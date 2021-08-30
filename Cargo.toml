@@ -17,5 +17,6 @@ winit = "0.25"
 winit_input_helper = "0.10"
 cpal = "0.13"
 ringbuf = "0.2"
+# futures = {version = "0.3", features = ["thread-pool"]}
 rusticnes-core = { git = "https://github.com/zeta0134/rusticnes-core" }
 rusticnes-ui-common = { git = "https://github.com/zeta0134/rusticnes-ui-common" }

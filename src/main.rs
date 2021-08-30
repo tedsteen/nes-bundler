@@ -6,6 +6,8 @@ extern crate cpal;
 extern crate ringbuf;
 
 use std::rc::Rc;
+use std::time::SystemTime;
+use std::fs;
 
 use log::error;
 use pixels::{Error, Pixels, SurfaceTexture};
@@ -95,13 +97,9 @@ pub fn dispatch_event(runtime: &mut RuntimeState, event: Event) -> Vec<Event> {
     let host = cpal::default_host();
 
     let output_device = host.default_output_device().expect("Could not get default output device");
-    let input_device = host.default_input_device().expect("Could not get default input device");
     println!("Output device: {}", output_device.name().unwrap());
-    println!("Iutput device: {}", input_device.name().unwrap());
     let output_config = output_device.default_output_config().unwrap();
     println!("Default output config: {:?}", output_config);
-    let input_config = input_device.default_input_config().unwrap();
-    println!("Default input config: {:?}", input_config);
     
     match output_config.sample_format() {
         cpal::SampleFormat::F32 => run::<f32>(&output_device, &output_config.into()),
@@ -118,16 +116,14 @@ T: cpal::Sample,
     let sample_rate = config.sample_rate.0 as f32;
     let channels = config.channels as usize;
 
-    const LATENCY: f32 = 1000.0;
+    const LATENCY: f32 = 200.0;
     // Create a delay in case the input and output devices aren't synced.
     let latency_frames = (LATENCY / 1_000.0) * sample_rate as f32;
     let latency_samples = latency_frames as usize * channels as usize;
     
-    use std::fs;
-    load_rom(&mut runtime, fs::read("rom.nes").expect("Could not read ROM rom.nes").as_slice());
+    load_rom(&mut runtime, fs::read("rom2.nes").expect("Could not read ROM").as_slice());
     set_audio_samplerate(&mut runtime, sample_rate as u32*2); //TODO: Why * 2??
-    set_audio_buffersize(&mut runtime, (latency_samples / 2) as u32);
-    
+    set_audio_buffersize(&mut runtime, (latency_samples * 2) as u32);
     
     println!("TED: {:?},{:?}", latency_frames, latency_samples);
 
@@ -165,7 +161,7 @@ T: cpal::Sample,
     let window = {
         let size = LogicalSize::new(WIDTH as f64, HEIGHT as f64);
         WindowBuilder::new()
-            .with_title("Hello Pixels")
+            .with_title("Hello rusticnes!")
             .with_inner_size(size)
             .with_min_inner_size(size)
             .build(&event_loop)
@@ -177,6 +173,14 @@ T: cpal::Sample,
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
         Pixels::new(WIDTH, HEIGHT, surface_texture)?
     };
+
+    //use futures::executor::ThreadPool;
+    //let pool = ThreadPool::new().expect("Failed to build pool");
+    //pool.spawn(async move {
+    //}).expect("Spawn failed");
+        
+    let mut start_time = SystemTime::now();
+    let mut current_frame = 0;
 
     event_loop.run(move |event, _, control_flow| {
         // Draw the current frame
@@ -206,21 +210,37 @@ T: cpal::Sample,
             if let Some(size) = input.window_resized() {
                 pixels.resize_surface(size.width, size.height);
             }
-
-            // Update internal state and request a redraw
-            run_until_vblank(&mut runtime);
-            //println!("request redraw");
-            window.request_redraw();
-
-            if audio_buffer_full(&mut runtime) {
-                let audio_buffer = get_audio_buffer(&mut runtime);
-                for e in audio_buffer {
-                    producer.push(e as f32/ 32768.0).expect("Could not push the audio buffer"); //TODO: Why / 32768.0?
-                }
-                //producer.push_slice(audio_buffer.as_slice());
-            }
-
         }
+
+        let runtime_in_ms = SystemTime::now().duration_since(start_time).expect("wat").as_millis();
+        let target_frame = runtime_in_ms / (1000 / 60);
+    
+        if target_frame - current_frame > 2 {
+            println!("We're running behind, reset the timer so we don't run off the deep end");
+            println!("Running frame {:?}/{:?} ({:?})", current_frame, target_frame, (target_frame-current_frame));
+            start_time = SystemTime::now();
+            current_frame = 0;
+            run_until_vblank(&mut runtime);
+            //window.request_redraw();
+        } else {
+            while current_frame < target_frame {
+                run_until_vblank(&mut runtime);
+                current_frame += 1;
+                window.request_redraw();
+            }
+            //TODO: Sleep a bit here if there's a long time until next target frame?
+            //thread::sleep(std::time::Duration::from_millis(10));
+        }
+
+        if audio_buffer_full(&mut runtime) {
+            let audio_buffer = get_audio_buffer(&mut runtime);
+            for e in audio_buffer {
+                let _r = producer.push(e as f32/ 32768.0); //TODO: Why / 32768.0?
+
+            }
+            //producer.push_slice(audio_buffer.as_slice());
+        }
+        
     });
 }
 
