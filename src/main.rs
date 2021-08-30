@@ -95,11 +95,12 @@ fn main() -> Result<(), Error> {
     env_logger::init();
     let host = cpal::default_host();
 
-    let output_device = host.default_output_device().expect("Could not get default output device");
-    println!("Output device: {}", output_device.name().unwrap());
-    let output_config = output_device.default_output_config().unwrap();
-    println!("Default output config: {:?}", output_config);
-
+    let output_device = host.default_output_device().expect("no sound output device available");
+    println!("Sound output device: {}", output_device.name().unwrap());
+    
+    let mut supported_configs_range = output_device.supported_output_configs().expect("error while querying configs");
+    let output_config = supported_configs_range.next().expect("no supported config?!").with_max_sample_rate();
+    
     match output_config.sample_format() {
         cpal::SampleFormat::F32 => run::<f32>(&output_device, &output_config.into()),
         cpal::SampleFormat::I16 => run::<i16>(&output_device, &output_config.into()),
@@ -107,32 +108,40 @@ fn main() -> Result<(), Error> {
     }
 }
 
-pub fn run<T>(output_device: &cpal::Device, config: &cpal::StreamConfig) -> Result<(), Error>
+pub fn run<T>(output_device: &cpal::Device, config: &cpal::SupportedStreamConfig) -> Result<(), Error>
 where
 T: cpal::Sample,
 {
+    let mut stream_config:cpal::StreamConfig = config.config();
+    //stream_config.sample_rate = cpal::SampleRate(44100);
+    stream_config.channels = 1;
+    stream_config.buffer_size = match config.buffer_size() {
+        cpal::SupportedBufferSize::Range {min, max: _} => cpal::BufferSize::Fixed(*min),
+        cpal::SupportedBufferSize::Unknown =>  cpal::BufferSize::Default,
+    };
+    
     let mut runtime: RuntimeState = RuntimeState::new();
-    let sample_rate = config.sample_rate.0 as f32;
-    let channels = config.channels as usize;
+    let sample_rate = stream_config.sample_rate.0 as f32;
+    let channels = stream_config.channels as usize;
 
-    const LATENCY: f32 = 100.0;
-    // Create a delay in case the input and output devices aren't synced.
+    const LATENCY: f32 = 300.0;
     let latency_frames = (LATENCY / 1_000.0) * sample_rate as f32;
     let latency_samples = latency_frames as usize * channels as usize;
     
     load_rom(&mut runtime, fs::read("rom2.nes").expect("Could not read ROM").as_slice());
-    set_audio_samplerate(&mut runtime, sample_rate as u32*2); //TODO: Why * 2??
-    set_audio_buffersize(&mut runtime, (latency_samples) as u32); //TODO: Look into what is a good value
-    
+    set_audio_samplerate(&mut runtime, sample_rate as u32);
+    let buffer_size = latency_samples as usize;
+    set_audio_buffersize(&mut runtime, buffer_size as u32); //TODO: Look into what is a good value
+    println!("Sound config: {:?}", stream_config);
     println!("TED: {:?},{:?}", latency_frames, latency_samples);
 
     // The buffer to share samples
-    let ring = RingBuffer::<f32>::new(latency_samples * 2);
+    let ring = RingBuffer::<i16>::new(latency_samples * 2);
     let (mut producer, mut consumer) = ring.split();
 
     // Fill the samples with 0.0 equal to the length of the delay.
     for _ in 0..latency_samples {
-        producer.push(0.0).unwrap();
+        producer.push(0).unwrap();
     }
     
     let output_data_fn = move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
@@ -140,7 +149,7 @@ T: cpal::Sample,
         
         for sample in data {
             *sample = match consumer.pop() {
-                Some(s) => s,
+                Some(s) => s as f32 / 32768.0,
                 None => {
                     input_fell_behind = true;
                     0.0
@@ -148,12 +157,9 @@ T: cpal::Sample,
             };
         }
         if input_fell_behind {
-            eprintln!("input stream fell behind: try increasing latency");
+            eprintln!("Consuming audio faster than it's being produced!");
         }
     };
-    let output_stream = output_device.build_output_stream(&config, output_data_fn, err_fn).expect("Could not build sound output stream");
-
-    output_stream.play().expect("Could not start playing output stream");
 
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
@@ -177,7 +183,12 @@ T: cpal::Sample,
     //let pool = ThreadPool::new().expect("Failed to build pool");
     //pool.spawn(async move {
     //}).expect("Spawn failed");
-        
+
+    let err_fn = |err| eprintln!("an error occurred on the output audio stream: {}", err);
+    let output_stream = output_device.build_output_stream(&stream_config, output_data_fn, err_fn).expect("Could not build sound output stream");
+
+    output_stream.play().expect("Could not start playing output stream");
+
     let mut start_time = SystemTime::now();
     let mut current_frame = 0;
 
@@ -265,17 +276,15 @@ T: cpal::Sample,
         }
 
         if audio_buffer_full(&mut runtime) {
-            let audio_buffer = get_audio_buffer(&mut runtime);
-            for e in audio_buffer {
-                let _r = producer.push(e as f32/ 32768.0); //TODO: Why / 32768.0?
-
+            if producer.capacity() - producer.len() >= buffer_size {
+                runtime.nes.apu.buffer_full = false;
+                let audio_buffer = runtime.nes.apu.output_buffer.to_owned();
+                producer.push_slice(audio_buffer.as_slice());    
+            } else {
+                eprintln!("Producing audio faster than it's being consumed!");
             }
             //producer.push_slice(audio_buffer.as_slice());
         }
         
     });
-}
-
-fn err_fn(err: cpal::StreamError) {
-    eprintln!("an error occurred on stream: {}", err);
 }
