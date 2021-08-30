@@ -1,0 +1,19 @@
+[package]
+name = "rusticnes-test"
+version = "0.1.0"
+authors = ["Ted Steen <ted.steen@gmail.com>"]
+edition = "2018"
+publish = false
+
+[features]
+optimize = ["log/release_max_level_warn"]
+default = ["optimize"]
+
+[dependencies]
+env_logger = "0.9"
+log = "0.4"
+pixels = "0.5"
+winit = "0.25"
+winit_input_helper = "0.10"
+rusticnes-core = { git = "https://github.com/zeta0134/rusticnes-core" }
+rusticnes-ui-common = { git = "https://github.com/zeta0134/rusticnes-ui-common" }
