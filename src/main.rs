@@ -31,68 +31,67 @@ pub fn dispatch_event(runtime: &mut RuntimeState, event: Event) -> Vec<Event> {
     let mut responses: Vec<Event> = Vec::new();
     responses.extend(runtime.handle_event(event.clone()));
     return responses;
-  }
+}
 
-  pub fn resolve_events(runtime: &mut RuntimeState, mut events: Vec<Event>) {
+pub fn resolve_events(runtime: &mut RuntimeState, mut events: Vec<Event>) {
     while events.len() > 0 {
-      let event = events.remove(0);
-      let responses = dispatch_event(runtime, event);
-      events.extend(responses);
+        let event = events.remove(0);
+        let responses = dispatch_event(runtime, event);
+        events.extend(responses);
     }
-  }
+}
 
-  pub fn load_rom(runtime: &mut RuntimeState, cart_data: &[u8]) {
+pub fn load_rom(runtime: &mut RuntimeState, cart_data: &[u8]) {
     let mut events: Vec<Event> = Vec::new();
     let bucket_of_nothing: Vec<u8> = Vec::new();
     let cartridge_data = cart_data.to_vec();
     events.push(Event::LoadCartridge("cartridge".to_string(), Rc::new(cartridge_data), Rc::new(bucket_of_nothing)));
     resolve_events(runtime, events);
-  }
+}
 
-  pub fn run_until_vblank(runtime: &mut RuntimeState) {
+pub fn run_until_vblank(runtime: &mut RuntimeState) {
     let mut events: Vec<Event> = Vec::new();
     events.push(Event::NesRunFrame);
     resolve_events(runtime, events);
-  }
+}
 
-  pub fn render_screen_pixels(runtime: &mut RuntimeState, frame: &mut [u8]) {
+pub fn render_screen_pixels(runtime: &mut RuntimeState, frame: &mut [u8]) {
     let nes = &runtime.nes;
 
     for x in 0 .. 256 {
-      for y in 0 .. 240 {
-        let palette_index = ((nes.ppu.screen[y * 256 + x]) as usize) * 3;
-        let pixel_offset = (y * 256 + x) * 4;
-        frame[pixel_offset + 0] = NTSC_PAL[palette_index + 0];
-        frame[pixel_offset + 1] = NTSC_PAL[palette_index + 1];
-        frame[pixel_offset + 2] = NTSC_PAL[palette_index + 2];
-        frame[((y * 256 + x) * 4) + 3] = 255;
-
-      }
+        for y in 0 .. 240 {
+            let palette_index = ((nes.ppu.screen[y * 256 + x]) as usize) * 3;
+            let pixel_offset = (y * 256 + x) * 4;
+            frame[pixel_offset + 0] = NTSC_PAL[palette_index + 0];
+            frame[pixel_offset + 1] = NTSC_PAL[palette_index + 1];
+            frame[pixel_offset + 2] = NTSC_PAL[palette_index + 2];
+            frame[((y * 256 + x) * 4) + 3] = 255;
+        }
     }
-  }
+}
 
-  pub fn set_audio_samplerate(runtime: &mut RuntimeState, sample_rate: u32) {
+pub fn set_audio_samplerate(runtime: &mut RuntimeState, sample_rate: u32) {
     let nes = &mut runtime.nes;
     nes.apu.set_sample_rate(sample_rate as u64);
-  }
+}
 
-  pub fn set_audio_buffersize(runtime: &mut RuntimeState, buffer_size: u32) {
+pub fn set_audio_buffersize(runtime: &mut RuntimeState, buffer_size: u32) {
     let nes = &mut runtime.nes;
     nes.apu.set_buffer_size(buffer_size as usize);
-  }
+}
 
-  pub fn audio_buffer_full(runtime: &mut RuntimeState) -> bool {
+pub fn audio_buffer_full(runtime: &mut RuntimeState) -> bool {
     let nes = &runtime.nes;
     return nes.apu.buffer_full;
-  }
+}
 
-  pub fn get_audio_buffer(runtime: &mut RuntimeState) -> Vec<i16> {
+pub fn get_audio_buffer(runtime: &mut RuntimeState) -> Vec<i16> {
     let nes = &mut runtime.nes;
     nes.apu.buffer_full = false;
     return nes.apu.output_buffer.to_owned();
-  }
+}
 
-  fn main() -> Result<(), Error> {
+fn main() -> Result<(), Error> {
     env_logger::init();
     let host = cpal::default_host();
 
@@ -100,7 +99,7 @@ pub fn dispatch_event(runtime: &mut RuntimeState, event: Event) -> Vec<Event> {
     println!("Output device: {}", output_device.name().unwrap());
     let output_config = output_device.default_output_config().unwrap();
     println!("Default output config: {:?}", output_config);
-    
+
     match output_config.sample_format() {
         cpal::SampleFormat::F32 => run::<f32>(&output_device, &output_config.into()),
         cpal::SampleFormat::I16 => run::<i16>(&output_device, &output_config.into()),
