@@ -116,14 +116,14 @@ T: cpal::Sample,
     let sample_rate = config.sample_rate.0 as f32;
     let channels = config.channels as usize;
 
-    const LATENCY: f32 = 200.0;
+    const LATENCY: f32 = 100.0;
     // Create a delay in case the input and output devices aren't synced.
     let latency_frames = (LATENCY / 1_000.0) * sample_rate as f32;
     let latency_samples = latency_frames as usize * channels as usize;
     
     load_rom(&mut runtime, fs::read("rom2.nes").expect("Could not read ROM").as_slice());
     set_audio_samplerate(&mut runtime, sample_rate as u32*2); //TODO: Why * 2??
-    set_audio_buffersize(&mut runtime, (latency_samples * 2) as u32);
+    set_audio_buffersize(&mut runtime, (latency_samples) as u32); //TODO: Look into what is a good value
     
     println!("TED: {:?},{:?}", latency_frames, latency_samples);
 
@@ -205,6 +205,39 @@ T: cpal::Sample,
                 *control_flow = ControlFlow::Exit;
                 return;
             }
+            let mut p1_input: u8 = 0;
+            //let mut p2_input: u8 = 0;
+            
+            if input.key_held(VirtualKeyCode::Up) {
+                p1_input |= 0b00010000u8;
+            }
+            if input.key_held(VirtualKeyCode::Down) {
+                p1_input |= 0b00100000u8;
+            }
+            if input.key_held(VirtualKeyCode::Left) {
+                p1_input |= 0b01000000u8;
+            }
+            if input.key_held(VirtualKeyCode::Right) {
+                p1_input |= 0b10000000u8;
+            }
+            
+            if input.key_held(VirtualKeyCode::Key1) {
+                p1_input |= 0b10001000u8;
+            }
+            if input.key_held(VirtualKeyCode::Key2) {
+                p1_input |= 0b00000100u8;
+            }
+
+            if input.key_held(VirtualKeyCode::LControl) {
+                p1_input |= 0b00000010u8;
+            }
+            if input.key_held(VirtualKeyCode::LAlt) {
+                p1_input |= 0b00000001u8;
+            }
+
+            
+            runtime.nes.p1_input = p1_input;
+            //runtime.nes.p2_input = p2_input;
 
             // Resize the window
             if let Some(size) = input.window_resized() {
