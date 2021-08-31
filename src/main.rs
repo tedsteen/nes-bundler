@@ -10,6 +10,7 @@ use std::rc::Rc;
 use std::time::SystemTime;
 use std::fs;
 
+use cpal::Sample;
 use log::error;
 use pixels::{Error, Pixels, SurfaceTexture};
 use winit::dpi::LogicalSize;
@@ -71,18 +72,19 @@ pub fn render_screen_pixels(runtime: &mut RuntimeState, frame: &mut [u8]) {
     }
 }
 
-pub fn start_audio_stream<T>(output_device: &cpal::Device, config: &cpal::SupportedStreamConfig) -> (ringbuf::Producer<i16>, cpal::SampleRate, cpal::Stream)
+pub fn start_audio_stream<T>(output_device: &cpal::Device, config: &cpal::SupportedStreamConfig) -> (ringbuf::Producer<i16>, u32, usize, cpal::Stream)
 where
 T: cpal::Sample,
 {
     let mut stream_config:cpal::StreamConfig = config.config();
     //stream_config.sample_rate = cpal::SampleRate(44100);
     stream_config.channels = 1;
+/*
     stream_config.buffer_size = match config.buffer_size() {
         cpal::SupportedBufferSize::Range {min, max: _} => cpal::BufferSize::Fixed(*min),
         cpal::SupportedBufferSize::Unknown =>  cpal::BufferSize::Default,
     };
-
+*/
     let sample_rate = stream_config.sample_rate.0 as f32;
     let channels = stream_config.channels as usize;
 
@@ -101,31 +103,31 @@ T: cpal::Sample,
     for _ in 0..latency_samples {
         producer.push(0).unwrap();
     }
-    
-    let mut last_sample = 0.0;
-    let output_data_fn = move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-        let mut input_fell_behind = false;    
-        for sample in data {
-            *sample = match consumer.pop() {
-                Some(s) => s as f32 / 32768.0,
-                None => {
-                    input_fell_behind = true;
-                    last_sample
-                }
-            };
-            last_sample = *sample;
-        }
-        if input_fell_behind {
-            eprintln!("Consuming audio faster than it's being produced!");
-        }
-    };
 
     let err_fn = |err| eprintln!("an error occurred on the output audio stream: {}", err);
-    let output_stream: cpal::Stream = output_device.build_output_stream(&stream_config, output_data_fn, err_fn).expect("Could not build sound output stream");
+    let output_stream: cpal::Stream = output_device.build_output_stream(
+        &stream_config, 
+        move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+            //consumer.pop_slice(data);
+            let mut input_fell_behind = false;
+            for sample in data {
+                *sample = match consumer.pop() {
+                    Some(s) => Sample::from(&s),
+                    None => {
+                        input_fell_behind = true;
+                        0.0
+                    }
+                };
+            }
+            if input_fell_behind {
+                eprintln!("Consuming audio faster than it's being produced! Try increasing latency");
+            }
+        },
+        err_fn).expect("Could not build sound output stream");
     
     output_stream.play().expect("Could not start playing output stream");
     
-    return (producer, stream_config.sample_rate, output_stream);
+    return (producer, stream_config.sample_rate.0, latency_samples, output_stream);
 }
 
 fn main() -> Result<(), Error> {
@@ -159,14 +161,14 @@ fn main() -> Result<(), Error> {
         Pixels::new(WIDTH, HEIGHT, surface_texture)?
     };
 
-    let (mut producer, sample_rate, _stream) = match output_config.sample_format() {
+    let (mut producer, sample_rate, buffer_length, _stream) = match output_config.sample_format() {
         cpal::SampleFormat::F32 => start_audio_stream::<f32>(&output_device, &output_config.into()),
         cpal::SampleFormat::I16 => start_audio_stream::<i16>(&output_device, &output_config.into()),
         cpal::SampleFormat::U16 => start_audio_stream::<u16>(&output_device, &output_config.into())
     };
 
-    runtime.nes.apu.set_sample_rate(sample_rate.0 as u64);
-    runtime.nes.apu.set_buffer_size(1024 * 4); //TODO: Look into what is a good value
+    runtime.nes.apu.set_sample_rate(sample_rate as u64);
+    runtime.nes.apu.set_buffer_size(buffer_length); //TODO: Look into what is a good value
 
     let mut start_time = SystemTime::now();
     let mut current_frame = 0;
@@ -204,7 +206,7 @@ fn main() -> Result<(), Error> {
                     let audio_buffer = runtime.nes.apu.output_buffer.to_owned();
                     let result = producer.push_slice(audio_buffer.as_slice());
                     if result < audio_buffer.len() {
-                        eprintln!("Producing audio faster than it's being consumed!");
+                        eprintln!("Producing audio faster than it's being consumed! ({:?} left)", audio_buffer.len() - result);
                     }
                 }
             },
@@ -253,10 +255,10 @@ fn main() -> Result<(), Error> {
                 p1_input |= 0b00000100u8;
             }
 
-            if input.key_held(VirtualKeyCode::LControl) {
+            if input.key_held(VirtualKeyCode::A) {
                 p1_input |= 0b00000010u8;
             }
-            if input.key_held(VirtualKeyCode::LAlt) {
+            if input.key_held(VirtualKeyCode::O) {
                 p1_input |= 0b00000001u8;
             }
 
