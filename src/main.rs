@@ -86,7 +86,7 @@ T: cpal::Sample,
     let sample_rate = stream_config.sample_rate.0 as f32;
     let channels = stream_config.channels as usize;
 
-    const LATENCY: f32 = 300.0;
+    const LATENCY: f32 = 200.0;
     let latency_frames = (LATENCY / 1_000.0) * sample_rate as f32;
     let latency_samples = latency_frames as usize * channels as usize;
 
@@ -166,7 +166,7 @@ fn main() -> Result<(), Error> {
     };
 
     runtime.nes.apu.set_sample_rate(sample_rate.0 as u64);
-    runtime.nes.apu.set_buffer_size(4096); //TODO: Look into what is a good value
+    runtime.nes.apu.set_buffer_size(1024 * 4); //TODO: Look into what is a good value
 
     let mut start_time = SystemTime::now();
     let mut current_frame = 0;
@@ -177,7 +177,7 @@ fn main() -> Result<(), Error> {
         match event {
             WinitEvent::MainEventsCleared => {
                 let runtime_in_ms = SystemTime::now().duration_since(start_time).unwrap().as_millis();
-                let target_frame = runtime_in_ms / (1000 / 60);
+                let target_frame = (runtime_in_ms as f64 / (1000.0 / 60.0)) as u128;
                 
                 if current_frame == target_frame {
                     thread::sleep(std::time::Duration::from_millis(1));
