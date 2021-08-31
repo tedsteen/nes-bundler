@@ -70,27 +70,6 @@ pub fn render_screen_pixels(runtime: &mut RuntimeState, frame: &mut [u8]) {
     }
 }
 
-pub fn set_audio_samplerate(runtime: &mut RuntimeState, sample_rate: u32) {
-    let nes = &mut runtime.nes;
-    nes.apu.set_sample_rate(sample_rate as u64);
-}
-
-pub fn set_audio_buffersize(runtime: &mut RuntimeState, buffer_size: u32) {
-    let nes = &mut runtime.nes;
-    nes.apu.set_buffer_size(buffer_size as usize);
-}
-
-pub fn audio_buffer_full(runtime: &mut RuntimeState) -> bool {
-    let nes = &runtime.nes;
-    return nes.apu.buffer_full;
-}
-
-pub fn get_audio_buffer(runtime: &mut RuntimeState) -> Vec<i16> {
-    let nes = &mut runtime.nes;
-    nes.apu.buffer_full = false;
-    return nes.apu.output_buffer.to_owned();
-}
-
 fn main() -> Result<(), Error> {
     env_logger::init();
     let host = cpal::default_host();
@@ -129,9 +108,9 @@ T: cpal::Sample,
     let latency_samples = latency_frames as usize * channels as usize;
     
     load_rom(&mut runtime, fs::read("rom2.nes").expect("Could not read ROM").as_slice());
-    set_audio_samplerate(&mut runtime, sample_rate as u32);
-    let buffer_size = latency_samples as usize;
-    set_audio_buffersize(&mut runtime, buffer_size as u32); //TODO: Look into what is a good value
+    runtime.nes.apu.set_sample_rate(sample_rate as u64);
+    let buffer_size = latency_samples as usize; 
+    runtime.nes.apu.set_buffer_size(buffer_size as usize); //TODO: Look into what is a good value
     println!("Sound config: {:?}", stream_config);
     println!("TED: {:?},{:?}", latency_frames, latency_samples);
 
@@ -275,7 +254,7 @@ T: cpal::Sample,
             //thread::sleep(std::time::Duration::from_millis(10));
         }
 
-        if audio_buffer_full(&mut runtime) {
+        if runtime.nes.apu.buffer_full {
             if producer.capacity() - producer.len() >= buffer_size {
                 runtime.nes.apu.buffer_full = false;
                 let audio_buffer = runtime.nes.apu.output_buffer.to_owned();
