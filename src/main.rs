@@ -125,7 +125,7 @@ T: cpal::Sample,
         },
         err_fn).expect("Could not build sound output stream");
     
-    output_stream.play().expect("Could not start playing output stream");
+    output_stream.pause().unwrap();
     
     return (producer, stream_config.sample_rate.0, latency_samples, output_stream);
 }
@@ -161,22 +161,31 @@ fn main() -> Result<(), Error> {
         Pixels::new(WIDTH, HEIGHT, surface_texture)?
     };
 
-    let (mut producer, sample_rate, buffer_length, _stream) = match output_config.sample_format() {
+    let (mut producer, sample_rate, buffer_length, stream) = match output_config.sample_format() {
         cpal::SampleFormat::F32 => start_audio_stream::<f32>(&output_device, &output_config.into()),
         cpal::SampleFormat::I16 => start_audio_stream::<i16>(&output_device, &output_config.into()),
         cpal::SampleFormat::U16 => start_audio_stream::<u16>(&output_device, &output_config.into())
     };
 
     runtime.nes.apu.set_sample_rate(sample_rate as u64);
-    runtime.nes.apu.set_buffer_size(buffer_length); //TODO: Look into what is a good value
+    runtime.nes.apu.set_buffer_size(buffer_length / 2); //TODO: Look into what is a good value, should prob be less than the ring buffer
 
-    let mut start_time = SystemTime::now();
-    let mut current_frame = 0;
+    let (mut start_time, mut current_frame) = (SystemTime::now(), 0);
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
         match event {
+            WinitEvent::NewEvents(start_cause) => {
+                match start_cause {
+                    winit::event::StartCause::Init => {
+                        //run_until_vblank(&mut runtime);
+                        stream.play().expect("Could not start playing output stream");
+                        start_time = SystemTime::now();
+                    },
+                    _ => {}
+                }
+            }
             WinitEvent::MainEventsCleared => {
                 let runtime_in_ms = SystemTime::now().duration_since(start_time).unwrap().as_millis();
                 let target_frame = (runtime_in_ms as f64 / (1000.0 / 60.0)) as u128;
@@ -185,20 +194,17 @@ fn main() -> Result<(), Error> {
                     thread::sleep(std::time::Duration::from_millis(1));
                 }
                 if target_frame - current_frame > 2 {
-                    println!("We're running behind, reset the timer so we don't run off the deep end");
-                    println!("Running frame {:?}/{:?} ({:?})", current_frame, target_frame, (target_frame-current_frame));
+                    println!("We're running behind, reset the timer so we don't run off the deep end (frame {:?}/{:?})", current_frame, target_frame);
                     start_time = SystemTime::now();
                     current_frame = 0;
                     run_until_vblank(&mut runtime);
-                    //window.request_redraw();
+                    window.request_redraw();
                 } else {
                     while current_frame < target_frame {
                         run_until_vblank(&mut runtime);
                         current_frame += 1;
                         window.request_redraw();
                     }
-                    //TODO: Sleep a bit here if there's a long time until next target frame?
-                    //thread::sleep(std::time::Duration::from_millis(10));
                 }
         
                 if runtime.nes.apu.buffer_full {
