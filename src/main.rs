@@ -172,19 +172,55 @@ fn main() -> Result<(), Error> {
     let mut current_frame = 0;
 
     event_loop.run(move |event, _, control_flow| {
-        // Draw the current frame
-        if let WinitEvent::RedrawRequested(_) = event {
-            //println!("render");
-            render_screen_pixels(&mut runtime, pixels.get_frame());
+        *control_flow = ControlFlow::Poll;
 
-            if pixels
-                .render()
-                .map_err(|e| error!("pixels.render() failed: {}", e))
-                .is_err()
-            {
-                *control_flow = ControlFlow::Exit;
-                return;
-            }
+        match event {
+            WinitEvent::MainEventsCleared => {
+                let runtime_in_ms = SystemTime::now().duration_since(start_time).unwrap().as_millis();
+                let target_frame = runtime_in_ms / (1000 / 60);
+                
+                if current_frame == target_frame {
+                    thread::sleep(std::time::Duration::from_millis(1));
+                }
+                if target_frame - current_frame > 2 {
+                    println!("We're running behind, reset the timer so we don't run off the deep end");
+                    println!("Running frame {:?}/{:?} ({:?})", current_frame, target_frame, (target_frame-current_frame));
+                    start_time = SystemTime::now();
+                    current_frame = 0;
+                    run_until_vblank(&mut runtime);
+                    //window.request_redraw();
+                } else {
+                    while current_frame < target_frame {
+                        run_until_vblank(&mut runtime);
+                        current_frame += 1;
+                        window.request_redraw();
+                    }
+                    //TODO: Sleep a bit here if there's a long time until next target frame?
+                    //thread::sleep(std::time::Duration::from_millis(10));
+                }
+        
+                if runtime.nes.apu.buffer_full {
+                    runtime.nes.apu.buffer_full = false;
+                    let audio_buffer = runtime.nes.apu.output_buffer.to_owned();
+                    let result = producer.push_slice(audio_buffer.as_slice());
+                    if result < audio_buffer.len() {
+                        eprintln!("Producing audio faster than it's being consumed!");
+                    }
+                }
+            },
+            WinitEvent::RedrawRequested(_) => {
+                render_screen_pixels(&mut runtime, pixels.get_frame());
+
+                if pixels
+                    .render()
+                    .map_err(|e| error!("pixels.render() failed: {}", e))
+                    .is_err()
+                {
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
+            },
+            _ => ()
         }
 
         // Handle input events
@@ -231,38 +267,6 @@ fn main() -> Result<(), Error> {
             // Resize the window
             if let Some(size) = input.window_resized() {
                 pixels.resize_surface(size.width, size.height);
-            }
-        }
-
-        let runtime_in_ms = SystemTime::now().duration_since(start_time).unwrap().as_millis();
-        let target_frame = runtime_in_ms / (1000 / 60);
-        
-        if current_frame == target_frame {
-            thread::sleep(std::time::Duration::from_millis(1));
-        }
-        if target_frame - current_frame > 2 {
-            println!("We're running behind, reset the timer so we don't run off the deep end");
-            println!("Running frame {:?}/{:?} ({:?})", current_frame, target_frame, (target_frame-current_frame));
-            start_time = SystemTime::now();
-            current_frame = 0;
-            run_until_vblank(&mut runtime);
-            //window.request_redraw();
-        } else {
-            while current_frame < target_frame {
-                run_until_vblank(&mut runtime);
-                current_frame += 1;
-                window.request_redraw();
-            }
-            //TODO: Sleep a bit here if there's a long time until next target frame?
-            //thread::sleep(std::time::Duration::from_millis(10));
-        }
-
-        if runtime.nes.apu.buffer_full {
-            runtime.nes.apu.buffer_full = false;
-            let audio_buffer = runtime.nes.apu.output_buffer.to_owned();
-            let result = producer.push_slice(audio_buffer.as_slice());
-            if result < audio_buffer.len() {
-                eprintln!("Producing audio faster than it's being consumed!");
             }
         }
     });
