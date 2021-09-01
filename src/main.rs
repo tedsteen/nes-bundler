@@ -167,7 +167,7 @@ fn main() -> Result<(), Error> {
 
     runtime.nes.apu.set_sample_rate(sample_rate as u64);
     runtime.nes.apu.set_buffer_size(buffer_length / 2); //TODO: Look into what is a good value, should prob be less than the ring buffer
-    stream.play().expect("Could not start playing output stream");
+    stream.play().expect("Could not start playing sound output stream");
     let (mut start_time, mut current_frame) = (SystemTime::now(), 0);
 
     event_loop.run(move |event, _, control_flow| {
@@ -182,7 +182,7 @@ fn main() -> Result<(), Error> {
                     thread::sleep(std::time::Duration::from_millis(1));
                 }
                 if target_frame - current_frame > 2 {
-                    println!("We're running behind, reset the timer so we don't run off the deep end (frame {:?}/{:?})", current_frame, target_frame);
+                    eprintln!("We're running behind, reset the timer so we don't run off the deep end (frame {:?}/{:?})", current_frame, target_frame);
                     start_time = SystemTime::now();
                     current_frame = 0;
                     run_until_vblank(&mut runtime);
