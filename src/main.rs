@@ -26,9 +26,6 @@ use rusticnes_ui_common::events::Event;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::RingBuffer;
 
-const WIDTH: u32 = 256;
-const HEIGHT: u32 = 240;
-
 pub fn dispatch_event(runtime: &mut RuntimeState, event: Event) -> Vec<Event> {
     let mut responses: Vec<Event> = Vec::new();
     responses.extend(runtime.handle_event(event.clone()));
@@ -145,12 +142,13 @@ fn main() -> Result<(), Error> {
 
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
+    
+    let (width, height, zoom) = (256, 240, 3);
     let window = {
-        let size = LogicalSize::new(WIDTH as f64, HEIGHT as f64);
         WindowBuilder::new()
             .with_title("Hello rusticnes!")
-            .with_inner_size(size)
-            .with_min_inner_size(size)
+            .with_inner_size(LogicalSize::new(width * zoom, height * zoom))
+            .with_min_inner_size(LogicalSize::new(width, height))
             .build(&event_loop)
             .unwrap()
     };
@@ -158,7 +156,7 @@ fn main() -> Result<(), Error> {
     let mut pixels = {
         let window_size = window.inner_size();
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
-        Pixels::new(WIDTH, HEIGHT, surface_texture)?
+        Pixels::new(width, height, surface_texture)?
     };
 
     let (mut producer, sample_rate, buffer_length, stream) = match output_config.sample_format() {
