@@ -213,7 +213,7 @@ fn main() -> Result<(), Error> {
             },
             WinitEvent::RedrawRequested(_) => {
                 render_screen_pixels(&mut runtime, pixels.get_frame());
-                gui.prepare(&window);
+                gui.prepare(&window, &runtime.nes);
 
                 // Render everything together
                 let render_result = pixels.render_with(|encoder, render_target, context| {
@@ -221,7 +221,7 @@ fn main() -> Result<(), Error> {
                     context.scaling_renderer.render(encoder, render_target);
 
                     // Render egui
-                    gui.render(encoder, render_target, context, &runtime.nes).unwrap()
+                    gui.render(encoder, render_target, context).unwrap()
 
                     //();
                 });

@@ -6,6 +6,8 @@ use std::time::Instant;
 use winit::window::Window;
 
 use rusticnes_core::nes::NesState;
+use rusticnes_core::opcode_info::disassemble_instruction;
+use rusticnes_core::memory;
 
 /// Manages all state required for rendering egui over `Pixels`.
 pub(crate) struct Gui {
@@ -17,10 +19,11 @@ pub(crate) struct Gui {
     paint_jobs: Vec<ClippedMesh>,
 
     // State for the demo app.
-    window_open: bool,
+    cpu_window_open: bool,
     pub show_gui: bool
 }
 
+use egui::{color::*, *};
 impl Gui {
     /// Create egui.
     pub(crate) fn new(width: u32, height: u32, scale_factor: f64, pixels: &pixels::Pixels) -> Self {
@@ -44,8 +47,8 @@ impl Gui {
             screen_descriptor,
             rpass,
             paint_jobs: Vec::new(),
-            window_open: true,
-            show_gui: false
+            cpu_window_open: true,
+            show_gui: true
         }
     }
 
@@ -68,7 +71,7 @@ impl Gui {
     }
 
     /// Prepare egui.
-    pub(crate) fn prepare(&mut self, window: &Window) {
+    pub(crate) fn prepare(&mut self, window: &Window, nes: &NesState) {
         self.platform
             .update_time(self.start_time.elapsed().as_secs_f64());
 
@@ -76,7 +79,7 @@ impl Gui {
         self.platform.begin_frame();
 
         // Draw the demo application.
-        self.ui(&self.platform.context());
+        self.ui(&self.platform.context(), nes);
 
         // End the egui frame and create all paint jobs to prepare for rendering.
         let (_output, paint_commands) = self.platform.end_frame(Some(window));
@@ -84,32 +87,87 @@ impl Gui {
     }
 
     /// Create the UI using egui.
-    fn ui(&mut self, ctx: &egui::CtxRef) {
+    fn ui(&mut self, ctx: &egui::CtxRef, nes: &NesState) {
         if self.show_gui {
             egui::TopBottomPanel::top("menubar_container").show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
-                    egui::menu::menu(ui, "File", |ui| {
-                        if ui.button("About...").clicked() {
-                            self.window_open = true;
+                    egui::menu::menu(ui, "Windows", |ui| {
+                        ui.checkbox(&mut self.cpu_window_open, "CPU");
+                    });
+
+                });
+            });
+            egui::Window::new("CPU").collapsible(false)
+            .open(&mut self.cpu_window_open).show(ctx, |ui| {
+                ui.label( "===== Registers =====");
+                egui::Grid::new("my_grid")
+                .num_columns(2)
+                .spacing([60.0, 4.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    ui.label("A:");
+                    ui.horizontal(|ui| ui.monospace(&format!("0x{:02X}", nes.registers.a)));
+                    ui.end_row();
+
+                    ui.label("X:");
+                    ui.horizontal(|ui| ui.monospace(&format!("0x{:02X}", nes.registers.x)));
+                    ui.end_row();
+
+                    ui.label("Y:");
+                    ui.horizontal(|ui| ui.monospace(&format!("0x{:02X}", nes.registers.y)));
+                    ui.end_row();
+
+                    ui.label("PC:");
+                    ui.horizontal(|ui| ui.monospace(&format!("0x{:04X}", nes.registers.pc)));
+                    ui.end_row();
+
+                    ui.label("S:");
+                    ui.horizontal(|ui| ui.monospace(&format!("0x{:02X}", nes.registers.s)));
+                    ui.end_row();
+
+                    ui.label("F:");
+                    
+                    ui.horizontal(|ui| ui.monospace("nvdzic"));
+                    ui.end_row();
+                    
+                    ui.label("");
+                    
+                    ui.horizontal(|ui| ui.monospace(&format!("{}{}{}{}{}{}",
+                    if nes.registers.flags.negative            {"n"} else {" "},
+                    if nes.registers.flags.overflow            {"v"} else {" "},
+                    if nes.registers.flags.decimal             {"d"} else {" "},
+                    if nes.registers.flags.zero                {"z"} else {" "},
+                    if nes.registers.flags.interrupts_disabled {"i"} else {" "},
+                    if nes.registers.flags.carry               {"c"} else {" "})));
+                    ui.end_row();
+                });
+
+                let scroll_area = ScrollArea::auto_sized();
+
+                ui.label("===== Disassembly =====");
+                scroll_area.show(ui, |ui| {
+                    ui.vertical(|ui| {
+                        let mut data_bytes_to_skip = 0;
+                        for i in 0 .. 30 {
+                            let pc = nes.registers.pc + (i as u16);
+                            let opcode = memory::debug_read_byte(nes, pc);
+                            let data1 = memory::debug_read_byte(nes, pc + 1);
+                            let data2 = memory::debug_read_byte(nes, pc + 2);
+                            let (instruction, data_bytes) = disassemble_instruction(opcode, data1, data2);
+                            let mut text_color = Color32::from_rgb(255, 255, 255);
+    
+                            if data_bytes_to_skip > 0 {
+                                text_color = Color32::from_rgb(64, 64, 64);
+                                data_bytes_to_skip -= 1;
+                            } else {
+                                data_bytes_to_skip = data_bytes;
+                            }
+                            ui.add(Label::new(&format!("0x{:04X} - 0x{:02X}:  {}", pc, opcode, instruction)).monospace().text_color(text_color));
                         }
-                    })
+                    });
                 });
             });
         }
-        egui::Window::new("Hello, egui!")
-            .open(&mut self.window_open)
-            .show(ctx, |ui| {
-                ui.label("This example demonstrates using egui with pixels.");
-                ui.label("Made with 💖 in San Francisco!");
-
-                ui.separator();
-
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x /= 2.0;
-                    ui.label("Learn more about egui at");
-                    ui.hyperlink("https://docs.rs/egui");
-                });
-            });
     }
 
     /// Render egui.
@@ -117,8 +175,7 @@ impl Gui {
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         render_target: &wgpu::TextureView,
-        context: &PixelsContext,
-        nes: &NesState
+        context: &PixelsContext
     ) -> Result<(), BackendError> {
         // Upload all resources to the GPU.
         self.rpass.update_texture(
