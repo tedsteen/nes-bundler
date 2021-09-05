@@ -1,9 +1,7 @@
 #![deny(clippy::all)]
 #![forbid(unsafe_code)]
 
-extern crate rusticnes_core;
-extern crate cpal;
-extern crate ringbuf;
+use crate::gui::Gui;
 
 use std::thread;
 use std::rc::Rc;
@@ -25,6 +23,8 @@ use rusticnes_ui_common::events::Event;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::RingBuffer;
+
+mod gui;
 
 pub fn dispatch_event(runtime: &mut RuntimeState, event: Event) -> Vec<Event> {
     let mut responses: Vec<Event> = Vec::new();
@@ -153,10 +153,14 @@ fn main() -> Result<(), Error> {
             .unwrap()
     };
 
-    let mut pixels = {
+    let (mut pixels, mut gui) = {
         let window_size = window.inner_size();
+        let scale_factor = window.scale_factor();
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
-        Pixels::new(width, height, surface_texture)?
+        let pixels = Pixels::new(width, height, surface_texture)?;
+        let gui = Gui::new(window_size.width, window_size.height, scale_factor, &pixels);
+
+        (pixels, gui)
     };
 
     let (mut producer, sample_rate, buffer_length, stream) = match output_config.sample_format() {
@@ -171,6 +175,9 @@ fn main() -> Result<(), Error> {
     let (mut start_time, mut current_frame) = (SystemTime::now(), 0);
 
     event_loop.run(move |event, _, control_flow| {
+        // Update egui inputs
+        gui.handle_event(&event);
+
         *control_flow = ControlFlow::Poll;
 
         match event {
@@ -206,20 +213,26 @@ fn main() -> Result<(), Error> {
             },
             WinitEvent::RedrawRequested(_) => {
                 render_screen_pixels(&mut runtime, pixels.get_frame());
+                gui.prepare(&window);
 
-                if pixels
-                    .render()
+                // Render everything together
+                let render_result = pixels.render_with(|encoder, render_target, context| {
+                    // Render the world texture
+                    context.scaling_renderer.render(encoder, render_target);
+
+                    // Render egui
+                    gui.render(encoder, render_target, context, &runtime.nes).unwrap()
+
+                    //();
+                });
+
+                // Basic error handling
+                if render_result
                     .map_err(|e| error!("pixels.render() failed: {}", e))
                     .is_err()
                 {
                     *control_flow = ControlFlow::Exit;
                     return;
-                }
-            },
-            WinitEvent::WindowEvent { window_id: _, event: ref e } => {
-                match e {
-                    winit::event::WindowEvent::Resized(size) => pixels.resize_surface(size.width, size.height),
-                    _ => ()
                 }
             },
             _ => ()
@@ -231,6 +244,19 @@ fn main() -> Result<(), Error> {
             if input.key_pressed(VirtualKeyCode::Escape) || input.quit() {
                 *control_flow = ControlFlow::Exit;
                 return;
+            }
+            // Update the scale factor
+            if let Some(scale_factor) = input.scale_factor() {
+                gui.scale_factor(scale_factor);
+            }
+            // Resize the window
+            if let Some(size) = input.window_resized() {
+                pixels.resize_surface(size.width, size.height);
+                gui.resize(size.width, size.height);
+            }
+
+            if input.key_pressed(VirtualKeyCode::F1) {
+                gui.show_gui = !gui.show_gui;
             }
             let mut p1_input: u8 = 0;
             //let mut p2_input: u8 = 0;
