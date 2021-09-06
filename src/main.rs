@@ -3,7 +3,6 @@
 
 use crate::gui::Gui;
 
-use std::thread;
 use std::rc::Rc;
 use std::time::SystemTime;
 use std::fs;
@@ -179,7 +178,8 @@ fn main() -> Result<(), Error> {
     runtime.nes.apu.set_sample_rate(sample_rate as u64);
     runtime.nes.apu.set_buffer_size(buffer_length / 2); //TODO: Look into what is a good value, should prob be less than the ring buffer
     stream.play().expect("Could not start playing sound output stream");
-    let (mut start_time, mut current_frame) = (SystemTime::now(), 0);
+    let (mut start_time, mut current_frame, mut nes_redraw_req) = (SystemTime::now(), 0, false);
+    let (mut gui_start_time, mut gui_current_frame) = (SystemTime::now(), 0);
 
     event_loop.run(move |event, _, control_flow| {
         // Update egui inputs
@@ -190,25 +190,22 @@ fn main() -> Result<(), Error> {
         match event {
             WinitEvent::MainEventsCleared => {
                 let runtime_in_ms = SystemTime::now().duration_since(start_time).unwrap().as_millis();
-                let target_frame = (runtime_in_ms as f64 / (1000.0 / 60.0)) as u128;
+                let target_nes_frame = (runtime_in_ms as f64 / (1000.0 / 60.0)) as u128;
                 
-                if current_frame == target_frame {
-                    thread::sleep(std::time::Duration::from_millis(1));
-                }
-                if target_frame - current_frame > 2 {
-                    eprintln!("We're running behind, reset the timer so we don't run off the deep end (frame {:?}/{:?})", current_frame, target_frame);
+                if target_nes_frame - current_frame > 2 {
+                    eprintln!("We're running behind, reset the timer so we don't run off the deep end (frame {:?}/{:?})", current_frame, target_nes_frame);
                     start_time = SystemTime::now();
                     current_frame = 0;
                     run_until_vblank(&mut runtime);
-                    window.request_redraw();
+                    nes_redraw_req = true;
                 } else {
-                    while current_frame < target_frame {
+                    while current_frame < target_nes_frame {
                         run_until_vblank(&mut runtime);
+                        nes_redraw_req = true;
                         current_frame += 1;
-                        window.request_redraw();
                     }
                 }
-        
+                window.request_redraw();
                 if runtime.nes.apu.buffer_full {
                     runtime.nes.apu.buffer_full = false;
                     let audio_buffer = runtime.nes.apu.output_buffer.to_owned();
@@ -219,18 +216,29 @@ fn main() -> Result<(), Error> {
                 }
             },
             WinitEvent::RedrawRequested(_) => {
-                render_screen_pixels(&mut runtime, pixels.get_frame());
+                if nes_redraw_req {
+                    render_screen_pixels(&mut runtime, pixels.get_frame());
+                }
+                
+                gui_current_frame += 1;
+                let dur = SystemTime::now().duration_since(gui_start_time).unwrap_or(std::time::Duration::from_millis(0));
+                if dur.as_millis() >= 2000 { // Update every 2 seconds
+                    gui.actual_fps = (gui_current_frame as f32 / dur.as_millis() as f32 * 1000.0) as u16;
+                    gui_start_time = SystemTime::now();
+                    gui_current_frame = 0;
+                }
+                
                 gui.prepare(&window, &runtime.nes);
 
                 // Render everything together
                 let render_result = pixels.render_with(|encoder, render_target, context| {
                     // Render the world texture
-                    context.scaling_renderer.render(encoder, render_target);
+                    let result = context.scaling_renderer.render(encoder, render_target);
 
                     // Render egui
-                    gui.render(encoder, render_target, context).unwrap()
+                    gui.render(encoder, render_target, context).expect("GUI failed to render");
 
-                    //();
+                    result
                 });
 
                 // Basic error handling

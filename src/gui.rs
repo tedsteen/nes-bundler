@@ -20,7 +20,8 @@ pub(crate) struct Gui {
 
     // State for the demo app.
     cpu_window_open: bool,
-    pub show_gui: bool
+    pub show_gui: bool,
+    pub actual_fps: u16
 }
 
 use egui::{color::*, *};
@@ -48,7 +49,8 @@ impl Gui {
             rpass,
             paint_jobs: Vec::new(),
             cpu_window_open: true,
-            show_gui: true
+            show_gui: true,
+            actual_fps: 0
         }
     }
 
@@ -89,82 +91,102 @@ impl Gui {
     /// Create the UI using egui.
     fn ui(&mut self, ctx: &egui::CtxRef, nes: &NesState) {
         if self.show_gui {
+            let window_open = &mut self.cpu_window_open;
+            let actual_fps = self.actual_fps;
             egui::TopBottomPanel::top("menubar_container").show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
                     egui::menu::menu(ui, "Windows", |ui| {
-                        ui.checkbox(&mut self.cpu_window_open, "CPU");
+                        ui.checkbox(window_open, "CPU");
                     });
-
+                    ui.with_layout(egui::Layout::right_to_left(), |ui| {
+                        ui.monospace(format!("FPS (UI): {:?}", actual_fps));
+                        ui.separator();
+                    });
                 });
             });
+            
             egui::Window::new("CPU").collapsible(false)
             .open(&mut self.cpu_window_open).show(ctx, |ui| {
-                ui.label( "===== Registers =====");
-                egui::Grid::new("my_grid")
-                .num_columns(2)
-                .spacing([60.0, 4.0])
-                .striped(true)
-                .show(ui, |ui| {
-                    ui.label("A:");
-                    ui.horizontal(|ui| ui.monospace(&format!("0x{:02X}", nes.registers.a)));
-                    ui.end_row();
-
-                    ui.label("X:");
-                    ui.horizontal(|ui| ui.monospace(&format!("0x{:02X}", nes.registers.x)));
-                    ui.end_row();
-
-                    ui.label("Y:");
-                    ui.horizontal(|ui| ui.monospace(&format!("0x{:02X}", nes.registers.y)));
-                    ui.end_row();
-
-                    ui.label("PC:");
-                    ui.horizontal(|ui| ui.monospace(&format!("0x{:04X}", nes.registers.pc)));
-                    ui.end_row();
-
-                    ui.label("S:");
-                    ui.horizontal(|ui| ui.monospace(&format!("0x{:02X}", nes.registers.s)));
-                    ui.end_row();
-
-                    ui.label("F:");
-                    
-                    ui.horizontal(|ui| ui.monospace("nvdzic"));
-                    ui.end_row();
-                    
-                    ui.label("");
-                    
-                    ui.horizontal(|ui| ui.monospace(&format!("{}{}{}{}{}{}",
-                    if nes.registers.flags.negative            {"n"} else {" "},
-                    if nes.registers.flags.overflow            {"v"} else {" "},
-                    if nes.registers.flags.decimal             {"d"} else {" "},
-                    if nes.registers.flags.zero                {"z"} else {" "},
-                    if nes.registers.flags.interrupts_disabled {"i"} else {" "},
-                    if nes.registers.flags.carry               {"c"} else {" "})));
-                    ui.end_row();
-                });
-
-                let scroll_area = ScrollArea::auto_sized();
-
-                ui.label("===== Disassembly =====");
-                scroll_area.show(ui, |ui| {
-                    ui.vertical(|ui| {
-                        let mut data_bytes_to_skip = 0;
-                        for i in 0 .. 30 {
-                            let pc = nes.registers.pc + (i as u16);
-                            let opcode = memory::debug_read_byte(nes, pc);
-                            let data1 = memory::debug_read_byte(nes, pc + 1);
-                            let data2 = memory::debug_read_byte(nes, pc + 2);
-                            let (instruction, data_bytes) = disassemble_instruction(opcode, data1, data2);
-                            let mut text_color = Color32::from_rgb(255, 255, 255);
-    
-                            if data_bytes_to_skip > 0 {
-                                text_color = Color32::from_rgb(64, 64, 64);
-                                data_bytes_to_skip -= 1;
-                            } else {
-                                data_bytes_to_skip = data_bytes;
-                            }
-                            ui.add(Label::new(&format!("0x{:04X} - 0x{:02X}:  {}", pc, opcode, instruction)).monospace().text_color(text_color));
-                        }
+                ui.with_layout(egui::Layout::left_to_right(), |ui| {
+                    CollapsingHeader::new("Registers")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        egui::Grid::new("register_grid")
+                        .num_columns(2)
+                        .spacing([60.0, 4.0])
+                        .striped(true)
+                        .show(ui, |ui| {
+                            ui.label("A:");
+                            ui.horizontal(|ui| ui.add(Label::new(&format!("0x{:02X}", nes.registers.a)).monospace().text_color(Color32::WHITE)));
+                            ui.end_row();
+        
+                            ui.label("X:");
+                            ui.horizontal(|ui| ui.add(Label::new(&format!("0x{:02X}", nes.registers.x)).monospace().text_color(Color32::WHITE)));
+                            ui.end_row();
+        
+                            ui.label("Y:");
+                            ui.horizontal(|ui| ui.add(Label::new(&format!("0x{:02X}", nes.registers.y)).monospace().text_color(Color32::WHITE)));
+                            ui.end_row();
+        
+                            ui.label("PC:");
+                            ui.horizontal(|ui| ui.add(Label::new(&format!("0x{:04X}", nes.registers.pc)).monospace().text_color(Color32::WHITE)));
+                            ui.end_row();
+        
+                            ui.label("S:");
+                            ui.horizontal(|ui| ui.add(Label::new(&format!("0x{:02X}", nes.registers.s)).monospace().text_color(Color32::WHITE)));
+                            ui.end_row();
+        
+                            ui.label("F:");
+                            
+                            ui.horizontal(|ui| ui.monospace("nvdzic"));
+                            ui.end_row();
+                            
+                            ui.label("");
+                            
+                            ui.horizontal(|ui| ui.add(Label::new(&format!("{}{}{}{}{}{}",
+                            if nes.registers.flags.negative            {"n"} else {" "},
+                            if nes.registers.flags.overflow            {"v"} else {" "},
+                            if nes.registers.flags.decimal             {"d"} else {" "},
+                            if nes.registers.flags.zero                {"z"} else {" "},
+                            if nes.registers.flags.interrupts_disabled {"i"} else {" "},
+                            if nes.registers.flags.carry               {"c"} else {" "})).monospace().text_color(Color32::WHITE)));
+                            ui.end_row();
+                        });
                     });
+                    
+                    CollapsingHeader::new("Disassembly")
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        let scroll_area = ScrollArea::auto_sized();
+                        
+                        scroll_area.show(ui, |ui| {
+                            egui::Grid::new("register_grid")
+                            .num_columns(2)
+                            .spacing([10.0, 4.0])
+                            .striped(true)
+                            .show(ui, |ui| {
+                                let mut data_bytes_to_skip = 0;
+                                for i in 0 .. 300 {
+                                    let pc = nes.registers.pc + (i as u16);
+                                    let opcode = memory::debug_read_byte(nes, pc);
+                                    let data1 = memory::debug_read_byte(nes, pc + 1);
+                                    let data2 = memory::debug_read_byte(nes, pc + 2);
+                                    let (instruction, data_bytes) = disassemble_instruction(opcode, data1, data2);
+                                    let mut text_color = Color32::WHITE;
+                                    
+                                    if data_bytes_to_skip > 0 {
+                                        text_color = Color32::from_rgb(64, 64, 64);
+                                        data_bytes_to_skip -= 1;
+                                    } else {
+                                        data_bytes_to_skip = data_bytes;
+                                    }
+                                    ui.add(Label::new(&format!("0x{:04X}", pc)).monospace());
+                                    ui.add(Label::new(&format!("{}", instruction)).monospace().text_color(text_color));
+                                    ui.end_row();
+                                }    
+                            });
+                        });
+                    });    
                 });
             });
         }
