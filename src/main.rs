@@ -9,8 +9,9 @@ use std::time::SystemTime;
 use std::fs;
 
 use cpal::Sample;
+use egui_wgpu_backend::wgpu;
 use log::error;
-use pixels::{Error, Pixels, SurfaceTexture};
+use pixels::{Error, PixelsBuilder, SurfaceTexture};
 use winit::dpi::LogicalSize;
 use winit::event::{Event as WinitEvent, VirtualKeyCode};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -157,7 +158,13 @@ fn main() -> Result<(), Error> {
         let window_size = window.inner_size();
         let scale_factor = window.scale_factor();
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
-        let pixels = Pixels::new(width, height, surface_texture)?;
+        
+        let pixels = PixelsBuilder::new(width, height, surface_texture)
+        .request_adapter_options(wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            compatible_surface: None,
+        })
+        .build()?;
         let gui = Gui::new(window_size.width, window_size.height, scale_factor, &pixels);
 
         (pixels, gui)
