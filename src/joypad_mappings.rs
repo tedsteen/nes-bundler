@@ -1,5 +1,6 @@
 use winit::event::VirtualKeyCode;
 use winit_input_helper::WinitInputHelper;
+use winit::event::VirtualKeyCode::*;
 
 pub(crate) struct JoypadMappings {
     pub up: VirtualKeyCode,
@@ -43,5 +44,30 @@ impl JoypadMappings {
         }
 
         pad_data
+    }
+    pub fn default_pad1() -> JoypadMappings {
+        JoypadMappings {
+            up: Up,
+            down: Down,
+            left: Left,
+            right: Right,
+            start: Key1,
+            select: Key2,
+            b: Q,
+            a: W,
+
+        }
+    }
+    pub fn default_pad2() -> JoypadMappings {
+        JoypadMappings {
+            up: W,
+            down: S,
+            left: A,
+            right: D,
+            start: Key9,
+            select: Key0,
+            b: LAlt,
+            a: LControl
+        }
     }
 }

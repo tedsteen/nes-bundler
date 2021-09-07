@@ -95,10 +95,10 @@ impl Gui {
                             self.make_button_combo(ui, "Pad 1 - Down", &mut pad1.down);
                             self.make_button_combo(ui, "Pad 1 - Left", &mut pad1.left);
                             self.make_button_combo(ui, "Pad 1 - Right", &mut pad1.right);
-                            self.make_button_combo(ui, "Pad 1 - A", &mut pad1.a);
-                            self.make_button_combo(ui, "Pad 1 - B", &mut pad1.b);
                             self.make_button_combo(ui, "Pad 1 - Start", &mut pad1.start);
                             self.make_button_combo(ui, "Pad 1 - Select", &mut pad1.select);
+                            self.make_button_combo(ui, "Pad 1 - B", &mut pad1.b);
+                            self.make_button_combo(ui, "Pad 1 - A", &mut pad1.a);
                         });
                     });
 
@@ -109,10 +109,10 @@ impl Gui {
                             self.make_button_combo(ui, "Pad 2 - Down", &mut pad2.down);
                             self.make_button_combo(ui, "Pad 2 - Left", &mut pad2.left);
                             self.make_button_combo(ui, "Pad 2 - Right", &mut pad2.right);
-                            self.make_button_combo(ui, "Pad 2 - A", &mut pad2.a);
-                            self.make_button_combo(ui, "Pad 2 - B", &mut pad2.b);
                             self.make_button_combo(ui, "Pad 2 - Start", &mut pad2.start);
                             self.make_button_combo(ui, "Pad 2 - Select", &mut pad2.select);
+                            self.make_button_combo(ui, "Pad 2 - B", &mut pad2.b);
+                            self.make_button_combo(ui, "Pad 2 - A", &mut pad2.a);
                         });
                     });
                 });

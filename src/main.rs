@@ -181,27 +181,8 @@ fn main() -> Result<(), Error> {
         cpal::SampleFormat::I16 => start_audio_stream::<i16>(&output_device, &output_config.into()),
         cpal::SampleFormat::U16 => start_audio_stream::<u16>(&output_device, &output_config.into())
     };
-    let mut pad1 = JoypadMappings {
-        up: VirtualKeyCode::Up,
-        down: VirtualKeyCode::Down,
-        left: VirtualKeyCode::Left,
-        right: VirtualKeyCode::Right,
-        start: VirtualKeyCode::Key1,
-        select: VirtualKeyCode::Key2,
-        a: VirtualKeyCode::RControl,
-        b: VirtualKeyCode::RAlt
-    };
-
-    let mut pad2 = JoypadMappings {
-        up: VirtualKeyCode::W,
-        down: VirtualKeyCode::S,
-        left: VirtualKeyCode::A,
-        right: VirtualKeyCode::D,
-        start: VirtualKeyCode::Key9,
-        select: VirtualKeyCode::Key0,
-        a: VirtualKeyCode::LControl,
-        b: VirtualKeyCode::LAlt
-    };
+    let mut pad1 = JoypadMappings::default_pad1();
+    let mut pad2 = JoypadMappings::default_pad2();
 
     runtime.nes.apu.set_sample_rate(sample_rate as u64);
     runtime.nes.apu.set_buffer_size(buffer_length / 2); //TODO: Look into what is a good value, should prob be less than the ring buffer
