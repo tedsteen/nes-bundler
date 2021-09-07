@@ -144,7 +144,7 @@ fn main() -> Result<(), Error> {
     let output_config = supported_configs_range.next().expect("no supported config?!").with_max_sample_rate();
     
     let mut runtime: RuntimeState = RuntimeState::new();
-    load_rom(&mut runtime, &Asset::get("rom2.nes").expect("Missing embedded ROM").data);
+    load_rom(&mut runtime, &Asset::get("rom.nes").expect("Missing embedded ROM").data);
     //use std::fs; load_rom(&mut runtime, fs::read("assets/rom2.nes").expect("Could not read ROM").as_slice());    
 
     let event_loop = EventLoop::new();

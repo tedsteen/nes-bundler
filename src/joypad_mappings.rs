@@ -35,12 +35,13 @@ impl JoypadMappings {
             pad_data |= 0b00000100u8;
         }
 
-        if input.key_held(self.a) {
+        if input.key_held(self.b) {
             pad_data |= 0b00000010u8;
         }
-        if input.key_held(self.b) {
+        if input.key_held(self.a) {
             pad_data |= 0b00000001u8;
         }
+
         pad_data
     }
 }
