@@ -2,10 +2,10 @@
 #![forbid(unsafe_code)]
 
 use crate::gui::Gui;
+use crate::joypad_mappings::JoypadMappings;
 
 use std::rc::Rc;
 use std::time::SystemTime;
-use std::fs;
 
 use cpal::Sample;
 use egui_wgpu_backend::wgpu;
@@ -25,6 +25,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::RingBuffer;
 
 mod gui;
+mod joypad_mappings;
 
 pub fn dispatch_event(runtime: &mut RuntimeState, event: Event) -> Vec<Event> {
     let mut responses: Vec<Event> = Vec::new();
@@ -127,7 +128,12 @@ T: cpal::Sample,
     return (producer, stream_config.sample_rate.0, latency_samples, output_stream);
 }
 
-fn main() -> Result<(), Error> {
+use rust_embed::RustEmbed;
+#[derive(RustEmbed)]
+#[folder = "assets/"]
+struct Asset;
+
+fn main() -> Result<(), Error> {    
     env_logger::init();
     let host = cpal::default_host();
 
@@ -138,7 +144,8 @@ fn main() -> Result<(), Error> {
     let output_config = supported_configs_range.next().expect("no supported config?!").with_max_sample_rate();
     
     let mut runtime: RuntimeState = RuntimeState::new();
-    load_rom(&mut runtime, fs::read("rom2.nes").expect("Could not read ROM").as_slice());
+    load_rom(&mut runtime, &Asset::get("rom2.nes").expect("Missing embedded ROM").data);
+    //use std::fs; load_rom(&mut runtime, fs::read("assets/rom2.nes").expect("Could not read ROM").as_slice());    
 
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
@@ -174,18 +181,61 @@ fn main() -> Result<(), Error> {
         cpal::SampleFormat::I16 => start_audio_stream::<i16>(&output_device, &output_config.into()),
         cpal::SampleFormat::U16 => start_audio_stream::<u16>(&output_device, &output_config.into())
     };
+    let mut pad1 = JoypadMappings {
+        up: VirtualKeyCode::Up,
+        down: VirtualKeyCode::Down,
+        left: VirtualKeyCode::Left,
+        right: VirtualKeyCode::Right,
+        start: VirtualKeyCode::Key1,
+        select: VirtualKeyCode::Key2,
+        a: VirtualKeyCode::RControl,
+        b: VirtualKeyCode::RAlt
+    };
+
+    let mut pad2 = JoypadMappings {
+        up: VirtualKeyCode::W,
+        down: VirtualKeyCode::S,
+        left: VirtualKeyCode::A,
+        right: VirtualKeyCode::D,
+        start: VirtualKeyCode::Key9,
+        select: VirtualKeyCode::Key0,
+        a: VirtualKeyCode::LControl,
+        b: VirtualKeyCode::LAlt
+    };
 
     runtime.nes.apu.set_sample_rate(sample_rate as u64);
     runtime.nes.apu.set_buffer_size(buffer_length / 2); //TODO: Look into what is a good value, should prob be less than the ring buffer
     stream.play().expect("Could not start playing sound output stream");
     let (mut start_time, mut current_frame, mut nes_redraw_req) = (SystemTime::now(), 0, false);
-    let (mut gui_start_time, mut gui_current_frame) = (SystemTime::now(), 0);
-
     event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Poll;
         // Update egui inputs
         gui.handle_event(&event);
 
-        *control_flow = ControlFlow::Poll;
+        // Handle input events
+        if input.update(&event) {
+            // Close events
+            if input.key_pressed(VirtualKeyCode::Escape) || input.quit() {
+                *control_flow = ControlFlow::Exit;
+                return;
+            }
+            // Update the scale factor
+            if let Some(scale_factor) = input.scale_factor() {
+                gui.scale_factor(scale_factor);
+            }
+            // Resize the window
+            if let Some(size) = input.window_resized() {
+                pixels.resize_surface(size.width, size.height);
+                gui.resize(size.width, size.height);
+            }
+
+            if input.key_pressed(VirtualKeyCode::F1) {
+                gui.show_gui = !gui.show_gui;
+            }
+
+            runtime.nes.p1_input = pad1.to_pad(&input);
+            runtime.nes.p2_input = pad2.to_pad(&input);
+        }
 
         match event {
             WinitEvent::MainEventsCleared => {
@@ -220,15 +270,7 @@ fn main() -> Result<(), Error> {
                     render_screen_pixels(&mut runtime, pixels.get_frame());
                 }
                 
-                gui_current_frame += 1;
-                let dur = SystemTime::now().duration_since(gui_start_time).unwrap_or(std::time::Duration::from_millis(0));
-                if dur.as_millis() >= 2000 { // Update every 2 seconds
-                    gui.actual_fps = (gui_current_frame as f32 / dur.as_millis() as f32 * 1000.0) as u16;
-                    gui_start_time = SystemTime::now();
-                    gui_current_frame = 0;
-                }
-                
-                gui.prepare(&window, &runtime.nes);
+                gui.prepare(&window, &mut pad1, &mut pad2);
 
                 // Render everything together
                 let render_result = pixels.render_with(|encoder, render_target, context| {
@@ -252,60 +294,5 @@ fn main() -> Result<(), Error> {
             },
             _ => ()
         }
-        
-        // Handle input events
-        if input.update(&event) {
-            // Close events
-            if input.key_pressed(VirtualKeyCode::Escape) || input.quit() {
-                *control_flow = ControlFlow::Exit;
-                return;
-            }
-            // Update the scale factor
-            if let Some(scale_factor) = input.scale_factor() {
-                gui.scale_factor(scale_factor);
-            }
-            // Resize the window
-            if let Some(size) = input.window_resized() {
-                pixels.resize_surface(size.width, size.height);
-                gui.resize(size.width, size.height);
-            }
-
-            if input.key_pressed(VirtualKeyCode::F1) {
-                gui.show_gui = !gui.show_gui;
-            }
-            let mut p1_input: u8 = 0;
-            //let mut p2_input: u8 = 0;
-
-            if input.key_held(VirtualKeyCode::Up) {
-                p1_input |= 0b00010000u8;
-            }
-            if input.key_held(VirtualKeyCode::Down) {
-                p1_input |= 0b00100000u8;
-            }
-            if input.key_held(VirtualKeyCode::Left) {
-                p1_input |= 0b01000000u8;
-            }
-            if input.key_held(VirtualKeyCode::Right) {
-                p1_input |= 0b10000000u8;
-            }
-
-            if input.key_held(VirtualKeyCode::Key1) {
-                p1_input |= 0b10001000u8;
-            }
-            if input.key_held(VirtualKeyCode::Key2) {
-                p1_input |= 0b00000100u8;
-            }
-
-            if input.key_held(VirtualKeyCode::A) {
-                p1_input |= 0b00000010u8;
-            }
-            if input.key_held(VirtualKeyCode::O) {
-                p1_input |= 0b00000001u8;
-            }
-
-            runtime.nes.p1_input = p1_input;
-            //runtime.nes.p2_input = p2_input;
-        }
-        
     });
 }
