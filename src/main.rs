@@ -116,14 +116,15 @@ fn main() -> Result<(), Error> {
     let audio = Audio::new();
     
     #[allow(unused_variables)] // This reference needs to be held on to to keep the stream running
-    let audio_stream = audio.start(100, Arc::clone(&runtime));
+    let audio_stream = audio.start(gui.latency, runtime.clone());
     
     let (mut start_time, mut current_frame, mut nes_redraw_req) = (SystemTime::now(), 0, false);
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         // Update egui inputs
         gui.handle_event(&event);
-
+        
+        audio_stream.set_latency(gui.latency);
         // Handle input events
         if input.update(&event) {
             // Close events

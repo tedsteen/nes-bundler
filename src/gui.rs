@@ -18,6 +18,7 @@ pub(crate) struct Gui {
 
     // State for the demo app.
     pub show_gui: bool,
+    pub latency: u16
 }
 
 const AVAILABLE_KEY_CODES: &'static [VirtualKeyCode] = &[Key1, Key2, Key3, Key4, Key5, Key6, Key7, Key8, Key9, Key0, A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z, Insert, Home, Delete, End, PageDown, PageUp, Left, Up, Right, Down, Back, Return, Space, Numlock, Numpad0, Numpad1, Numpad2, Numpad3, Numpad4, Numpad5, Numpad6, Numpad7, Numpad8, Numpad9, NumpadAdd, NumpadDivide, NumpadDecimal, NumpadComma, NumpadEnter, NumpadEquals, NumpadMultiply, NumpadSubtract, LAlt, LControl, LShift, LWin, RAlt, RControl, RShift, RWin, Tab];
@@ -45,7 +46,8 @@ impl Gui {
             screen_descriptor,
             rpass,
             paint_jobs: Vec::new(),
-            show_gui: false
+            show_gui: false,
+            latency: 100
         }
     }
 
@@ -87,6 +89,7 @@ impl Gui {
     fn ui(&mut self, ctx: &egui::CtxRef, pad1: &mut JoypadMappings, pad2: &mut JoypadMappings) {
         if self.show_gui {
             egui::Window::new("Joypad Mappings").collapsible(false).show(ctx, |ui| {
+                ui.add(egui::Slider::new(&mut self.latency, 1..=1000).suffix("ms"));
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         ui.label("Joypad #1");
