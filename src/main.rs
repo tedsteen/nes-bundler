@@ -2,12 +2,12 @@
 #![forbid(unsafe_code)]
 
 use crate::gui::Gui;
+use crate::audio::Audio;
 use crate::joypad_mappings::JoypadMappings;
 
 use std::rc::Rc;
 use std::time::SystemTime;
 
-use cpal::Sample;
 use egui_wgpu_backend::wgpu;
 use log::error;
 use pixels::{Error, PixelsBuilder, SurfaceTexture};
@@ -21,11 +21,9 @@ use rusticnes_core::palettes::NTSC_PAL;
 use rusticnes_ui_common::application::RuntimeState;
 use rusticnes_ui_common::events::Event;
 
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use ringbuf::RingBuffer;
-
 mod gui;
 mod joypad_mappings;
+mod audio;
 
 pub fn dispatch_event(runtime: &mut RuntimeState, event: Event) -> Vec<Event> {
     let mut responses: Vec<Event> = Vec::new();
@@ -70,64 +68,6 @@ pub fn render_screen_pixels(runtime: &mut RuntimeState, frame: &mut [u8]) {
     }
 }
 
-pub fn start_audio_stream<T>(output_device: &cpal::Device, config: &cpal::SupportedStreamConfig) -> (ringbuf::Producer<i16>, u32, usize, cpal::Stream)
-where
-T: cpal::Sample,
-{
-    let mut stream_config:cpal::StreamConfig = config.config();
-    //stream_config.sample_rate = cpal::SampleRate(44100);
-    stream_config.channels = 1;
-/*
-    stream_config.buffer_size = match config.buffer_size() {
-        cpal::SupportedBufferSize::Range {min, max: _} => cpal::BufferSize::Fixed(*min),
-        cpal::SupportedBufferSize::Unknown =>  cpal::BufferSize::Default,
-    };
-*/
-    let sample_rate = stream_config.sample_rate.0 as f32;
-    let channels = stream_config.channels as usize;
-
-    const LATENCY: f32 = 200.0;
-    let latency_frames = (LATENCY / 1_000.0) * sample_rate as f32;
-    let latency_samples = latency_frames as usize * channels as usize;
-
-    println!("Sound config: {:?}", stream_config);
-    println!("latency_frames: {:?}, latency_samples: {:?}", latency_frames, latency_samples);
-
-    // The buffer to share samples
-    let ring = RingBuffer::<i16>::new(latency_samples * 2);
-    let (mut producer, mut consumer) = ring.split();
-
-    // Fill the samples with 0.0 equal to the length of the delay.
-    for _ in 0..latency_samples {
-        producer.push(0).unwrap();
-    }
-
-    let err_fn = |err| eprintln!("an error occurred on the output audio stream: {}", err);
-    let output_stream: cpal::Stream = output_device.build_output_stream(
-        &stream_config, 
-        move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-            //consumer.pop_slice(data);
-            let mut input_fell_behind = false;
-            for sample in data {
-                *sample = match consumer.pop() {
-                    Some(s) => Sample::from(&s),
-                    None => {
-                        input_fell_behind = true;
-                        0.0
-                    }
-                };
-            }
-            if input_fell_behind {
-                eprintln!("Consuming audio faster than it's being produced! Try increasing latency");
-            }
-        },
-        err_fn).expect("Could not build sound output stream");
-    
-    output_stream.pause().unwrap();
-    
-    return (producer, stream_config.sample_rate.0, latency_samples, output_stream);
-}
-
 use rust_embed::RustEmbed;
 #[derive(RustEmbed)]
 #[folder = "assets/"]
@@ -135,16 +75,9 @@ struct Asset;
 
 fn main() -> Result<(), Error> {    
     env_logger::init();
-    let host = cpal::default_host();
-
-    let output_device = host.default_output_device().expect("no sound output device available");
-    println!("Sound output device: {}", output_device.name().unwrap());
-
-    let mut supported_configs_range = output_device.supported_output_configs().expect("error while querying configs");
-    let output_config = supported_configs_range.next().expect("no supported config?!").with_max_sample_rate();
-    
+        
     let mut runtime: RuntimeState = RuntimeState::new();
-    load_rom(&mut runtime, &Asset::get("rom.nes").expect("Missing embedded ROM").data);
+    load_rom(&mut runtime, &Asset::get("rom2.nes").expect("Missing embedded ROM").data);
     //use std::fs; load_rom(&mut runtime, fs::read("assets/rom2.nes").expect("Could not read ROM").as_slice());    
 
     let event_loop = EventLoop::new();
@@ -176,17 +109,14 @@ fn main() -> Result<(), Error> {
         (pixels, gui)
     };
 
-    let (mut producer, sample_rate, buffer_length, stream) = match output_config.sample_format() {
-        cpal::SampleFormat::F32 => start_audio_stream::<f32>(&output_device, &output_config.into()),
-        cpal::SampleFormat::I16 => start_audio_stream::<i16>(&output_device, &output_config.into()),
-        cpal::SampleFormat::U16 => start_audio_stream::<u16>(&output_device, &output_config.into())
-    };
     let mut pad1 = JoypadMappings::default_pad1();
     let mut pad2 = JoypadMappings::default_pad2();
-
-    runtime.nes.apu.set_sample_rate(sample_rate as u64);
-    runtime.nes.apu.set_buffer_size(buffer_length / 2); //TODO: Look into what is a good value, should prob be less than the ring buffer
-    stream.play().expect("Could not start playing sound output stream");
+    let audio = Audio::new();
+    
+    let mut audio_stream = audio.start(100, 1);
+    runtime.nes.apu.set_sample_rate(audio_stream.sample_rate as u64);
+    runtime.nes.apu.set_buffer_size(audio_stream.buffer_length / 2); //TODO: Look into what is a good value, should prob be less than the ring buffer
+    
     let (mut start_time, mut current_frame, mut nes_redraw_req) = (SystemTime::now(), 0, false);
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -240,7 +170,7 @@ fn main() -> Result<(), Error> {
                 if runtime.nes.apu.buffer_full {
                     runtime.nes.apu.buffer_full = false;
                     let audio_buffer = runtime.nes.apu.output_buffer.to_owned();
-                    let result = producer.push_slice(audio_buffer.as_slice());
+                    let result = audio_stream.producer.push_slice(audio_buffer.as_slice());
                     if result < audio_buffer.len() {
                         eprintln!("Producing audio faster than it's being consumed! ({:?} left)", audio_buffer.len() - result);
                     }
