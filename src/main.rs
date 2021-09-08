@@ -7,6 +7,8 @@ use crate::joypad_mappings::JoypadMappings;
 
 use std::rc::Rc;
 use std::time::SystemTime;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 use egui_wgpu_backend::wgpu;
 use log::error;
@@ -25,13 +27,13 @@ mod gui;
 mod joypad_mappings;
 mod audio;
 
-pub fn dispatch_event(runtime: &mut RuntimeState, event: Event) -> Vec<Event> {
+pub fn dispatch_event(runtime: &mut Arc<Mutex<RuntimeState>>, event: Event) -> Vec<Event> {
     let mut responses: Vec<Event> = Vec::new();
-    responses.extend(runtime.handle_event(event.clone()));
+    responses.extend(runtime.lock().unwrap().handle_event(event.clone()));
     return responses;
 }
 
-pub fn resolve_events(runtime: &mut RuntimeState, mut events: Vec<Event>) {
+pub fn resolve_events(runtime: &mut Arc<Mutex<RuntimeState>>, mut events: Vec<Event>) {
     while events.len() > 0 {
         let event = events.remove(0);
         let responses = dispatch_event(runtime, event);
@@ -39,7 +41,7 @@ pub fn resolve_events(runtime: &mut RuntimeState, mut events: Vec<Event>) {
     }
 }
 
-pub fn load_rom(runtime: &mut RuntimeState, cart_data: &[u8]) {
+pub fn load_rom(runtime: &mut Arc<Mutex<RuntimeState>>, cart_data: &[u8]) {
     let mut events: Vec<Event> = Vec::new();
     let bucket_of_nothing: Vec<u8> = Vec::new();
     let cartridge_data = cart_data.to_vec();
@@ -47,18 +49,18 @@ pub fn load_rom(runtime: &mut RuntimeState, cart_data: &[u8]) {
     resolve_events(runtime, events);
 }
 
-pub fn run_until_vblank(runtime: &mut RuntimeState) {
+pub fn run_until_vblank(runtime: &mut Arc<Mutex<RuntimeState>>) {
     let mut events: Vec<Event> = Vec::new();
     events.push(Event::NesRunFrame);
     resolve_events(runtime, events);
 }
 
-pub fn render_screen_pixels(runtime: &mut RuntimeState, frame: &mut [u8]) {
-    let nes = &runtime.nes;
+pub fn render_screen_pixels(runtime: &mut Arc<Mutex<RuntimeState>>, frame: &mut [u8]) {
+    let ppu = &runtime.lock().unwrap().nes.ppu;
 
     for x in 0 .. 256 {
         for y in 0 .. 240 {
-            let palette_index = ((nes.ppu.screen[y * 256 + x]) as usize) * 3;
+            let palette_index = ((ppu.screen[y * 256 + x]) as usize) * 3;
             let pixel_offset = (y * 256 + x) * 4;
             frame[pixel_offset + 0] = NTSC_PAL[palette_index + 0];
             frame[pixel_offset + 1] = NTSC_PAL[palette_index + 1];
@@ -76,7 +78,7 @@ struct Asset;
 fn main() -> Result<(), Error> {    
     env_logger::init();
         
-    let mut runtime: RuntimeState = RuntimeState::new();
+    let mut runtime = Arc::new(Mutex::new(RuntimeState::new()));
     load_rom(&mut runtime, &Asset::get("rom2.nes").expect("Missing embedded ROM").data);
     //use std::fs; load_rom(&mut runtime, fs::read("assets/rom2.nes").expect("Could not read ROM").as_slice());    
 
@@ -113,9 +115,8 @@ fn main() -> Result<(), Error> {
     let mut pad2 = JoypadMappings::default_pad2();
     let audio = Audio::new();
     
-    let mut audio_stream = audio.start(100, 1);
-    runtime.nes.apu.set_sample_rate(audio_stream.sample_rate as u64);
-    runtime.nes.apu.set_buffer_size(audio_stream.buffer_length / 2); //TODO: Look into what is a good value, should prob be less than the ring buffer
+    #[allow(unused_variables)] // This reference needs to be held on to to keep the stream running
+    let audio_stream = audio.start(100, Arc::clone(&runtime));
     
     let (mut start_time, mut current_frame, mut nes_redraw_req) = (SystemTime::now(), 0, false);
     event_loop.run(move |event, _, control_flow| {
@@ -144,8 +145,9 @@ fn main() -> Result<(), Error> {
                 gui.show_gui = !gui.show_gui;
             }
 
-            runtime.nes.p1_input = pad1.to_pad(&input);
-            runtime.nes.p2_input = pad2.to_pad(&input);
+            let mut nes = &mut runtime.lock().unwrap().nes;
+            nes.p1_input = pad1.to_pad(&input);
+            nes.p2_input = pad2.to_pad(&input);
         }
 
         match event {
@@ -167,14 +169,6 @@ fn main() -> Result<(), Error> {
                     }
                 }
                 window.request_redraw();
-                if runtime.nes.apu.buffer_full {
-                    runtime.nes.apu.buffer_full = false;
-                    let audio_buffer = runtime.nes.apu.output_buffer.to_owned();
-                    let result = audio_stream.producer.push_slice(audio_buffer.as_slice());
-                    if result < audio_buffer.len() {
-                        eprintln!("Producing audio faster than it's being consumed! ({:?} left)", audio_buffer.len() - result);
-                    }
-                }
             },
             WinitEvent::RedrawRequested(_) => {
                 if nes_redraw_req {
