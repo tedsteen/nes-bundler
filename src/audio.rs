@@ -1,64 +1,9 @@
-use cpal::Sample;
+use cpal::{Sample, StreamConfig};
 use cpal::traits::{DeviceTrait, HostTrait};
 use rusticnes_ui_common::application::RuntimeState;
 use std::sync::Arc;
 use std::sync::Mutex;
 use ringbuf::RingBuffer;
-struct Buffer {
-    pub latency: u16,
-    length: usize,
-    sample_rate: f32,
-    channels: usize,
-    producer: ringbuf::Producer<i16>,
-    consumer: ringbuf::Consumer<i16>,
-    runtime: Arc<Mutex<RuntimeState>>
-}
-
-impl Buffer {
-    fn new(runtime: Arc<Mutex<RuntimeState>>, latency: u16, sample_rate: f32, channels: usize) -> Self {
-        let (mut producer, consumer, buffer_size) = Buffer::create_ring(&runtime, latency, sample_rate, channels);
-        // Fill the samples with 0.0 equal to the length of the delay.
-        for _ in 0..buffer_size * 2 {
-            producer.push(0).unwrap();
-        }
-
-        let apu = &mut runtime.lock().unwrap().nes.apu;
-        apu.set_sample_rate(sample_rate as u64);
-        
-
-        Self {
-            latency,
-            length: buffer_size,
-            sample_rate,
-            channels,
-            producer,
-            consumer,
-            runtime: runtime.clone()
-        }
-    }
-    fn create_ring(_runtime: &Arc<Mutex<RuntimeState>>, latency: u16, sample_rate: f32, channels: usize) -> (ringbuf::Producer<i16>, ringbuf::Consumer<i16>, usize) {
-        let latency_frames = (latency as f32 / 1_000.0) * sample_rate as f32;
-        let buffer_size = latency_frames as usize * channels as usize;
-        let ring = RingBuffer::<i16>::new(buffer_size * 2);
-        let (producer, consumer) = ring.split();
-        println!("Audio latency: {}ms", latency);
-        
-        // TODO: set apu sample rate and buffer size here when rusticnes supports it.
-        //let apu = &mut runtime.lock().unwrap().nes.apu;
-        //apu.set_buffer_size(buffer_size);
-
-        (producer, consumer, buffer_size)
-    }
-
-    fn set_latency(self: &mut Self, latency: u16) {
-        let (mut producer, consumer, length) = Buffer::create_ring(&self.runtime, latency, self.sample_rate, self.channels);
-        self.consumer.move_to(&mut producer, None);
-        self.latency = latency;
-        self.producer = producer;
-        self.consumer = consumer;
-        self.length = length;
-    }
-}
 
 pub(crate) struct Audio {
     output_device: cpal::Device,
@@ -68,73 +13,54 @@ pub(crate) struct Audio {
 pub(crate) struct Stream {
     #[allow(dead_code)] // This reference needs to be held on to to keep the stream running
     stream: cpal::Stream,
-    buffer: Arc<Mutex<Buffer>>,
+    latency: u16,
+    runtime: Arc<Mutex<RuntimeState>>,
+    sample_rate: f32,
+    channels: usize
 }
 
 impl Stream {
-    fn new(latency : u16, audio: &Audio, runtime: Arc<Mutex<RuntimeState>>) -> Self {
-        let mut stream_config = audio.output_config.config();
-        stream_config.channels = 1;
-/*
-        stream_config.buffer_size = match output_config.buffer_size() {
-            cpal::SupportedBufferSize::Range {min, max: _} => cpal::BufferSize::Fixed(*min),
-            cpal::SupportedBufferSize::Unknown =>  cpal::BufferSize::Default,
-        };
-*/
-        let (stream, buffer) = Stream::create_stream(&audio.output_device, &audio.output_config, &stream_config, latency, &runtime);
-        Self {
-            stream: stream,
-            buffer,
-        }
-    }
-
-    pub fn set_latency(self: &Self, latency: u16) {
-        let mut buffer = self.buffer.lock().unwrap();
-        if buffer.latency != latency {
-            buffer.set_latency(std::cmp::max(1, latency) as u16);
-        }
-    }
-
-    fn create_stream(output_device: &cpal::Device, output_config: &cpal::SupportedStreamConfig, stream_config: &cpal::StreamConfig, latency: u16, runtime: &Arc<Mutex<RuntimeState>>) -> (cpal::Stream, Arc<Mutex<Buffer>>) {
-        match output_config.sample_format() {
-            cpal::SampleFormat::F32 => Stream::create_audio_stream::<f32>(&output_device, &stream_config, latency, runtime),
-            cpal::SampleFormat::I16 => Stream::create_audio_stream::<i16>(&output_device, &stream_config, latency, runtime),
-            cpal::SampleFormat::U16 => Stream::create_audio_stream::<u16>(&output_device, &stream_config, latency, runtime)
-        }
-    }
-
-    fn create_audio_stream<T>(output_device: &cpal::Device, stream_config: &cpal::StreamConfig, latency: u16, runtime: &Arc<Mutex<RuntimeState>>) -> (cpal::Stream, Arc<Mutex<Buffer>>)
+    fn new<T>(latency : u16, mut stream_config: StreamConfig, output_device: &cpal::Device, runtime: Arc<Mutex<RuntimeState>>) -> Self 
     where
     T: cpal::Sample,
     {
+        stream_config.channels = 1;
+                
         let sample_rate = stream_config.sample_rate.0 as f32;
         let channels = stream_config.channels as usize;
-        let buffer = Arc::new(Mutex::new(Buffer::new(runtime.clone(), latency, sample_rate, channels)));
+
+        let buffer_size = Stream::calc_buffer_length(latency, sample_rate, channels);
+
+        let apu = &mut runtime.lock().unwrap().nes.apu;
+        apu.set_sample_rate(sample_rate as u64);
+        apu.set_buffer_size(buffer_size);
 
         println!("Stream config: {:?}", stream_config);
-        
-        let runtime = runtime.clone();
-        let buffer_for_output_stream = buffer.clone();
-        (output_device.build_output_stream(
-            stream_config,
-            move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                let mut lock = runtime.lock().unwrap();
-                let mut buffer = buffer_for_output_stream.lock().unwrap();
+                
+        let ring = RingBuffer::<i16>::new(2 * Stream::calc_buffer_length(1000, sample_rate, channels)); //make a buffer big enough for maximum latency
+        let (mut producer, mut consumer) = ring.split();
+        // Add the delay to the buffer
+        for _ in 0..buffer_size {
+            producer.push(0).unwrap();
+        }
 
+        let runtime_for_stream = runtime.clone();
+        let start_time = std::time::SystemTime::now();
+
+        let stream = output_device.build_output_stream(
+            &stream_config,
+            move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                let mut lock = runtime_for_stream.lock().unwrap();
                 let apu = &mut lock.nes.apu;
+
                 if apu.buffer_full {
-                    apu.buffer_full = false;                    
-                    let audio_buffer = apu.output_buffer.to_owned();
-                    let result = buffer.producer.push_slice(audio_buffer.as_slice());
-                    if result < audio_buffer.len() {
-                        eprintln!("Producing audio faster than it's being consumed! ({:?} left)", audio_buffer.len() - result);
-                    }
+                    apu.buffer_full = false;
+                    producer.push_slice(apu.output_buffer.to_owned().as_slice());
                 }
-                std::mem::drop(lock);
 
                 let mut input_fell_behind = false;
                 for sample in data {
-                    *sample = match buffer.consumer.pop() {
+                    *sample = match consumer.pop() {
                         Some(s) => Sample::from(&s),
                         None => {
                             input_fell_behind = true;
@@ -143,13 +69,41 @@ impl Stream {
                     };
                 }
                 if input_fell_behind {
-                    eprintln!("Consuming audio faster than it's being produced! Try increasing latency");
+                    if std::time::SystemTime::now().duration_since(start_time).unwrap().gt(&std::time::Duration::from_secs(1)) {
+                        eprintln!("Consuming audio faster than it's being produced! Try increasing latency");
+                    }
                 }
             },
             |err| eprintln!("an error occurred on the output audio stream: {}", err)
-        ).expect("Could not build sound output stream"), buffer.clone())
+        ).expect("Could not build sound output stream");
+
+        Self {
+            stream: stream,
+            latency,
+            runtime: runtime.clone(),
+            sample_rate,
+            channels
+        }
+    }
+
+    fn calc_buffer_length(latency: u16, sample_rate: f32, channels: usize) -> usize {
+        let latency_frames = (latency as f32 / 1_000.0) * sample_rate;
+        latency_frames as usize * channels as usize
+    }
+
+    pub fn set_latency(self: &mut Self, mut latency: u16) {
+        latency = std::cmp::max(latency, 1);
+
+        if self.latency != latency {
+            let buffer_size = Stream::calc_buffer_length(latency, self.sample_rate, self.channels);
+    
+            let apu = &mut self.runtime.lock().unwrap().nes.apu;
+            apu.set_buffer_size(buffer_size);
+            self.latency = latency;
+        }
     }
 }
+
 impl Audio {
     pub fn new() -> Self {
         let host = cpal::default_host();
@@ -167,6 +121,17 @@ impl Audio {
     }
 
     pub(crate) fn start(self: &Self, latency : u16, runtime: Arc<Mutex<RuntimeState>>) -> Stream {
-        Stream::new(latency, self, runtime)
+        let stream_config = self.output_config.config();
+/*        
+        stream_config.buffer_size = match self.output_config.buffer_size() {
+            cpal::SupportedBufferSize::Range {min, max: _} => cpal::BufferSize::Fixed(*min),
+            cpal::SupportedBufferSize::Unknown =>  cpal::BufferSize::Default,
+        };
+*/
+        match self.output_config.sample_format() {
+            cpal::SampleFormat::F32 => Stream::new::<f32>(latency, stream_config, &self.output_device, runtime),
+            cpal::SampleFormat::I16 => Stream::new::<i16>(latency, stream_config, &self.output_device, runtime),
+            cpal::SampleFormat::U16 => Stream::new::<u16>(latency, stream_config, &self.output_device, runtime)
+        }
     }
 }

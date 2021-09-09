@@ -116,8 +116,8 @@ fn main() -> Result<(), Error> {
     let audio = Audio::new();
     
     #[allow(unused_variables)] // This reference needs to be held on to to keep the stream running
-    let audio_stream = audio.start(gui.latency, runtime.clone());
-    
+    let mut audio_stream = audio.start(gui.latency, runtime.clone());
+
     let (mut start_time, mut current_frame, mut nes_redraw_req) = (SystemTime::now(), 0, false);
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;

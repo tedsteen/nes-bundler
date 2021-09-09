@@ -89,7 +89,10 @@ impl Gui {
     fn ui(&mut self, ctx: &egui::CtxRef, pad1: &mut JoypadMappings, pad2: &mut JoypadMappings) {
         if self.show_gui {
             egui::Window::new("Joypad Mappings").collapsible(false).show(ctx, |ui| {
-                ui.add(egui::Slider::new(&mut self.latency, 1..=1000).suffix("ms"));
+                ui.horizontal(|ui| {
+                    ui.label("Audio latency");
+                    ui.add(egui::Slider::new(&mut self.latency, 1..=500).suffix("ms"));
+                });
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         ui.label("Joypad #1");
