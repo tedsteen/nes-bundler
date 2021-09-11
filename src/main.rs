@@ -6,9 +6,12 @@ use crate::audio::Audio;
 use crate::joypad_mappings::JoypadMappings;
 
 use std::rc::Rc;
+use std::sync::atomic::Ordering;
 use std::time::SystemTime;
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::AtomicBool;
+use std::fs;
+
 
 use egui_wgpu_backend::wgpu;
 use log::error;
@@ -75,16 +78,19 @@ use rust_embed::RustEmbed;
 #[folder = "assets/"]
 struct Asset;
 
-fn main() -> Result<(), Error> {    
+fn main() -> Result<(), Error> {
     env_logger::init();
-        
+
     let mut runtime = Arc::new(Mutex::new(RuntimeState::new()));
-    load_rom(&mut runtime, &Asset::get("rom2.nes").expect("Missing embedded ROM").data);
-    //use std::fs; load_rom(&mut runtime, fs::read("assets/rom2.nes").expect("Could not read ROM").as_slice());    
+
+    match std::env::var("ROM_FILE") {
+        Ok(rom_file) => load_rom(&mut runtime, fs::read(&rom_file).expect(format!("Could not read ROM {}", rom_file).as_str()).as_slice()),
+        Err(_e) => load_rom(&mut runtime, &Asset::get("rom.nes").expect("Missing embedded ROM").data)
+    }
 
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
-    
+
     let (width, height, zoom) = (256, 240, 3);
     let window = {
         WindowBuilder::new()
@@ -99,7 +105,7 @@ fn main() -> Result<(), Error> {
         let window_size = window.inner_size();
         let scale_factor = window.scale_factor();
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
-        
+
         let pixels = PixelsBuilder::new(width, height, surface_texture)
         .request_adapter_options(wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
@@ -114,16 +120,29 @@ fn main() -> Result<(), Error> {
     let mut pad1 = JoypadMappings::default_pad1();
     let mut pad2 = JoypadMappings::default_pad2();
     let audio = Audio::new();
-    
-    #[allow(unused_variables)] // This reference needs to be held on to to keep the stream running
+
     let mut audio_stream = audio.start(gui.latency, runtime.clone());
 
+    let exit = Arc::new(AtomicBool::new(false));
+    {
+        let exit = Arc::clone(&exit);
+        ctrlc::set_handler(move || {
+            exit.swap(true, Ordering::Relaxed);
+        }).expect("Error setting Ctrl-C handler");
+    }
+
     let (mut start_time, mut current_frame, mut nes_redraw_req) = (SystemTime::now(), 0, false);
+
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
+
+        if exit.load(Ordering::Relaxed) {
+            *control_flow = ControlFlow::Exit;
+            return;
+        }
+
         // Update egui inputs
         gui.handle_event(&event);
-        
         audio_stream.set_latency(gui.latency);
         // Handle input events
         if input.update(&event) {
@@ -155,7 +174,7 @@ fn main() -> Result<(), Error> {
             WinitEvent::MainEventsCleared => {
                 let runtime_in_ms = SystemTime::now().duration_since(start_time).unwrap().as_millis();
                 let target_nes_frame = (runtime_in_ms as f64 / (1000.0 / 60.0)) as u128;
-                
+
                 if target_nes_frame - current_frame > 2 {
                     eprintln!("We're running behind, reset the timer so we don't run off the deep end (frame {:?}/{:?})", current_frame, target_nes_frame);
                     start_time = SystemTime::now();
@@ -175,7 +194,7 @@ fn main() -> Result<(), Error> {
                 if nes_redraw_req {
                     render_screen_pixels(&mut runtime, pixels.get_frame());
                 }
-                
+
                 gui.prepare(&window, &mut pad1, &mut pad2);
 
                 // Render everything together
