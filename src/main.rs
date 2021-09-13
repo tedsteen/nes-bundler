@@ -5,7 +5,6 @@ use crate::gui::Gui;
 use crate::audio::Audio;
 use crate::joypad_mappings::JoypadMappings;
 
-use std::rc::Rc;
 use std::sync::atomic::Ordering;
 use std::time::SystemTime;
 use std::sync::{Arc, Mutex};
@@ -23,43 +22,27 @@ use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
 
 use rusticnes_core::palettes::NTSC_PAL;
-use rusticnes_ui_common::application::RuntimeState;
-use rusticnes_ui_common::events::Event;
+use rusticnes_core::nes::NesState;
+use rusticnes_core::cartridge::mapper_from_file;
+use rusticnes_core::mmc::none::NoneMapper;
 
 mod gui;
 mod joypad_mappings;
 mod audio;
 
-pub fn dispatch_event(runtime: &mut Arc<Mutex<RuntimeState>>, event: Event) -> Vec<Event> {
-    let mut responses: Vec<Event> = Vec::new();
-    responses.extend(runtime.lock().unwrap().handle_event(event.clone()));
-    return responses;
-}
-
-pub fn resolve_events(runtime: &mut Arc<Mutex<RuntimeState>>, mut events: Vec<Event>) {
-    while events.len() > 0 {
-        let event = events.remove(0);
-        let responses = dispatch_event(runtime, event);
-        events.extend(responses);
+pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
+    match mapper_from_file(cart_data.as_slice()) {
+        Ok(mapper) => {
+            let mut nes = NesState::new(mapper);
+            nes.power_on();
+            Ok(nes)
+        },
+        err => err.map(|_| NesState::new(Box::new(NoneMapper::new())))
     }
 }
 
-pub fn load_rom(runtime: &mut Arc<Mutex<RuntimeState>>, cart_data: &[u8]) {
-    let mut events: Vec<Event> = Vec::new();
-    let bucket_of_nothing: Vec<u8> = Vec::new();
-    let cartridge_data = cart_data.to_vec();
-    events.push(Event::LoadCartridge("cartridge".to_string(), Rc::new(cartridge_data), Rc::new(bucket_of_nothing)));
-    resolve_events(runtime, events);
-}
-
-pub fn run_until_vblank(runtime: &mut Arc<Mutex<RuntimeState>>) {
-    let mut events: Vec<Event> = Vec::new();
-    events.push(Event::NesRunFrame);
-    resolve_events(runtime, events);
-}
-
-pub fn render_screen_pixels(runtime: &mut Arc<Mutex<RuntimeState>>, frame: &mut [u8]) {
-    let ppu = &runtime.lock().unwrap().nes.ppu;
+pub fn render_screen_pixels(nes: &mut NesState, frame: &mut [u8]) {
+    let ppu = &nes.ppu;
 
     for x in 0 .. 256 {
         for y in 0 .. 240 {
@@ -81,13 +64,16 @@ struct Asset;
 fn main() -> Result<(), Error> {
     env_logger::init();
 
-    let mut runtime = Arc::new(Mutex::new(RuntimeState::new()));
+    let rom_data = match std::env::var("ROM_FILE") {
+        Ok(rom_file) => {
+            let data = fs::read(&rom_file).expect(format!("Could not read ROM {}", rom_file).as_str());
+            data
+        },
+        Err(_e) => Asset::get("rom.nes").expect("Missing embedded ROM").data.into_owned()
+    };
 
-    match std::env::var("ROM_FILE") {
-        Ok(rom_file) => load_rom(&mut runtime, fs::read(&rom_file).expect(format!("Could not read ROM {}", rom_file).as_str()).as_slice()),
-        Err(_e) => load_rom(&mut runtime, &Asset::get("rom.nes").expect("Missing embedded ROM").data)
-    }
-
+    let nes = Arc::new(Mutex::new(load_rom(rom_data).expect("Failed to load ROM")));
+    
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
 
@@ -121,7 +107,7 @@ fn main() -> Result<(), Error> {
     let mut pad2 = JoypadMappings::DEFAULT_PAD2;
     let audio = Audio::new();
 
-    let mut audio_stream = audio.start(gui.latency, runtime.clone());
+    let mut audio_stream = audio.start(gui.latency, nes.clone());
 
     let exit = Arc::new(AtomicBool::new(false));
     {
@@ -164,8 +150,7 @@ fn main() -> Result<(), Error> {
             if input.key_pressed(VirtualKeyCode::F1) {
                 gui.show_gui = !gui.show_gui;
             }
-
-            let mut nes = &mut runtime.lock().unwrap().nes;
+            let nes = &mut nes.lock().unwrap();
             nes.p1_input = pad1.to_pad(&input);
             nes.p2_input = pad2.to_pad(&input);
         }
@@ -179,11 +164,11 @@ fn main() -> Result<(), Error> {
                     eprintln!("We're running behind, reset the timer so we don't run off the deep end (frame {:?}/{:?})", current_frame, target_nes_frame);
                     start_time = SystemTime::now();
                     current_frame = 0;
-                    run_until_vblank(&mut runtime);
+                    nes.lock().unwrap().run_until_vblank();
                     nes_redraw_req = true;
                 } else {
                     while current_frame < target_nes_frame {
-                        run_until_vblank(&mut runtime);
+                        nes.lock().unwrap().run_until_vblank();
                         nes_redraw_req = true;
                         current_frame += 1;
                     }
@@ -192,7 +177,7 @@ fn main() -> Result<(), Error> {
             },
             WinitEvent::RedrawRequested(_) => {
                 if nes_redraw_req {
-                    render_screen_pixels(&mut runtime, pixels.get_frame());
+                    render_screen_pixels(&mut nes.lock().unwrap(), pixels.get_frame());
                 }
 
                 gui.prepare(&window, &mut pad1, &mut pad2);

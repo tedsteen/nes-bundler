@@ -33,4 +33,3 @@ ctrlc = "3.2"
 # futures = {version = "0.3", features = ["thread-pool"]}
 
 rusticnes-core = { git = "https://github.com/zeta0134/rusticnes-core" }
-rusticnes-ui-common = { git = "https://github.com/zeta0134/rusticnes-ui-common" }

@@ -1,6 +1,6 @@
 use cpal::{Sample, StreamConfig};
 use cpal::traits::{DeviceTrait, HostTrait};
-use rusticnes_ui_common::application::RuntimeState;
+use rusticnes_core::nes::NesState;
 use std::sync::Arc;
 use std::sync::Mutex;
 use ringbuf::RingBuffer;
@@ -14,13 +14,13 @@ pub(crate) struct Stream {
     #[allow(dead_code)] // This reference needs to be held on to to keep the stream running
     stream: cpal::Stream,
     latency: u16,
-    runtime: Arc<Mutex<RuntimeState>>,
+    nes: Arc<Mutex<NesState>>,
     sample_rate: f32,
     channels: usize
 }
 
 impl Stream {
-    fn new<T>(latency : u16, mut stream_config: StreamConfig, output_device: &cpal::Device, runtime: Arc<Mutex<RuntimeState>>) -> Self 
+    fn new<T>(latency : u16, mut stream_config: StreamConfig, output_device: &cpal::Device, nes: Arc<Mutex<NesState>>) -> Self 
     where
     T: cpal::Sample,
     {
@@ -31,7 +31,7 @@ impl Stream {
 
         let buffer_size = Stream::calc_buffer_length(latency, sample_rate, channels);
 
-        let apu = &mut runtime.lock().unwrap().nes.apu;
+        let apu = &mut nes.lock().unwrap().apu;
         apu.set_sample_rate(sample_rate as u64);
         apu.set_buffer_size(buffer_size);
 
@@ -44,18 +44,19 @@ impl Stream {
             producer.push(0).unwrap();
         }
 
-        let runtime_for_stream = runtime.clone();
+        let nes_for_stream = nes.clone();
         let start_time = std::time::SystemTime::now();
 
         let stream = output_device.build_output_stream(
             &stream_config,
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                let mut lock = runtime_for_stream.lock().unwrap();
-                let apu = &mut lock.nes.apu;
+                {
+                    let apu = &mut nes_for_stream.lock().unwrap().apu;
 
-                if apu.buffer_full {
-                    apu.buffer_full = false;
-                    producer.push_slice(apu.output_buffer.to_owned().as_slice());
+                    if apu.buffer_full {
+                        apu.buffer_full = false;
+                        producer.push_slice(apu.output_buffer.to_owned().as_slice());
+                    }
                 }
 
                 let mut input_fell_behind = false;
@@ -80,7 +81,7 @@ impl Stream {
         Self {
             stream: stream,
             latency,
-            runtime: runtime.clone(),
+            nes: nes.clone(),
             sample_rate,
             channels
         }
@@ -97,7 +98,7 @@ impl Stream {
         if self.latency != latency {
             let buffer_size = Stream::calc_buffer_length(latency, self.sample_rate, self.channels);
     
-            let apu = &mut self.runtime.lock().unwrap().nes.apu;
+            let apu = &mut self.nes.lock().unwrap().apu;
             apu.set_buffer_size(buffer_size);
             self.latency = latency;
         }
@@ -120,7 +121,7 @@ impl Audio {
         }
     }
 
-    pub(crate) fn start(self: &Self, latency : u16, runtime: Arc<Mutex<RuntimeState>>) -> Stream {
+    pub(crate) fn start(self: &Self, latency : u16, nes: Arc<Mutex<NesState>>) -> Stream {
         let stream_config = self.output_config.config();
 /*        
         stream_config.buffer_size = match self.output_config.buffer_size() {
@@ -129,9 +130,9 @@ impl Audio {
         };
 */
         match self.output_config.sample_format() {
-            cpal::SampleFormat::F32 => Stream::new::<f32>(latency, stream_config, &self.output_device, runtime),
-            cpal::SampleFormat::I16 => Stream::new::<i16>(latency, stream_config, &self.output_device, runtime),
-            cpal::SampleFormat::U16 => Stream::new::<u16>(latency, stream_config, &self.output_device, runtime)
+            cpal::SampleFormat::F32 => Stream::new::<f32>(latency, stream_config, &self.output_device, nes),
+            cpal::SampleFormat::I16 => Stream::new::<i16>(latency, stream_config, &self.output_device, nes),
+            cpal::SampleFormat::U16 => Stream::new::<u16>(latency, stream_config, &self.output_device, nes)
         }
     }
 }
