@@ -117,8 +117,8 @@ fn main() -> Result<(), Error> {
         (pixels, gui)
     };
 
-    let mut pad1 = JoypadMappings::default_pad1();
-    let mut pad2 = JoypadMappings::default_pad2();
+    let mut pad1 = JoypadMappings::DEFAULT_PAD1;
+    let mut pad2 = JoypadMappings::DEFAULT_PAD2;
     let audio = Audio::new();
 
     let mut audio_stream = audio.start(gui.latency, runtime.clone());
