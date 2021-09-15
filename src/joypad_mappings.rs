@@ -30,7 +30,7 @@ impl JoypadMappings {
         }
 
         if input.key_held(self.start) {
-            pad_data |= 0b10001000u8;
+            pad_data |= 0b00001000u8;
         }
         if input.key_held(self.select) {
             pad_data |= 0b00000100u8;
