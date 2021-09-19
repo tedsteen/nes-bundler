@@ -133,7 +133,7 @@ fn main() -> Result<(), Error> {
         // Handle input events
         if input.update(&event) {
             // Close events
-            if input.key_pressed(VirtualKeyCode::Escape) || input.quit() {
+            if input.quit() {
                 *control_flow = ControlFlow::Exit;
                 return;
             }
@@ -147,7 +147,7 @@ fn main() -> Result<(), Error> {
                 gui.resize(size.width, size.height);
             }
 
-            if input.key_pressed(VirtualKeyCode::F1) {
+            if input.key_pressed(VirtualKeyCode::Escape) {
                 gui.show_gui = !gui.show_gui;
             }
             let nes = &mut nes.lock().unwrap();

@@ -50,10 +50,10 @@ impl JoypadMappings {
         down: Down,
         left: Left,
         right: Right,
-        start: Key1,
-        select: Key2,
-        b: Q,
-        a: W,
+        start: Return,
+        select: RShift,
+        b: Key1,
+        a: Key2,
     };
     
     pub const DEFAULT_PAD2: JoypadMappings = JoypadMappings {
