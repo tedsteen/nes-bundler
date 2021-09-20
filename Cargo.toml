@@ -16,7 +16,6 @@ log = "0.4"
 pixels = "0.6"
 
 winit = "0.25"
-winit_input_helper = "0.10"
 
 # rfd = "0.4" # Open file dialog for loading new ROMs?
 rust-embed = "6.2"
@@ -30,6 +29,6 @@ ringbuf = "0.2"
 
 ctrlc = "3.2"
 
-# futures = {version = "0.3", features = ["thread-pool"]}
+game-loop = { version = "0.8", features = ["window"] }
 
 rusticnes-core = { git = "https://github.com/zeta0134/rusticnes-core" }

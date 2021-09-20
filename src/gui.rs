@@ -17,8 +17,7 @@ pub(crate) struct Gui {
     paint_jobs: Vec<ClippedMesh>,
 
     // State for the demo app.
-    pub show_gui: bool,
-    pub latency: u16
+    pub show_gui: bool
 }
 
 const AVAILABLE_KEY_CODES: &'static [VirtualKeyCode] = &[Key1, Key2, Key3, Key4, Key5, Key6, Key7, Key8, Key9, Key0, A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z, Insert, Home, Delete, End, PageDown, PageUp, Left, Up, Right, Down, Back, Return, Space, Numlock, Numpad0, Numpad1, Numpad2, Numpad3, Numpad4, Numpad5, Numpad6, Numpad7, Numpad8, Numpad9, NumpadAdd, NumpadDivide, NumpadDecimal, NumpadComma, NumpadEnter, NumpadEquals, NumpadMultiply, NumpadSubtract, LAlt, LControl, LShift, LWin, RAlt, RControl, RShift, RWin, Tab];
@@ -46,8 +45,7 @@ impl Gui {
             screen_descriptor,
             rpass,
             paint_jobs: Vec::new(),
-            show_gui: false,
-            latency: 100
+            show_gui: false
         }
     }
 
@@ -70,7 +68,7 @@ impl Gui {
     }
 
     /// Prepare egui.
-    pub(crate) fn prepare(&mut self, window: &Window, pad1: &mut JoypadMappings, pad2: &mut JoypadMappings) {
+    pub(crate) fn prepare(&mut self, window: &Window, pad1: &mut JoypadMappings, pad2: &mut JoypadMappings, latency: &mut u16) {
         self.platform
             .update_time(self.start_time.elapsed().as_secs_f64());
 
@@ -78,7 +76,7 @@ impl Gui {
         self.platform.begin_frame();
 
         // Draw the demo application.
-        self.ui(&self.platform.context(), pad1, pad2);
+        self.ui(&self.platform.context(), pad1, pad2, latency);
 
         // End the egui frame and create all paint jobs to prepare for rendering.
         let (_output, paint_commands) = self.platform.end_frame(Some(window));
@@ -86,12 +84,12 @@ impl Gui {
     }
     
     /// Create the UI using egui.
-    fn ui(&mut self, ctx: &egui::CtxRef, pad1: &mut JoypadMappings, pad2: &mut JoypadMappings) {
+    fn ui(&mut self, ctx: &egui::CtxRef, pad1: &mut JoypadMappings, pad2: &mut JoypadMappings, latency: &mut u16) {
         if self.show_gui {
             egui::Window::new("Joypad Mappings").collapsible(false).show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("Audio latency");
-                    ui.add(egui::Slider::new(&mut self.latency, 1..=500).suffix("ms"));
+                    ui.add(egui::Slider::new(latency, 1..=500).suffix("ms"));
                 });
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {

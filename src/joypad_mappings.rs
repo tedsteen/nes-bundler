@@ -1,6 +1,6 @@
 use winit::event::VirtualKeyCode;
-use winit_input_helper::WinitInputHelper;
 use winit::event::VirtualKeyCode::*;
+use winit::event::ElementState::*;
 
 pub(crate) struct JoypadMappings {
     pub up: VirtualKeyCode,
@@ -10,40 +10,43 @@ pub(crate) struct JoypadMappings {
     pub a: VirtualKeyCode,
     pub b: VirtualKeyCode,
     pub select: VirtualKeyCode,
-    pub start: VirtualKeyCode
+    pub start: VirtualKeyCode,
+    state: u8
 }
 
 impl JoypadMappings {
-    pub fn to_pad(&mut self, input: &WinitInputHelper) -> u8 {
-        let mut pad_data: u8 = 0;
-        if input.key_held(self.up) {
-            pad_data |= 0b00010000u8;
-        }
-        if input.key_held(self.down) {
-            pad_data |= 0b00100000u8;
-        }
-        if input.key_held(self.left) {
-            pad_data |= 0b01000000u8;
-        }
-        if input.key_held(self.right) {
-            pad_data |= 0b10000000u8;
+    pub fn to_pad(&mut self, input: &winit::event::KeyboardInput) -> u8 {
+        let code = input.virtual_keycode.unwrap();
+        let state = input.state;
+
+        let mask: u8 =
+            if code == self.up {
+                0b00010000u8
+            } else if code == self.down {
+                0b00100000u8
+            } else if code == self.left {
+                0b01000000u8
+            } else if code == self.right {
+                0b10000000u8
+            } else if code == self.start {
+                0b00001000u8
+            } else if code == self.select {
+                0b00000100u8
+            } else if code == self.b {
+                0b00000010u8
+            } else if code == self.a {
+                0b00000001u8
+            } else {
+                0b00000000u8
+            };
+
+        if state == Pressed {
+            self.state |= mask;
+        } else if state == Released {
+            self.state ^= mask;
         }
 
-        if input.key_held(self.start) {
-            pad_data |= 0b00001000u8;
-        }
-        if input.key_held(self.select) {
-            pad_data |= 0b00000100u8;
-        }
-
-        if input.key_held(self.b) {
-            pad_data |= 0b00000010u8;
-        }
-        if input.key_held(self.a) {
-            pad_data |= 0b00000001u8;
-        }
-
-        pad_data
+        self.state
     }
     pub const DEFAULT_PAD1: JoypadMappings = JoypadMappings {
         up: Up,
@@ -54,6 +57,7 @@ impl JoypadMappings {
         select: RShift,
         b: Key1,
         a: Key2,
+        state: 0
     };
     
     pub const DEFAULT_PAD2: JoypadMappings = JoypadMappings {
@@ -64,6 +68,7 @@ impl JoypadMappings {
         start: Key9,
         select: Key0,
         b: LAlt,
-        a: LControl
+        a: LControl,
+        state: 0
     };
 }
