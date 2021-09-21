@@ -5,10 +5,13 @@ use crate::gui::Gui;
 use crate::audio::Audio;
 use crate::joypad_mappings::JoypadMappings;
 
+use std::net::SocketAddr;
+use std::ops::{Deref};
 use std::sync::{Arc, Mutex};
 use std::fs;
 
 use game_loop::game_loop;
+use ggrs::{GGRSRequest, NULL_FRAME, GameState, P2PSession, SyncTestSession, PlayerType, SessionState};
 
 use egui_wgpu_backend::wgpu;
 use log::error;
@@ -23,6 +26,9 @@ use rusticnes_core::palettes::NTSC_PAL;
 use rusticnes_core::nes::NesState;
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::mmc::none::NoneMapper;
+
+use rust_embed::RustEmbed;
+use structopt::StructOpt;
 
 mod gui;
 mod joypad_mappings;
@@ -51,24 +57,36 @@ pub fn render_screen_pixels(ppu: &mut PpuState, frame: &mut [u8]) {
         }
     }
 }
+#[derive(StructOpt)]
+struct Opt {
+    #[structopt(short, long)]
+    local_port: u16,
+    #[structopt(short, long)]
+    players: Vec<String>,
+}
 
-use rust_embed::RustEmbed;
 #[derive(RustEmbed)]
 #[folder = "assets/"]
 struct Asset;
 
 const FPS: u32 = 60;
-
+const INPUT_SIZE: usize = std::mem::size_of::<u8>();
+const NUM_PLAYERS: u32 = 2;
+const WIDTH: u32 = 256;
+const HEIGHT: u32 = 240;
+const ZOOM: f32 = 1.5;
 fn main() -> Result<(), Error> {
     env_logger::init();
+
+    let opt = Opt::from_args();
+
     let event_loop = EventLoop::new();
 
-    let (width, height, zoom) = (256, 240, 3);
     let window = {
         WindowBuilder::new()
             .with_title("Hello rusticnes!")
-            .with_inner_size(LogicalSize::new(width * zoom, height * zoom))
-            .with_min_inner_size(LogicalSize::new(width, height))
+            .with_inner_size(LogicalSize::new(WIDTH as f32 * ZOOM, HEIGHT as f32 * ZOOM))
+            .with_min_inner_size(LogicalSize::new(WIDTH, HEIGHT))
             .build(&event_loop)
             .unwrap()
     };
@@ -78,7 +96,7 @@ fn main() -> Result<(), Error> {
         let scale_factor = window.scale_factor();
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
 
-        let pixels = PixelsBuilder::new(width, height, surface_texture)
+        let pixels = PixelsBuilder::new(WIDTH, HEIGHT, surface_texture)
         .request_adapter_options(wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: None,
@@ -89,26 +107,90 @@ fn main() -> Result<(), Error> {
         (pixels, gui)
     };
 
-    let game = Game::new(gui, pixels);
+    let game = Game::new(gui, pixels, opt);
     let audio = Audio::new();
-    let mut audio_stream = audio.start(game.audio_latency, game.nes.clone());
+    let mut audio_stream = audio.start(game.audio_latency, game.nes.clone());    
 
-    game_loop(event_loop, window, game, FPS, 0.08, |g| {
-        g.game.update();
-        
+    game_loop(event_loop, window, game, FPS, 0.08, move |g| {
+        let game = &mut g.game;
+        //game.update(game.pad1.state, game.pad2.state);
+        if game.sess.current_state() == SessionState::Running {
+            match game.sess.advance_frame(game.local_handle, &vec![game.pad1.state]) {
+                Ok(requests) => {
+                    for request in requests {
+                        match request {
+                            GGRSRequest::LoadGameState { cell } => {
+                                let game_state = cell.load();
+                                let frame = game_state.frame;
+
+                                println!("LOAD {}, diff in frame: {}", game_state.checksum, game.frame - frame);
+                                let mut nes = game.nes.lock().unwrap();
+                                game.frame = frame;
+                                *nes = bincode::deserialize(game_state.buffer.unwrap().as_slice()).unwrap();
+                            },
+                            GGRSRequest::SaveGameState { cell, frame } => {
+                                let nes = game.nes.lock().unwrap();
+                                let game_state = GameState::new(frame, Some(bincode::serialize(nes.deref()).unwrap()), None);
+                                //println!("SAVE {}", game_state.checksum);
+                                cell.save(game_state);
+                            },
+                            GGRSRequest::AdvanceFrame { inputs } => {
+                                let pad1 = if inputs[0].frame == NULL_FRAME {
+                                    0 //Disconnected player
+                                } else {
+                                    inputs[0].input()[0]
+                                };
+                                let pad2 = if inputs[1].frame == NULL_FRAME {
+                                    0 //Disconnected player
+                                } else {
+                                    inputs[1].input()[0]
+                                };
+                                game.update(pad1, pad2);
+                            },
+                        }
+                    }
+                }
+                Err(ggrs::GGRSError::PredictionThreshold) => {
+                    println!(
+                        "Frame {} skipped: PredictionThreshold",
+                        game.frame
+                    );
+                }
+                Err(e) => eprintln!("Ouch :( {:?}", e)
+            }
+            
+            //regularily print networks stats
+            if game.frame % 120 == 0 {
+                for i in 0..NUM_PLAYERS {
+                    if let Ok(stats) = game.sess.network_stats(i as usize) {
+                        println!("NetworkStats to player {}: {:?}", i, stats);
+                    }
+                }
+            }
+        }
     }, move |g| {
         g.game.render(&g.window);
-
     }, move |g, event| {
+        let game = &mut g.game;
+        //TODO: time over for sess.poll_remote_clients()? // println!("tick {:?}", event);
+        game.sess.poll_remote_clients();
+        
+        for event in game.sess.events() {
+            // TODO: handle GGRS events
+            println!("Event: {:?}", event);
+        }
+
         if !g.game.handle(event) {
             g.exit();
         }
         audio_stream.set_latency(g.game.audio_latency);
-
     });
 }
 
 struct Game {
+    frame: i32,
+    sess: P2PSession,
+    local_handle: usize,
     gui: Gui,
     pixels: Pixels,
     audio_latency: u16,
@@ -118,7 +200,7 @@ struct Game {
 }
 
 impl Game {
-    pub fn new(gui: Gui, pixels: Pixels) -> Self {
+    pub fn new(gui: Gui, pixels: Pixels, opt: Opt) -> Self {
         let rom_data = match std::env::var("ROM_FILE") {
             Ok(rom_file) => {
                 let data = fs::read(&rom_file).expect(format!("Could not read ROM {}", rom_file).as_str());
@@ -126,10 +208,35 @@ impl Game {
             },
             Err(_e) => Asset::get("rom.nes").expect("Missing embedded ROM").data.into_owned()
         };
-    
+
         let nes = Arc::new(Mutex::new(load_rom(rom_data).expect("Failed to load ROM")));
-        
+        let mut local_handle = 0;
+        let num_players = opt.players.len();
+        assert!(num_players > 0);
+    
+        let mut sess = P2PSession::new(num_players as u32, INPUT_SIZE, opt.local_port).expect("Could not create a P2P Session");
+        sess.set_sparse_saving(true).unwrap();
+        sess.set_fps(FPS).unwrap();
+        // add players
+        for (i, player_addr) in opt.players.iter().enumerate() {
+            // local player
+            if player_addr == "localhost" {
+                sess.add_player(PlayerType::Local, i).unwrap();
+                local_handle = i;
+            } else {
+                // remote players
+                let remote_addr: SocketAddr = player_addr.parse().unwrap();
+                sess.add_player(PlayerType::Remote(remote_addr), i).unwrap();
+            }
+        }
+        sess.set_frame_delay(2, local_handle).unwrap();
+        sess.set_fps(FPS).unwrap();
+        sess.start_session().expect("Could not start P2P session");    
+
         Self {
+            frame: 0,
+            sess,
+            local_handle,
             gui,
             pixels,
             audio_latency: 100,
@@ -139,8 +246,14 @@ impl Game {
         }
     }
 
-    pub fn update(&mut self) {
-        self.nes.lock().unwrap().run_until_vblank();
+    pub fn update(&mut self, pad1: u8, pad2: u8) {
+        let mut nes = self.nes.lock().unwrap();
+
+        nes.p1_input = pad1;
+        nes.p2_input = pad2;
+        nes.run_until_vblank();
+
+        self.frame += 1;
     }
 
     pub fn render(&mut self, window: &winit::window::Window) -> bool {
@@ -180,18 +293,39 @@ impl Game {
 
             if let winit::event::WindowEvent::KeyboardInput { input, .. } = event {
                 if let Some(code) = input.virtual_keycode {
+                    use std::fs::File;
+                    use std::io::{Read, Write};
                     match code {
                         VirtualKeyCode::Escape => {
                             if input.state == winit::event::ElementState::Pressed {
                                 self.gui.show_gui = !self.gui.show_gui;
                             }
                         },
+                        VirtualKeyCode::F1 => {
+                            if input.state == winit::event::ElementState::Pressed {
+                                let buffer = bincode::serialize(self.nes.lock().unwrap().deref()).unwrap();
+                                let filename = "save.state";
+                                let mut file = File::create(filename).unwrap();
+                                file.write_all(buffer.as_slice()).expect("Failed to write save state");
+                            }
+                        },
+                        VirtualKeyCode::F2 => {
+                            if input.state == winit::event::ElementState::Pressed {
+                                let filename = "save.state";
+                                let mut file = File::open(&filename).expect("no file found");
+                                let metadata = fs::metadata(&filename).expect("unable to read metadata");
+                                let mut buffer = vec![0; metadata.len() as usize];
+                                file.read(&mut buffer).expect("buffer overflow");
+                                let old_nes: NesState = bincode::deserialize(buffer.as_slice()).unwrap();
+                                let mut nes = self.nes.lock().expect("wat");
+                                *nes = old_nes;
+                            }
+                        },
                         _ => {
-                            let nes = &mut self.nes.lock().unwrap();
-                            nes.p1_input = self.pad1.to_pad(&input);
-                            nes.p2_input = self.pad2.to_pad(&input);
+                            self.pad1.apply(&input);
+                            self.pad2.apply(&input);
                         }
-                        
+
                     }
                 }
             }

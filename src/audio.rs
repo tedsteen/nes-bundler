@@ -71,7 +71,7 @@ impl Stream {
                 }
                 if input_fell_behind {
                     if std::time::SystemTime::now().duration_since(start_time).unwrap().gt(&std::time::Duration::from_secs(1)) {
-                        eprintln!("Consuming audio faster than it's being produced! Try increasing latency");
+                        //eprintln!("Consuming audio faster than it's being produced! Try increasing latency");
                     }
                 }
             },

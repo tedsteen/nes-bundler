@@ -11,11 +11,11 @@ pub(crate) struct JoypadMappings {
     pub b: VirtualKeyCode,
     pub select: VirtualKeyCode,
     pub start: VirtualKeyCode,
-    state: u8
+    pub state: u8
 }
 
 impl JoypadMappings {
-    pub fn to_pad(&mut self, input: &winit::event::KeyboardInput) -> u8 {
+    pub fn apply(&mut self, input: &winit::event::KeyboardInput) -> u8 {
         let code = input.virtual_keycode.unwrap();
         let state = input.state;
 
