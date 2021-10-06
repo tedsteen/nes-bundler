@@ -34,6 +34,13 @@ game-loop = { version = "0.8", features = ["window"] }
 ggrs = "0.5"
 bincode = "1.3"
 
+webrtc = "0.1"
+anyhow = "1.0"
+tokio = { version = "1", features = ["full"] }
+libp2p = {version = "0.39", features = ["kad"]}
+futures = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+
 # rusticnes-core = { git = "https://github.com/zeta0134/rusticnes-core" }
 rusticnes-core = { path = "../rusticnes-core-ted-fork" }
 

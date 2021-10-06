@@ -15,8 +15,10 @@ use ggrs::{GGRSRequest, NULL_FRAME, GameState, P2PSession, SyncTestSession, Play
 
 use egui_wgpu_backend::wgpu;
 use log::error;
+use p2p::P2P;
 use pixels::{Error, Pixels, PixelsBuilder, SurfaceTexture};
 use rusticnes_core::ppu::PpuState;
+use tokio::runtime::Runtime;
 use winit::dpi::LogicalSize;
 use winit::event::{Event as WinitEvent, VirtualKeyCode};
 use winit::event_loop::{EventLoop};
@@ -33,6 +35,9 @@ use structopt::StructOpt;
 mod gui;
 mod joypad_mappings;
 mod audio;
+mod discovery;
+mod peer;
+mod p2p;
 
 pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
     match mapper_from_file(cart_data.as_slice()) {
@@ -60,9 +65,7 @@ pub fn render_screen_pixels(ppu: &mut PpuState, frame: &mut [u8]) {
 #[derive(StructOpt)]
 struct Opt {
     #[structopt(short, long)]
-    local_port: u16,
-    #[structopt(short, long)]
-    players: Vec<String>,
+    controlling: bool,
 }
 
 #[derive(RustEmbed)]
@@ -71,11 +74,13 @@ struct Asset;
 
 const FPS: u32 = 60;
 const INPUT_SIZE: usize = std::mem::size_of::<u8>();
-const NUM_PLAYERS: u32 = 2;
+const NUM_PLAYERS: u16 = 2;
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
 const ZOOM: f32 = 1.5;
-fn main() -> Result<(), Error> {
+
+#[tokio::main]
+async fn main() {
     env_logger::init();
 
     let opt = Opt::from_args();
@@ -101,13 +106,16 @@ fn main() -> Result<(), Error> {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: None,
         })
-        .build()?;
+        .build().unwrap();
 
         let gui = Gui::new(window_size.width, window_size.height, scale_factor, &pixels);
         (pixels, gui)
     };
+    let rt = Runtime::new().unwrap();
+    //let game = rt.block_on(async {
+    let game =    Game::new(gui, pixels, opt).await;
+    //});
 
-    let game = Game::new(gui, pixels, opt);
     let audio = Audio::new();
     let mut audio_stream = audio.start(game.audio_latency, game.nes.clone());    
 
@@ -200,7 +208,7 @@ struct Game {
 }
 
 impl Game {
-    pub fn new(gui: Gui, pixels: Pixels, opt: Opt) -> Self {
+    pub async fn new(gui: Gui, pixels: Pixels, opt: Opt) -> Self {
         let rom_data = match std::env::var("ROM_FILE") {
             Ok(rom_file) => {
                 let data = fs::read(&rom_file).expect(format!("Could not read ROM {}", rom_file).as_str());
@@ -210,28 +218,20 @@ impl Game {
         };
 
         let nes = Arc::new(Mutex::new(load_rom(rom_data).expect("Failed to load ROM")));
-        let mut local_handle = 0;
-        let num_players = opt.players.len();
-        assert!(num_players > 0);
     
-        let mut sess = P2PSession::new(num_players as u32, INPUT_SIZE, opt.local_port).expect("Could not create a P2P Session");
+        let node = &mut discovery::Node::new().await;
+    
+        let mut room = node.enter_room(&String::from("private")).await;
+    
+        let p2p = P2P::new(INPUT_SIZE);
+        let p2p_game = p2p.start_game(&mut room, NUM_PLAYERS, node).await;
+        let mut sess = p2p_game.session;
+        let local_handle = p2p_game.local_handle;
+
         sess.set_sparse_saving(true).unwrap();
         sess.set_fps(FPS).unwrap();
-        // add players
-        for (i, player_addr) in opt.players.iter().enumerate() {
-            // local player
-            if player_addr == "localhost" {
-                sess.add_player(PlayerType::Local, i).unwrap();
-                local_handle = i;
-            } else {
-                // remote players
-                let remote_addr: SocketAddr = player_addr.parse().unwrap();
-                sess.add_player(PlayerType::Remote(remote_addr), i).unwrap();
-            }
-        }
         sess.set_frame_delay(2, local_handle).unwrap();
-        sess.set_fps(FPS).unwrap();
-        sess.start_session().expect("Could not start P2P session");    
+        sess.start_session().expect("Could not start P2P session");
 
         Self {
             frame: 0,
