@@ -29,11 +29,10 @@ impl P2P {
         Self { input_size }
     }
 
-    pub(crate) async fn start_game(self: &Self, room: &mut Room, num_players: u16, node: &mut Node) -> P2PGame {
+    pub(crate) async fn start_game(self: &Self, room: &mut Room, num_players: u16, node: Node) -> P2PGame {
         println!("Waiting for {} peers...", num_players - 1);
         let peers = loop {
-            let peers = room.get_peers(node).await;
-            
+            let peers = room.get_peers(node.clone()).await;
             let connected_peers: Vec<Arc<Peer>> = peers.iter().filter(|p| {
                 match &*p.state.lock().unwrap() {
                     PeerState::Connected => true,

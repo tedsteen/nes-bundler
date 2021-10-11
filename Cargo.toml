@@ -43,5 +43,3 @@ serde = { version = "1.0", features = ["derive"] }
 
 # rusticnes-core = { git = "https://github.com/zeta0134/rusticnes-core" }
 rusticnes-core = { path = "../rusticnes-core-ted-fork" }
-
-structopt = "0.3"

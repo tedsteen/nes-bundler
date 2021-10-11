@@ -5,20 +5,18 @@ use crate::gui::Gui;
 use crate::audio::Audio;
 use crate::joypad_mappings::JoypadMappings;
 
-use std::net::SocketAddr;
 use std::ops::{Deref};
 use std::sync::{Arc, Mutex};
 use std::fs;
 
 use game_loop::game_loop;
-use ggrs::{GGRSRequest, NULL_FRAME, GameState, P2PSession, SyncTestSession, PlayerType, SessionState};
+use ggrs::{GGRSRequest, NULL_FRAME, GameState, P2PSession, SessionState};
 
 use egui_wgpu_backend::wgpu;
 use log::error;
 use p2p::P2P;
-use pixels::{Error, Pixels, PixelsBuilder, SurfaceTexture};
+use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
 use rusticnes_core::ppu::PpuState;
-use tokio::runtime::Runtime;
 use winit::dpi::LogicalSize;
 use winit::event::{Event as WinitEvent, VirtualKeyCode};
 use winit::event_loop::{EventLoop};
@@ -30,7 +28,6 @@ use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::mmc::none::NoneMapper;
 
 use rust_embed::RustEmbed;
-use structopt::StructOpt;
 
 mod gui;
 mod joypad_mappings;
@@ -62,11 +59,6 @@ pub fn render_screen_pixels(ppu: &mut PpuState, frame: &mut [u8]) {
         }
     }
 }
-#[derive(StructOpt)]
-struct Opt {
-    #[structopt(short, long)]
-    controlling: bool,
-}
 
 #[derive(RustEmbed)]
 #[folder = "assets/"]
@@ -79,11 +71,8 @@ const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
 const ZOOM: f32 = 1.5;
 
-#[tokio::main]
-async fn main() {
+fn main() {
     env_logger::init();
-
-    let opt = Opt::from_args();
 
     let event_loop = EventLoop::new();
 
@@ -111,11 +100,13 @@ async fn main() {
         let gui = Gui::new(window_size.width, window_size.height, scale_factor, &pixels);
         (pixels, gui)
     };
-    let rt = Runtime::new().unwrap();
-    //let game = rt.block_on(async {
-    let game =    Game::new(gui, pixels, opt).await;
-    //});
 
+    let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(1).enable_time().enable_io().build().unwrap();
+
+    let game = rt.block_on(async {
+        Game::new(gui, pixels).await
+    });
+    
     let audio = Audio::new();
     let mut audio_stream = audio.start(game.audio_latency, game.nes.clone());    
 
@@ -183,9 +174,9 @@ async fn main() {
         //TODO: time over for sess.poll_remote_clients()? // println!("tick {:?}", event);
         game.sess.poll_remote_clients();
         
-        for event in game.sess.events() {
+        for _ in game.sess.events() {
             // TODO: handle GGRS events
-            println!("Event: {:?}", event);
+            //println!("Event: {:?}", event);
         }
 
         if !g.game.handle(event) {
@@ -208,7 +199,7 @@ struct Game {
 }
 
 impl Game {
-    pub async fn new(gui: Gui, pixels: Pixels, opt: Opt) -> Self {
+    pub async fn new(gui: Gui, pixels: Pixels) -> Self {
         let rom_data = match std::env::var("ROM_FILE") {
             Ok(rom_file) => {
                 let data = fs::read(&rom_file).expect(format!("Could not read ROM {}", rom_file).as_str());
@@ -219,7 +210,7 @@ impl Game {
 
         let nes = Arc::new(Mutex::new(load_rom(rom_data).expect("Failed to load ROM")));
     
-        let node = &mut discovery::Node::new().await;
+        let mut node = discovery::Node::new().await;
     
         let mut room = node.enter_room(&String::from("private")).await;
     

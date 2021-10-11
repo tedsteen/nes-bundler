@@ -23,18 +23,19 @@ use webrtc::{
     }
 };
 
-use crate::{discovery::{Command, CommandBus, Event, EventBus, Node, SignalKey}};
+use crate::{discovery::{Node}};
 
 pub(crate) type ChannelWriter = Arc<tokio::sync::mpsc::Sender<Bytes>>;
 pub(crate) type ChannelReader = Arc<tokio::sync::Mutex<tokio::sync::mpsc::Receiver<Bytes>>>;
 
+#[derive(Debug)]
 pub(crate) struct Channel {
     pub(crate) reader: ChannelReader,
     pub(crate) writer: ChannelWriter,
     pub(crate) fake_addr: SocketAddr
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum PeerState {
     Initializing,
     Connecting,
@@ -42,6 +43,7 @@ pub(crate) enum PeerState {
     Disconnected
 }
 
+#[derive(Debug)]
 pub struct Peer {
     pub(crate) id: PeerId,
     pub(crate) state: Arc<Mutex<PeerState>>,
@@ -50,7 +52,8 @@ pub struct Peer {
 static PEER_COUNTER: AtomicU16 = AtomicU16::new(0);
 
 impl Peer {
-    pub(crate) async fn new(id: PeerId, local_id: PeerId, node: &Node, _room_name: &str) -> Self {
+    pub(crate) async fn new(id: PeerId, node: Node, _room_name: &str) -> Self {
+        
         let config = RTCConfiguration {
             ice_servers: vec![RTCIceServer {
                 //TODO: add ICE-server?
@@ -69,19 +72,18 @@ impl Peer {
         let api = APIBuilder::new().build();
         let connection = Arc::new(api.new_peer_connection(config).await.unwrap());
         
-        let command_bus = node.command_bus.clone();
-        let event_bus = node.event_bus.clone();
-        
         let (send_sender, mut send_receiver) = tokio::sync::mpsc::channel(100);
         let (recv_sender, recv_receiver) = tokio::sync::mpsc::channel(100);
         let recv_sender = Arc::new(recv_sender);
+
+        let local_id = node.local_peer_id.clone();
         tokio::spawn({
             let connection = connection.clone();
             async move {
                 let data_channel = if local_id > id {
-                    Peer::do_offer(id, local_id, connection, command_bus, event_bus).await.unwrap()
+                    Peer::do_offer(id, local_id, connection, node).await.unwrap()
                 } else {
-                    Peer::do_answer(id, local_id, connection, command_bus, event_bus).await.unwrap()
+                    Peer::do_answer(id, local_id, connection, node).await.unwrap()
                 };
         
                 data_channel.on_open(Box::new({
@@ -143,7 +145,7 @@ impl Peer {
         }
     }
 
-    async fn do_offer(id: PeerId, local_id: PeerId, peer_connection: Arc<RTCPeerConnection>, command_bus: CommandBus, event_bus: EventBus) -> Result<Arc<RTCDataChannel>> {
+    async fn do_offer(id: PeerId, local_id: PeerId, peer_connection: Arc<RTCPeerConnection>, node: Node) -> Result<Arc<RTCDataChannel>> {
         let data_channel = peer_connection.create_data_channel("data", None).await?;
 
         // Create an offer to send to the other process
@@ -153,9 +155,9 @@ impl Peer {
         let ice_candidates = Peer::gather_candidates(peer_connection.clone()).await;
         
         let offer = Signal { session_description, ice_candidates };
-        command_bus.send(Command::PutSignal(SignalKey { from_peer: local_id, to_peer: id }, bincode::serialize(&offer).unwrap())).await.unwrap();
-        
-        let remote_offer = Peer::get_signal(id, local_id, command_bus, event_bus).await.unwrap();
+        node.put_signal(local_id, id, bincode::serialize(&offer).unwrap()).await.unwrap();
+
+        let remote_offer = Peer::get_signal(id, local_id, node).await.unwrap();
         peer_connection.set_remote_description(remote_offer.session_description).await?;
         for candidate in remote_offer.ice_candidates {
             if let Err(err) = peer_connection.add_ice_candidate(RTCIceCandidateInit {
@@ -169,8 +171,8 @@ impl Peer {
         Ok(data_channel)
     }
 
-    async fn do_answer(id: PeerId, local_id: PeerId, peer_connection: Arc<RTCPeerConnection>, command_bus: CommandBus, event_bus: EventBus) -> Result<Arc<RTCDataChannel>> {
-        let remote_offer = Peer::get_signal(id, local_id, command_bus.clone(), event_bus).await.unwrap();
+    async fn do_answer(id: PeerId, local_id: PeerId, peer_connection: Arc<RTCPeerConnection>, node: Node) -> Result<Arc<RTCDataChannel>> {
+        let remote_offer = Peer::get_signal(id, local_id, node.clone()).await.unwrap();
         peer_connection.set_remote_description(remote_offer.session_description).await?;
 
         for candidate in remote_offer.ice_candidates {
@@ -188,14 +190,15 @@ impl Peer {
         let ice_candidates = Peer::gather_candidates(peer_connection.clone()).await;
 
         let offer = Signal {session_description, ice_candidates };
-        command_bus.send(Command::PutSignal(SignalKey { from_peer: local_id, to_peer: id }, bincode::serialize(&offer).unwrap())).await.unwrap();
+        
+        node.put_signal(local_id, id, bincode::serialize(&offer).unwrap()).await.unwrap();
 
         let (tx, mut rx) = tokio::sync::mpsc::channel(1);
         // Register data channel creation handling
         peer_connection.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
             let tx = tx.clone();
             Box::pin(async move {
-                tx.send(d).await;
+                let _ = tx.send(d).await;
             })
         })).await;
 
@@ -203,28 +206,18 @@ impl Peer {
         Ok(data_channel)
     }
 
-    async fn get_signal(from_id: PeerId, to_id: PeerId, command_bus: CommandBus, event_bus: EventBus) -> Result<Signal, String> {
-        let mut event_bus = event_bus.subscribe();
-        let cmd = Command::GetSignal(SignalKey { from_peer: from_id, to_peer: to_id });
-        command_bus.send(cmd.clone()).await.unwrap();
-
+    async fn get_signal(from_id: PeerId, to_id: PeerId, node: Node) -> Result<Signal, String> {
         loop {
-            let event = event_bus.recv().await.unwrap();
-            
-            match event {
-                Event::SignalReceived(key, value) => {
-                    if key.to_peer == to_id && key.from_peer == from_id {
-                        return Ok(bincode::deserialize(&value).unwrap());
-                    }
+            let res = node.get_signal(from_id, to_id).await;
+            match res {
+                Ok(value) => {
+                    return Ok(bincode::deserialize(&value).unwrap());
                 },
-                Event::CommandFailed(failed_cmd, _error) => {
-                    // Retry
-                    if failed_cmd == cmd {
-                        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                        command_bus.send(Command::GetSignal(SignalKey { from_peer: from_id, to_peer: to_id })).await.unwrap();
-                    }
+                Err(_) => {
+
+                    //Sleep and then retry
+                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                 },
-                _ => {}
             }
         }
     }
