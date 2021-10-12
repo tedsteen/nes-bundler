@@ -1,10 +1,13 @@
+use libp2p::kad::GetProvidersOk;
+use libp2p::kad::record::Key;
 use tokio::runtime::{Handle};
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::discovery::{Node, Room};
+use crate::discovery::{self, Node, PREFIX};
 use crate::peer::{Peer};
 use crate::peer::PeerState;
 
+use std::collections::HashSet;
 use std::{
     collections::HashMap,
     sync::Arc,
@@ -20,18 +23,29 @@ pub(crate) struct P2PGame {
 }
 
 pub(crate) struct P2P {
-    input_size: usize
+    input_size: usize,
+    node: Node
 }
 
 impl P2P {
-    pub(crate) fn new(input_size: usize) -> Self {
-        Self { input_size }
+    pub(crate) async fn new(input_size: usize) -> Self {
+        //let runtime = tokio::runtime::Builder::new_multi_thread()
+        //.enable_all()
+        //.build().unwrap();
+
+        //let node = runtime.block_on(async {
+        let node = discovery::Node::new().await;
+        //});
+
+        Self { input_size, node }
     }
 
-    pub(crate) async fn start_game(self: &Self, room: &mut Room, num_players: u16, node: Node) -> P2PGame {
+    pub(crate) async fn start_game(self: &Self, num_players: u16) -> P2PGame {
+        let mut room = Room::new(&String::from("private"), self.node.clone()).await;
+
         println!("Waiting for {} peers...", num_players - 1);
         let peers = loop {
-            let peers = room.get_peers(node.clone()).await;
+            let peers = room.get_peers().await;
             let connected_peers: Vec<Arc<Peer>> = peers.iter().filter(|p| {
                 match &*p.state.lock().unwrap() {
                     PeerState::Connected => true,
@@ -47,12 +61,13 @@ impl P2P {
                 tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
             }
         };
+        println!("All connected!");
 
         let sock = RoomNonBlockingSocket::new(peers.clone()).await;
         let mut session = P2PSession::new_with_socket(num_players as u32, self.input_size, sock).expect("Could not create a P2P Session");
 
         let mut peers: Vec<PeerType> = peers.iter().map(|p| PeerType::Remote(p.clone())).collect();
-        peers.push(PeerType::Local(node.local_peer_id));
+        peers.push(PeerType::Local(self.node.local_peer_id));
 
         peers.sort_by(|a, b| {
             let a = match a {
@@ -83,6 +98,52 @@ impl P2P {
             local_handle
         };
         P2PGame { session, local_handle }
+    }
+}
+
+pub(crate) struct Room {
+    node: Node,
+    name: String,
+    peers: HashMap<PeerId, Arc<Peer>>
+}
+
+impl Room {
+    pub(crate) async fn new(name: &str, node: Node) -> Self {
+        match node.start_providing(Key::new(&format!("{}.{}.signal_data", PREFIX, name))).await {
+            Ok(_ok) => {},
+            Err(err) => panic!("Failed to provide signal {:?}", err),
+        }
+
+        Self {
+            node,
+            name: name.to_string(),
+            peers: HashMap::new()
+        }
+    }
+
+    pub(crate) async fn get_peers(self: &mut Self) -> Vec<Arc<Peer>> {    
+        let peer_ids = self.get_peer_ids(self.node.clone()).await.unwrap();
+
+        for peer_id in peer_ids {
+            let peer = self.peers.entry(peer_id);
+            match peer {
+                std::collections::hash_map::Entry::Occupied(_) => {},
+                std::collections::hash_map::Entry::Vacant(_) => {
+                    self.peers.insert(peer_id, Arc::new(Peer::new(peer_id, self.node.clone()).await));
+                },
+            }
+        }
+
+        self.peers.values().cloned().collect()
+    }
+
+    async fn get_peer_ids(self: &Self, node: Node) -> Result<HashSet<PeerId>, String> {
+        let room_name = self.name.clone();
+
+        match node.get_providers(Key::new(&format!("{}.{}.signal_data", PREFIX, room_name))).await {
+            Ok(GetProvidersOk { providers, ..}) => Ok(providers),
+            Err(e) => Err(e),
+        }
     }
 }
 

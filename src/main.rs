@@ -14,7 +14,7 @@ use ggrs::{GGRSEvent, GGRSRequest, GameState, NULL_FRAME, P2PSession, SessionSta
 
 use egui_wgpu_backend::wgpu;
 use log::error;
-use p2p::P2P;
+use p2p::{P2P};
 use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
 use rusticnes_core::ppu::PpuState;
 use winit::dpi::LogicalSize;
@@ -102,11 +102,7 @@ async fn main() {
         (pixels, gui)
     };
 
-    //let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_time().enable_io().build().unwrap();
-
-    //let game = rt.block_on(async {
     let game = Game::new(gui, pixels).await;
-    //});
     
     let audio = Audio::new();
     let mut audio_stream = audio.start(game.audio_latency, game.nes.clone());    
@@ -119,7 +115,7 @@ async fn main() {
             println!("Frame {} skipped: WaitRecommendation", game.frame);
             return;
         }
-
+        //println!("State: {:?}", game.sess.current_state());
         //game.update(game.pad1.state, game.pad2.state);
         if game.sess.current_state() == SessionState::Running {
             match game.sess.advance_frame(game.local_handle, &vec![game.pad1.state]) {
@@ -223,12 +219,9 @@ impl Game {
 
         let nes = Arc::new(Mutex::new(load_rom(rom_data).expect("Failed to load ROM")));
     
-        let mut node = discovery::Node::new().await;
-    
-        let mut room = node.enter_room(&String::from("private")).await;
-    
-        let p2p = P2P::new(INPUT_SIZE);
-        let p2p_game = p2p.start_game(&mut room, NUM_PLAYERS, node).await;
+        let p2p = P2P::new(INPUT_SIZE).await;
+
+        let p2p_game = p2p.start_game(NUM_PLAYERS).await;
         let mut sess = p2p_game.session;
         let local_handle = p2p_game.local_handle;
 

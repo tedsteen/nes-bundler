@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::Result;
 use webrtc_data::data_channel::DataChannel;
-use libp2p::{PeerId};
+use libp2p::{PeerId, kad::{PeerRecord, Record}};
 use webrtc::{api::{APIBuilder, setting_engine::SettingEngine}, data::data_channel::{RTCDataChannel}, peer::{
         configuration::RTCConfiguration,
         ice::{
@@ -20,7 +20,7 @@ use webrtc::{api::{APIBuilder, setting_engine::SettingEngine}, data::data_channe
         sdp::session_description::RTCSessionDescription
     }};
 
-use crate::{discovery::{Node}};
+use crate::{discovery::{Node, PREFIX}};
 
 #[derive(Debug)]
 pub(crate) struct Channel {
@@ -45,7 +45,7 @@ pub struct Peer {
 static PEER_COUNTER: AtomicU16 = AtomicU16::new(0);
 
 impl Peer {
-    pub(crate) async fn new(id: PeerId, node: Node, _room_name: &str) -> Self {
+    pub(crate) async fn new(id: PeerId, node: Node) -> Self {
         let config = RTCConfiguration {
             ice_servers: vec![RTCIceServer {
                 //TODO: add ICE-server?
@@ -117,7 +117,7 @@ impl Peer {
         let ice_candidates = Peer::gather_candidates(peer_connection.clone()).await;
         
         let offer = Signal { session_description, ice_candidates };
-        node.put_signal(local_id, id, bincode::serialize(&offer).unwrap()).await.unwrap();
+        Peer::put_signal(node.clone(), local_id, id, bincode::serialize(&offer).unwrap()).await.unwrap();
 
         let remote_offer = Peer::get_signal(id, local_id, node).await.unwrap();
         peer_connection.set_remote_description(remote_offer.session_description).await?;
@@ -164,7 +164,7 @@ impl Peer {
 
         let offer = Signal {session_description, ice_candidates };
         
-        node.put_signal(local_id, id, bincode::serialize(&offer).unwrap()).await.unwrap();
+        Peer::put_signal(node, local_id, id, bincode::serialize(&offer).unwrap()).await.unwrap();
 
         let (tx, mut rx) = tokio::sync::mpsc::channel(1);
         peer_connection.on_data_channel(Box::new(move |data_channel: Arc<RTCDataChannel>| {
@@ -183,21 +183,40 @@ impl Peer {
         Ok(data_channel)
     }
 
+    async fn put_signal(node: Node, from_peer: PeerId, to_peer: PeerId, offer: Vec<u8>) -> Result<(), String> {
+        let key = SignalKey { from_peer, to_peer };
+        let record = Record {
+            key: key.to_key(),
+            value: offer,
+            publisher: Some(from_peer),
+            expires: None,
+        };
+        node.put_record(record).await.map(|_| ())
+    }
+
     async fn get_signal(from_id: PeerId, to_id: PeerId, node: Node) -> Result<Signal, String> {
         loop {
-            let res = node.get_signal(from_id, to_id).await;
+            let key = SignalKey { from_peer: from_id, to_peer: to_id };
+            let res = node.get_record(key.to_key()).await;
             match res {
-                Ok(value) => {
-                    break Ok(bincode::deserialize(&value).unwrap());
+                Ok(ok) => {
+                    let mut r = None;
+                    for record in ok.records {
+                        r = Some(record);
+                    }
+                    //TODO: when getting many like this, which one to use?
+                    if let Some(PeerRecord { record, ..}) = r {
+                        let ret = record.value;
+                        break Ok(bincode::deserialize(&ret).unwrap());
+                    };
                 },
-                Err(_) => {
-
-                    //Sleep and then retry
-                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                },
+                _ => ()
             }
+            // Nothing yet? Sleep and then retry...
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         }
     }
+
     
     async fn gather_candidates(peer_connection: Arc<RTCPeerConnection>) -> Vec<RTCIceCandidate> {
         println!("Gather candidates...");
@@ -232,4 +251,17 @@ use serde::{Serialize, Deserialize};
 struct Signal {
     ice_candidates: Vec<RTCIceCandidate>,
     session_description: RTCSessionDescription,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SignalKey {
+    pub(crate) from_peer: PeerId,
+    pub(crate) to_peer: PeerId
+}
+
+use libp2p::kad::record::Key;
+impl SignalKey {
+    fn to_key(self: &Self) -> Key {
+        Key::new(&format!("{}.{}.{}", PREFIX, self.from_peer, self.to_peer))
+    }
 }

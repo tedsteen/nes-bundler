@@ -1,42 +1,10 @@
-use std::{collections::{HashMap, HashSet}, sync::{Arc}, task::{Context, Poll}};
+use std::{task::{Context, Poll}};
 
-use libp2p::{NetworkBehaviour, PeerId, development_transport, identity, kad::{AddProviderOk, GetProvidersOk, GetRecordOk, KademliaEvent, PeerRecord, PutRecordOk, QueryId, QueryResult, Quorum, Record, record::{self, Key, store::MemoryStore}}, mdns::{Mdns, MdnsConfig, MdnsEvent}, swarm::{SwarmBuilder, NetworkBehaviourEventProcess, SwarmEvent}};
+use libp2p::{NetworkBehaviour, PeerId, development_transport, identity, kad::{AddProviderOk, GetProvidersOk, GetRecordOk, KademliaEvent, PutRecordOk, QueryId, QueryResult, Quorum, Record, record::{self, Key, store::MemoryStore}}, mdns::{Mdns, MdnsConfig, MdnsEvent}, swarm::{SwarmBuilder, NetworkBehaviourEventProcess, SwarmEvent}};
 use futures::prelude::*;
 use tokio::sync::{broadcast::Receiver};
-use crate::peer::Peer;
 
-pub struct Room {
-    name: String,
-    peers: HashMap<PeerId, Arc<Peer>>
-}
-impl Room {
-    async fn new(name: &str, node: &Node) -> Self {
-        match node.start_providing(Key::new(&format!("{}.{}.signal_data", PREFIX, name))).await {
-            Ok(_ok) => {},
-            Err(err) => panic!("Failed to provide signal {:?}", err),
-        }
-
-        Self {
-            name: name.to_string(),
-            peers: HashMap::new()
-        }
-    }
-
-    pub(crate) async fn get_peers(self: &mut Self, mut node: Node) -> Vec<Arc<Peer>> {
-        let peer_ids = node.get_peers(&self.name).await.unwrap();
-        for peer_id in peer_ids {
-            let peer = self.peers.entry(peer_id);
-            match peer {
-                std::collections::hash_map::Entry::Occupied(_) => {},
-                std::collections::hash_map::Entry::Vacant(_) => {
-                    self.peers.insert(peer_id, Arc::new(Peer::new(peer_id, node.clone(), &self.name).await));
-                },
-            }
-        }
-
-        self.peers.values().cloned().collect()
-    }
-}
+pub(crate) const PREFIX: &str = "nestest";
 
 type Kademlia = libp2p::kad::Kademlia<MemoryStore>;
 
@@ -82,19 +50,6 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
         }
     }
 }
-type EventBus = tokio::sync::broadcast::Sender<KademliaEvent2>;
-#[derive(Clone)]
-enum KademliaResponse {
-    StartProviding(CommandResult<AddProviderOk>),
-    GetProviders(CommandResult<GetProvidersOk>),
-    PutRecord(CommandResult<PutRecordOk>),
-    GetRecord(CommandResult<GetRecordOk>),
-}
-#[derive(Clone)]
-struct KademliaEvent2 {
-    query_id: QueryId,
-    response: KademliaResponse
-}
 
 impl NetworkBehaviourEventProcess<KademliaEvent> for MyBehaviour {
     // Called when `kademlia` produces an event.
@@ -128,10 +83,18 @@ impl NetworkBehaviourEventProcess<KademliaEvent> for MyBehaviour {
     }
 }
 
+type EventBus = tokio::sync::broadcast::Sender<KademliaEvent2>;
 #[derive(Clone)]
-pub(crate) struct Node {
-    command_bus: CommandBus,
-    pub(crate) local_peer_id: PeerId
+enum KademliaResponse {
+    StartProviding(CommandResult<AddProviderOk>),
+    GetProviders(CommandResult<GetProvidersOk>),
+    PutRecord(CommandResult<PutRecordOk>),
+    GetRecord(CommandResult<GetRecordOk>),
+}
+#[derive(Clone)]
+struct KademliaEvent2 {
+    query_id: QueryId,
+    response: KademliaResponse
 }
 
 type Responder<T> = tokio::sync::oneshot::Sender<CommandResult<T>>;
@@ -147,6 +110,12 @@ enum Command {
 
 type CommandBus = tokio::sync::mpsc::Sender<Command>;
 
+#[derive(Clone)]
+pub(crate) struct Node {
+    command_bus: CommandBus,
+    pub(crate) local_peer_id: PeerId
+}
+
 impl Node {
     pub(crate) async fn new() -> Self {
         let (command_bus, local_peer_id) = Node::setup_discovery().await;
@@ -156,60 +125,28 @@ impl Node {
         }
     }
 
-    async fn start_providing(self: &Self, key: Key) -> CommandResult<AddProviderOk> {
+    pub(crate) async fn start_providing(self: &Self, key: Key) -> CommandResult<AddProviderOk> {
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         self.command_bus.send(Command::StartProviding(key, resp_tx)).await.unwrap();
         resp_rx.await.unwrap()
     }
 
-    async fn get_providers(self: &Self, key: Key) -> CommandResult<GetProvidersOk> {
+    pub(crate) async fn get_providers(self: &Self, key: Key) -> CommandResult<GetProvidersOk> {
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         self.command_bus.send(Command::GetProviders(key, resp_tx)).await.unwrap();
         resp_rx.await.unwrap()
     }
     
-    async fn put_record(self: &Self, record: Record) -> CommandResult<PutRecordOk> {
+    pub(crate) async fn put_record(self: &Self, record: Record) -> CommandResult<PutRecordOk> {
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         self.command_bus.send(Command::PutRecord(record, resp_tx)).await.unwrap();
         resp_rx.await.unwrap()
     }
 
-    async fn get_record(self: &Self, key: Key) -> CommandResult<GetRecordOk> {
+    pub(crate) async fn get_record(self: &Self, key: Key) -> CommandResult<GetRecordOk> {
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         self.command_bus.send(Command::GetRecord(key, resp_tx)).await.unwrap();
         resp_rx.await.unwrap()
-    }
-
-    pub(crate) async fn put_signal(self: &Self, from_peer: PeerId, to_peer: PeerId, offer: Vec<u8>) -> Result<(), String> {
-        let key = SignalKey { from_peer, to_peer };
-        let record = Record {
-            key: key.to_key(),
-            value: offer,
-            publisher: Some(from_peer),
-            expires: None,
-        };
-        self.put_record(record).await.map(|_| ())
-    }
-
-    pub(crate) async fn get_signal(self: &Node, from_id: PeerId, to_id: PeerId) -> Result<Vec<u8>, String> {
-        let key = SignalKey { from_peer: from_id, to_peer: to_id };
-        let res = self.get_record(key.to_key()).await;
-        match res {
-            Ok(ok) => {
-                let mut r = None;
-                for record in ok.records {
-                    r = Some(record);
-                }
-                //TODO: when getting many like this, which one to use?
-                if let Some(PeerRecord { record, ..}) = r {
-                    
-                    Ok(record.value)
-                } else {
-                    Err("Not found".to_string())
-                }
-            },
-            Err(e) => Err(e),
-        }
     }
 
     async fn setup_discovery() -> (CommandBus, PeerId) {
@@ -332,30 +269,5 @@ impl Node {
         }));
 
         (command_bus, local_peer_id)
-    }
-
-    async fn get_peers(self: &mut Self, room_name: &str) -> Result<HashSet<PeerId>, String> {
-        match self.get_providers(Key::new(&format!("{}.{}.signal_data", PREFIX, room_name))).await {
-            Ok(GetProvidersOk { providers, ..}) => Ok(providers),
-            Err(e) => Err(e),
-        }
-    }
-
-    pub async fn enter_room(self: &mut Self, room_name: &String) -> Room {
-        Room::new(room_name, self).await
-    }
-}
-
-const PREFIX: &str = "nestest";
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct SignalKey {
-    pub(crate) from_peer: PeerId,
-    pub(crate) to_peer: PeerId
-}
-
-impl SignalKey {
-    fn to_key(self: &Self) -> Key {
-        Key::new(&format!("{}.{}.{}", PREFIX, self.from_peer, self.to_peer))
     }
 }
