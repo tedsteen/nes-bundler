@@ -7,11 +7,9 @@ use std::{
 };
 
 use anyhow::Result;
-use libp2p::{PeerId, bytes::Bytes};
-use webrtc::{
-    api::{APIBuilder},
-    data::data_channel::{RTCDataChannel, data_channel_message::DataChannelMessage},
-    peer::{
+use webrtc_data::data_channel::DataChannel;
+use libp2p::{PeerId};
+use webrtc::{api::{APIBuilder, setting_engine::SettingEngine}, data::data_channel::{RTCDataChannel}, peer::{
         configuration::RTCConfiguration,
         ice::{
             ice_candidate::{RTCIceCandidate, RTCIceCandidateInit},
@@ -20,18 +18,13 @@ use webrtc::{
         peer_connection::RTCPeerConnection,
         peer_connection_state::RTCPeerConnectionState,
         sdp::session_description::RTCSessionDescription
-    }
-};
+    }};
 
 use crate::{discovery::{Node}};
 
-pub(crate) type ChannelWriter = Arc<tokio::sync::mpsc::Sender<Bytes>>;
-pub(crate) type ChannelReader = Arc<tokio::sync::Mutex<tokio::sync::mpsc::Receiver<Bytes>>>;
-
 #[derive(Debug)]
 pub(crate) struct Channel {
-    pub(crate) reader: ChannelReader,
-    pub(crate) writer: ChannelWriter,
+    pub(crate) data_channel: Arc<DataChannel>,
     pub(crate) fake_addr: SocketAddr
 }
 
@@ -53,7 +46,6 @@ static PEER_COUNTER: AtomicU16 = AtomicU16::new(0);
 
 impl Peer {
     pub(crate) async fn new(id: PeerId, node: Node, _room_name: &str) -> Self {
-        
         let config = RTCConfiguration {
             ice_servers: vec![RTCIceServer {
                 //TODO: add ICE-server?
@@ -68,60 +60,18 @@ impl Peer {
             }],
             ..Default::default()
         };
-
-        let api = APIBuilder::new().build();
+        
+        let mut s = SettingEngine::default();
+        s.detach_data_channels();
+        let api = APIBuilder::new()
+        .with_setting_engine(s)
+        .build();
+        
         let connection = Arc::new(api.new_peer_connection(config).await.unwrap());
         
-        let (send_sender, mut send_receiver) = tokio::sync::mpsc::channel(100);
-        let (recv_sender, recv_receiver) = tokio::sync::mpsc::channel(100);
-        let recv_sender = Arc::new(recv_sender);
-
-        let local_id = node.local_peer_id.clone();
-        tokio::spawn({
-            let connection = connection.clone();
-            async move {
-                let data_channel = if local_id > id {
-                    Peer::do_offer(id, local_id, connection, node).await.unwrap()
-                } else {
-                    Peer::do_answer(id, local_id, connection, node).await.unwrap()
-                };
-        
-                data_channel.on_open(Box::new({
-                    let data_channel = data_channel.clone();
-                    move || {
-                        tokio::spawn({
-                            let data_channel = data_channel.clone();
-                            async move {
-                                data_channel.on_message(Box::new(move |msg: DataChannelMessage| {
-                                    let data = msg.data;
-                                    let recv_sender = recv_sender.clone();
-                                    
-                                    Box::pin(async move {
-                                        recv_sender.send(data).await.unwrap();
-                                    })
-                                })).await;
-                            }
-                        });
-
-                        tokio::spawn(async move {
-                            while let Some(r) = send_receiver.recv().await {
-                                data_channel.send(&r).await.unwrap();
-                            }
-                        });
-                        Box::pin(async move {})
-                    }
-                })).await;
-            }
-        });
-
-        PEER_COUNTER.fetch_add(1, Ordering::SeqCst);
-        
-        let channel = Channel {reader: Arc::new(tokio::sync::Mutex::new(recv_receiver)), writer: Arc::new(send_sender), fake_addr: format!("127.0.0.1:{}", PEER_COUNTER.load(Ordering::SeqCst)).parse().unwrap()};
-
         let state = Arc::new(Mutex::new(PeerState::Initializing));
-
         connection.on_peer_connection_state_change(Box::new({
-            let state = state.clone();    
+            let state = state.clone();
             move |s: RTCPeerConnectionState| {
                 let mut state = state.lock().unwrap();
                 match s {
@@ -138,6 +88,17 @@ impl Peer {
         }))
         .await;
 
+        let local_id = node.local_peer_id.clone();
+        let data_channel = if local_id > id {
+            Peer::do_offer(id, local_id, connection.clone(), node).await.unwrap()
+        } else {
+            Peer::do_answer(id, local_id, connection.clone(), node).await.unwrap()
+        };
+        
+        PEER_COUNTER.fetch_add(1, Ordering::SeqCst);
+        // TODO: Move fake addr stuff out of here (to slot logic?)
+        let channel = Channel {data_channel, fake_addr: format!("127.0.0.1:{}", PEER_COUNTER.load(Ordering::SeqCst)).parse().unwrap()};
+
         Self {
             id,
             state,
@@ -145,9 +106,10 @@ impl Peer {
         }
     }
 
-    async fn do_offer(id: PeerId, local_id: PeerId, peer_connection: Arc<RTCPeerConnection>, node: Node) -> Result<Arc<RTCDataChannel>> {
+    async fn do_offer(id: PeerId, local_id: PeerId, peer_connection: Arc<RTCPeerConnection>, node: Node) -> Result<Arc<DataChannel>> {
+        //println!("OFFER");
         let data_channel = peer_connection.create_data_channel("data", None).await?;
-
+        
         // Create an offer to send to the other process
         let session_description = peer_connection.create_offer(None).await?;
         peer_connection.set_local_description(session_description.clone()).await?;
@@ -168,10 +130,21 @@ impl Peer {
             }
         }
 
+        // Detach data_channel
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        data_channel.clone().on_open(Box::new(move || {
+            Box::pin(async move {
+                let _ = tx.send(data_channel.detach().await.unwrap());
+            })
+        }))
+        .await;
+        let data_channel = rx.await.unwrap();
+
         Ok(data_channel)
     }
 
-    async fn do_answer(id: PeerId, local_id: PeerId, peer_connection: Arc<RTCPeerConnection>, node: Node) -> Result<Arc<RTCDataChannel>> {
+    async fn do_answer(id: PeerId, local_id: PeerId, peer_connection: Arc<RTCPeerConnection>, node: Node) -> Result<Arc<DataChannel>> {
+        //println!("ANSWER");
         let remote_offer = Peer::get_signal(id, local_id, node.clone()).await.unwrap();
         peer_connection.set_remote_description(remote_offer.session_description).await?;
 
@@ -194,14 +167,18 @@ impl Peer {
         node.put_signal(local_id, id, bincode::serialize(&offer).unwrap()).await.unwrap();
 
         let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-        // Register data channel creation handling
-        peer_connection.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
+        peer_connection.on_data_channel(Box::new(move |data_channel: Arc<RTCDataChannel>| {
             let tx = tx.clone();
             Box::pin(async move {
-                let _ = tx.send(d).await;
+                // Detach data_channel
+                data_channel.clone().on_open(Box::new(move || {
+                    Box::pin(async move {
+                        let _ = tx.send(data_channel.detach().await.unwrap()).await;
+                    })
+                }))
+                .await;
             })
         })).await;
-
         let data_channel = rx.recv().await.unwrap();
         Ok(data_channel)
     }
@@ -211,7 +188,7 @@ impl Peer {
             let res = node.get_signal(from_id, to_id).await;
             match res {
                 Ok(value) => {
-                    return Ok(bincode::deserialize(&value).unwrap());
+                    break Ok(bincode::deserialize(&value).unwrap());
                 },
                 Err(_) => {
 

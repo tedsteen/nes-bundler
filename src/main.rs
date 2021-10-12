@@ -71,6 +71,7 @@ const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
 const ZOOM: f32 = 1.5;
 
+//#[tokio::main]
 fn main() {
     env_logger::init();
 
@@ -101,7 +102,7 @@ fn main() {
         (pixels, gui)
     };
 
-    let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(1).enable_time().enable_io().build().unwrap();
+    let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_time().enable_io().build().unwrap();
 
     let game = rt.block_on(async {
         Game::new(gui, pixels).await
@@ -113,6 +114,7 @@ fn main() {
     game_loop(event_loop, window, game, FPS, 0.08, move |g| {
         let game = &mut g.game;
         //game.update(game.pad1.state, game.pad2.state);
+        
         if game.sess.current_state() == SessionState::Running {
             match game.sess.advance_frame(game.local_handle, &vec![game.pad1.state]) {
                 Ok(requests) => {
@@ -219,9 +221,9 @@ impl Game {
         let mut sess = p2p_game.session;
         let local_handle = p2p_game.local_handle;
 
-        sess.set_sparse_saving(true).unwrap();
+        //sess.set_sparse_saving(true).unwrap();
         sess.set_fps(FPS).unwrap();
-        sess.set_frame_delay(2, local_handle).unwrap();
+        sess.set_frame_delay(4, local_handle).unwrap();
         sess.start_session().expect("Could not start P2P session");
 
         Self {
@@ -230,7 +232,7 @@ impl Game {
             local_handle,
             gui,
             pixels,
-            audio_latency: 100,
+            audio_latency: 400,
             nes,
             pad1: JoypadMappings::DEFAULT_PAD1,
             pad2: JoypadMappings::DEFAULT_PAD2
