@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::fs;
 
 use game_loop::game_loop;
-use ggrs::{GGRSRequest, NULL_FRAME, GameState, P2PSession, SessionState};
+use ggrs::{GGRSEvent, GGRSRequest, GameState, NULL_FRAME, P2PSession, SessionState};
 
 use egui_wgpu_backend::wgpu;
 use log::error;
@@ -71,8 +71,8 @@ const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
 const ZOOM: f32 = 1.5;
 
-//#[tokio::main]
-fn main() {
+#[tokio::main]
+async fn main() {
     env_logger::init();
 
     let event_loop = EventLoop::new();
@@ -102,19 +102,25 @@ fn main() {
         (pixels, gui)
     };
 
-    let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_time().enable_io().build().unwrap();
+    //let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_time().enable_io().build().unwrap();
 
-    let game = rt.block_on(async {
-        Game::new(gui, pixels).await
-    });
+    //let game = rt.block_on(async {
+    let game = Game::new(gui, pixels).await;
+    //});
     
     let audio = Audio::new();
     let mut audio_stream = audio.start(game.audio_latency, game.nes.clone());    
 
     game_loop(event_loop, window, game, FPS, 0.08, move |g| {
         let game = &mut g.game;
-        //game.update(game.pad1.state, game.pad2.state);
         
+        if game.frames_to_skip > 0 {
+            game.decrease_frames_to_skip();
+            println!("Frame {} skipped: WaitRecommendation", game.frame);
+            return;
+        }
+
+        //game.update(game.pad1.state, game.pad2.state);
         if game.sess.current_state() == SessionState::Running {
             match game.sess.advance_frame(game.local_handle, &vec![game.pad1.state]) {
                 Ok(requests) => {
@@ -175,12 +181,16 @@ fn main() {
         let game = &mut g.game;
         //TODO: time over for sess.poll_remote_clients()? // println!("tick {:?}", event);
         game.sess.poll_remote_clients();
-        
-        for _ in game.sess.events() {
-            // TODO: handle GGRS events
-            //println!("Event: {:?}", event);
-        }
+        let mut a = 0;
 
+        for event in game.sess.events() {
+            if let GGRSEvent::WaitRecommendation { skip_frames } = event {
+                a += skip_frames;
+            }
+            println!("Event: {:?}", event);
+        }
+        game.increase_frames_to_skip(a);
+        
         if !g.game.handle(event) {
             g.exit();
         }
@@ -190,6 +200,7 @@ fn main() {
 
 struct Game {
     frame: i32,
+    frames_to_skip: u32,
     sess: P2PSession,
     local_handle: usize,
     gui: Gui,
@@ -225,9 +236,10 @@ impl Game {
         sess.set_fps(FPS).unwrap();
         sess.set_frame_delay(4, local_handle).unwrap();
         sess.start_session().expect("Could not start P2P session");
-
+        
         Self {
             frame: 0,
+            frames_to_skip: 0,
             sess,
             local_handle,
             gui,
@@ -237,6 +249,14 @@ impl Game {
             pad1: JoypadMappings::DEFAULT_PAD1,
             pad2: JoypadMappings::DEFAULT_PAD2
         }
+    }
+    
+    pub fn increase_frames_to_skip(self: &mut Self, frames: u32) {
+        self.frames_to_skip += frames;
+    }
+    
+    pub fn decrease_frames_to_skip(self: &mut Self) {
+        self.frames_to_skip -= 1;
     }
 
     pub fn update(&mut self, pad1: u8, pad2: u8) {

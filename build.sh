@@ -15,11 +15,15 @@ RUSTFLAGS="-Cprofile-generate=/tmp/pgo-data" cargo build --release --target=$TAR
 # STEP 2: Run the binary to generate profiler data
 ./target/$TARGET/release/rusticnes-test &
 PID=$!
+./target/$TARGET/release/rusticnes-test &
+PID2=$!
 
-# Collect profiler data for 2 mins...
-sleep 60
-kill -SIGINT $PID
+# Collect profiler data for 3 mins...
+#sleep 180
+#kill -SIGINT $PID
+#kill -SIGINT $PID2
 wait $PID
+wait $PID2
 
 # STEP 3: Merge and post-process all the `.profraw` files in /tmp/pgo-data
 xcrun llvm-profdata merge -o /tmp/pgo-data/merged.profdata /tmp/pgo-data

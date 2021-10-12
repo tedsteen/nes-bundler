@@ -93,7 +93,6 @@ enum PeerType {
 
 const RECV_BUFFER_SIZE: usize = 4096;
 pub(crate) struct RoomNonBlockingSocket {
-    //channels: HashMap<SocketAddr, (Arc<DataChannel>, [u8; RECV_BUFFER_SIZE])>,
     runtime_handle: Handle,
     reader: Receiver<(SocketAddr, UdpMessage)>,
     sender: Sender<(SocketAddr, UdpMessage)>
