@@ -220,7 +220,6 @@ impl Peer {
         }
     }
 
-    
     async fn gather_candidates(peer_connection: Arc<RTCPeerConnection>) -> Vec<RTCIceCandidate> {
         println!("Gather candidates...");
         let mut gather_complete = peer_connection.gathering_complete_promise().await;

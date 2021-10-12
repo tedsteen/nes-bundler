@@ -27,8 +27,6 @@ egui_winit_platform = "0.10"
 cpal = "0.13"
 ringbuf = "0.2"
 
-ctrlc = "3.2"
-
 game-loop = { version = "0.8", features = ["window"] }
 
 ggrs = "0.5"
