@@ -133,7 +133,8 @@ async fn main() {
                             },
                             GGRSRequest::SaveGameState { cell, frame } => {
                                 let nes = game.nes.lock().unwrap();
-                                let game_state = GameState::new(frame, Some(bincode::serialize(nes.deref()).unwrap()), None);
+                                let state = bincode::serialize(nes.deref()).unwrap();
+                                let game_state = GameState::new(frame, Some(state), None);
                                 //println!("SAVE {}", game_state.checksum);
                                 cell.save(game_state);
                             },

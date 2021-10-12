@@ -10,7 +10,6 @@ use crate::peer::PeerState;
 use std::collections::HashSet;
 use std::{
     collections::HashMap,
-    sync::Arc,
     net::SocketAddr
 };
 
@@ -46,8 +45,8 @@ impl P2P {
         println!("Waiting for {} peers...", num_players - 1);
         let peers = loop {
             let peers = room.get_peers().await;
-            let connected_peers: Vec<Arc<Peer>> = peers.iter().filter(|p| {
-                match &*p.state.lock().unwrap() {
+            let connected_peers: Vec<Peer> = peers.iter().filter(|&peer| {
+                match peer.get_state() {
                     PeerState::Connected => true,
                     _ => false,
                 }
@@ -104,7 +103,7 @@ impl P2P {
 pub(crate) struct Room {
     node: Node,
     name: String,
-    peers: HashMap<PeerId, Arc<Peer>>
+    peers: HashMap<PeerId, Peer>
 }
 
 impl Room {
@@ -121,7 +120,7 @@ impl Room {
         }
     }
 
-    pub(crate) async fn get_peers(self: &mut Self) -> Vec<Arc<Peer>> {    
+    pub(crate) async fn get_peers(self: &mut Self) -> Vec<Peer> {    
         let peer_ids = self.get_peer_ids(self.node.clone()).await.unwrap();
 
         for peer_id in peer_ids {
@@ -129,7 +128,7 @@ impl Room {
             match peer {
                 std::collections::hash_map::Entry::Occupied(_) => {},
                 std::collections::hash_map::Entry::Vacant(_) => {
-                    self.peers.insert(peer_id, Arc::new(Peer::new(peer_id, self.node.clone()).await));
+                    self.peers.insert(peer_id, Peer::new(peer_id, self.node.clone()).await);
                 },
             }
         }
@@ -149,7 +148,7 @@ impl Room {
 
 enum PeerType {
     Local(PeerId),
-    Remote(Arc<Peer>)
+    Remote(Peer)
 }
 
 const RECV_BUFFER_SIZE: usize = 4096;
@@ -160,7 +159,7 @@ pub(crate) struct RoomNonBlockingSocket {
 }
 
 impl RoomNonBlockingSocket {
-    pub(crate) async fn new(peers: Vec<Arc<Peer>>) -> Self {
+    pub(crate) async fn new(peers: Vec<Peer>) -> Self {
         let runtime_handle = tokio::runtime::Handle::current();
         let mut channels = HashMap::with_capacity(peers.len());
         for peer in peers {

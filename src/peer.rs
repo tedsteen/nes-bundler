@@ -1,12 +1,13 @@
 use std::{
     net::SocketAddr,
     sync::{
-        Arc, Mutex, 
+        Arc, 
         atomic::{AtomicU16, Ordering}
     }
 };
 
 use anyhow::Result;
+use tokio::sync::watch::Receiver;
 use webrtc_data::data_channel::DataChannel;
 use libp2p::{PeerId, kad::{PeerRecord, Record}};
 use webrtc::{api::{APIBuilder, setting_engine::SettingEngine}, data::data_channel::{RTCDataChannel}, peer::{
@@ -22,13 +23,13 @@ use webrtc::{api::{APIBuilder, setting_engine::SettingEngine}, data::data_channe
 
 use crate::{discovery::{Node, PREFIX}};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Channel {
     pub(crate) data_channel: Arc<DataChannel>,
     pub(crate) fake_addr: SocketAddr
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum PeerState {
     Initializing,
     Connecting,
@@ -36,11 +37,11 @@ pub(crate) enum PeerState {
     Disconnected
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Peer {
     pub(crate) id: PeerId,
-    pub(crate) state: Arc<Mutex<PeerState>>,
-    pub(crate) channel: Channel
+    pub(crate) channel: Channel,
+    state_watcher: Receiver<PeerState>
 }
 static PEER_COUNTER: AtomicU16 = AtomicU16::new(0);
 
@@ -69,19 +70,17 @@ impl Peer {
         
         let connection = Arc::new(api.new_peer_connection(config).await.unwrap());
         
-        let state = Arc::new(Mutex::new(PeerState::Initializing));
+        let (tx, state_watcher) = tokio::sync::watch::channel(PeerState::Initializing);
+
         connection.on_peer_connection_state_change(Box::new({
-            let state = state.clone();
             move |s: RTCPeerConnectionState| {
-                let mut state = state.lock().unwrap();
                 match s {
                     RTCPeerConnectionState::Disconnected | RTCPeerConnectionState::Failed | RTCPeerConnectionState::Closed => {
-                        *state = PeerState::Disconnected;
+                        tx.send(PeerState::Disconnected).unwrap();
                     },
-                    RTCPeerConnectionState::Connected => *state = PeerState::Connected,
-                    RTCPeerConnectionState::Connecting => *state = PeerState::Connecting,
-                    RTCPeerConnectionState::Unspecified => {},
-                    RTCPeerConnectionState::New => {},
+                    RTCPeerConnectionState::Connected => { tx.send(PeerState::Connected).unwrap(); },
+                    RTCPeerConnectionState::Connecting => { tx.send(PeerState::Connecting).unwrap(); },
+                    _ => ()
                 };
                 Box::pin(async {})
             }
@@ -101,9 +100,13 @@ impl Peer {
 
         Self {
             id,
-            state,
-            channel
+            channel,
+            state_watcher
         }
+    }
+
+    pub(crate) fn get_state(self: &Self) -> PeerState {
+        *self.state_watcher.borrow()
     }
 
     async fn do_offer(id: PeerId, local_id: PeerId, peer_connection: Arc<RTCPeerConnection>, node: Node) -> Result<Arc<DataChannel>> {
@@ -220,28 +223,23 @@ impl Peer {
     
     async fn gather_candidates(peer_connection: Arc<RTCPeerConnection>) -> Vec<RTCIceCandidate> {
         println!("Gather candidates...");
-        let (gather_finished_tx, mut gather_finished_rx) = tokio::sync::mpsc::channel::<()>(1);
-        let mut gather_finished_tx = Some(gather_finished_tx);
-        let candidates = Arc::new(Mutex::new(vec![]));
-
-        peer_connection
-        .on_ice_candidate(Box::new(
-            {
-                let candidates = candidates.clone(); move |c: Option<RTCIceCandidate>| {
+        let mut gather_complete = peer_connection.gathering_complete_promise().await;
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        peer_connection.on_ice_candidate(Box::new({ move |c: Option<RTCIceCandidate>| {
                 if let Some(candidate) = c {
-                    candidates.lock().unwrap().push(candidate);
-                } else {
-                    gather_finished_tx.take();
+                    tx.send(candidate).unwrap();
                 }
                 Box::pin(async {})
             }
         })).await;
-
-        let _ = gather_finished_rx.recv().await;
-        let x = candidates.lock().unwrap().to_owned();
-        println!("Got candidates!");
-
-        x
+        
+        let _ = gather_complete.recv().await;
+        let mut candidates = vec!();
+        while let Ok(candidate) = rx.try_recv() {
+            candidates.push(candidate);
+        }
+        println!("Got {} candidates!", candidates.len());
+        candidates
     }
 }
 
@@ -254,9 +252,9 @@ struct Signal {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct SignalKey {
-    pub(crate) from_peer: PeerId,
-    pub(crate) to_peer: PeerId
+struct SignalKey {
+    from_peer: PeerId,
+    to_peer: PeerId
 }
 
 use libp2p::kad::record::Key;
