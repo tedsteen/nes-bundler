@@ -1,10 +1,8 @@
-use std::{task::{Context, Poll}};
+use std::{collections::HashSet, task::{Context, Poll}};
 
 use libp2p::{NetworkBehaviour, PeerId, development_transport, identity, kad::{AddProviderOk, GetProvidersOk, GetRecordOk, KademliaEvent, PutRecordOk, QueryId, QueryResult, Quorum, Record, record::{self, Key, store::MemoryStore}}, mdns::{Mdns, MdnsConfig, MdnsEvent}, swarm::{SwarmBuilder, NetworkBehaviourEventProcess, SwarmEvent}};
 use futures::prelude::*;
 use tokio::sync::{broadcast::Receiver};
-
-pub(crate) const PREFIX: &str = "nestest";
 
 type Kademlia = libp2p::kad::Kademlia<MemoryStore>;
 
@@ -21,6 +19,9 @@ struct MyBehaviour {
     #[behaviour(ignore)]
     #[allow(dead_code)]
     t: Receiver<KademliaEvent2>, //TODO: keep the event bus alive somehow. Could probably be removed now..
+
+    #[behaviour(ignore)]
+    local_provides: HashSet<Key>
 }
 
 impl MyBehaviour {
@@ -30,12 +31,14 @@ impl MyBehaviour {
         let kademlia = Kademlia::new(local_peer_id, store);
 
         let (event_bus, t) = tokio::sync::broadcast::channel(16);
-        
+        let local_provides = HashSet::new();
+
         Self {
             kademlia,
             mdns,
             event_bus,
-            t
+            t,
+            local_provides
         }
     }
 }
@@ -66,7 +69,8 @@ impl NetworkBehaviourEventProcess<KademliaEvent> for MyBehaviour {
                         let _ = self.event_bus.send(KademliaEvent2 { query_id: id, response: KademliaResponse::GetProviders(result) });
                     },
                     QueryResult::PutRecord(result) => {
-                        let result = result.map_err(|_| format!("TODO: error for put record error"));
+                        let result = result.map_err(|err| format!("Couldn't put record: {:?}", err));
+                        //println!("Put record result: {:?}", result);
                         let _ = self.event_bus.send(KademliaEvent2 { query_id: id, response: KademliaResponse::PutRecord(result) });
                     },
                     QueryResult::GetRecord(result) => {
@@ -103,6 +107,7 @@ type CommandResult<T> = Result<T, String>;
 #[derive(Debug)]
 enum Command {
     StartProviding(record::Key, Responder<AddProviderOk>),
+    StopProviding(record::Key),
     GetProviders(record::Key, Responder<GetProvidersOk>),
     PutRecord(record::Record, Responder<PutRecordOk>),
     GetRecord(record::Key, Responder<GetRecordOk>),
@@ -110,7 +115,7 @@ enum Command {
 
 type CommandBus = tokio::sync::mpsc::Sender<Command>;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct Node {
     command_bus: CommandBus,
     pub(crate) local_peer_id: PeerId
@@ -119,7 +124,7 @@ pub(crate) struct Node {
 impl Node {
     pub(crate) async fn new() -> Self {
         let (command_bus, local_peer_id) = Node::setup_discovery().await;
-
+        
         Self {
             command_bus, local_peer_id
         }
@@ -129,6 +134,10 @@ impl Node {
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         self.command_bus.send(Command::StartProviding(key, resp_tx)).await.unwrap();
         resp_rx.await.unwrap()
+    }
+
+    pub(crate) async fn stop_providing(self: &Self, key: Key) {
+        self.command_bus.send(Command::StopProviding(key)).await.unwrap();
     }
 
     pub(crate) async fn get_providers(self: &Self, key: Key) -> CommandResult<GetProvidersOk> {
@@ -199,8 +208,8 @@ impl Node {
                         let _ = responder.send(res);
                     });
                 },
-                Err(_) => {
-                    let _ = responder.send(Err("TODO".to_string()));
+                Err(e) => {
+                    let _ = responder.send(Err(format!("TODO: Failed to send command: {}", e)));
                 }
             }
         }
@@ -212,24 +221,44 @@ impl Node {
                     Poll::Ready(Some(command)) => {
                         match command {
                             Command::StartProviding(key, responder) => {
-                                let query_id = swarm.behaviour_mut().kademlia.start_providing(key);
-                                catch_event(query_id, event_bus.subscribe(), responder, |response| {
+                                let query_id = swarm.behaviour_mut().kademlia.start_providing(key.clone());
+                                swarm.behaviour_mut().local_provides.insert(key);                                
+                                catch_event(query_id, event_bus.subscribe(), responder, move |response| {
                                     match response {
-                                        KademliaResponse::StartProviding(result) => Some(result),
+                                        KademliaResponse::StartProviding(result) => {
+                                            
+                                            Some(result)
+                                        },
                                         _ => None
                                     }
                                 });
                             },
+                            Command::StopProviding(key) => {
+                                swarm.behaviour_mut().local_provides.remove(&key);
+                                swarm.behaviour_mut().kademlia.stop_providing(&key);
+                            },
                             Command::GetProviders(key, responder) => {
-                                let query_id = swarm.behaviour_mut().kademlia.get_providers(key);
-                                catch_event(Ok(query_id), event_bus.subscribe(), responder, |response| {
+                                let query_id = swarm.behaviour_mut().kademlia.get_providers(key.clone());
+                                let local_provides = swarm.behaviour().local_provides.contains(&key);
+                                let local_peer_id = *swarm.local_peer_id();
+                                catch_event(Ok(query_id), event_bus.subscribe(), responder, move |response| {
                                     match response {
-                                        KademliaResponse::GetProviders(result) => Some(result),
+                                        KademliaResponse::GetProviders(result) => {
+                                            if let Ok(mut ok) = result {
+                                                if local_provides {
+                                                    ok.providers.insert(local_peer_id);
+                                                }
+                                                Some(Ok(ok))
+                                            } else {
+                                                Some(result)
+                                            }
+                                        },
                                         _ => None
                                     }
                                 });
                             }
                             Command::PutRecord(record, responder) => {
+                                //println!("Putting record: {:?}", record);
                                 let query_id = swarm.behaviour_mut().kademlia.put_record(record.clone(), Quorum::One);
                                 catch_event(query_id, event_bus.subscribe(), responder, |response| {
                                     match response {
@@ -239,6 +268,7 @@ impl Node {
                                 });
                             },
                             Command::GetRecord(key, responder) => {
+                                //println!("Getting record: {:?}", key);
                                 let query_id = swarm.behaviour_mut().kademlia.get_record(&key, Quorum::One);
                                 catch_event(Ok(query_id), event_bus.subscribe(), responder, |response| {
                                     match response {

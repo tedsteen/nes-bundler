@@ -17,6 +17,7 @@ use log::error;
 use p2p::{P2P};
 use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
 use rusticnes_core::ppu::PpuState;
+use tokio::runtime::Runtime;
 use winit::dpi::LogicalSize;
 use winit::event::{Event as WinitEvent, VirtualKeyCode};
 use winit::event_loop::{EventLoop};
@@ -66,13 +67,13 @@ struct Asset;
 
 const FPS: u32 = 60;
 const INPUT_SIZE: usize = std::mem::size_of::<u8>();
-const NUM_PLAYERS: u16 = 2;
+const NUM_PLAYERS: usize = 2;
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
 const ZOOM: f32 = 1.5;
 
-#[tokio::main]
-async fn main() {
+//#[tokio::main]
+fn main() {
     env_logger::init();
 
     let event_loop = EventLoop::new();
@@ -102,7 +103,7 @@ async fn main() {
         (pixels, gui)
     };
 
-    let game = Game::new(gui, pixels).await;
+    let game = Game::new(gui, pixels);
     
     let audio = Audio::new();
     let mut audio_stream = audio.start(game.audio_latency, game.nes.clone());    
@@ -176,7 +177,6 @@ async fn main() {
         g.game.render(&g.window);
     }, move |g, event| {
         let game = &mut g.game;
-        //TODO: time over for sess.poll_remote_clients()? // println!("tick {:?}", event);
         game.sess.poll_remote_clients();
         let mut a = 0;
 
@@ -205,11 +205,16 @@ struct Game {
     audio_latency: u16,
     nes: Arc<Mutex<NesState>>,
     pad1: JoypadMappings,
-    pad2: JoypadMappings
+    pad2: JoypadMappings,
+    #[allow(dead_code)] // This reference needs to be held on to to keep the runtime going
+    runtime: Runtime,
+    #[allow(dead_code)] // This reference needs to be held on to to keep the P2P going
+    p2p: P2P
+
 }
 
 impl Game {
-    pub async fn new(gui: Gui, pixels: Pixels) -> Self {
+    pub fn new(gui: Gui, pixels: Pixels) -> Self {
         let rom_data = match std::env::var("ROM_FILE") {
             Ok(rom_file) => {
                 let data = fs::read(&rom_file).expect(format!("Could not read ROM {}", rom_file).as_str());
@@ -219,12 +224,15 @@ impl Game {
         };
 
         let nes = Arc::new(Mutex::new(load_rom(rom_data).expect("Failed to load ROM")));
-    
-        let p2p = P2P::new(INPUT_SIZE).await;
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let (p2p, (mut sess, local_handle)) = runtime.block_on(async {
+            let p2p = P2P::new().await;
 
-        let p2p_game = p2p.start_game(NUM_PLAYERS).await;
-        let mut sess = p2p_game.session;
-        let local_handle = p2p_game.local_handle;
+            let p2p_game = p2p.create_game("private", NUM_PLAYERS).await;
+            
+            let s = p2p_game.start_session(INPUT_SIZE).await;
+            (p2p, s)
+        });
 
         //sess.set_sparse_saving(true).unwrap();
         sess.set_fps(FPS).unwrap();
@@ -241,7 +249,9 @@ impl Game {
             audio_latency: 400,
             nes,
             pad1: JoypadMappings::DEFAULT_PAD1,
-            pad2: JoypadMappings::DEFAULT_PAD2
+            pad2: JoypadMappings::DEFAULT_PAD2,
+            runtime,
+            p2p
         }
     }
     
