@@ -72,8 +72,8 @@ const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
 const ZOOM: f32 = 1.5;
 
-//#[tokio::main]
-fn main() {
+#[tokio::main]
+async fn main() {
     env_logger::init();
 
     let event_loop = EventLoop::new();
@@ -103,7 +103,7 @@ fn main() {
         (pixels, gui)
     };
 
-    let game = Game::new(gui, pixels);
+    let game = Game::new(gui, pixels).await;
     
     let audio = Audio::new();
     let mut audio_stream = audio.start(game.audio_latency, game.nes.clone());    
@@ -214,7 +214,7 @@ struct Game {
 }
 
 impl Game {
-    pub fn new(gui: Gui, pixels: Pixels) -> Self {
+    pub async fn new(gui: Gui, pixels: Pixels) -> Self {
         let rom_data = match std::env::var("ROM_FILE") {
             Ok(rom_file) => {
                 let data = fs::read(&rom_file).expect(format!("Could not read ROM {}", rom_file).as_str());
@@ -225,14 +225,11 @@ impl Game {
 
         let nes = Arc::new(Mutex::new(load_rom(rom_data).expect("Failed to load ROM")));
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        let (p2p, (mut sess, local_handle)) = runtime.block_on(async {
-            let p2p = P2P::new().await;
+        let p2p = P2P::new().await;
 
-            let p2p_game = p2p.create_game("private", NUM_PLAYERS).await;
-            
-            let s = p2p_game.start_session(INPUT_SIZE).await;
-            (p2p, s)
-        });
+        let p2p_game = p2p.create_game("private", NUM_PLAYERS).await;
+        
+        let (mut sess, local_handle) = p2p_game.start_session(INPUT_SIZE).await;
 
         //sess.set_sparse_saving(true).unwrap();
         sess.set_fps(FPS).unwrap();
