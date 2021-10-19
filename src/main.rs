@@ -82,7 +82,7 @@ struct Opt {
     #[structopt(long)]
     create: bool,
     #[structopt(long, required_if("create", "true"), default_value = "2")]
-    slots: usize
+    slots: u8
 }
 
 #[tokio::main]

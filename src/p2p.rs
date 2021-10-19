@@ -45,8 +45,7 @@ impl P2PGame {
         }
     }
 
-    //TODO: change to u8 not usize...
-    async fn get_slot_count(self: &Self) -> Option<usize> {
+    async fn get_slot_count(self: &Self) -> Option<u8> {
         self.get_record("slot-count").await.map(|slot_count_data| bincode::deserialize(&slot_count_data).unwrap())
     }
 
@@ -77,7 +76,7 @@ impl P2PGame {
 
     async fn get_slots(self: &Self) -> Option<Vec<Slot>> {
         if let Some(slot_count) = self.get_slot_count().await {
-            let mut slots = Vec::with_capacity(slot_count);
+            let mut slots = Vec::with_capacity(slot_count as usize);
             for idx in 0..slot_count {
                 let slot = match self.get_slot_owner(idx).await {
                     Some(slot_owner) => {
@@ -97,7 +96,7 @@ impl P2PGame {
         }
     }
 
-    async fn get_slot_owner(self: &Self, idx: usize) -> Option<PeerId> {
+    async fn get_slot_owner(self: &Self, idx: u8) -> Option<PeerId> {
         
         let mut providers = Vec::new();
         for peer_id in self.get_providers("slot-idx").await {
@@ -186,10 +185,10 @@ impl P2P {
         P2PGame::new(owner_id, self.node.clone()).await
     }
 
-    pub(crate) async fn create_game(self: &Self, name: &str, num_players: usize) -> P2PGame {
+    pub(crate) async fn create_game(self: &Self, name: &str, slot_count: u8) -> P2PGame {
         let game = P2PGame::new(self.node.local_peer_id, self.node.clone()).await;
         self.node.start_providing("p2p-game").await;
-        game.put_record("slot-count", bincode::serialize(&num_players).unwrap()).await;
+        game.put_record("slot-count", bincode::serialize(&slot_count).unwrap()).await;
         game.put_record("name", bincode::serialize(&name).unwrap()).await;
         game
     }
