@@ -40,5 +40,7 @@ libp2p = {version = "0.39", features = ["kad"]}
 futures = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 
+structopt = "0.3"
+
 # rusticnes-core = { git = "https://github.com/zeta0134/rusticnes-core" }
 rusticnes-core = { path = "../rusticnes-core-ted-fork" }

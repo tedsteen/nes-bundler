@@ -4,6 +4,8 @@
 use crate::gui::Gui;
 use crate::audio::Audio;
 use crate::joypad_mappings::JoypadMappings;
+use crate::p2p::{Participant, Slot};
+use crate::peer::PeerState;
 
 use std::ops::{Deref};
 use std::sync::{Arc, Mutex};
@@ -17,7 +19,6 @@ use log::error;
 use p2p::{P2P};
 use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
 use rusticnes_core::ppu::PpuState;
-use tokio::runtime::Runtime;
 use winit::dpi::LogicalSize;
 use winit::event::{Event as WinitEvent, VirtualKeyCode};
 use winit::event_loop::{EventLoop};
@@ -72,10 +73,26 @@ const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
 const ZOOM: f32 = 1.5;
 
+use structopt::StructOpt;
+
+#[derive(Debug, StructOpt)]
+struct Opt {
+    #[structopt(long)]
+    game_name: String,
+    #[structopt(long)]
+    create: bool,
+    #[structopt(long, required_if("create", "true"), default_value = "2")]
+    slots: usize
+}
+
 #[tokio::main]
 async fn main() {
     env_logger::init();
 
+    let opt = Opt::from_args();
+    
+    println!("Opt: {:?}", opt);
+    
     let event_loop = EventLoop::new();
 
     let window = {
@@ -103,7 +120,7 @@ async fn main() {
         (pixels, gui)
     };
 
-    let game = Game::new(gui, pixels).await;
+    let game = Game::new(gui, pixels, opt).await;
     
     let audio = Audio::new();
     let mut audio_stream = audio.start(game.audio_latency, game.nes.clone());    
@@ -118,8 +135,9 @@ async fn main() {
         }
         //println!("State: {:?}", game.sess.current_state());
         //game.update(game.pad1.state, game.pad2.state);
-        if game.sess.current_state() == SessionState::Running {
-            match game.sess.advance_frame(game.local_handle, &vec![game.pad1.state]) {
+        let sess = &mut game.sess;
+        if sess.current_state() == SessionState::Running {
+            match sess.advance_frame(game.local_handle, &vec![game.pad1.state]) {
                 Ok(requests) => {
                     for request in requests {
                         match request {
@@ -206,15 +224,10 @@ struct Game {
     nes: Arc<Mutex<NesState>>,
     pad1: JoypadMappings,
     pad2: JoypadMappings,
-    #[allow(dead_code)] // This reference needs to be held on to to keep the runtime going
-    runtime: Runtime,
-    #[allow(dead_code)] // This reference needs to be held on to to keep the P2P going
-    p2p: P2P
-
 }
 
 impl Game {
-    pub async fn new(gui: Gui, pixels: Pixels) -> Self {
+    pub async fn new(gui: Gui, pixels: Pixels, opt: Opt) -> Self {
         let rom_data = match std::env::var("ROM_FILE") {
             Ok(rom_file) => {
                 let data = fs::read(&rom_file).expect(format!("Could not read ROM {}", rom_file).as_str());
@@ -224,17 +237,69 @@ impl Game {
         };
 
         let nes = Arc::new(Mutex::new(load_rom(rom_data).expect("Failed to load ROM")));
-        let runtime = tokio::runtime::Runtime::new().unwrap();
         let p2p = P2P::new().await;
-
-        let p2p_game = p2p.create_game("private", NUM_PLAYERS).await;
         
-        let (mut sess, local_handle) = p2p_game.start_session(INPUT_SIZE).await;
+        let p2p_game = if opt.create {
+            println!("Creating game {}", opt.game_name);
+            let game = p2p.create_game(&opt.game_name, opt.slots).await;
+            println!("Created!");
+            game
+        } else {
+            loop {
+                if let Some(owner_id) = p2p.find_owner(&opt.game_name).await {
+                    println!("Joining game '{}' ({:?}...", opt.game_name, owner_id);
+                    let game = p2p.join_game(owner_id).await;
+                    println!("Joined!");
+                    break game;
+                } else {
+                    println!("Looking for game '{}'", opt.game_name);
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+            }
+        };
 
+        let (mut sess, local_handle) = loop {
+            match p2p_game.current_state().await {
+                p2p::GameState::Initializing => {
+                    println!("Initializing...");
+                },
+                p2p::GameState::New(slots) => {
+                    println!("Waiting for slots to be occupied and connected: {:?}", slots);
+
+                    let vacant_idx = slots.iter().enumerate()
+                    .find(|(_, slot) | matches!(slot, Slot::Vacant()))
+                    .map(|(idx, _)| idx);
+
+                    if let Some(vacant_idx) = vacant_idx {
+                        let our_slot = slots.iter()
+                        .find(|slot| matches!(slot, Slot::Occupied(Participant::Local(_))));
+                        if our_slot.is_none() {
+                            p2p_game.claim_slot(vacant_idx).await;    
+                        }
+                    }
+                },
+                p2p::GameState::Ready(ready_state) => {
+                    let mut peers = Vec::new();
+                    for participant in ready_state.players.clone() {
+                        if let Participant::Remote(peer_id, _) = participant {
+                            peers.push(p2p.get_peer(peer_id).await);
+                        }
+                    }
+                    if !peers.iter().all(|peer| matches!(*peer.connection_state.borrow(), PeerState::Connected(_)) ) {
+                        println!("Waiting for all peers to connect...");
+                    } else {
+                        println!("Starting session!");
+                        break p2p.start_session(ready_state, INPUT_SIZE).await;
+                    }
+                },
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+        };
         //sess.set_sparse_saving(true).unwrap();
         sess.set_fps(FPS).unwrap();
         sess.set_frame_delay(4, local_handle).unwrap();
         sess.start_session().expect("Could not start P2P session");
+        
         
         Self {
             frame: 0,
@@ -246,9 +311,7 @@ impl Game {
             audio_latency: 400,
             nes,
             pad1: JoypadMappings::DEFAULT_PAD1,
-            pad2: JoypadMappings::DEFAULT_PAD2,
-            runtime,
-            p2p
+            pad2: JoypadMappings::DEFAULT_PAD2
         }
     }
     

@@ -3,7 +3,7 @@ use std::{sync::{Arc, Mutex}};
 use anyhow::Result;
 use tokio::{sync::watch::{Receiver, Sender}};
 use webrtc_data::data_channel::DataChannel;
-use libp2p::{PeerId, kad::{PutRecordOk, Record, record::Key}};
+use libp2p::{PeerId};
 use webrtc::{api::{APIBuilder, setting_engine::SettingEngine}, data::data_channel::{RTCDataChannel}, peer::{
         configuration::RTCConfiguration,
         ice::{
@@ -98,7 +98,7 @@ impl Peer {
         
         connection.on_peer_connection_state_change(Box::new({
             move |state: RTCPeerConnectionState| {
-                println!("Connection state changed: {:?}", state);
+                //println!("Connection state changed: {:?}", state);
                 a.send(state).unwrap();
                 Box::pin(async move {})
             }
@@ -209,60 +209,20 @@ impl Peer {
     }
 
     async fn put_signal(node: Node, from_peer: PeerId, to_peer: PeerId, offer: &Vec<u8>) {
-        let key = format!("signal.{}", to_peer);
-
-        while let Err(_) = Peer::static_put_meta_data(&node, from_peer, &key, offer).await {
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-        }
+        let key = format!("{}.signal.{}", from_peer, to_peer);
+        node.put_record(&key, offer.to_vec(), None).await;
     }
 
     async fn get_signal(from_peer: PeerId, to_peer: PeerId, node: Node) -> Result<Signal, String> {
+        let key = format!("{}.signal.{}", from_peer, to_peer);
         loop {
-            let key = format!("signal.{}", to_peer);
-            let res = Peer::static_get_meta_data(&node, from_peer, &key).await;
-            match res {
-                Ok(Some(value)) => {
-                    break Ok(bincode::deserialize(&value).unwrap());
-                },
-                _ => ()
+            if let Some(signal) = node.get_record(&key).await {
+                break Ok(bincode::deserialize(&signal).unwrap());
             }
-            // Nothing yet? Sleep and then retry...
             tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         }
     }
 
-    async fn static_put_meta_data(node: &Node, id: PeerId, key: &str, value: &Vec<u8>) -> Result<PutRecordOk, String> {
-        let key = Key::new(&format!("{}.{}", id, key));
-        let record = Record {
-            key,
-            value: value.to_vec(),
-            publisher: Some(id),
-            expires: None,
-        };
-        node.put_record(record).await
-    }
-/*
-    pub(crate) async fn put_meta_data(self: &Self, key: &str, value: Vec<u8>) -> Result<PutRecordOk, String> {
-        Peer::static_put_meta_data(&self.node, self.id, key, value).await
-    }
-*/
-    async fn static_get_meta_data(node: &Node, id: PeerId, key: &str) -> Result<Option<Vec<u8>>, String> {
-        let key = Key::new(&format!("{}.{}", id, key));
-        let result = node.get_record(key).await;
-        result.map(|ok| {
-            let mut result = None;
-            //TODO: when getting many like this, which one to use?
-            for record in ok.records {
-                result = Some(record);
-            }
-            result.map(|e| e.record.value )
-        })
-    }
-/*
-    pub(crate) async fn get_meta_data(self: &Self, key: &str) -> Result<Option<Vec<u8>>, String> {
-        Peer::static_get_meta_data(&self.node, self.id, key).await
-    }
-*/
     async fn gather_candidates(peer_connection: &RTCPeerConnection) -> Vec<RTCIceCandidate> {
         //println!("Gather candidates...");
         let mut gather_complete = peer_connection.gathering_complete_promise().await;

@@ -1,8 +1,7 @@
-use std::{collections::HashSet, task::{Context, Poll}};
+use std::{collections::{HashSet}, task::{Context, Poll}, time::Instant};
 
 use libp2p::{NetworkBehaviour, PeerId, development_transport, identity, kad::{AddProviderOk, GetProvidersOk, GetRecordOk, KademliaEvent, PutRecordOk, QueryId, QueryResult, Quorum, Record, record::{self, Key, store::MemoryStore}}, mdns::{Mdns, MdnsConfig, MdnsEvent}, swarm::{SwarmBuilder, NetworkBehaviourEventProcess, SwarmEvent}};
 use futures::prelude::*;
-use tokio::sync::{broadcast::Receiver};
 
 type Kademlia = libp2p::kad::Kademlia<MemoryStore>;
 
@@ -17,10 +16,6 @@ struct MyBehaviour {
     event_bus: EventBus,
 
     #[behaviour(ignore)]
-    #[allow(dead_code)]
-    t: Receiver<KademliaEvent2>, //TODO: keep the event bus alive somehow. Could probably be removed now..
-
-    #[behaviour(ignore)]
     local_provides: HashSet<Key>
 }
 
@@ -30,14 +25,13 @@ impl MyBehaviour {
         let store = MemoryStore::new(local_peer_id);
         let kademlia = Kademlia::new(local_peer_id, store);
 
-        let (event_bus, t) = tokio::sync::broadcast::channel(16);
+        let (event_bus, _) = tokio::sync::broadcast::channel(16);
         let local_provides = HashSet::new();
 
         Self {
             kademlia,
             mdns,
             event_bus,
-            t,
             local_provides
         }
     }
@@ -74,7 +68,7 @@ impl NetworkBehaviourEventProcess<KademliaEvent> for MyBehaviour {
                         let _ = self.event_bus.send(KademliaEvent2 { query_id: id, response: KademliaResponse::PutRecord(result) });
                     },
                     QueryResult::GetRecord(result) => {
-                        let result = result.map_err(|_| format!("TODO: error for get record error"));
+                        let result = result.map_err(|err| format!("TODO: error for get record error ({:?})", err));
                         let _ = self.event_bus.send(KademliaEvent2 { query_id: id, response: KademliaResponse::GetRecord(result) });
                     },
                     _ => {
@@ -130,32 +124,83 @@ impl Node {
         }
     }
 
-    pub(crate) async fn start_providing(self: &Self, key: Key) -> CommandResult<AddProviderOk> {
+    async fn try_start_providing(self: &Self, key: Key) -> CommandResult<AddProviderOk> {
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         self.command_bus.send(Command::StartProviding(key, resp_tx)).await.unwrap();
         resp_rx.await.unwrap()
     }
 
-    pub(crate) async fn stop_providing(self: &Self, key: Key) {
+    async fn stop_providing(self: &Self, key: &str) {
+        let key = Key::new(&key.to_string());
         self.command_bus.send(Command::StopProviding(key)).await.unwrap();
     }
 
-    pub(crate) async fn get_providers(self: &Self, key: Key) -> CommandResult<GetProvidersOk> {
+    async fn try_get_providers(self: &Self, key: Key) -> CommandResult<GetProvidersOk> {
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         self.command_bus.send(Command::GetProviders(key, resp_tx)).await.unwrap();
         resp_rx.await.unwrap()
     }
     
-    pub(crate) async fn put_record(self: &Self, record: Record) -> CommandResult<PutRecordOk> {
+    async fn try_put_record(self: &Self, record: Record) -> CommandResult<PutRecordOk> {
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         self.command_bus.send(Command::PutRecord(record, resp_tx)).await.unwrap();
         resp_rx.await.unwrap()
     }
 
-    pub(crate) async fn get_record(self: &Self, key: Key) -> CommandResult<GetRecordOk> {
+    async fn try_get_record(self: &Self, key: Key) -> CommandResult<GetRecordOk> {
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         self.command_bus.send(Command::GetRecord(key, resp_tx)).await.unwrap();
         resp_rx.await.unwrap()
+    }
+
+    pub(crate) async fn start_providing(self: &Self, key: &str) {
+        let key = Key::new(&key.to_string());
+        while let Err(err) = self.try_start_providing(key.clone()).await {
+            eprintln!("Failed to start providing {:?} - ({:?}), retrying...", key, err);
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+    }
+    pub(crate) async fn get_providers(self: &Self, key: &str) -> HashSet<PeerId> {
+        loop {
+            match self.try_get_providers(Key::new(&key.to_string())).await {
+                Ok(ok) => {
+                    break ok.providers;
+                },
+                Err(err) => {
+                    eprintln!("Failed to get providers {:?} - ({:?}), retrying...", key, err);
+                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                }
+            }
+        }
+    }
+
+    //TODO: Make value type generic and user serde to serialize
+    pub(crate) async fn put_record(self: &Self, key: &str, value: Vec<u8>, expires: Option<Instant>) {
+        let key = Key::new(&key.to_string());
+        let record = Record {
+            key,
+            value,
+            publisher: Some(self.local_peer_id),
+            expires,
+        };
+
+        while let Err(_err) = self.try_put_record(record.clone()).await {
+            //eprintln!("Failed to put record {:?} - ({:?}), retrying...", record, err);
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+    }
+
+    //TODO: Make return type generic and user serde to deserialize
+    pub(crate) async fn get_record(self: &Self, key: &str) -> Option<Vec<u8>> {
+        match self.try_get_record(Key::new(&key.to_string())).await {
+            Ok(ok) => {
+                Some(ok.records[0].record.value.clone()) //TODO: How about not cloning?..
+            },
+            Err(_err) => {
+                //eprintln!("Failed to get record {:?} - ({:?})", key, err);
+                None
+            }
+        }
     }
 
     async fn setup_discovery() -> (CommandBus, PeerId) {
