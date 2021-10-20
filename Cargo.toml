@@ -2,7 +2,7 @@
 name = "rusticnes-test"
 version = "0.1.0"
 authors = ["Ted Steen <ted.steen@gmail.com>"]
-edition = "2018"
+edition = "2021"
 publish = false
 resolver="2"
 

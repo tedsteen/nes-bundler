@@ -15,7 +15,7 @@ use webrtc::{api::{APIBuilder, setting_engine::SettingEngine}, data::data_channe
         sdp::session_description::RTCSessionDescription
     }};
 
-use crate::{discovery::{Node}};
+use crate::network::{discovery::{Node}};
 
 #[derive(Clone)]
 pub(crate) enum PeerState {
@@ -54,7 +54,7 @@ impl std::fmt::Debug for Peer {
 }
 
 impl Peer {
-    pub(crate) async fn new(id: PeerId, node: Node) -> Self {
+    pub(crate) fn new(id: PeerId, node: Node) -> Self {
         let config = RTCConfiguration {
             ice_servers: vec![RTCIceServer {
                 //TODO: add ICE-server?

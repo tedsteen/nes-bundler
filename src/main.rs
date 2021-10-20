@@ -1,77 +1,35 @@
 #![deny(clippy::all)]
 #![forbid(unsafe_code)]
 
-use crate::gui::Gui;
-use crate::audio::Audio;
-use crate::joypad_mappings::JoypadMappings;
-use crate::p2p::{Participant, Slot};
-use crate::peer::PeerState;
+use std::collections::HashMap;
 
-use std::ops::{Deref};
-use std::sync::{Arc, Mutex};
-use std::fs;
+use crate::input::{JoypadInput, StaticJoypadInput};
+use crate::network::p2p::{P2P};
 
 use game_loop::game_loop;
 use ggrs::{GGRSEvent, GGRSRequest, GameState, NULL_FRAME, P2PSession, SessionState};
 
 use egui_wgpu_backend::wgpu;
+use gui::Gui;
+use input::{JoypadKeyMap, JoypadKeyboardInput};
 use log::error;
-use p2p::{P2P};
 use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
-use rusticnes_core::ppu::PpuState;
 use winit::dpi::LogicalSize;
 use winit::event::{Event as WinitEvent, VirtualKeyCode};
 use winit::event_loop::{EventLoop};
 use winit::window::WindowBuilder;
 
-use rusticnes_core::palettes::NTSC_PAL;
-use rusticnes_core::nes::NesState;
-use rusticnes_core::cartridge::mapper_from_file;
-use rusticnes_core::mmc::none::NoneMapper;
-
-use rust_embed::RustEmbed;
-
 mod gui;
-mod joypad_mappings;
+mod input;
 mod audio;
-mod discovery;
-mod peer;
-mod p2p;
-
-pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
-    match mapper_from_file(cart_data.as_slice()) {
-        Ok(mapper) => {
-            let mut nes = NesState::new(mapper);
-            nes.power_on();
-            Ok(nes)
-        },
-        err => err.map(|_| NesState::new(Box::new(NoneMapper::new())))
-    }
-}
-
-pub fn render_screen_pixels(ppu: &mut PpuState, frame: &mut [u8]) {
-    for x in 0 .. 256 {
-        for y in 0 .. 240 {
-            let palette_index = ((ppu.screen[y * 256 + x]) as usize) * 3;
-            let pixel_offset = (y * 256 + x) * 4;
-            frame[pixel_offset + 0] = NTSC_PAL[palette_index + 0];
-            frame[pixel_offset + 1] = NTSC_PAL[palette_index + 1];
-            frame[pixel_offset + 2] = NTSC_PAL[palette_index + 2];
-            frame[((y * 256 + x) * 4) + 3] = 255;
-        }
-    }
-}
-
-#[derive(RustEmbed)]
-#[folder = "assets/"]
-struct Asset;
+mod network;
 
 const FPS: u32 = 60;
 const INPUT_SIZE: usize = std::mem::size_of::<u8>();
 const NUM_PLAYERS: usize = 2;
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
-const ZOOM: f32 = 1.5;
+const ZOOM: f32 = 2.0;
 
 use structopt::StructOpt;
 
@@ -88,10 +46,6 @@ struct Opt {
 #[tokio::main]
 async fn main() {
     env_logger::init();
-
-    let opt = Opt::from_args();
-    
-    println!("Opt: {:?}", opt);
     
     let event_loop = EventLoop::new();
 
@@ -116,132 +70,116 @@ async fn main() {
         })
         .build().unwrap();
 
-        let gui = Gui::new(window_size.width, window_size.height, scale_factor, &pixels);
+        let gui = Gui::new(window_size.width, window_size.height, scale_factor, &pixels, P2P::new(INPUT_SIZE).await);
         (pixels, gui)
     };
 
-    let game = Game::new(gui, pixels, opt).await;
+    let game_runner = GameRunner::new(gui, pixels).await;
     
-    let audio = Audio::new();
-    let mut audio_stream = audio.start(game.audio_latency, game.nes.clone());    
-
-    game_loop(event_loop, window, game, FPS, 0.08, move |g| {
-        let game = &mut g.game;
-        
-        if game.frames_to_skip > 0 {
-            game.decrease_frames_to_skip();
-            println!("Frame {} skipped: WaitRecommendation", game.frame);
-            return;
-        }
-        //println!("State: {:?}", game.sess.current_state());
-        //game.update(game.pad1.state, game.pad2.state);
-        let sess = &mut game.sess;
-        if sess.current_state() == SessionState::Running {
-            match sess.advance_frame(game.local_handle, &vec![game.pad1.state]) {
-                Ok(requests) => {
-                    for request in requests {
-                        match request {
-                            GGRSRequest::LoadGameState { cell } => {
-                                let game_state = cell.load();
-                                let frame = game_state.frame;
-
-                                println!("LOAD {}, diff in frame: {}", game_state.checksum, game.frame - frame);
-                                let mut nes = game.nes.lock().unwrap();
-                                game.frame = frame;
-                                *nes = bincode::deserialize(game_state.buffer.unwrap().as_slice()).unwrap();
-                            },
-                            GGRSRequest::SaveGameState { cell, frame } => {
-                                let nes = game.nes.lock().unwrap();
-                                let state = bincode::serialize(nes.deref()).unwrap();
-                                let game_state = GameState::new(frame, Some(state), None);
-                                //println!("SAVE {}", game_state.checksum);
-                                cell.save(game_state);
-                            },
-                            GGRSRequest::AdvanceFrame { inputs } => {
-                                let pad1 = if inputs[0].frame == NULL_FRAME {
-                                    0 //Disconnected player
-                                } else {
-                                    inputs[0].input()[0]
-                                };
-                                let pad2 = if inputs[1].frame == NULL_FRAME {
-                                    0 //Disconnected player
-                                } else {
-                                    inputs[1].input()[0]
-                                };
-                                game.update(pad1, pad2);
-                            },
-                        }
-                    }
-                }
-                Err(ggrs::GGRSError::PredictionThreshold) => {
-                    println!(
-                        "Frame {} skipped: PredictionThreshold",
-                        game.frame
-                    );
-                }
-                Err(e) => eprintln!("Ouch :( {:?}", e)
-            }
-            
-            //regularily print networks stats
-            if game.frame % 120 == 0 {
-                for i in 0..NUM_PLAYERS {
-                    if let Ok(stats) = game.sess.network_stats(i as usize) {
-                        println!("NetworkStats to player {}: {:?}", i, stats);
-                    }
-                }
-            }
-        }
+    game_loop(event_loop, window, game_runner, FPS, 0.08, move |g| {
+        let game_runner = &mut g.game;
+        game_runner.advance();
     }, move |g| {
-        g.game.render(&g.window);
+        let game_runner = &mut g.game;
+        game_runner.render(&g.window);
     }, move |g, event| {
-        let game = &mut g.game;
-        game.sess.poll_remote_clients();
-        let mut a = 0;
-
-        for event in game.sess.events() {
-            if let GGRSEvent::WaitRecommendation { skip_frames } = event {
-                a += skip_frames;
-            }
-            println!("Event: {:?}", event);
-        }
-        game.increase_frames_to_skip(a);
-        
-        if !g.game.handle(event) {
+        let game_runner = &mut g.game;
+        if !game_runner.handle(event) {
             g.exit();
         }
-        audio_stream.set_latency(g.game.audio_latency);
     });
 }
 
-struct Game {
-    frame: i32,
-    frames_to_skip: u32,
-    sess: P2PSession,
-    local_handle: usize,
-    gui: Gui,
-    pixels: Pixels,
-    audio_latency: u16,
-    nes: Arc<Mutex<NesState>>,
-    pad1: JoypadMappings,
-    pad2: JoypadMappings,
+struct MyBox {
+    x: f64,
+    y: f64,
+    x_vel: f64,
+    y_vel: f64
 }
 
-impl Game {
-    pub async fn new(gui: Gui, pixels: Pixels, opt: Opt) -> Self {
-        let rom_data = match std::env::var("ROM_FILE") {
-            Ok(rom_file) => {
-                let data = fs::read(&rom_file).expect(format!("Could not read ROM {}", rom_file).as_str());
-                data
-            },
-            Err(_e) => Asset::get("rom.nes").expect("Missing embedded ROM").data.into_owned()
-        };
+struct MyGameState {
+    boxes: HashMap<usize, MyBox>
+}
 
-        let nes = Arc::new(Mutex::new(load_rom(rom_data).expect("Failed to load ROM")));
-        let p2p = P2P::new().await;
+impl MyGameState {
+    fn new() -> Self {
+        Self {
+            boxes: HashMap::new()
+        }
+    }
+
+    //TODO: Use a Vec<JoypadInput> instead?
+    pub fn advance(&mut self, inputs: Vec<StaticJoypadInput>) {
+        //println!("Advancing! {:?}", inputs);
+        use input::JoypadButton::*;
+        for (idx, input) in inputs.iter().enumerate() {
+            let b = self.get_box(idx);
+            if input.is_pressed(UP) {
+                b.y_vel -= 0.1;
+            }
+            if input.is_pressed(DOWN) {
+                b.y_vel += 0.1;
+            }
+            if input.is_pressed(LEFT) {
+                b.x_vel -= 0.1;
+            }
+            if input.is_pressed(RIGHT) {
+                b.x_vel += 0.1;
+            }
+            b.x_vel *= 0.98;
+            b.y_vel *= 0.98;
+
+            b.x += b.x_vel;
+            b.y += b.y_vel;
+
+            if b.x + BOX_SIZE > WIDTH as f64 { b.x = WIDTH as f64 - BOX_SIZE; b.x_vel *= -1.0 }
+            if b.x < 0.0 { b.x = 0.0; b.x_vel *= -1.0 }
+            if b.y + BOX_SIZE > HEIGHT as f64 { b.y = HEIGHT as f64 - BOX_SIZE; b.y_vel *= -1.0 }
+            if b.y < 0.0 { b.y = 0.0; b.y_vel *= -1.0 }
+        }
+    }
+
+    fn get_box(&mut self, idx: usize) -> &mut MyBox {
+        self.boxes.entry(idx).or_insert_with(|| { MyBox { x: WIDTH as f64 / 2.0 - BOX_SIZE / 2.0, y: HEIGHT as f64 / 2.0 - BOX_SIZE / 2.0, x_vel: 0.0, y_vel: 0.0 } })
+    }
+}
+
+enum SelectedInput {
+    Keyboard
+}
+
+struct JoypadInputs {
+    selected: SelectedInput,
+    keyboard: JoypadKeyboardInput
+}
+
+struct Settings {
+    audio_latency: u16,
+    inputs: Vec<JoypadInputs>
+}
+
+impl JoypadInputs {
+    fn get_pad(self: &Self) -> Box<&dyn JoypadInput> {
+        match self.selected {
+            SelectedInput::Keyboard => Box::new(&self.keyboard),
+        }
+    }
+}
+struct NetPlayState {
+    session: P2PSession,
+    local_handle: usize,
+    frames_to_skip: u32,
+    frame: i32
+}
+
+impl NetPlayState {
+/*
+    async fn new() -> Self {
+
         
         let p2p_game = if opt.create {
             println!("Creating game {}", opt.game_name);
-            let game = p2p.create_game(&opt.game_name, opt.slots).await;
+            
             println!("Created!");
             game
         } else {
@@ -258,12 +196,12 @@ impl Game {
             }
         };
 
-        let (mut sess, local_handle) = loop {
+        let (mut session, local_handle) = loop {
             match p2p_game.current_state().await {
-                p2p::GameState::Initializing => {
+                network::p2p::GameState::Initializing => {
                     println!("Initializing...");
                 },
-                p2p::GameState::New(slots) => {
+                network::p2p::GameState::New(slots) => {
                     println!("Waiting for slots to be occupied and connected: {:?}", slots);
 
                     let vacant_idx = slots.iter().enumerate()
@@ -278,7 +216,7 @@ impl Game {
                         }
                     }
                 },
-                p2p::GameState::Ready(ready_state) => {
+                network::p2p::GameState::Ready(ready_state) => {
                     let mut peers = Vec::new();
                     for participant in ready_state.players.clone() {
                         if let Participant::Remote(peer_id, _) = participant {
@@ -296,50 +234,180 @@ impl Game {
             tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
         };
         //sess.set_sparse_saving(true).unwrap();
-        sess.set_fps(FPS).unwrap();
-        sess.set_frame_delay(4, local_handle).unwrap();
-        sess.start_session().expect("Could not start P2P session");
-        
+        session.set_fps(FPS).unwrap();
+        session.set_frame_delay(4, local_handle).unwrap();
+        session.start_session().expect("Could not start P2P session");
         
         Self {
             frame: 0,
-            frames_to_skip: 0,
-            sess,
+            session,
             local_handle,
+            frames_to_skip: 0
+        }
+    }
+*/
+}
+enum PlayState {
+    LocalPlay(),
+    NetPlay(NetPlayState)
+}
+enum GameRunnerState {
+    Loading(String, f64),
+    Playing(MyGameState, PlayState)
+}
+struct GameRunner {
+    state: GameRunnerState,
+    gui: Gui,
+    pixels: Pixels,
+    settings: Settings
+}
+
+const BOX_SIZE: f64 = 20.0;
+impl GameRunner {
+    pub async fn new(gui: Gui, pixels: Pixels) -> Self {
+        Self {
+            state: GameRunnerState::Playing(MyGameState::new(), PlayState::LocalPlay()),
             gui,
             pixels,
-            audio_latency: 400,
-            nes,
-            pad1: JoypadMappings::DEFAULT_PAD1,
-            pad2: JoypadMappings::DEFAULT_PAD2
+            settings: Settings {
+                audio_latency: 50,
+                inputs: vec!(
+                    JoypadInputs {
+                        selected: SelectedInput::Keyboard,
+                        keyboard: JoypadKeyboardInput::new(JoypadKeyMap::default_pad1())
+                    },
+                    JoypadInputs {
+                        selected: SelectedInput::Keyboard,
+                        keyboard: JoypadKeyboardInput::new(JoypadKeyMap::default_pad2())
+                    }
+                )
+            }
         }
     }
     
-    pub fn increase_frames_to_skip(self: &mut Self, frames: u32) {
-        self.frames_to_skip += frames;
-    }
-    
-    pub fn decrease_frames_to_skip(self: &mut Self) {
-        self.frames_to_skip -= 1;
-    }
-
-    pub fn update(&mut self, pad1: u8, pad2: u8) {
-        let mut nes = self.nes.lock().unwrap();
-
-        nes.p1_input = pad1;
-        nes.p2_input = pad2;
-        nes.run_until_vblank();
-
-        self.frame += 1;
+    pub fn advance(self: &mut Self) {
+        let state = &mut self.state;
+        match state {
+            GameRunnerState::Loading(msg, progress) => {
+                //TODO: ...
+                println!("Loading: \"{}\", ({}%)", msg, *progress * 100.0);
+            },
+            GameRunnerState::Playing(game_state, play_state) => {
+                match play_state {
+                    PlayState::LocalPlay() => {
+                        let a = self.settings.inputs.iter().map(|inputs| {
+                            match inputs.selected {
+                                SelectedInput::Keyboard => StaticJoypadInput(inputs.keyboard.to_u8()),
+                            }
+                        }).collect();
+                        game_state.advance(a);
+                    },
+                    PlayState::NetPlay(netplay_state) => {
+                        netplay_state.frame += 1;
+                        let sess = &mut netplay_state.session;
+                        sess.poll_remote_clients();
+                
+                        for event in sess.events() {
+                            if let GGRSEvent::WaitRecommendation { skip_frames } = event {
+                                netplay_state.frames_to_skip += skip_frames;
+                            }
+                            println!("Event: {:?}", event);
+                        }
+                
+                        if netplay_state.frames_to_skip > 0 {
+                            netplay_state.frames_to_skip -= 1;
+                            println!("Frame {} skipped: WaitRecommendation", netplay_state.frame);
+                            return;
+                        }
+                        //println!("State: {:?}", game.sess.current_state());
+                        //game.update(game.pad1.state, game.pad2.state);
+                        if sess.current_state() == SessionState::Running {
+                            let pad1 = self.settings.inputs[0].get_pad();
+                
+                            match sess.advance_frame(netplay_state.local_handle, &vec![pad1.to_u8()]) {
+                                Ok(requests) => {
+                                    for request in requests {
+                                        match request {
+                                            GGRSRequest::LoadGameState { cell } => {
+                                                let game_state = cell.load();
+                                                let frame = game_state.frame;
+                
+                                                println!("LOAD {}, diff in frame: {}", game_state.checksum, netplay_state.frame - frame);
+                                                netplay_state.frame = frame; //TODO: Look into this frame stuff here...
+                                            },
+                                            GGRSRequest::SaveGameState { cell, frame } => {
+                                                let nes = &0;
+                
+                                                let state = bincode::serialize(nes).unwrap();
+                                                let game_state = GameState::new(frame, Some(state), None);
+                                                //println!("SAVE {}", game_state.checksum);
+                                                cell.save(game_state);
+                                            },
+                                            GGRSRequest::AdvanceFrame { inputs } => {
+                                                let inputs = inputs.iter().map(|i| {
+                                                    if i.frame == NULL_FRAME {
+                                                        StaticJoypadInput(0) //disconnected player
+                                                    } else {
+                                                        StaticJoypadInput(i.buffer[0])
+                                                    }
+                                                }).collect();
+                                                game_state.advance(inputs);
+                                            },
+                                        }
+                                    }
+                                }
+                                Err(ggrs::GGRSError::PredictionThreshold) => {
+                                    println!("Frame {} skipped: PredictionThreshold", netplay_state.frame);
+                                }
+                                Err(e) => eprintln!("Ouch :( {:?}", e)
+                            }
+                            
+                            //regularily print networks stats
+                            if netplay_state.frame % 120 == 0 {
+                                for i in 0..NUM_PLAYERS {
+                                    if let Ok(stats) = sess.network_stats(i as usize) {
+                                        println!("NetworkStats to player {}: {:?}", i, stats);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     pub fn render(&mut self, window: &winit::window::Window) -> bool {
         let pixels = &mut self.pixels;
-        let gui = &mut self.gui;
-        gui.prepare(&window, &mut self.pad1, &mut self.pad2, &mut self.audio_latency);
+        
+        if let GameRunnerState::Playing(game_state, _) = &self.state {
+            let frame = pixels.get_frame();
 
-        //Render nes
-        render_screen_pixels(&mut self.nes.lock().unwrap().ppu, pixels.get_frame());
+            for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
+                let x = (i % WIDTH as usize) as f64;
+                let y = (i / WIDTH as usize) as f64;
+                
+                let rgba = game_state.boxes.values().enumerate().find(|(_, b)| {
+                    x >= b.x
+                    && x < b.x + BOX_SIZE
+                    && y >= b.y
+                    && y < b.y + BOX_SIZE
+                }).map_or([0x00, 0x00, 0x00, 0x00], |(a, _)| {
+                    if a == 0 {
+                        [0x48, 0xb2, 0xe8, 0xff]
+                    } else if a == 1 {
+                        [0x5e, 0x48, 0xe8, 0xff]
+                    } else {
+                        [0xff, 0xff, 0xff, 0xff]
+                    }
+                });
+    
+                pixel.copy_from_slice(&rgba);
+            }
+        }
+
+        let gui = &mut self.gui;
+        gui.prepare(&window, &mut self.settings, &mut self.state);
 
         // Render everything together
         pixels.render_with(|encoder, render_target, context| {
@@ -356,7 +424,7 @@ impl Game {
 
     pub fn handle(&mut self, event: winit::event::Event<()>) -> bool {
         // Update egui inputs
-        self.gui.handle_event(&event);
+        self.gui.handle_event(&event, &mut self.settings);
 
         // Handle input events
         if let WinitEvent::WindowEvent { event, .. } = event {
@@ -370,39 +438,16 @@ impl Game {
 
             if let winit::event::WindowEvent::KeyboardInput { input, .. } = event {
                 if let Some(code) = input.virtual_keycode {
-                    use std::fs::File;
-                    use std::io::{Read, Write};
                     match code {
                         VirtualKeyCode::Escape => {
                             if input.state == winit::event::ElementState::Pressed {
                                 self.gui.show_gui = !self.gui.show_gui;
                             }
                         },
-                        VirtualKeyCode::F1 => {
-                            if input.state == winit::event::ElementState::Pressed {
-                                let buffer = bincode::serialize(self.nes.lock().unwrap().deref()).unwrap();
-                                let filename = "save.state";
-                                let mut file = File::create(filename).unwrap();
-                                file.write_all(buffer.as_slice()).expect("Failed to write save state");
-                            }
-                        },
-                        VirtualKeyCode::F2 => {
-                            if input.state == winit::event::ElementState::Pressed {
-                                let filename = "save.state";
-                                let mut file = File::open(&filename).expect("no file found");
-                                let metadata = fs::metadata(&filename).expect("unable to read metadata");
-                                let mut buffer = vec![0; metadata.len() as usize];
-                                file.read(&mut buffer).expect("buffer overflow");
-                                let old_nes: NesState = bincode::deserialize(buffer.as_slice()).unwrap();
-                                let mut nes = self.nes.lock().expect("wat");
-                                *nes = old_nes;
-                            }
-                        },
                         _ => {
-                            self.pad1.apply(&input);
-                            self.pad2.apply(&input);
+                            self.settings.inputs[0].keyboard.apply(&input);
+                            self.settings.inputs[1].keyboard.apply(&input);
                         }
-
                     }
                 }
             }

@@ -1,7 +1,7 @@
 use tokio::runtime::{Handle};
 
-use crate::discovery::{self, Node};
-use crate::peer::{Peer, PeerState};
+use crate::network::discovery::{self, Node};
+use crate::network::peer::{Peer, PeerState};
 
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -23,22 +23,27 @@ pub(crate) enum Slot {
     Vacant(),
     Occupied(Participant)
 }
+#[derive(Debug, Clone)]
 pub(crate) struct ReadyState {
     pub(crate) players: Vec<Participant>,
     spectators: Vec<Participant>
 }
+
+#[derive(Debug, Clone)]
 pub(crate) enum GameState {
     Initializing,
     New(Vec<Slot>),
     Ready(ReadyState),
 }
+
+#[derive(Clone)]
 pub(crate) struct P2PGame {
     owner_id: PeerId,
     node: Node,
 }
 
 impl P2PGame {    
-    async fn new(owner_id: PeerId, node: Node) -> Self {
+    fn new(owner_id: PeerId, node: Node) -> Self {
         Self {
             owner_id,
             node,
@@ -53,7 +58,7 @@ impl P2PGame {
         self.get_record("name").await.map(|name_data| bincode::deserialize(&name_data).unwrap())
     }
 
-    pub(crate) async fn current_state(self: &Self) -> GameState {
+    pub(crate) async fn current_state(&self, p2p: P2P) -> GameState {
         if let Some(slots) = self.get_slots().await {
             let participants = slots.iter()
             .filter_map(|slot| {
@@ -64,7 +69,8 @@ impl P2PGame {
                 }
             })
             .collect::<Vec<_>>();
-            if participants.len() == slots.len() {
+            let all_connected = self.all_connected(participants.clone(), p2p);
+            if participants.len() == slots.len() && all_connected {
                 GameState::Ready(ReadyState { players: participants, spectators: vec!() })
             } else {
                 GameState::New(slots)
@@ -72,6 +78,18 @@ impl P2PGame {
         } else {
             GameState::Initializing
         }
+    }
+    
+    fn all_connected(&self, participants: Vec<Participant>, p2p: P2P) -> bool {
+        let mut peers = Vec::new();
+        for participant in participants {
+            if let Participant::Remote(peer_id, _) = participant {
+                peers.push(p2p.get_peer(peer_id.clone()));
+            }
+        }
+
+        peers.iter().all(|peer| matches!(*peer.connection_state.borrow(), PeerState::Connected(_)) )
+
     }
 
     async fn get_slots(self: &Self) -> Option<Vec<Slot>> {
@@ -113,11 +131,14 @@ impl P2PGame {
         providers.iter().cloned().max()
     }
 
-    pub(crate) async fn claim_slot(self: &Self, slot_idx: usize) {
+    pub(crate) fn claim_slot(self: &Self, slot_idx: usize) {
         let key = format!("{}.slot-idx", self.node.local_peer_id);
         //println!("Claim slot {:?}, {:?}", slot_idx, key);
-        self.start_providing("slot-idx").await;
-        self.put_record(&key, bincode::serialize(&slot_idx).unwrap()).await;
+        let c = self.clone();
+        tokio::spawn(async move {
+            c.start_providing("slot-idx").await;
+            c.put_record(&key, bincode::serialize(&slot_idx).unwrap()).await;
+        });
     }
 
     async fn start_providing(self: &Self, key: &str) {
@@ -141,64 +162,74 @@ impl P2PGame {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct P2P {
     node: Node,
+    pub(crate) input_size: usize,
     peers: Arc<Mutex<HashMap<PeerId, Peer>>>,
 }
 
 impl P2P {
-    pub(crate) async fn new() -> Self {
+    pub(crate) async fn new(input_size: usize) -> Self {
         let node = discovery::Node::new().await;
         Self {
             node,
+            input_size,
             peers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    pub(crate) async fn get_peer(self: &Self, peer_id: PeerId) -> Peer {
+    pub(crate) fn get_peer(&self, peer_id: PeerId) -> Peer {
         let mut lock = self.peers.lock().unwrap();
         if let Some(peer) = lock.get(&peer_id) {
             return peer.clone();
         } else {
-            let peer = Peer::new(peer_id, self.node.clone()).await;
+            let peer = Peer::new(peer_id, self.node.clone());
             lock.insert(peer_id, peer.clone());
             return peer;
         }
     }
-
-    pub(crate) async fn find_owner(self: &Self, game_name: &str) -> Option<PeerId> {
+    pub(crate) async fn find_games(&self, game_name: &str) -> Vec<(String, PeerId)> {
         let mut owners = vec!();
         let providers = self.node.get_providers("p2p-game").await;
         for peer_id in providers {
             for name in self.node.get_record(&format!("{}.p2p-game.name", peer_id)).await {
                 let name: &str = bincode::deserialize(&name).unwrap();
-                if name == game_name {
-                    owners.push(peer_id);
+                if name.contains(game_name) {
+                    owners.push((name.to_owned(), peer_id));
                 }
             }
         }
-        owners.iter().cloned().max()
+        owners
     }
 
-    pub(crate) async fn join_game(self: &Self, owner_id: PeerId) -> P2PGame {
-        P2PGame::new(owner_id, self.node.clone()).await
+    pub(crate) fn join_game(self: &Self, owner_id: PeerId) -> P2PGame {
+        P2PGame::new(owner_id, self.node.clone())
     }
 
     pub(crate) async fn create_game(self: &Self, name: &str, slot_count: u8) -> P2PGame {
-        let game = P2PGame::new(self.node.local_peer_id, self.node.clone()).await;
-        self.node.start_providing("p2p-game").await;
-        game.put_record("slot-count", bincode::serialize(&slot_count).unwrap()).await;
-        game.put_record("name", bincode::serialize(&name).unwrap()).await;
+        let game = P2PGame::new(self.node.local_peer_id, self.node.clone());
+        tokio::spawn({
+            let node = self.node.clone();
+            let game = game.clone();
+            let name = name.to_string();    
+            async move {
+                node.start_providing("p2p-game").await;
+                game.put_record("slot-count", bincode::serialize(&slot_count).unwrap()).await;
+                game.put_record("name", bincode::serialize(&name).unwrap()).await;
+            }
+        });
+        
+
         game
     }
 
-    pub(crate) async fn start_session(self: &Self, ready_state: ReadyState, input_size: usize) -> (P2PSession, usize) {
+    pub(crate) fn start_session(self: &Self, ready_state: ReadyState) -> (P2PSession, usize) {
         let num_players = ready_state.players.len() + ready_state.spectators.len();
         println!("Players: {}", num_players);
         
-        let sock = P2PGameNonBlockingSocket::new(&ready_state, &self).await;
-        let mut session = P2PSession::new_with_socket(num_players as u32, input_size, sock).expect("Could not create a P2P Session");
+        let sock = P2PGameNonBlockingSocket::new(&ready_state, &self);
+        let mut session = P2PSession::new_with_socket(num_players as u32, self.input_size, sock).expect("Could not create a P2P Session");
 
         let local_handle = {
             let mut local_handle = 0;
@@ -228,7 +259,7 @@ pub(crate) struct P2PGameNonBlockingSocket {
 }
 
 impl P2PGameNonBlockingSocket {
-    pub(crate) async fn new(ready_state: &ReadyState, p2p: &P2P) -> Self {
+    pub(crate) fn new(ready_state: &ReadyState, p2p: &P2P) -> Self {
         let runtime_handle = tokio::runtime::Handle::current();
         let participants = [&ready_state.players[..], &ready_state.spectators[..]].concat();
 
@@ -236,7 +267,7 @@ impl P2PGameNonBlockingSocket {
         for participant in participants {
             match participant {
                 Participant::Remote(peer_id, addr) => {
-                    let peer = p2p.get_peer(peer_id).await;
+                    let peer = p2p.get_peer(peer_id);
                     peers.insert(addr.clone(), (peer, [0; RECV_BUFFER_SIZE]));
                 },
                 _ => ()
