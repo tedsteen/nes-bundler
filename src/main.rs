@@ -1,8 +1,6 @@
 #![deny(clippy::all)]
 #![forbid(unsafe_code)]
 
-use std::collections::HashMap;
-
 use crate::input::{JoypadInput, StaticJoypadInput};
 use crate::network::p2p::{P2P};
 
@@ -26,7 +24,7 @@ mod network;
 
 const FPS: u32 = 60;
 const INPUT_SIZE: usize = std::mem::size_of::<u8>();
-const NUM_PLAYERS: usize = 2;
+const MAX_PLAYERS: usize = 4;
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
 const ZOOM: f32 = 2.0;
@@ -67,6 +65,7 @@ async fn main() {
         .request_adapter_options(wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: None,
+            force_fallback_adapter: false
         })
         .build().unwrap();
 
@@ -90,6 +89,9 @@ async fn main() {
     });
 }
 
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize, Clone, Copy)]
 struct MyBox {
     x: f64,
     y: f64,
@@ -97,18 +99,18 @@ struct MyBox {
     y_vel: f64
 }
 
+#[derive(Serialize, Deserialize)]
 struct MyGameState {
-    boxes: HashMap<usize, MyBox>
+    boxes: [MyBox; MAX_PLAYERS]
 }
 
 impl MyGameState {
     fn new() -> Self {
         Self {
-            boxes: HashMap::new()
+            boxes: [MyBox { x: 0.0, y: 0.0, x_vel: 0.0, y_vel: 0.0 }; MAX_PLAYERS]
         }
     }
 
-    //TODO: Use a Vec<JoypadInput> instead?
     pub fn advance(&mut self, inputs: Vec<StaticJoypadInput>) {
         //println!("Advancing! {:?}", inputs);
         use input::JoypadButton::*;
@@ -140,7 +142,7 @@ impl MyGameState {
     }
 
     fn get_box(&mut self, idx: usize) -> &mut MyBox {
-        self.boxes.entry(idx).or_insert_with(|| { MyBox { x: WIDTH as f64 / 2.0 - BOX_SIZE / 2.0, y: HEIGHT as f64 / 2.0 - BOX_SIZE / 2.0, x_vel: 0.0, y_vel: 0.0 } })
+        &mut self.boxes[idx]
     }
 }
 
@@ -155,7 +157,7 @@ struct JoypadInputs {
 
 struct Settings {
     audio_latency: u16,
-    inputs: Vec<JoypadInputs>
+    inputs: [JoypadInputs; MAX_PLAYERS]
 }
 
 impl JoypadInputs {
@@ -167,93 +169,19 @@ impl JoypadInputs {
 }
 struct NetPlayState {
     session: P2PSession,
+    player_count: usize,
     local_handle: usize,
     frames_to_skip: u32,
     frame: i32
 }
 
-impl NetPlayState {
-/*
-    async fn new() -> Self {
-
-        
-        let p2p_game = if opt.create {
-            println!("Creating game {}", opt.game_name);
-            
-            println!("Created!");
-            game
-        } else {
-            loop {
-                if let Some(owner_id) = p2p.find_owner(&opt.game_name).await {
-                    println!("Joining game '{}' ({:?}...", opt.game_name, owner_id);
-                    let game = p2p.join_game(owner_id).await;
-                    println!("Joined!");
-                    break game;
-                } else {
-                    println!("Looking for game '{}'", opt.game_name);
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-            }
-        };
-
-        let (mut session, local_handle) = loop {
-            match p2p_game.current_state().await {
-                network::p2p::GameState::Initializing => {
-                    println!("Initializing...");
-                },
-                network::p2p::GameState::New(slots) => {
-                    println!("Waiting for slots to be occupied and connected: {:?}", slots);
-
-                    let vacant_idx = slots.iter().enumerate()
-                    .find(|(_, slot) | matches!(slot, Slot::Vacant()))
-                    .map(|(idx, _)| idx);
-
-                    if let Some(vacant_idx) = vacant_idx {
-                        let our_slot = slots.iter()
-                        .find(|slot| matches!(slot, Slot::Occupied(Participant::Local(_))));
-                        if our_slot.is_none() {
-                            p2p_game.claim_slot(vacant_idx).await;    
-                        }
-                    }
-                },
-                network::p2p::GameState::Ready(ready_state) => {
-                    let mut peers = Vec::new();
-                    for participant in ready_state.players.clone() {
-                        if let Participant::Remote(peer_id, _) = participant {
-                            peers.push(p2p.get_peer(peer_id).await);
-                        }
-                    }
-                    if !peers.iter().all(|peer| matches!(*peer.connection_state.borrow(), PeerState::Connected(_)) ) {
-                        println!("Waiting for all peers to connect...");
-                    } else {
-                        println!("Starting session!");
-                        break p2p.start_session(ready_state, INPUT_SIZE).await;
-                    }
-                },
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-        };
-        //sess.set_sparse_saving(true).unwrap();
-        session.set_fps(FPS).unwrap();
-        session.set_frame_delay(4, local_handle).unwrap();
-        session.start_session().expect("Could not start P2P session");
-        
-        Self {
-            frame: 0,
-            session,
-            local_handle,
-            frames_to_skip: 0
-        }
-    }
-*/
-}
 enum PlayState {
     LocalPlay(),
     NetPlay(NetPlayState)
 }
 enum GameRunnerState {
-    Loading(String, f64),
-    Playing(MyGameState, PlayState)
+    Playing(MyGameState, PlayState),
+    Loading
 }
 struct GameRunner {
     state: GameRunnerState,
@@ -271,7 +199,7 @@ impl GameRunner {
             pixels,
             settings: Settings {
                 audio_latency: 50,
-                inputs: vec!(
+                inputs: [
                     JoypadInputs {
                         selected: SelectedInput::Keyboard,
                         keyboard: JoypadKeyboardInput::new(JoypadKeyMap::default_pad1())
@@ -279,8 +207,16 @@ impl GameRunner {
                     JoypadInputs {
                         selected: SelectedInput::Keyboard,
                         keyboard: JoypadKeyboardInput::new(JoypadKeyMap::default_pad2())
+                    },
+                    JoypadInputs {
+                        selected: SelectedInput::Keyboard,
+                        keyboard: JoypadKeyboardInput::new(JoypadKeyMap::unmapped())
+                    },
+                    JoypadInputs {
+                        selected: SelectedInput::Keyboard,
+                        keyboard: JoypadKeyboardInput::new(JoypadKeyMap::unmapped())
                     }
-                )
+                ]
             }
         }
     }
@@ -288,10 +224,6 @@ impl GameRunner {
     pub fn advance(self: &mut Self) {
         let state = &mut self.state;
         match state {
-            GameRunnerState::Loading(msg, progress) => {
-                //TODO: ...
-                println!("Loading: \"{}\", ({}%)", msg, *progress * 100.0);
-            },
             GameRunnerState::Playing(game_state, play_state) => {
                 match play_state {
                     PlayState::LocalPlay() => {
@@ -322,23 +254,19 @@ impl GameRunner {
                         //println!("State: {:?}", game.sess.current_state());
                         //game.update(game.pad1.state, game.pad2.state);
                         if sess.current_state() == SessionState::Running {
-                            let pad1 = self.settings.inputs[0].get_pad();
-                
-                            match sess.advance_frame(netplay_state.local_handle, &vec![pad1.to_u8()]) {
+                            match sess.advance_frame(netplay_state.local_handle, &[self.settings.inputs[0].get_pad().to_u8()]) {
                                 Ok(requests) => {
                                     for request in requests {
                                         match request {
                                             GGRSRequest::LoadGameState { cell } => {
-                                                let game_state = cell.load();
-                                                let frame = game_state.frame;
-                
-                                                println!("LOAD {}, diff in frame: {}", game_state.checksum, netplay_state.frame - frame);
+                                                let g_s = cell.load();
+                                                let frame = g_s.frame;
+                                                *game_state = bincode::deserialize(&g_s.buffer.unwrap()).unwrap();
+                                                println!("LOAD {}, diff in frame: {}", g_s.checksum, netplay_state.frame - frame);
                                                 netplay_state.frame = frame; //TODO: Look into this frame stuff here...
                                             },
                                             GGRSRequest::SaveGameState { cell, frame } => {
-                                                let nes = &0;
-                
-                                                let state = bincode::serialize(nes).unwrap();
+                                                let state = bincode::serialize(game_state).unwrap();
                                                 let game_state = GameState::new(frame, Some(state), None);
                                                 //println!("SAVE {}", game_state.checksum);
                                                 cell.save(game_state);
@@ -364,7 +292,7 @@ impl GameRunner {
                             
                             //regularily print networks stats
                             if netplay_state.frame % 120 == 0 {
-                                for i in 0..NUM_PLAYERS {
+                                for i in 0..netplay_state.player_count {
                                     if let Ok(stats) = sess.network_stats(i as usize) {
                                         println!("NetworkStats to player {}: {:?}", i, stats);
                                     }
@@ -374,35 +302,34 @@ impl GameRunner {
                     }
                 }
             }
+            GameRunnerState::Loading => todo!(),
         }
     }
+
+    const BOX_COLORS: [[u8; 4]; MAX_PLAYERS] = [[0x48, 0xb2, 0xe8, 0xff], [0x5e, 0x48, 0xe8, 0xff], [0xff, 0x00, 0x00, 0xff], [0x00, 0xff, 0x00, 0xff]];
+    const BACKGROUND_COLOR: [u8; 4] = [0x00, 0x00, 0x00, 0xff];
 
     pub fn render(&mut self, window: &winit::window::Window) -> bool {
         let pixels = &mut self.pixels;
         
         if let GameRunnerState::Playing(game_state, _) = &self.state {
             let frame = pixels.get_frame();
+            
+            // Clear with background color
+            for pixel in frame.chunks_exact_mut(4) {
+                pixel.copy_from_slice(&GameRunner::BACKGROUND_COLOR);
+            }
 
-            for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-                let x = (i % WIDTH as usize) as f64;
-                let y = (i / WIDTH as usize) as f64;
-                
-                let rgba = game_state.boxes.values().enumerate().find(|(_, b)| {
-                    x >= b.x
-                    && x < b.x + BOX_SIZE
-                    && y >= b.y
-                    && y < b.y + BOX_SIZE
-                }).map_or([0x00, 0x00, 0x00, 0x00], |(a, _)| {
-                    if a == 0 {
-                        [0x48, 0xb2, 0xe8, 0xff]
-                    } else if a == 1 {
-                        [0x5e, 0x48, 0xe8, 0xff]
-                    } else {
-                        [0xff, 0xff, 0xff, 0xff]
+            // Draw boxes
+            let mut line = [0 as u8; 4 * BOX_SIZE as usize];
+            for (box_idx, my_box) in game_state.boxes.iter().enumerate() {
+                for y in my_box.y as u16..(my_box.y + BOX_SIZE) as u16 {
+                    for pixel in line.chunks_exact_mut(4) {
+                        pixel.copy_from_slice(&GameRunner::BOX_COLORS[box_idx]); 
                     }
-                });
-    
-                pixel.copy_from_slice(&rgba);
+                    let frame_idx = (my_box.x as usize * 4) + (y as usize * (WIDTH as usize * 4)) as usize;
+                    frame[frame_idx..frame_idx + line.len()].copy_from_slice(&line);
+                }
             }
         }
 
@@ -412,11 +339,10 @@ impl GameRunner {
         // Render everything together
         pixels.render_with(|encoder, render_target, context| {
             // Render the world texture
-            let result = context.scaling_renderer.render(encoder, render_target);
+            context.scaling_renderer.render(encoder, render_target);
             // Render egui
             gui.render(encoder, render_target, context).expect("GUI failed to render");
-
-            result
+            Ok(())
         })
         .map_err(|e| error!("pixels.render() failed: {}", e))
         .is_err()
@@ -445,8 +371,9 @@ impl GameRunner {
                             }
                         },
                         _ => {
-                            self.settings.inputs[0].keyboard.apply(&input);
-                            self.settings.inputs[1].keyboard.apply(&input);
+                            for joypad_inputs in &mut self.settings.inputs {
+                                joypad_inputs.keyboard.apply(&input);    
+                            }
                         }
                     }
                 }

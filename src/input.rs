@@ -24,44 +24,50 @@ pub(crate) trait JoypadInput {
     fn to_u8(self: &Self) -> u8;
 }
 pub(crate) struct JoypadKeyMap {
-    map: HashMap<JoypadButton, VirtualKeyCode>,
+    map: HashMap<JoypadButton, Option<VirtualKeyCode>>,
 }
 
 use winit::event::VirtualKeyCode::*;
 impl JoypadKeyMap {
-    fn new(up: VirtualKeyCode, down: VirtualKeyCode, left: VirtualKeyCode, right: VirtualKeyCode, start: VirtualKeyCode, select: VirtualKeyCode, b: VirtualKeyCode, a: VirtualKeyCode) -> Self {
+    fn new(up: Option<VirtualKeyCode>, down: Option<VirtualKeyCode>, left: Option<VirtualKeyCode>, right: Option<VirtualKeyCode>, start: Option<VirtualKeyCode>, select: Option<VirtualKeyCode>, b: Option<VirtualKeyCode>, a: Option<VirtualKeyCode>) -> Self {
         let mut map = HashMap::new();
-        map.insert(JoypadButton::UP, up);
-        map.insert(JoypadButton::DOWN, down);
-        map.insert(JoypadButton::LEFT, left);
-        map.insert(JoypadButton::RIGHT, right);
-        map.insert(JoypadButton::START, start);
-        map.insert(JoypadButton::SELECT, select);
-        map.insert(JoypadButton::B, b);
-        map.insert(JoypadButton::A, a);
+        use JoypadButton::*;
+        map.insert(UP, up);
+        map.insert(DOWN, down);
+        map.insert(LEFT, left);
+        map.insert(RIGHT, right);
+        map.insert(START, start);
+        map.insert(SELECT, select);
+        map.insert(B, b);
+        map.insert(A, a);
         Self { map }
     }
 
-    pub(crate) fn lookup(self: &mut Self, button: &JoypadButton) -> &mut VirtualKeyCode {
+    pub(crate) fn lookup(self: &mut Self, button: &JoypadButton) -> &mut Option<VirtualKeyCode> {
         self.map.get_mut(button).unwrap()
     }
     
-    fn reverse_lookup(self: &Self, key_code: &VirtualKeyCode) -> HashSet<JoypadButton> {
+    fn reverse_lookup(self: &Self, key_code: &VirtualKeyCode) -> HashSet<&JoypadButton> {
         let mut buttons = HashSet::new();
 
-        for (button, key) in self.map.clone() {
-            if key.eq(key_code) {
-                buttons.insert(button);
+        for (button, key) in &self.map {
+            if let Some(key) = key {
+                if key.eq(key_code) {
+                    buttons.insert(button);
+                }
             }
         }
         buttons
     }
     
     pub(crate) fn default_pad1() -> JoypadKeyMap {
-        JoypadKeyMap::new(Up, Down, Left, Right, Return, RShift, Key1, Key2)
+        JoypadKeyMap::new(Some(Up), Some(Down), Some(Left), Some(Right), Some(Return), Some(RShift), Some(Key1), Some(Key2))
     }
     pub(crate) fn default_pad2() -> JoypadKeyMap {
-        JoypadKeyMap::new(W, S, A, D, Key9, Key0, LAlt, LControl)
+        JoypadKeyMap::new(Some(W), Some(S), Some(A), Some(D), Some(Key9), Some(Key0), Some(LAlt), Some(LControl))
+    }
+    pub(crate) fn unmapped() -> JoypadKeyMap {
+        JoypadKeyMap::new(None, None, None, None, None, None, None, None)
     }
 }
 
@@ -85,10 +91,8 @@ impl JoypadInput for JoypadKeyboardInput {
 impl JoypadKeyboardInput {
     pub fn apply(&mut self, input: &winit::event::KeyboardInput) -> u8 {
         let code = input.virtual_keycode.unwrap();
-        let mapping = &self.mapping;
-        let buttons = mapping.reverse_lookup(&code);
-
-        let mask = buttons.iter().fold(0 as u8, |acc, button| acc | *button as u8 );
+        let buttons = self.mapping.reverse_lookup(&code);
+        let mask = buttons.iter().fold(0 as u8, |acc, &button| acc | *button as u8 );
         
         use winit::event::ElementState::*;
         match input.state {

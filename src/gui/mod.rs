@@ -81,7 +81,7 @@ impl Gui {
     /// Prepare egui.
     pub(crate) fn prepare(&mut self, window: &Window, settings: &mut Settings, game_runner_state: &mut GameRunnerState) {
         self.platform
-            .update_time(self.start_time.elapsed().as_secs_f64());
+        .update_time(self.start_time.elapsed().as_secs_f64());
 
         // Begin the egui frame.
         self.platform.begin_frame();

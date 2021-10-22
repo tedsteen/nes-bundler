@@ -13,7 +13,7 @@ default = ["optimize"]
 [dependencies]
 env_logger = "0.9"
 log = "0.4"
-pixels = "0.6"
+pixels = "0.7"
 
 winit = "0.25"
 
@@ -21,8 +21,8 @@ winit = "0.25"
 rust-embed = "6.2"
 
 egui = "0.14"
-egui_wgpu_backend = "0.12"
-egui_winit_platform = "0.10"
+egui_wgpu_backend = "0.13"
+egui_winit_platform = {version = "0.10", features = ["copypasta"] }
 
 cpal = "0.13"
 ringbuf = "0.2"

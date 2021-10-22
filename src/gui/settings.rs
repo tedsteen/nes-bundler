@@ -5,7 +5,7 @@ use crate::{Settings, input::{JoypadButton, JoypadInput, JoypadKeyboardInput}};
 
 #[derive(Debug)]
 struct MapRequest {
-    pad: u8,
+    pad: usize,
     button: JoypadButton
 }
 
@@ -24,7 +24,7 @@ impl SettingsGui {
                     if let Some(map_request) = &self.mapping_request {
                         let inputs = &mut settings.inputs[map_request.pad as usize];
                         let current_key_code = inputs.keyboard.mapping.lookup(&map_request.button);
-                        *current_key_code = code;
+                        *current_key_code = Some(code);
                         self.mapping_request = None;
                     }
                 }
@@ -32,43 +32,52 @@ impl SettingsGui {
         }
     }
 
-    fn key_map_ui(self: &mut Self, ui: &mut Ui, keyboard_input: &mut JoypadKeyboardInput, pad: u8) {
+    fn key_map_ui(self: &mut Self, ui: &mut Ui, keyboard_input: &mut JoypadKeyboardInput, pad: usize) {
         ui.label(format!("Joypad #{}", pad + 1));
-        ui.group(|ui| {
-            self.make_button_combo(ui, pad, keyboard_input, JoypadButton::UP);
-            self.make_button_combo(ui, pad, keyboard_input, JoypadButton::DOWN);
-            self.make_button_combo(ui, pad, keyboard_input, JoypadButton::LEFT);
-            self.make_button_combo(ui, pad, keyboard_input, JoypadButton::RIGHT);
-            self.make_button_combo(ui, pad, keyboard_input, JoypadButton::START);
-            self.make_button_combo(ui, pad, keyboard_input, JoypadButton::SELECT);
-            self.make_button_combo(ui, pad, keyboard_input, JoypadButton::B);
-            self.make_button_combo(ui, pad, keyboard_input, JoypadButton::A);
+        egui::Grid::new("joymap_grid")
+        .num_columns(2)
+        .striped(true)
+        .show(ui, |ui| {
+            use JoypadButton::*;
+            self.make_button_combo(ui, pad, keyboard_input, UP);
+            self.make_button_combo(ui, pad, keyboard_input, DOWN);
+            self.make_button_combo(ui, pad, keyboard_input, LEFT);
+            self.make_button_combo(ui, pad, keyboard_input, RIGHT);
+            self.make_button_combo(ui, pad, keyboard_input, START);
+            self.make_button_combo(ui, pad, keyboard_input, SELECT);
+            self.make_button_combo(ui, pad, keyboard_input, B);
+            self.make_button_combo(ui, pad, keyboard_input, A);
         });
     }
 
-    fn make_button_combo(&mut self, ui: &mut egui::Ui, pad: u8, keyboard_input: &mut JoypadKeyboardInput, button: JoypadButton) {
-        let mut label = Label::new(format!("Pad {} - {:?}", pad + 1, button));
+    fn make_button_combo(&mut self, ui: &mut egui::Ui, pad: usize, keyboard_input: &mut JoypadKeyboardInput, button: JoypadButton) {
         
+        let mut label = Label::new(format!("{:?}", button));
         if keyboard_input.is_pressed(button) {
             label = label.text_color(Color32::from_rgb(255, 255, 255));
         }
-        let key_to_map = keyboard_input.mapping.lookup(&button);
-        ui.horizontal(|ui| {
-            ui.label(label);
+        ui.add(label);
 
-            match self.mapping_request {
-                Some(MapRequest { pad: p, button: b}) if p == pad && b == button => {
-                    if ui.add(Button::new("Cancel").text_color(Color32::from_rgb(255, 0, 0))).clicked() {
-                        self.mapping_request = None;
-                    };
-                },
-                _ => {
-                    if ui.button(format!("{:?}", key_to_map)).clicked() {
-                        self.mapping_request = Some(MapRequest { pad, button });
-                    }
+        match self.mapping_request {
+            Some(MapRequest { pad: p, button: b}) if p == pad && b == button => {
+                if ui.add(Button::new("Cancel").text_color(Color32::from_rgb(255, 0, 0))).clicked() {
+                    self.mapping_request = None;
+                };
+            },
+            _ => {
+                let key_to_map = keyboard_input.mapping.lookup(&button);
+                let key_to_map = match key_to_map {
+                    Some(k) => format!("{:?}", k),
+                    None => "-".to_owned(),
+                };
+                
+                if ui.button(format!("{}", key_to_map)).clicked() {
+                    self.mapping_request = Some(MapRequest { pad, button });
                 }
             }
-        });
+        }
+        ui.end_row();
+        
     }
     
     pub(crate) fn ui(&mut self, ctx: &egui::CtxRef, settings: &mut Settings) {
@@ -78,13 +87,11 @@ impl SettingsGui {
                 ui.add(egui::Slider::new(&mut settings.audio_latency, 1..=500).suffix("ms"));
             });
             ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    self.key_map_ui(ui, &mut settings.inputs[0].keyboard, 0)
-                });
-
-                ui.vertical(|ui| {
-                    self.key_map_ui(ui, &mut settings.inputs[1].keyboard, 1)
-                });
+                for (pad, joypad_inputs) in &mut settings.inputs.iter_mut().enumerate() {
+                    ui.vertical(|ui| {
+                        self.key_map_ui(ui, &mut joypad_inputs.keyboard, pad);
+                    });    
+                }
             });
         });
     }

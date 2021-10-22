@@ -1,4 +1,4 @@
-use std::{str::FromStr};
+use egui::ScrollArea;
 use libp2p::PeerId;
 
 use crate::{GameRunnerState, MyGameState, NetPlayState, PlayState, network::{p2p::{GameState, P2P, P2PGame}}};
@@ -9,59 +9,48 @@ enum State {
 }
 
 struct StartGameState {
-    game: OneShotReceiver<P2PGame>,
+    game: P2PGame,
     current_state: tokio::sync::watch::Receiver<GameState>
 }
 
 impl StartGameState {
-    fn create(p2p: P2P, name: &str, slot_count: u8) -> Self {
+    fn ted(p2p: &P2P, game: &P2PGame) -> tokio::sync::watch::Receiver<GameState> {
         let (sender, current_state) = tokio::sync::watch::channel(GameState::Initializing);
-        let (game_sender, game_receiver) = tokio::sync::oneshot::channel();
-        let name = name.to_owned();
+        let mut p2p = p2p.clone();
+        let game = game.clone();
+
         tokio::spawn(async move {
-            let game = p2p.create_game(&name, slot_count).await;
-            let p2p = p2p.clone();
-            let _ = game_sender.send(game.clone());
             loop {
-                if let Err(_) = sender.send(game.current_state(p2p.clone()).await) {
+                if let Err(_) = sender.send(game.current_state(&mut p2p).await) {
                     break; //No one is listening any longer.
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
             println!("Broke out");
         });
+        current_state
+    }
+
+    fn create(p2p: &P2P, name: &str, slot_count: u8) -> Self {
+        let game = p2p.create_game(&name, slot_count);
 
         Self {
-            game: OneShotReceiver::new(game_receiver),
-            current_state
+            current_state: StartGameState::ted(p2p, &game),
+            game
         }
     }
 
-    fn join(p2p: P2P, owner_id: PeerId) -> Self {
-        let (sender, current_state) = tokio::sync::watch::channel(GameState::Initializing);
-        let (game_sender, game_receiver) = tokio::sync::oneshot::channel();
-        tokio::spawn(async move {
-            let game = p2p.join_game(owner_id);
-            let _ = game_sender.send(game.clone());
-            loop {
-                if let Err(_) = sender.send(game.current_state(p2p.clone()).await) {
-                    break; //No one is listening any longer.
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            }
-            println!("Broke out");
-        });
+    fn join(p2p: &P2P, owner_id: &PeerId) -> Self {
+        let game = p2p.join_game(owner_id);
 
         Self {
-            game: OneShotReceiver::new(game_receiver),
-            current_state
+            current_state: StartGameState::ted(p2p, &game),
+            game
         }
     }
 
     fn claim(&mut self, idx: usize) {
-        if let Some(game) = self.game.get() {
-            game.claim_slot(idx);
-        }
+        self.game.claim_slot(idx);
     }
 }
 
@@ -72,7 +61,6 @@ struct CreateGameState {
 
     //Join
     search_string: String,
-    join_id: String,
     search_result: Option<OneShotReceiver<Vec<(String, PeerId)>>>
 }
 
@@ -82,25 +70,23 @@ impl CreateGameState {
             name: "test".to_owned(),
             slot_count: 2,
             search_string: "".to_owned(),
-            join_id: "".to_owned(),
             search_result: None
         }
     }
-    fn create(&self, p2p: P2P) -> State {
+    fn create(&self, p2p: &P2P) -> State {
         State::StartGame(StartGameState::create(p2p, &self.name, self.slot_count))
     }
 
-    fn join(&self, p2p: P2P) -> State {
-        State::StartGame(StartGameState::join(p2p, PeerId::from_str(&self.join_id).unwrap()))
+    fn join(&self, p2p: &P2P, owner_id: PeerId) -> State {
+        State::StartGame(StartGameState::join(p2p, &owner_id))
     }
 
-    fn search(&mut self, p2p: P2P) {
-
+    fn search(&mut self, p2p: &P2P) {
         let (sender, receiver) = tokio::sync::oneshot::channel();
         let search_string = self.search_string.clone();
+        let p2p = p2p.clone();
         tokio::spawn(async move {
-            let r = p2p.find_games(&search_string).await;
-            let _ = sender.send(r);
+            let _ = sender.send(p2p.find_games(&search_string).await);
         });
         self.search_result = Some(OneShotReceiver::new(receiver));
     }
@@ -124,39 +110,44 @@ impl NetplayGui {
     
     pub(crate) fn ui(&mut self, ctx: &egui::CtxRef, game_runner_state: &mut GameRunnerState) {
         egui::Window::new("Netplay!").collapsible(false).show(ctx, |ui| {
-            match &mut self.state {
+            let state = &mut self.state;
+            match state {
                 State::CreateGame(create_state) => {
+                    let mut new_state = None;
                     ui.add(egui::TextEdit::singleline(&mut create_state.search_string).hint_text("Search for room"));
                     if ui.button("Search").clicked() {
-                        create_state.search(self.p2p.clone());
+                        create_state.search(&self.p2p);
                     }
+
                     if let Some(result) = &mut create_state.search_result {
-                        if let Some(r) = result.get() {
-                            for (a, b) in r {
-                                ui.label(format!("Result: {:?} = '{:?}'", a, b));
-                                if ui.button("Copy id").clicked() {
-                                    create_state.join_id = b.to_string();
+                        if let Some(results) = result.get().clone() {
+
+                        let scroll_area = ScrollArea::from_max_height(100.0);
+
+                        scroll_area.show(ui, |ui| {
+                            ui.vertical(|ui| {
+                                for (name, peer_id) in results {
+                                    ui.label(format!("{:?}'", name));
+                                    if ui.button("Join").clicked() {
+                                        new_state = Some(create_state.join(&self.p2p, peer_id));
+                                    }
                                 }
-                            }
+                            });
+                        });
                         }
                     }
-                    ui.add(egui::TextEdit::singleline(&mut create_state.join_id).hint_text("Id of room to join"));
-                    let join_btn = ui.button("Join");
 
                     ui.add(egui::TextEdit::singleline(&mut create_state.name).hint_text("Name your new room"));
                     ui.add(egui::DragValue::new(&mut create_state.slot_count).speed(1.0).clamp_range(2..=4).suffix(" players"));
                     let enabled = create_state.name.trim().len() > 0;
                     
-                    let create_btn = ui.add(egui::Button::new("Create").enabled(enabled)).on_disabled_hover_text("Give your room a name");
-                    
-                    if create_btn.clicked() {
-                        //self.create_room(&create_state.name, create_state.slot_count);
-                        self.state = create_state.create(self.p2p.clone());
-                    } else if join_btn.clicked() {
-                        //TODO: Check that the id is a PeerId
-                        self.state = create_state.join(self.p2p.clone());
+                    if ui.add(egui::Button::new("Create").enabled(enabled)).on_disabled_hover_text("Give your room a name").clicked() {
+                        new_state = Some(create_state.create(&self.p2p));
                     }
-
+                    
+                    if let Some(new_state) = new_state {
+                        self.state = new_state;
+                    }
                 },
                 State::StartGame(start_game_state) => {
                     let state = start_game_state.current_state.borrow().clone();
@@ -178,8 +169,8 @@ impl NetplayGui {
                                             crate::network::p2p::Participant::Local(id) => {
                                                 format!("You! ({})", id)
                                             },
-                                            crate::network::p2p::Participant::Remote(id, _) => {
-                                                format!("{}", id)
+                                            crate::network::p2p::Participant::Remote(peer, _) => {
+                                                format!("{}", peer.id)
                                             },
                                         };
                                         ui.label(format!("Slot - {:?}", name));
@@ -191,12 +182,12 @@ impl NetplayGui {
                         GameState::Ready(ready_state) => {
                             ui.label(format!("State: Lobby is ready! - {:?}", ready_state));
                             if ui.button("Start game!").clicked() {
-                                let (mut session, local_handle) = self.p2p.start_session(ready_state);
+                                let (mut session, local_handle) = self.p2p.start_session(&ready_state);
                                 session.set_fps(60).unwrap();
                                 session.set_frame_delay(4, local_handle).unwrap();
                                 session.start_session().expect("Could not start P2P session");
                         
-                                *game_runner_state = GameRunnerState::Playing(MyGameState::new(), PlayState::NetPlay(NetPlayState { session, local_handle, frames_to_skip: 0, frame: 0 }));
+                                *game_runner_state = GameRunnerState::Playing(MyGameState::new(), PlayState::NetPlay(NetPlayState { session, player_count: ready_state.players.len(), local_handle, frames_to_skip: 0, frame: 0 }));
                             }
                         },
                     }
