@@ -35,7 +35,7 @@ impl StartGameState {
     }
 
     fn create(p2p: &P2P, name: &str, slot_count: u8) -> Self {
-        let game = p2p.create_game(&name, slot_count);
+        let game = p2p.create_game(name, slot_count);
 
         Self {
             current_state: StartGameState::ted(p2p, &game),
@@ -151,7 +151,7 @@ impl NetplayGui {
                             .clamp_range(2..=4)
                             .suffix(" players"),
                     );
-                    let enabled = create_state.name.trim().len() > 0;
+                    let enabled = !create_state.name.trim().is_empty();
 
                     if ui
                         .add_enabled(enabled, Button::new("Create"))
@@ -169,13 +169,13 @@ impl NetplayGui {
                     let state = start_game_state.current_state.borrow().clone();
                     match state {
                         GameState::Initializing => {
-                            ui.label(format!("State: Lobby is initializing!"));
+                            ui.label("State: Lobby is initializing!".to_string());
                         }
                         GameState::New(slots) => {
                             for (idx, slot) in slots.iter().enumerate() {
                                 match slot {
                                     crate::network::p2p::Slot::Vacant() => {
-                                        ui.label(format!("Slot - Free"));
+                                        ui.label("Slot - Free".to_string());
                                         if ui.button("Claim").clicked() {
                                             start_game_state.claim(idx);
                                         }

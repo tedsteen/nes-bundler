@@ -47,13 +47,13 @@ impl P2PGame {
         }
     }
 
-    async fn get_slot_count(self: &Self) -> Option<u8> {
+    async fn get_slot_count(&self) -> Option<u8> {
         self.get_record("slot-count")
             .await
             .map(|slot_count_data| bincode::deserialize(&slot_count_data).unwrap())
     }
 
-    async fn get_name(self: &Self) -> Option<String> {
+    async fn get_name(&self) -> Option<String> {
         self.get_record("name")
             .await
             .map(|name_data| bincode::deserialize(&name_data).unwrap())
@@ -118,7 +118,7 @@ impl P2PGame {
         }
     }
 
-    async fn get_slot_owner(self: &Self, idx: u8) -> Option<PeerId> {
+    async fn get_slot_owner(&self, idx: u8) -> Option<PeerId> {
         let mut providers = Vec::new();
         for peer_id in self.get_providers("slot-idx").await {
             let key = format!("{}.slot-idx", peer_id);
@@ -134,7 +134,7 @@ impl P2PGame {
         providers.iter().cloned().max()
     }
 
-    pub(crate) fn claim_slot(self: &Self, slot_idx: usize) {
+    pub(crate) fn claim_slot(&self, slot_idx: usize) {
         let key = format!("{}.slot-idx", self.node.local_peer_id);
         //println!("Claim slot {:?}, {:?}", slot_idx, key);
         let c = self.clone();
@@ -145,22 +145,22 @@ impl P2PGame {
         });
     }
 
-    async fn start_providing(self: &Self, key: &str) {
+    async fn start_providing(&self, key: &str) {
         let key = format!("{}.p2p-game.{}", self.owner_id, key);
         self.node.start_providing(&key).await;
     }
 
-    async fn get_providers(self: &Self, key: &str) -> HashSet<PeerId> {
+    async fn get_providers(&self, key: &str) -> HashSet<PeerId> {
         let key = format!("{}.p2p-game.{}", self.owner_id, key);
         self.node.get_providers(&key).await
     }
 
-    async fn put_record(self: &Self, key: &str, value: Vec<u8>) {
+    async fn put_record(&self, key: &str, value: Vec<u8>) {
         let key = format!("{}.p2p-game.{}", self.owner_id, key);
         self.node.put_record(&key, value, None).await;
     }
 
-    async fn get_record(self: &Self, key: &str) -> Option<Vec<u8>> {
+    async fn get_record(&self, key: &str) -> Option<Vec<u8>> {
         let key = format!("{}.p2p-game.{}", self.owner_id, key);
         self.node.get_record(&key).await
     }
@@ -210,11 +210,11 @@ impl P2P {
         owners
     }
 
-    pub(crate) fn join_game(self: &Self, owner_id: &PeerId) -> P2PGame {
+    pub(crate) fn join_game(&self, owner_id: &PeerId) -> P2PGame {
         P2PGame::new(owner_id, &self.node)
     }
 
-    pub(crate) fn create_game(self: &Self, name: &str, slot_count: u8) -> P2PGame {
+    pub(crate) fn create_game(&self, name: &str, slot_count: u8) -> P2PGame {
         let game = P2PGame::new(&self.node.local_peer_id, &self.node);
         tokio::spawn({
             let game = game.clone();
@@ -251,7 +251,7 @@ impl P2P {
                     Participant::Remote(_, addr) => {
                         println!("Add remote player {:?}", addr);
                         session
-                            .add_player(PlayerType::Remote(addr.clone()), slot_idx)
+                            .add_player(PlayerType::Remote(*addr), slot_idx)
                             .unwrap();
                     }
                 }
@@ -278,7 +278,7 @@ impl P2PGameNonBlockingSocket {
         for participant in participants {
             match participant {
                 Participant::Remote(peer, addr) => {
-                    peers.insert(addr.clone(), (peer, [0; RECV_BUFFER_SIZE]));
+                    peers.insert(addr, (peer, [0; RECV_BUFFER_SIZE]));
                 }
                 _ => (),
             }
@@ -301,7 +301,7 @@ impl P2PGameNonBlockingSocket {
                                         &buffer[0..number_of_bytes],
                                     ) {
                                         //println!("READ: {:?} - {:?}", msg, src_addr);
-                                        tx.send((src_addr.clone(), msg)).await.unwrap();
+                                        tx.send((src_addr, msg)).await.unwrap();
                                     } else {
                                         eprintln!(
                                             "Failed to deserialize message, message discarded"

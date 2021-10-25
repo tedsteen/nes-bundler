@@ -70,7 +70,7 @@ impl NetworkBehaviourEventProcess<KademliaEvent> for MyBehaviour {
                 match result {
                     QueryResult::StartProviding(result) => {
                         let result =
-                            result.map_err(|_| format!("TODO: error for add provider error"));
+                            result.map_err(|_| "TODO: error for add provider error".to_string());
                         let _ = self.event_bus.send(KademliaEvent2 {
                             query_id: id,
                             response: KademliaResponse::StartProviding(result),
@@ -78,7 +78,7 @@ impl NetworkBehaviourEventProcess<KademliaEvent> for MyBehaviour {
                     }
                     QueryResult::GetProviders(result) => {
                         let result =
-                            result.map_err(|_| format!("TODO: error for get providers error"));
+                            result.map_err(|_| "TODO: error for get providers error".to_string());
                         let _ = self.event_bus.send(KademliaEvent2 {
                             query_id: id,
                             response: KademliaResponse::GetProviders(result),
@@ -155,7 +155,7 @@ impl Node {
         }
     }
 
-    async fn try_start_providing(self: &Self, key: Key) -> CommandResult<AddProviderOk> {
+    async fn try_start_providing(&self, key: Key) -> CommandResult<AddProviderOk> {
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         self.command_bus
             .send(Command::StartProviding(key, resp_tx))
@@ -164,7 +164,7 @@ impl Node {
         resp_rx.await.unwrap()
     }
 
-    async fn stop_providing(self: &Self, key: &str) {
+    async fn stop_providing(&self, key: &str) {
         let key = Key::new(&key.to_string());
         self.command_bus
             .send(Command::StopProviding(key))
@@ -172,7 +172,7 @@ impl Node {
             .unwrap();
     }
 
-    async fn try_get_providers(self: &Self, key: Key) -> CommandResult<GetProvidersOk> {
+    async fn try_get_providers(&self, key: Key) -> CommandResult<GetProvidersOk> {
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         self.command_bus
             .send(Command::GetProviders(key, resp_tx))
@@ -181,7 +181,7 @@ impl Node {
         resp_rx.await.unwrap()
     }
 
-    async fn try_put_record(self: &Self, record: Record) -> CommandResult<PutRecordOk> {
+    async fn try_put_record(&self, record: Record) -> CommandResult<PutRecordOk> {
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         self.command_bus
             .send(Command::PutRecord(record, resp_tx))
@@ -190,7 +190,7 @@ impl Node {
         resp_rx.await.unwrap()
     }
 
-    async fn try_get_record(self: &Self, key: Key) -> CommandResult<GetRecordOk> {
+    async fn try_get_record(&self, key: Key) -> CommandResult<GetRecordOk> {
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         self.command_bus
             .send(Command::GetRecord(key, resp_tx))
@@ -199,7 +199,7 @@ impl Node {
         resp_rx.await.unwrap()
     }
 
-    pub(crate) async fn start_providing(self: &Self, key: &str) {
+    pub(crate) async fn start_providing(&self, key: &str) {
         let key = Key::new(&key.to_string());
         while let Err(err) = self.try_start_providing(key.clone()).await {
             eprintln!(
@@ -209,7 +209,7 @@ impl Node {
             tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         }
     }
-    pub(crate) async fn get_providers(self: &Self, key: &str) -> HashSet<PeerId> {
+    pub(crate) async fn get_providers(&self, key: &str) -> HashSet<PeerId> {
         loop {
             match self.try_get_providers(Key::new(&key.to_string())).await {
                 Ok(ok) => {
@@ -228,7 +228,7 @@ impl Node {
 
     //TODO: Make value type generic and user serde to serialize
     pub(crate) async fn put_record(
-        self: &Self,
+        &self,
         key: &str,
         value: Vec<u8>,
         expires: Option<Instant>,
@@ -248,7 +248,7 @@ impl Node {
     }
 
     //TODO: Make return type generic and user serde to deserialize
-    pub(crate) async fn get_record(self: &Self, key: &str) -> Option<Vec<u8>> {
+    pub(crate) async fn get_record(&self, key: &str) -> Option<Vec<u8>> {
         match self.try_get_record(Key::new(&key.to_string())).await {
             Ok(ok) => {
                 Some(ok.records[0].record.value.clone()) //TODO: How about not cloning?..
@@ -298,7 +298,7 @@ impl Node {
             T: Send + 'static,
             F: 'static,
         {
-            let query_id = query_id.map_err(|_| format!("TODO: proper error handling"));
+            let query_id = query_id.map_err(|_| "TODO: proper error handling".to_string());
             match query_id {
                 Ok(query_id) => {
                     tokio::spawn(async move {

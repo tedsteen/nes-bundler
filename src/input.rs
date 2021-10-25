@@ -17,11 +17,11 @@ pub(crate) enum JoypadButton {
 }
 
 pub(crate) trait JoypadInput {
-    fn is_pressed(self: &Self, button: JoypadButton) -> bool {
+    fn is_pressed(&self, button: JoypadButton) -> bool {
         self.to_u8() & (button as u8) != 0
     }
 
-    fn to_u8(self: &Self) -> u8;
+    fn to_u8(&self) -> u8;
 }
 pub(crate) struct JoypadKeyMap {
     map: HashMap<JoypadButton, Option<VirtualKeyCode>>,
@@ -52,11 +52,11 @@ impl JoypadKeyMap {
         Self { map }
     }
 
-    pub(crate) fn lookup(self: &mut Self, button: &JoypadButton) -> &mut Option<VirtualKeyCode> {
+    pub(crate) fn lookup(&mut self, button: &JoypadButton) -> &mut Option<VirtualKeyCode> {
         self.map.get_mut(button).unwrap()
     }
 
-    fn reverse_lookup(self: &Self, key_code: &VirtualKeyCode) -> HashSet<&JoypadButton> {
+    fn reverse_lookup(&self, key_code: &VirtualKeyCode) -> HashSet<&JoypadButton> {
         let mut buttons = HashSet::new();
 
         for (button, key) in &self.map {
@@ -110,7 +110,7 @@ impl JoypadKeyboardInput {
 }
 
 impl JoypadInput for JoypadKeyboardInput {
-    fn to_u8(self: &Self) -> u8 {
+    fn to_u8(&self) -> u8 {
         self.state
     }
 }
@@ -121,7 +121,7 @@ impl JoypadKeyboardInput {
         let buttons = self.mapping.reverse_lookup(&code);
         let mask = buttons
             .iter()
-            .fold(0 as u8, |acc, &button| acc | *button as u8);
+            .fold(0_u8, |acc, &button| acc | *button as u8);
 
         use winit::event::ElementState::*;
         match input.state {
@@ -137,7 +137,7 @@ impl JoypadKeyboardInput {
 pub(crate) struct StaticJoypadInput(pub u8);
 
 impl JoypadInput for StaticJoypadInput {
-    fn to_u8(self: &Self) -> u8 {
+    fn to_u8(&self) -> u8 {
         self.0
     }
 }

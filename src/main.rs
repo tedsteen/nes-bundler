@@ -116,9 +116,9 @@ impl MyGameState {
     fn new() -> Self {
         let rom_data = match std::env::var("ROM_FILE") {
             Ok(rom_file) => {
-                let data = std::fs::read(&rom_file)
-                    .expect(format!("Could not read ROM {}", rom_file).as_str());
-                data
+                
+                std::fs::read(&rom_file)
+                    .unwrap_or_else(|_| panic!("Could not read ROM {}", rom_file))
             }
             Err(_e) => Asset::get("rom.nes")
                 .expect("Missing embedded ROM")
@@ -163,7 +163,7 @@ struct Settings {
 }
 
 impl JoypadInputs {
-    fn get_pad(self: &Self) -> Box<&dyn JoypadInput> {
+    fn get_pad(&self) -> Box<&dyn JoypadInput> {
         match self.selected {
             SelectedInput::Keyboard => Box::new(&self.keyboard),
         }
@@ -222,7 +222,7 @@ impl GameRunner {
         }
     }
 
-    pub fn advance(self: &mut Self) {
+    pub fn advance(&mut self) {
         let state = &mut self.state;
         match state {
             GameRunnerState::Playing(game_state, play_state) => {
@@ -338,7 +338,7 @@ impl GameRunner {
         }
 
         let gui = &mut self.gui;
-        gui.prepare(&window, &mut self.settings, &mut self.state);
+        gui.prepare(window, &mut self.settings, &mut self.state);
 
         // Render everything together
         pixels

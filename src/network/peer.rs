@@ -97,7 +97,7 @@ impl Peer {
                     }))
                     .await;
 
-                let local_id = node.local_peer_id.clone();
+                let local_id = node.local_peer_id;
                 let data_channel = if local_id > id {
                     Peer::do_offer(id, local_id, connection, &node)
                         .await
@@ -164,7 +164,7 @@ impl Peer {
             session_description,
             ice_candidates,
         };
-        Peer::put_signal(&node, local_id, id, &bincode::serialize(&offer).unwrap()).await;
+        Peer::put_signal(node, local_id, id, &bincode::serialize(&offer).unwrap()).await;
 
         let remote_offer = Peer::get_signal(id, local_id, node).await.unwrap();
         peer_connection

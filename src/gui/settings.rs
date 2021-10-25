@@ -42,7 +42,7 @@ impl SettingsGui {
     }
 
     fn key_map_ui(
-        self: &mut Self,
+        &mut self,
         ui: &mut Ui,
         keyboard_input: &mut JoypadKeyboardInput,
         pad: usize,
@@ -93,7 +93,7 @@ impl SettingsGui {
                     None => "-".to_owned(),
                 };
 
-                if ui.button(format!("{}", key_to_map)).clicked() {
+                if ui.button(key_to_map).clicked() {
                     self.mapping_request = Some(MapRequest { pad, button });
                 }
             }

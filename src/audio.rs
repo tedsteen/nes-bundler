@@ -76,14 +76,11 @@ impl Stream {
                             }
                         };
                     }
-                    if input_fell_behind {
-                        if std::time::SystemTime::now()
+                    if input_fell_behind && std::time::SystemTime::now()
                             .duration_since(start_time)
                             .unwrap()
-                            .gt(&std::time::Duration::from_secs(1))
-                        {
-                            //eprintln!("Consuming audio faster than it's being produced! Try increasing latency");
-                        }
+                            .gt(&std::time::Duration::from_secs(1)) {
+                        //eprintln!("Consuming audio faster than it's being produced! Try increasing latency");
                     }
                 },
                 |err| eprintln!("an error occurred on the output audio stream: {}", err),
@@ -91,7 +88,7 @@ impl Stream {
             .expect("Could not build sound output stream");
 
         Self {
-            stream: stream,
+            stream,
             latency,
             nes: nes.clone(),
             sample_rate,
@@ -104,7 +101,7 @@ impl Stream {
         latency_frames as usize * channels as usize
     }
 
-    pub fn set_latency(self: &mut Self, mut latency: u16) {
+    pub fn set_latency(&mut self, mut latency: u16) {
         latency = std::cmp::max(latency, 1);
 
         if self.latency != latency {
@@ -140,7 +137,7 @@ impl Audio {
         }
     }
 
-    pub(crate) fn start(self: &Self, latency: u16, nes: Arc<Mutex<NesState>>) -> Stream {
+    pub(crate) fn start(&self, latency: u16, nes: Arc<Mutex<NesState>>) -> Stream {
         let stream_config = self.output_config.config();
         /*
                 stream_config.buffer_size = match self.output_config.buffer_size() {
