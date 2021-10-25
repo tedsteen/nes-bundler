@@ -66,7 +66,6 @@ async fn main() {
 
     let (pixels, gui) = {
         let window_size = window.inner_size();
-        let scale_factor = window.scale_factor();
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
 
         let pixels = PixelsBuilder::new(WIDTH, HEIGHT, surface_texture)
@@ -77,7 +76,7 @@ async fn main() {
         })
         .build().unwrap();
 
-        let gui = Gui::new(window_size.width, window_size.height, scale_factor, &pixels, P2P::new(INPUT_SIZE).await);
+        let gui = Gui::new(&window, &pixels, P2P::new(INPUT_SIZE).await);
         (pixels, gui)
     };
 
@@ -319,22 +318,18 @@ impl GameRunner {
         .is_err()
     }
 
-    pub fn handle(&mut self, event: winit::event::Event<()>) -> bool {
-        // Update egui inputs
-        self.gui.handle_event(&event, &mut self.settings);
-        
+    pub fn handle(&mut self, event: winit::event::Event<()>) -> bool {        
         if let GameRunnerState::Playing (_, PlayState::NetPlay(netplay_state)) = &mut self.state {
-            netplay_state.session.poll_remote_clients(); //TODO: Is this good or bad?
+            netplay_state.session.poll_remote_clients(); //TODO: Is this a good idea?..
         }
 
         // Handle input events
         if let WinitEvent::WindowEvent { event, .. } = event {
+            // Update egui inputs
+            self.gui.handle_event(&event, &mut self.settings);
+
             if let winit::event::WindowEvent::Resized(size) = event {
                 self.pixels.resize_surface(size.width, size.height);
-                self.gui.resize(size.width, size.height);
-            }
-            if let winit::event::WindowEvent::ScaleFactorChanged{scale_factor, ..} = event {
-                self.gui.scale_factor(scale_factor);
             }
 
             if let winit::event::WindowEvent::KeyboardInput { input, .. } = event {

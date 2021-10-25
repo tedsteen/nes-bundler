@@ -1,4 +1,4 @@
-use egui::ScrollArea;
+use egui_wgpu_backend::egui::{Button, CtxRef, DragValue, ScrollArea, TextEdit, Window};
 use libp2p::PeerId;
 
 use crate::{GameRunnerState, MyGameState, NetPlayState, PlayState, network::{p2p::{GameState, P2P, P2PGame}}};
@@ -105,16 +105,16 @@ impl NetplayGui {
         }
     }
 
-    pub(crate) fn handle_event(&mut self, _: &winit::event::Event<'_, ()>) {
+    pub(crate) fn handle_event(&mut self, _: &winit::event::WindowEvent) {
     }
     
-    pub(crate) fn ui(&mut self, ctx: &egui::CtxRef, game_runner_state: &mut GameRunnerState) {
-        egui::Window::new("Netplay!").collapsible(false).show(ctx, |ui| {
+    pub(crate) fn ui(&mut self, ctx: &CtxRef, game_runner_state: &mut GameRunnerState) {
+        Window::new("Netplay!").collapsible(false).show(ctx, |ui| {
             let state = &mut self.state;
             match state {
                 State::CreateGame(create_state) => {
                     let mut new_state = None;
-                    ui.add(egui::TextEdit::singleline(&mut create_state.search_string).hint_text("Search for room"));
+                    ui.add(TextEdit::singleline(&mut create_state.search_string).hint_text("Search for room"));
                     if ui.button("Search").clicked() {
                         create_state.search(&self.p2p);
                     }
@@ -122,7 +122,7 @@ impl NetplayGui {
                     if let Some(result) = &mut create_state.search_result {
                         if let Some(results) = result.get().clone() {
 
-                        let scroll_area = ScrollArea::from_max_height(100.0);
+                        let scroll_area = ScrollArea::vertical().max_height(100.0);
 
                         scroll_area.show(ui, |ui| {
                             ui.vertical(|ui| {
@@ -137,11 +137,11 @@ impl NetplayGui {
                         }
                     }
 
-                    ui.add(egui::TextEdit::singleline(&mut create_state.name).hint_text("Name your new room"));
-                    ui.add(egui::DragValue::new(&mut create_state.slot_count).speed(1.0).clamp_range(2..=4).suffix(" players"));
+                    ui.add(TextEdit::singleline(&mut create_state.name).hint_text("Name your new room"));
+                    ui.add(DragValue::new(&mut create_state.slot_count).speed(1.0).clamp_range(2..=4).suffix(" players"));
                     let enabled = create_state.name.trim().len() > 0;
                     
-                    if ui.add(egui::Button::new("Create").enabled(enabled)).on_disabled_hover_text("Give your room a name").clicked() {
+                    if ui.add_enabled(enabled, Button::new("Create")).on_disabled_hover_text("Give your room a name").clicked() {
                         new_state = Some(create_state.create(&self.p2p));
                     }
                     

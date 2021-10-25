@@ -1,4 +1,4 @@
-use egui::{Button, Color32, Label, Ui};
+use egui_wgpu_backend::egui::{Button, Color32, CtxRef, Grid, Label, Slider, Ui, Window};
 use winit::event::ElementState;
 
 use crate::{Settings, input::{JoypadButton, JoypadInput, JoypadKeyboardInput}};
@@ -17,8 +17,8 @@ impl SettingsGui {
     pub(crate) fn new() -> Self {
         Self { mapping_request: None }
     }
-    pub(crate) fn handle_event(&mut self, event: &winit::event::Event<'_, ()>, settings: &mut Settings) {
-        if let winit::event::Event::WindowEvent { event: winit::event::WindowEvent::KeyboardInput { input, .. }, .. } = event {
+    pub(crate) fn handle_event(&mut self, event: &winit::event::WindowEvent, settings: &mut Settings) {
+        if let winit::event::WindowEvent::KeyboardInput { input, .. } = event {
             if let Some(code) = input.virtual_keycode {
                 if let ElementState::Pressed = input.state {
                     if let Some(map_request) = &self.mapping_request {
@@ -34,7 +34,7 @@ impl SettingsGui {
 
     fn key_map_ui(self: &mut Self, ui: &mut Ui, keyboard_input: &mut JoypadKeyboardInput, pad: usize) {
         ui.label(format!("Joypad #{}", pad + 1));
-        egui::Grid::new("joymap_grid")
+        Grid::new("joymap_grid")
         .num_columns(2)
         .striped(true)
         .show(ui, |ui| {
@@ -50,7 +50,7 @@ impl SettingsGui {
         });
     }
 
-    fn make_button_combo(&mut self, ui: &mut egui::Ui, pad: usize, keyboard_input: &mut JoypadKeyboardInput, button: JoypadButton) {
+    fn make_button_combo(&mut self, ui: &mut Ui, pad: usize, keyboard_input: &mut JoypadKeyboardInput, button: JoypadButton) {
         
         let mut label = Label::new(format!("{:?}", button));
         if keyboard_input.is_pressed(button) {
@@ -80,11 +80,11 @@ impl SettingsGui {
         
     }
     
-    pub(crate) fn ui(&mut self, ctx: &egui::CtxRef, settings: &mut Settings) {
-        egui::Window::new("Settings").collapsible(false).show(ctx, |ui| {
+    pub(crate) fn ui(&mut self, ctx: &CtxRef, settings: &mut Settings) {
+        Window::new("Settings").collapsible(false).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label("Audio latency");
-                ui.add(egui::Slider::new(&mut settings.audio_latency, 1..=500).suffix("ms"));
+                ui.add(Slider::new(&mut settings.audio_latency, 1..=500).suffix("ms"));
             });
             ui.horizontal(|ui| {
                 for (pad, joypad_inputs) in &mut settings.inputs.iter_mut().enumerate() {

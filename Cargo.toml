@@ -20,9 +20,10 @@ winit = "0.25"
 # rfd = "0.4" # Open file dialog for loading new ROMs?
 rust-embed = "6.2"
 
-egui = "0.14"
-egui_wgpu_backend = "0.13"
-egui_winit_platform = {version = "0.10", features = ["copypasta"] }
+egui = "0.15"
+#egui_wgpu_backend = "0.13"
+egui_wgpu_backend = { git = "https://github.com/hasenbanck/egui_wgpu_backend/" }
+egui-winit = "0.15"
 
 cpal = "0.13"
 ringbuf = "0.2"
