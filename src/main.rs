@@ -12,6 +12,10 @@ use gui::Gui;
 use input::{JoypadKeyMap, JoypadKeyboardInput};
 use log::error;
 use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
+use rusticnes_core::cartridge::mapper_from_file;
+use rusticnes_core::mmc::none::NoneMapper;
+use rusticnes_core::nes::NesState;
+use rusticnes_core::palettes::NTSC_PAL;
 use winit::dpi::LogicalSize;
 use winit::event::{Event as WinitEvent, VirtualKeyCode};
 use winit::event_loop::{EventLoop};
@@ -29,16 +33,20 @@ const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
 const ZOOM: f32 = 2.0;
 
-use structopt::StructOpt;
+use rust_embed::RustEmbed;
+#[derive(RustEmbed)]
+#[folder = "assets/"]
+struct Asset;
 
-#[derive(Debug, StructOpt)]
-struct Opt {
-    #[structopt(long)]
-    game_name: String,
-    #[structopt(long)]
-    create: bool,
-    #[structopt(long, required_if("create", "true"), default_value = "2")]
-    slots: u8
+pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
+    match mapper_from_file(cart_data.as_slice()) {
+        Ok(mapper) => {
+            let mut nes = NesState::new(mapper);
+            nes.power_on();
+            Ok(nes)
+        },
+        err => err.map(|_| NesState::new(Box::new(NoneMapper::new())))
+    }
 }
 
 #[tokio::main]
@@ -90,59 +98,42 @@ async fn main() {
 }
 
 use serde::{Serialize, Deserialize};
-
-#[derive(Serialize, Deserialize, Clone, Copy)]
-struct MyBox {
-    x: f64,
-    y: f64,
-    x_vel: f64,
-    y_vel: f64
-}
-
 #[derive(Serialize, Deserialize)]
 struct MyGameState {
-    boxes: [MyBox; MAX_PLAYERS]
+    nes: NesState
 }
 
 impl MyGameState {
     fn new() -> Self {
+        let rom_data = match std::env::var("ROM_FILE") {
+            Ok(rom_file) => {
+                let data = std::fs::read(&rom_file).expect(format!("Could not read ROM {}", rom_file).as_str());
+                data
+            },
+            Err(_e) => Asset::get("rom.nes").expect("Missing embedded ROM").data.into_owned()
+        };
+    
+        let nes = load_rom(rom_data).expect("Failed to load ROM");
+
         Self {
-            boxes: [MyBox { x: 0.0, y: 0.0, x_vel: 0.0, y_vel: 0.0 }; MAX_PLAYERS]
+            nes
         }
     }
 
     pub fn advance(&mut self, inputs: Vec<StaticJoypadInput>) {
         //println!("Advancing! {:?}", inputs);
-        use input::JoypadButton::*;
-        for (idx, input) in inputs.iter().enumerate() {
-            let b = self.get_box(idx);
-            if input.is_pressed(UP) {
-                b.y_vel -= 0.1;
-            }
-            if input.is_pressed(DOWN) {
-                b.y_vel += 0.1;
-            }
-            if input.is_pressed(LEFT) {
-                b.x_vel -= 0.1;
-            }
-            if input.is_pressed(RIGHT) {
-                b.x_vel += 0.1;
-            }
-            b.x_vel *= 0.98;
-            b.y_vel *= 0.98;
-
-            b.x += b.x_vel;
-            b.y += b.y_vel;
-
-            if b.x + BOX_SIZE > WIDTH as f64 { b.x = WIDTH as f64 - BOX_SIZE; b.x_vel *= -1.0 }
-            if b.x < 0.0 { b.x = 0.0; b.x_vel *= -1.0 }
-            if b.y + BOX_SIZE > HEIGHT as f64 { b.y = HEIGHT as f64 - BOX_SIZE; b.y_vel *= -1.0 }
-            if b.y < 0.0 { b.y = 0.0; b.y_vel *= -1.0 }
-        }
+        self.nes.p1_input = inputs[0].to_u8();
+        self.nes.p2_input = inputs[1].to_u8();
+        self.nes.run_until_vblank();
     }
 
-    fn get_box(&mut self, idx: usize) -> &mut MyBox {
-        &mut self.boxes[idx]
+    fn render(&self, frame: &mut [u8]) {
+        let ppu = &self.nes.ppu;
+        for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
+            let palette_index = ppu.screen[i] as usize * 3;
+            let rgba = &NTSC_PAL[palette_index..palette_index+4]; //TODO: cheating with the alpha channel here..
+            pixel.copy_from_slice(rgba);
+        }
     }
 }
 
@@ -190,7 +181,6 @@ struct GameRunner {
     settings: Settings
 }
 
-const BOX_SIZE: f64 = 20.0;
 impl GameRunner {
     pub async fn new(gui: Gui, pixels: Pixels) -> Self {
         Self {
@@ -251,8 +241,8 @@ impl GameRunner {
                             println!("Frame {} skipped: WaitRecommendation", netplay_state.frame);
                             return;
                         }
+
                         //println!("State: {:?}", game.sess.current_state());
-                        //game.update(game.pad1.state, game.pad2.state);
                         if sess.current_state() == SessionState::Running {
                             match sess.advance_frame(netplay_state.local_handle, &[self.settings.inputs[0].get_pad().to_u8()]) {
                                 Ok(requests) => {
@@ -306,31 +296,12 @@ impl GameRunner {
         }
     }
 
-    const BOX_COLORS: [[u8; 4]; MAX_PLAYERS] = [[0x48, 0xb2, 0xe8, 0xff], [0x5e, 0x48, 0xe8, 0xff], [0xff, 0x00, 0x00, 0xff], [0x00, 0xff, 0x00, 0xff]];
-    const BACKGROUND_COLOR: [u8; 4] = [0x00, 0x00, 0x00, 0xff];
-
     pub fn render(&mut self, window: &winit::window::Window) -> bool {
         let pixels = &mut self.pixels;
         
         if let GameRunnerState::Playing(game_state, _) = &self.state {
             let frame = pixels.get_frame();
-            
-            // Clear with background color
-            for pixel in frame.chunks_exact_mut(4) {
-                pixel.copy_from_slice(&GameRunner::BACKGROUND_COLOR);
-            }
-
-            // Draw boxes
-            let mut line = [0 as u8; 4 * BOX_SIZE as usize];
-            for (box_idx, my_box) in game_state.boxes.iter().enumerate() {
-                for y in my_box.y as u16..(my_box.y + BOX_SIZE) as u16 {
-                    for pixel in line.chunks_exact_mut(4) {
-                        pixel.copy_from_slice(&GameRunner::BOX_COLORS[box_idx]); 
-                    }
-                    let frame_idx = (my_box.x as usize * 4) + (y as usize * (WIDTH as usize * 4)) as usize;
-                    frame[frame_idx..frame_idx + line.len()].copy_from_slice(&line);
-                }
-            }
+            game_state.render(frame);
         }
 
         let gui = &mut self.gui;
@@ -351,6 +322,10 @@ impl GameRunner {
     pub fn handle(&mut self, event: winit::event::Event<()>) -> bool {
         // Update egui inputs
         self.gui.handle_event(&event, &mut self.settings);
+        
+        if let GameRunnerState::Playing (_, PlayState::NetPlay(netplay_state)) = &mut self.state {
+            netplay_state.session.poll_remote_clients(); //TODO: Is this good or bad?
+        }
 
         // Handle input events
         if let WinitEvent::WindowEvent { event, .. } = event {
