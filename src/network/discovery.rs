@@ -40,6 +40,7 @@ impl MyBehaviour {
         let kademlia = Kademlia::new(local_peer_id, store);
 
         let (event_bus, _) = tokio::sync::broadcast::channel(16);
+        #[allow(clippy::mutable_key_type)]
         let local_provides = HashSet::new();
 
         Self {
@@ -65,48 +66,45 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
 impl NetworkBehaviourEventProcess<KademliaEvent> for MyBehaviour {
     // Called when `kademlia` produces an event.
     fn inject_event(&mut self, message: KademliaEvent) {
-        match message {
-            KademliaEvent::OutboundQueryCompleted { result, id, .. } => {
-                match result {
-                    QueryResult::StartProviding(result) => {
-                        let result =
-                            result.map_err(|_| "TODO: error for add provider error".to_string());
-                        let _ = self.event_bus.send(KademliaEvent2 {
-                            query_id: id,
-                            response: KademliaResponse::StartProviding(result),
-                        });
-                    }
-                    QueryResult::GetProviders(result) => {
-                        let result =
-                            result.map_err(|_| "TODO: error for get providers error".to_string());
-                        let _ = self.event_bus.send(KademliaEvent2 {
-                            query_id: id,
-                            response: KademliaResponse::GetProviders(result),
-                        });
-                    }
-                    QueryResult::PutRecord(result) => {
-                        let result =
-                            result.map_err(|err| format!("Couldn't put record: {:?}", err));
-                        //println!("Put record result: {:?}", result);
-                        let _ = self.event_bus.send(KademliaEvent2 {
-                            query_id: id,
-                            response: KademliaResponse::PutRecord(result),
-                        });
-                    }
-                    QueryResult::GetRecord(result) => {
-                        let result = result
-                            .map_err(|err| format!("TODO: error for get record error ({:?})", err));
-                        let _ = self.event_bus.send(KademliaEvent2 {
-                            query_id: id,
-                            response: KademliaResponse::GetRecord(result),
-                        });
-                    }
-                    _ => {
-                        // Ignore the rest
-                    }
+        if let KademliaEvent::OutboundQueryCompleted { result, id, .. } = message {
+            match result {
+                QueryResult::StartProviding(result) => {
+                    let result =
+                        result.map_err(|_| "TODO: error for add provider error".to_string());
+                    let _ = self.event_bus.send(KademliaEvent2 {
+                        query_id: id,
+                        response: KademliaResponse::StartProviding(result),
+                    });
+                }
+                QueryResult::GetProviders(result) => {
+                    let result =
+                        result.map_err(|_| "TODO: error for get providers error".to_string());
+                    let _ = self.event_bus.send(KademliaEvent2 {
+                        query_id: id,
+                        response: KademliaResponse::GetProviders(result),
+                    });
+                }
+                QueryResult::PutRecord(result) => {
+                    let result =
+                        result.map_err(|err| format!("Couldn't put record: {:?}", err));
+                    //println!("Put record result: {:?}", result);
+                    let _ = self.event_bus.send(KademliaEvent2 {
+                        query_id: id,
+                        response: KademliaResponse::PutRecord(result),
+                    });
+                }
+                QueryResult::GetRecord(result) => {
+                    let result = result
+                        .map_err(|err| format!("TODO: error for get record error ({:?})", err));
+                    let _ = self.event_bus.send(KademliaEvent2 {
+                        query_id: id,
+                        response: KademliaResponse::GetRecord(result),
+                    });
+                }
+                _ => {
+                    // Ignore the rest
                 }
             }
-            _ => {}
         }
     }
 }

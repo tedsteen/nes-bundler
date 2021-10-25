@@ -24,7 +24,7 @@ impl StartGameState {
 
         tokio::spawn(async move {
             loop {
-                if let Err(_) = sender.send(game.current_state(&mut p2p).await) {
+                if sender.send(game.current_state(&mut p2p).await).is_err() {
                     break; //No one is listening any longer.
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;

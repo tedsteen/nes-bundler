@@ -53,12 +53,12 @@ impl SettingsGui {
             .striped(true)
             .show(ui, |ui| {
                 use JoypadButton::*;
-                self.make_button_combo(ui, pad, keyboard_input, UP);
-                self.make_button_combo(ui, pad, keyboard_input, DOWN);
-                self.make_button_combo(ui, pad, keyboard_input, LEFT);
-                self.make_button_combo(ui, pad, keyboard_input, RIGHT);
-                self.make_button_combo(ui, pad, keyboard_input, START);
-                self.make_button_combo(ui, pad, keyboard_input, SELECT);
+                self.make_button_combo(ui, pad, keyboard_input, Up);
+                self.make_button_combo(ui, pad, keyboard_input, Down);
+                self.make_button_combo(ui, pad, keyboard_input, Left);
+                self.make_button_combo(ui, pad, keyboard_input, Right);
+                self.make_button_combo(ui, pad, keyboard_input, Start);
+                self.make_button_combo(ui, pad, keyboard_input, Select);
                 self.make_button_combo(ui, pad, keyboard_input, B);
                 self.make_button_combo(ui, pad, keyboard_input, A);
             });

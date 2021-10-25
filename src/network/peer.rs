@@ -256,7 +256,7 @@ impl Peer {
         Ok(data_channel)
     }
 
-    async fn put_signal(node: &Node, from_peer: PeerId, to_peer: PeerId, offer: &Vec<u8>) {
+    async fn put_signal(node: &Node, from_peer: PeerId, to_peer: PeerId, offer: &[u8]) {
         let key = format!("{}.signal.{}", from_peer, to_peer);
         node.put_record(&key, offer.to_vec(), None).await;
     }

@@ -15,6 +15,8 @@ pub(crate) enum Participant {
     Local(PeerId),
     Remote(Peer, SocketAddr),
 }
+
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub(crate) enum Slot {
     Vacant(),
@@ -196,7 +198,7 @@ impl P2P {
         let mut owners = vec![];
         let providers = self.node.get_providers("p2p-game").await;
         for peer_id in providers {
-            for name in self
+            if let Some(name) = self
                 .node
                 .get_record(&format!("{}.p2p-game.name", peer_id))
                 .await
@@ -276,11 +278,8 @@ impl P2PGameNonBlockingSocket {
 
         let mut peers = HashMap::new();
         for participant in participants {
-            match participant {
-                Participant::Remote(peer, addr) => {
-                    peers.insert(addr, (peer, [0; RECV_BUFFER_SIZE]));
-                }
-                _ => (),
+            if let Participant::Remote(peer, addr) = participant {
+                peers.insert(addr, (peer, [0; RECV_BUFFER_SIZE]));
             }
         }
 

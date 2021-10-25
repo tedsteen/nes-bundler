@@ -4,13 +4,13 @@ use winit::event::VirtualKeyCode;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum JoypadButton {
-    UP = 0b00010000isize,
-    DOWN = 0b00100000isize,
-    LEFT = 0b01000000isize,
-    RIGHT = 0b10000000isize,
+    Up = 0b00010000isize,
+    Down = 0b00100000isize,
+    Left = 0b01000000isize,
+    Right = 0b10000000isize,
 
-    START = 0b00001000isize,
-    SELECT = 0b00000100isize,
+    Start = 0b00001000isize,
+    Select = 0b00000100isize,
 
     B = 0b00000010isize,
     A = 0b00000001isize,
@@ -29,6 +29,7 @@ pub(crate) struct JoypadKeyMap {
 
 use winit::event::VirtualKeyCode::*;
 impl JoypadKeyMap {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         up: Option<VirtualKeyCode>,
         down: Option<VirtualKeyCode>,
@@ -41,12 +42,12 @@ impl JoypadKeyMap {
     ) -> Self {
         let mut map = HashMap::new();
         use JoypadButton::*;
-        map.insert(UP, up);
-        map.insert(DOWN, down);
-        map.insert(LEFT, left);
-        map.insert(RIGHT, right);
-        map.insert(START, start);
-        map.insert(SELECT, select);
+        map.insert(Up, up);
+        map.insert(Down, down);
+        map.insert(Left, left);
+        map.insert(Right, right);
+        map.insert(Start, start);
+        map.insert(Select, select);
         map.insert(B, b);
         map.insert(A, a);
         Self { map }

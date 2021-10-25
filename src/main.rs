@@ -163,9 +163,9 @@ struct Settings {
 }
 
 impl JoypadInputs {
-    fn get_pad(&self) -> Box<&dyn JoypadInput> {
+    fn get_pad(&self) -> &dyn JoypadInput {
         match self.selected {
-            SelectedInput::Keyboard => Box::new(&self.keyboard),
+            SelectedInput::Keyboard => &self.keyboard,
         }
     }
 }
@@ -177,6 +177,7 @@ struct NetPlayState {
     frame: i32,
 }
 
+#[allow(clippy::large_enum_variant)]
 enum PlayState {
     LocalPlay(),
     NetPlay(NetPlayState),
