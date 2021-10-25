@@ -1,29 +1,32 @@
-use std::{sync::{Arc}};
+use std::sync::Arc;
 
 use anyhow::Result;
-use tokio::{sync::watch::{Receiver}};
-use webrtc_data::data_channel::DataChannel;
-use libp2p::{PeerId};
-use webrtc::{api::{APIBuilder, setting_engine::SettingEngine}, data::data_channel::{RTCDataChannel}, peer::{
+use libp2p::PeerId;
+use tokio::sync::watch::Receiver;
+use webrtc::{
+    api::{setting_engine::SettingEngine, APIBuilder},
+    data::data_channel::RTCDataChannel,
+    peer::{
         configuration::RTCConfiguration,
         ice::{
             ice_candidate::{RTCIceCandidate, RTCIceCandidateInit},
-            ice_server::RTCIceServer
+            ice_server::RTCIceServer,
         },
         peer_connection::RTCPeerConnection,
         peer_connection_state::RTCPeerConnectionState,
-        sdp::session_description::RTCSessionDescription
-    }};
+        sdp::session_description::RTCSessionDescription,
+    },
+};
+use webrtc_data::data_channel::DataChannel;
 
-use crate::network::{discovery::{Node}};
+use crate::network::discovery::Node;
 
 #[derive(Clone)]
 pub(crate) enum PeerState {
     Initializing,
     Connecting,
     Connected(Arc<DataChannel>),
-    Disconnected
-    // TODO: Come up with a state when a peer is truly dead and should be discarded (so we can stop read/write loops)
+    Disconnected, // TODO: Come up with a state when a peer is truly dead and should be discarded (so we can stop read/write loops)
 }
 
 impl std::fmt::Debug for PeerState {
@@ -47,9 +50,9 @@ pub struct Peer {
 impl std::fmt::Debug for Peer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Peer")
-        .field("id", &self.id)
-        .field("connection_state", &*self.connection_state.borrow())
-        .finish()
+            .field("id", &self.id)
+            .field("connection_state", &*self.connection_state.borrow())
+            .finish()
     }
 }
 
@@ -63,20 +66,19 @@ impl Peer {
                     "stun:stun1.l.google.com:19302".to_owned(),
                     "stun:stun2.l.google.com:19302".to_owned(),
                     "stun:stun3.l.google.com:19302".to_owned(),
-                    "stun:stun4.l.google.com:19302".to_owned()
-                    ],
+                    "stun:stun4.l.google.com:19302".to_owned(),
+                ],
                 ..Default::default()
             }],
             ..Default::default()
         };
-        
+
         let mut s = SettingEngine::default();
         s.detach_data_channels();
-        let api = Arc::new(APIBuilder::new()
-        .with_setting_engine(s)
-        .build());
+        let api = Arc::new(APIBuilder::new().with_setting_engine(s).build());
 
-        let (connection_state_sender, connection_state) = tokio::sync::watch::channel(PeerState::Initializing);
+        let (connection_state_sender, connection_state) =
+            tokio::sync::watch::channel(PeerState::Initializing);
 
         // Connect and start watching the connection state.
         tokio::spawn({
@@ -85,34 +87,40 @@ impl Peer {
                 println!("Connecting new peer: {:?}", id);
                 let connection = &api.new_peer_connection(config).await.unwrap();
                 let (a, mut b) = tokio::sync::watch::channel(RTCPeerConnectionState::Unspecified);
-        
-                connection.on_peer_connection_state_change(Box::new({
-                    move |state: RTCPeerConnectionState| {
-                        a.send(state).unwrap();
-                        Box::pin(async move {})
-                    }
-                })).await;
+
+                connection
+                    .on_peer_connection_state_change(Box::new({
+                        move |state: RTCPeerConnectionState| {
+                            a.send(state).unwrap();
+                            Box::pin(async move {})
+                        }
+                    }))
+                    .await;
 
                 let local_id = node.local_peer_id.clone();
                 let data_channel = if local_id > id {
-                    Peer::do_offer(id, local_id, connection, &node).await.unwrap()
+                    Peer::do_offer(id, local_id, connection, &node)
+                        .await
+                        .unwrap()
                 } else {
-                    Peer::do_answer(id, local_id, connection, &node).await.unwrap()
+                    Peer::do_answer(id, local_id, connection, &node)
+                        .await
+                        .unwrap()
                 };
                 println!("Connected! {:?}", id);
-                
+
                 loop {
                     let new_state = match *b.borrow() {
-                        RTCPeerConnectionState::Disconnected | RTCPeerConnectionState::Failed | RTCPeerConnectionState::Closed => {
-                            Some(PeerState::Disconnected)
-                        },
+                        RTCPeerConnectionState::Disconnected
+                        | RTCPeerConnectionState::Failed
+                        | RTCPeerConnectionState::Closed => Some(PeerState::Disconnected),
                         RTCPeerConnectionState::Connected => {
                             Some(PeerState::Connected(data_channel.clone()))
-                        },
+                        }
                         RTCPeerConnectionState::Connecting => Some(PeerState::Connecting),
-                        _ => None
+                        _ => None,
                     };
-                    
+
                     if let Some(new_state) = new_state {
                         if connection_state_sender.send(new_state).is_err() {
                             // No one is listening, break out.
@@ -131,83 +139,119 @@ impl Peer {
         Self {
             id,
             connection_state,
-            node: node.clone()
+            node: node.clone(),
         }
     }
 
-    async fn do_offer(id: PeerId, local_id: PeerId, peer_connection: &RTCPeerConnection, node: &Node) -> Result<Arc<DataChannel>> {
+    async fn do_offer(
+        id: PeerId,
+        local_id: PeerId,
+        peer_connection: &RTCPeerConnection,
+        node: &Node,
+    ) -> Result<Arc<DataChannel>> {
         //println!("OFFER");
         let data_channel = peer_connection.create_data_channel("data", None).await?;
-        
+
         // Create an offer to send to the other process
         let session_description = peer_connection.create_offer(None).await?;
-        peer_connection.set_local_description(session_description.clone()).await?;
+        peer_connection
+            .set_local_description(session_description.clone())
+            .await?;
 
         let ice_candidates = Peer::gather_candidates(peer_connection).await;
-        
-        let offer = Signal { session_description, ice_candidates };
+
+        let offer = Signal {
+            session_description,
+            ice_candidates,
+        };
         Peer::put_signal(&node, local_id, id, &bincode::serialize(&offer).unwrap()).await;
 
         let remote_offer = Peer::get_signal(id, local_id, node).await.unwrap();
-        peer_connection.set_remote_description(remote_offer.session_description).await?;
+        peer_connection
+            .set_remote_description(remote_offer.session_description)
+            .await?;
         for candidate in remote_offer.ice_candidates {
-            if let Err(err) = peer_connection.add_ice_candidate(RTCIceCandidateInit {
-                candidate: candidate.to_json().await?.candidate,
-                ..Default::default()
-            }).await {
+            if let Err(err) = peer_connection
+                .add_ice_candidate(RTCIceCandidateInit {
+                    candidate: candidate.to_json().await?.candidate,
+                    ..Default::default()
+                })
+                .await
+            {
                 panic!("{}", err);
             }
         }
 
         // Detach data_channel
         let (tx, rx) = tokio::sync::oneshot::channel();
-        data_channel.clone().on_open(Box::new(move || {
-            Box::pin(async move {
-                let _ = tx.send(data_channel.detach().await.unwrap());
-            })
-        }))
-        .await;
+        data_channel
+            .clone()
+            .on_open(Box::new(move || {
+                Box::pin(async move {
+                    let _ = tx.send(data_channel.detach().await.unwrap());
+                })
+            }))
+            .await;
         let data_channel = rx.await.unwrap();
 
         Ok(data_channel)
     }
 
-    async fn do_answer(id: PeerId, local_id: PeerId, peer_connection: &RTCPeerConnection, node: &Node) -> Result<Arc<DataChannel>> {
+    async fn do_answer(
+        id: PeerId,
+        local_id: PeerId,
+        peer_connection: &RTCPeerConnection,
+        node: &Node,
+    ) -> Result<Arc<DataChannel>> {
         //println!("ANSWER");
         let remote_offer = Peer::get_signal(id, local_id, node).await.unwrap();
-        peer_connection.set_remote_description(remote_offer.session_description).await?;
+        peer_connection
+            .set_remote_description(remote_offer.session_description)
+            .await?;
 
         for candidate in remote_offer.ice_candidates {
-            if let Err(err) = peer_connection.add_ice_candidate(RTCIceCandidateInit {
-                candidate: candidate.to_json().await?.candidate,
-                ..Default::default()
-            }).await {
+            if let Err(err) = peer_connection
+                .add_ice_candidate(RTCIceCandidateInit {
+                    candidate: candidate.to_json().await?.candidate,
+                    ..Default::default()
+                })
+                .await
+            {
                 panic!("{}", err);
             }
         }
 
         let session_description = peer_connection.create_answer(None).await?;
-        peer_connection.set_local_description(session_description.clone()).await?;
+        peer_connection
+            .set_local_description(session_description.clone())
+            .await?;
 
         let ice_candidates = Peer::gather_candidates(peer_connection).await;
 
-        let offer = Signal {session_description, ice_candidates };
-        
+        let offer = Signal {
+            session_description,
+            ice_candidates,
+        };
+
         Peer::put_signal(node, local_id, id, &bincode::serialize(&offer).unwrap()).await;
 
         let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-        peer_connection.on_data_channel(Box::new(move |data_channel: Arc<RTCDataChannel>| {
-            let tx = tx.clone();
-            Box::pin(async move {
-                // Detach data_channel
-                data_channel.clone().on_open(Box::new(move || {
-                    Box::pin(async move {
-                        let _ = tx.send(data_channel.detach().await.unwrap()).await;
-                    })
-                }))
-                .await;
-            })
-        })).await;
+        peer_connection
+            .on_data_channel(Box::new(move |data_channel: Arc<RTCDataChannel>| {
+                let tx = tx.clone();
+                Box::pin(async move {
+                    // Detach data_channel
+                    data_channel
+                        .clone()
+                        .on_open(Box::new(move || {
+                            Box::pin(async move {
+                                let _ = tx.send(data_channel.detach().await.unwrap()).await;
+                            })
+                        }))
+                        .await;
+                })
+            }))
+            .await;
         let data_channel = rx.recv().await.unwrap();
         Ok(data_channel)
     }
@@ -232,15 +276,19 @@ impl Peer {
         let mut gather_complete = peer_connection.gathering_complete_promise().await;
         let (candidate_sender, mut candidate_receiver) = tokio::sync::mpsc::unbounded_channel();
 
-        peer_connection.on_ice_candidate(Box::new({move |c: Option<RTCIceCandidate>| {
-            if let Some(candidate) = c {
-                let _ = candidate_sender.send(candidate);
-            }
-            Box::pin(async move {})
-        }})).await;
-        
+        peer_connection
+            .on_ice_candidate(Box::new({
+                move |c: Option<RTCIceCandidate>| {
+                    if let Some(candidate) = c {
+                        let _ = candidate_sender.send(candidate);
+                    }
+                    Box::pin(async move {})
+                }
+            }))
+            .await;
+
         let _ = gather_complete.recv().await;
-        let mut candidates = vec!();
+        let mut candidates = vec![];
         while let Ok(m) = candidate_receiver.try_recv() {
             candidates.push(m);
         }
@@ -249,7 +297,7 @@ impl Peer {
     }
 }
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Signal {
@@ -260,5 +308,5 @@ struct Signal {
 #[derive(Clone, Debug, PartialEq)]
 struct SignalKey {
     from_peer: PeerId,
-    to_peer: PeerId
+    to_peer: PeerId,
 }

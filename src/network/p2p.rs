@@ -1,32 +1,29 @@
-use tokio::runtime::{Handle};
+use tokio::runtime::Handle;
 
 use crate::network::discovery::{self, Node};
 use crate::network::peer::{Peer, PeerState};
 
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
-use std::{
-    collections::HashMap,
-    net::SocketAddr
-};
+use std::{collections::HashMap, net::SocketAddr};
 
-use libp2p::{PeerId, bytes::Bytes};
 use ggrs::{NonBlockingSocket, P2PSession, PlayerType, UdpMessage};
+use libp2p::{bytes::Bytes, PeerId};
 
 #[derive(Debug, Clone)]
 pub(crate) enum Participant {
     Local(PeerId),
-    Remote(Peer, SocketAddr)
+    Remote(Peer, SocketAddr),
 }
 #[derive(Debug, Clone)]
 pub(crate) enum Slot {
     Vacant(),
-    Occupied(Participant)
+    Occupied(Participant),
 }
 #[derive(Debug, Clone)]
 pub(crate) struct ReadyState {
     pub(crate) players: Vec<Participant>,
-    spectators: Vec<Participant>
+    spectators: Vec<Participant>,
 }
 
 #[derive(Debug, Clone)]
@@ -42,7 +39,7 @@ pub(crate) struct P2PGame {
     node: Node,
 }
 
-impl P2PGame {    
+impl P2PGame {
     fn new(owner_id: &PeerId, node: &Node) -> Self {
         Self {
             owner_id: *owner_id,
@@ -51,25 +48,30 @@ impl P2PGame {
     }
 
     async fn get_slot_count(self: &Self) -> Option<u8> {
-        self.get_record("slot-count").await.map(|slot_count_data| bincode::deserialize(&slot_count_data).unwrap())
+        self.get_record("slot-count")
+            .await
+            .map(|slot_count_data| bincode::deserialize(&slot_count_data).unwrap())
     }
 
     async fn get_name(self: &Self) -> Option<String> {
-        self.get_record("name").await.map(|name_data| bincode::deserialize(&name_data).unwrap())
+        self.get_record("name")
+            .await
+            .map(|name_data| bincode::deserialize(&name_data).unwrap())
     }
 
     pub(crate) async fn current_state(&self, p2p: &mut P2P) -> GameState {
         if let Some(slots) = self.get_slots(p2p).await {
-            let participants = slots.iter()
-            .filter_map(|slot| {
-                if let Slot::Occupied(occupied_slot) = slot {
-                    Some(occupied_slot.clone())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-            
+            let participants = slots
+                .iter()
+                .filter_map(|slot| {
+                    if let Slot::Occupied(occupied_slot) = slot {
+                        Some(occupied_slot.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+
             let all_connected = participants.iter().all(|participant| {
                 if let Participant::Remote(peer, _) = participant {
                     matches!(&*peer.connection_state.borrow(), PeerState::Connected(_))
@@ -79,7 +81,10 @@ impl P2PGame {
             });
 
             if participants.len() == slots.len() && all_connected {
-                GameState::Ready(ReadyState { players: participants, spectators: vec!() })
+                GameState::Ready(ReadyState {
+                    players: participants,
+                    spectators: vec![],
+                })
             } else {
                 GameState::New(slots)
             }
@@ -97,9 +102,12 @@ impl P2PGame {
                         if slot_owner == self.node.local_peer_id {
                             Slot::Occupied(Participant::Local(slot_owner))
                         } else {
-                            Slot::Occupied(Participant::Remote(p2p.get_peer(slot_owner), format!("127.0.0.1:{}", idx).parse().unwrap()))
+                            Slot::Occupied(Participant::Remote(
+                                p2p.get_peer(slot_owner),
+                                format!("127.0.0.1:{}", idx).parse().unwrap(),
+                            ))
                         }
-                    },
+                    }
                     None => Slot::Vacant(),
                 };
                 slots.push(slot);
@@ -111,7 +119,6 @@ impl P2PGame {
     }
 
     async fn get_slot_owner(self: &Self, idx: u8) -> Option<PeerId> {
-        
         let mut providers = Vec::new();
         for peer_id in self.get_providers("slot-idx").await {
             let key = format!("{}.slot-idx", peer_id);
@@ -122,7 +129,7 @@ impl P2PGame {
                 }
             }
         }
-        
+
         // Pick the largest id so everyone gets the same result
         providers.iter().cloned().max()
     }
@@ -133,7 +140,8 @@ impl P2PGame {
         let c = self.clone();
         tokio::spawn(async move {
             c.start_providing("slot-idx").await;
-            c.put_record(&key, bincode::serialize(&slot_idx).unwrap()).await;
+            c.put_record(&key, bincode::serialize(&slot_idx).unwrap())
+                .await;
         });
     }
 
@@ -176,17 +184,23 @@ impl P2P {
     }
 
     pub(crate) fn get_peer(&mut self, peer_id: PeerId) -> Peer {
-        self.peers.lock().unwrap()
-        .entry(peer_id)
-        .or_insert_with(|| Peer::new(peer_id, &self.node))
-        .clone()
+        self.peers
+            .lock()
+            .unwrap()
+            .entry(peer_id)
+            .or_insert_with(|| Peer::new(peer_id, &self.node))
+            .clone()
     }
 
     pub(crate) async fn find_games(&self, game_name: &str) -> Vec<(String, PeerId)> {
-        let mut owners = vec!();
+        let mut owners = vec![];
         let providers = self.node.get_providers("p2p-game").await;
         for peer_id in providers {
-            for name in self.node.get_record(&format!("{}.p2p-game.name", peer_id)).await {
+            for name in self
+                .node
+                .get_record(&format!("{}.p2p-game.name", peer_id))
+                .await
+            {
                 let name: &str = bincode::deserialize(&name).unwrap();
                 if name.contains(game_name) {
                     owners.push((name.to_owned(), peer_id));
@@ -207,8 +221,10 @@ impl P2P {
             let node = self.node.clone();
             let name = name.to_owned();
             async move {
-                game.put_record("slot-count", bincode::serialize(&slot_count).unwrap()).await;
-                game.put_record("name", bincode::serialize(&name).unwrap()).await;
+                game.put_record("slot-count", bincode::serialize(&slot_count).unwrap())
+                    .await;
+                game.put_record("name", bincode::serialize(&name).unwrap())
+                    .await;
                 node.start_providing("p2p-game").await;
             }
         });
@@ -219,9 +235,10 @@ impl P2P {
     pub(crate) fn start_session(&self, ready_state: &ReadyState) -> (P2PSession, usize) {
         let num_players = ready_state.players.len() + ready_state.spectators.len();
         println!("Players: {}", num_players);
-        
+
         let sock = P2PGameNonBlockingSocket::new(ready_state);
-        let mut session = P2PSession::new_with_socket(num_players as u32, self.input_size, sock).expect("Could not create a P2P Session");
+        let mut session = P2PSession::new_with_socket(num_players as u32, self.input_size, sock)
+            .expect("Could not create a P2P Session");
 
         let local_handle = {
             let mut local_handle = 0;
@@ -230,11 +247,13 @@ impl P2P {
                     Participant::Local(_) => {
                         println!("Add local player {}", slot_idx);
                         local_handle = session.add_player(PlayerType::Local, slot_idx).unwrap();
-                    },
+                    }
                     Participant::Remote(_, addr) => {
                         println!("Add remote player {:?}", addr);
-                        session.add_player(PlayerType::Remote(addr.clone()), slot_idx).unwrap();
-                    },
+                        session
+                            .add_player(PlayerType::Remote(addr.clone()), slot_idx)
+                            .unwrap();
+                    }
                 }
             }
             local_handle
@@ -247,7 +266,7 @@ const RECV_BUFFER_SIZE: usize = 4096;
 pub(crate) struct P2PGameNonBlockingSocket {
     runtime_handle: Handle,
     reader: tokio::sync::mpsc::Receiver<(std::net::SocketAddr, UdpMessage)>,
-    sender: tokio::sync::mpsc::Sender<(std::net::SocketAddr, UdpMessage)>
+    sender: tokio::sync::mpsc::Sender<(std::net::SocketAddr, UdpMessage)>,
 }
 
 impl P2PGameNonBlockingSocket {
@@ -260,8 +279,8 @@ impl P2PGameNonBlockingSocket {
             match participant {
                 Participant::Remote(peer, addr) => {
                     peers.insert(addr.clone(), (peer, [0; RECV_BUFFER_SIZE]));
-                },
-                _ => ()
+                }
+                _ => (),
             }
         }
 
@@ -278,23 +297,30 @@ impl P2PGameNonBlockingSocket {
                             PeerState::Connected(channel) => {
                                 while let Ok(number_of_bytes) = channel.read(&mut buffer).await {
                                     assert!(number_of_bytes <= RECV_BUFFER_SIZE);
-                                    if let Ok(msg) = bincode::deserialize::<UdpMessage>(&buffer[0..number_of_bytes]) {
+                                    if let Ok(msg) = bincode::deserialize::<UdpMessage>(
+                                        &buffer[0..number_of_bytes],
+                                    ) {
                                         //println!("READ: {:?} - {:?}", msg, src_addr);
                                         tx.send((src_addr.clone(), msg)).await.unwrap();
                                     } else {
-                                        eprintln!("Failed to deserialize message, message discarded");
+                                        eprintln!(
+                                            "Failed to deserialize message, message discarded"
+                                        );
                                     }
                                 }
                                 println!("Exited read loop for {:?}", src_addr);
-                            },
+                            }
                             //TODO: exit when the peer state is unrecoverable
-                            _ => eprintln!("Peer {:?} not in a state where it can read. Will try again...", src_addr),
+                            _ => eprintln!(
+                                "Peer {:?} not in a state where it can read. Will try again...",
+                                src_addr
+                            ),
                         }
                         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                     }
                 }
             });
-        };
+        }
 
         // Write loop
         let (sender, mut rx) = tokio::sync::mpsc::channel::<(SocketAddr, UdpMessage)>(100);
@@ -307,9 +333,12 @@ impl P2PGameNonBlockingSocket {
                         let buf = bincode::serialize(&msg).unwrap();
                         let bytes = Bytes::from(buf);
                         channel.write(&bytes).await.unwrap();
-                        //println!("SEND: {:?} - {:?}", msg, addr);    
+                        //println!("SEND: {:?} - {:?}", msg, addr);
                     } else {
-                        eprintln!("Peer {:?} was not in a state where it could write. Message discarded.", addr);
+                        eprintln!(
+                            "Peer {:?} was not in a state where it could write. Message discarded.",
+                            addr
+                        );
                     }
                 }
                 println!("Exited write loop");
@@ -319,7 +348,7 @@ impl P2PGameNonBlockingSocket {
         Self {
             runtime_handle,
             reader,
-            sender
+            sender,
         }
     }
 }
