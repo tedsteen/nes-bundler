@@ -41,12 +41,7 @@ impl SettingsGui {
         }
     }
 
-    fn key_map_ui(
-        &mut self,
-        ui: &mut Ui,
-        keyboard_input: &mut JoypadKeyboardInput,
-        pad: usize,
-    ) {
+    fn key_map_ui(&mut self, ui: &mut Ui, keyboard_input: &mut JoypadKeyboardInput, pad: usize) {
         ui.label(format!("Joypad #{}", pad + 1));
         Grid::new("joymap_grid")
             .num_columns(2)

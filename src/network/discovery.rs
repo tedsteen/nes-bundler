@@ -85,8 +85,7 @@ impl NetworkBehaviourEventProcess<KademliaEvent> for MyBehaviour {
                     });
                 }
                 QueryResult::PutRecord(result) => {
-                    let result =
-                        result.map_err(|err| format!("Couldn't put record: {:?}", err));
+                    let result = result.map_err(|err| format!("Couldn't put record: {:?}", err));
                     //println!("Put record result: {:?}", result);
                     let _ = self.event_bus.send(KademliaEvent2 {
                         query_id: id,
@@ -225,12 +224,7 @@ impl Node {
     }
 
     //TODO: Make value type generic and user serde to serialize
-    pub(crate) async fn put_record(
-        &self,
-        key: &str,
-        value: Vec<u8>,
-        expires: Option<Instant>,
-    ) {
+    pub(crate) async fn put_record(&self, key: &str, value: Vec<u8>, expires: Option<Instant>) {
         let key = Key::new(&key.to_string());
         let record = Record {
             key,

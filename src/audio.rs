@@ -1,10 +1,10 @@
 use cpal::traits::{DeviceTrait, HostTrait};
 use cpal::{Sample, StreamConfig};
-use ringbuf::RingBuffer;
 use rusticnes_core::nes::NesState;
+use std::sync::atomic::AtomicU16;
+use std::sync::atomic::Ordering::SeqCst;
 use std::sync::Arc;
 use std::sync::Mutex;
-
 pub(crate) struct Audio {
     output_device: cpal::Device,
     output_config: cpal::SupportedStreamConfig,
@@ -13,7 +13,7 @@ pub(crate) struct Audio {
 pub(crate) struct Stream {
     #[allow(dead_code)] // This reference needs to be held on to to keep the stream running
     stream: cpal::Stream,
-    latency: u16,
+    latency: Arc<AtomicU16>,
     nes: Arc<Mutex<NesState>>,
     sample_rate: f32,
     channels: usize,
@@ -35,52 +35,56 @@ impl Stream {
         let channels = stream_config.channels as usize;
 
         let buffer_size = Stream::calc_buffer_length(latency, sample_rate, channels);
-
-        let apu = &mut nes.lock().unwrap().apu;
-        apu.set_sample_rate(sample_rate as u64);
-        apu.set_buffer_size(buffer_size);
+        {
+            let apu = &mut nes.lock().unwrap().apu;
+            apu.set_sample_rate(sample_rate as u64);
+            apu.set_buffer_size(buffer_size);
+        }
+        let (mut producer, mut consumer) =
+            ringbuf::RingBuffer::new(Stream::calc_buffer_length(500, sample_rate, channels) * 2)
+                .split(); // 500 is max latency
 
         println!("Stream config: {:?}", stream_config);
 
-        let ring =
-            RingBuffer::<i16>::new(2 * Stream::calc_buffer_length(1000, sample_rate, channels)); //make a buffer big enough for maximum latency
-        let (mut producer, mut consumer) = ring.split();
-        // Add the delay to the buffer
-        for _ in 0..buffer_size {
-            producer.push(0).unwrap();
-        }
-
-        let nes_for_stream = nes.clone();
-        let start_time = std::time::SystemTime::now();
+        let mut nes_sample = 0;
+        let latency = Arc::new(AtomicU16::new(latency));
+        tokio::spawn({
+            let latency = latency.clone();
+            let nes = nes.clone();
+            async move {
+                loop {
+                    {
+                        let apu = &mut nes.lock().unwrap().apu;
+                        if apu.buffer_full {
+                            for sample in apu.output_buffer.to_owned() {
+                                if producer.push(sample).is_err() {
+                                    //eprintln!("Sound buffer full");
+                                }
+                            }
+                            apu.buffer_full = false;
+                        }
+                    }
+                    let latency = latency.load(SeqCst);
+                    tokio::time::sleep(std::time::Duration::from_micros(
+                        ((latency * 1000) / 2) as u64,
+                    ))
+                    .await;
+                }
+            }
+        });
 
         let stream = output_device
             .build_output_stream(
                 &stream_config,
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                    {
-                        let apu = &mut nes_for_stream.lock().unwrap().apu;
-
-                        if apu.buffer_full {
-                            apu.buffer_full = false;
-                            producer.push_slice(apu.output_buffer.to_owned().as_slice());
-                        }
-                    }
-
-                    let mut input_fell_behind = false;
                     for sample in data {
-                        *sample = match consumer.pop() {
-                            Some(s) => Sample::from(&s),
-                            None => {
-                                input_fell_behind = true;
-                                0.0
-                            }
-                        };
-                    }
-                    if input_fell_behind && std::time::SystemTime::now()
-                            .duration_since(start_time)
-                            .unwrap()
-                            .gt(&std::time::Duration::from_secs(1)) {
-                        //eprintln!("Consuming audio faster than it's being produced! Try increasing latency");
+                        if let Some(sample) = consumer.pop() {
+                            nes_sample = sample;
+                        } else {
+                            //eprintln!("Buffer underrun");
+                        }
+
+                        *sample = Sample::from(&nes_sample);
                     }
                 },
                 |err| eprintln!("an error occurred on the output audio stream: {}", err),
@@ -90,7 +94,7 @@ impl Stream {
         Self {
             stream,
             latency,
-            nes: nes.clone(),
+            nes,
             sample_rate,
             channels,
         }
@@ -101,15 +105,14 @@ impl Stream {
         latency_frames as usize * channels as usize
     }
 
-    pub fn set_latency(&mut self, mut latency: u16) {
+    pub fn set_latency(&self, mut latency: u16) {
         latency = std::cmp::max(latency, 1);
 
-        if self.latency != latency {
+        if self.latency.load(SeqCst) != latency {
             let buffer_size = Stream::calc_buffer_length(latency, self.sample_rate, self.channels);
-
             let apu = &mut self.nes.lock().unwrap().apu;
             apu.set_buffer_size(buffer_size);
-            self.latency = latency;
+            self.latency.store(latency, SeqCst);
         }
     }
 }
@@ -139,12 +142,6 @@ impl Audio {
 
     pub(crate) fn start(&self, latency: u16, nes: Arc<Mutex<NesState>>) -> Stream {
         let stream_config = self.output_config.config();
-        /*
-                stream_config.buffer_size = match self.output_config.buffer_size() {
-                    cpal::SupportedBufferSize::Range {min, max: _} => cpal::BufferSize::Fixed(*min),
-                    cpal::SupportedBufferSize::Unknown =>  cpal::BufferSize::Default,
-                };
-        */
         match self.output_config.sample_format() {
             cpal::SampleFormat::F32 => {
                 Stream::new::<f32>(latency, stream_config, &self.output_device, nes)

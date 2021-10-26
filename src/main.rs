@@ -1,9 +1,12 @@
 #![deny(clippy::all)]
 #![forbid(unsafe_code)]
 
+use std::sync::{Arc, Mutex};
+
 use crate::input::{JoypadInput, StaticJoypadInput};
 use crate::network::p2p::P2P;
 
+use audio::{Audio, Stream};
 use game_loop::game_loop;
 use ggrs::{GGRSEvent, GGRSRequest, GameState, P2PSession, SessionState, NULL_FRAME};
 
@@ -106,42 +109,55 @@ async fn main() {
     );
 }
 
-use serde::{Deserialize, Serialize};
-#[derive(Serialize, Deserialize)]
 struct MyGameState {
-    nes: NesState,
+    nes: Arc<Mutex<NesState>>,
+    sound_stream: Stream,
 }
 
 impl MyGameState {
     fn new() -> Self {
         let rom_data = match std::env::var("ROM_FILE") {
-            Ok(rom_file) => {
-                
-                std::fs::read(&rom_file)
-                    .unwrap_or_else(|_| panic!("Could not read ROM {}", rom_file))
-            }
+            Ok(rom_file) => std::fs::read(&rom_file)
+                .unwrap_or_else(|_| panic!("Could not read ROM {}", rom_file)),
             Err(_e) => Asset::get("rom.nes")
                 .expect("Missing embedded ROM")
                 .data
                 .into_owned(),
         };
 
-        let nes = load_rom(rom_data).expect("Failed to load ROM");
+        let nes = Arc::new(Mutex::new(load_rom(rom_data).expect("Failed to load ROM")));
 
-        Self { nes }
+        let audio = Audio::new();
+        let sound_stream = audio.start(50, nes.clone());
+
+        Self { nes, sound_stream }
+    }
+    pub fn save(&self) -> Vec<u8> {
+        let nes = &*self.nes.lock().expect("Could not get lock on nes");
+        bincode::serialize(&nes).unwrap()
+    }
+
+    pub fn load(&mut self, data: &[u8]) {
+        let mut nes = self.nes.lock().expect("Could not get lock on nes");
+        *nes = bincode::deserialize(data).unwrap();
     }
 
     pub fn advance(&mut self, inputs: Vec<StaticJoypadInput>) {
         //println!("Advancing! {:?}", inputs);
-        self.nes.p1_input = inputs[0].to_u8();
-        self.nes.p2_input = inputs[1].to_u8();
-        self.nes.run_until_vblank();
+        let mut nes = self.nes.lock().expect("Could not get lock on nes");
+        nes.p1_input = inputs[0].to_u8();
+        nes.p2_input = inputs[1].to_u8();
+        nes.run_until_vblank();
     }
 
     fn render(&self, frame: &mut [u8]) {
-        let ppu = &self.nes.ppu;
+        let screen = {
+            let nes = self.nes.lock().expect("Could not get lock on nes");
+            nes.ppu.screen.clone() //TODO: Is it better to lock during the pixel copying or copy here and not lock? (thinking about the audio loop)
+        };
+
         for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-            let palette_index = ppu.screen[i] as usize * 3;
+            let palette_index = screen[i] as usize * 3;
             let rgba = &NTSC_PAL[palette_index..palette_index + 4]; //TODO: cheating with the alpha channel here..
             pixel.copy_from_slice(rgba);
         }
@@ -271,9 +287,9 @@ impl GameRunner {
                                             GGRSRequest::LoadGameState { cell } => {
                                                 let g_s = cell.load();
                                                 let frame = g_s.frame;
-                                                *game_state =
-                                                    bincode::deserialize(&g_s.buffer.unwrap())
-                                                        .unwrap();
+                                                game_state
+                                                    .load(&g_s.buffer.expect("No state in cell?"));
+
                                                 println!(
                                                     "LOAD {}, diff in frame: {}",
                                                     g_s.checksum,
@@ -282,7 +298,7 @@ impl GameRunner {
                                                 netplay_state.frame = frame; //TODO: Look into this frame stuff here...
                                             }
                                             GGRSRequest::SaveGameState { cell, frame } => {
-                                                let state = bincode::serialize(game_state).unwrap();
+                                                let state = game_state.save();
                                                 let game_state =
                                                     GameState::new(frame, Some(state), None);
                                                 //println!("SAVE {}", game_state.checksum);
@@ -356,10 +372,6 @@ impl GameRunner {
     }
 
     pub fn handle(&mut self, event: winit::event::Event<()>) -> bool {
-        if let GameRunnerState::Playing(_, PlayState::NetPlay(netplay_state)) = &mut self.state {
-            netplay_state.session.poll_remote_clients(); //TODO: Is this a good idea?..
-        }
-
         // Handle input events
         if let WinitEvent::WindowEvent { event, .. } = event {
             // Update egui inputs
@@ -384,6 +396,15 @@ impl GameRunner {
                         }
                     }
                 }
+            }
+        }
+
+        if let GameRunnerState::Playing(game_state, play_state) = &mut self.state {
+            game_state
+                .sound_stream
+                .set_latency(self.settings.audio_latency);
+            if let PlayState::NetPlay(netplay_state) = play_state {
+                netplay_state.session.poll_remote_clients(); //TODO: Is this a good idea?..
             }
         }
         true
