@@ -128,7 +128,7 @@ type CommandResult<T> = Result<T, String>;
 #[derive(Debug)]
 enum Command {
     StartProviding(record::Key, Responder<AddProviderOk>),
-    StopProviding(record::Key),
+    //StopProviding(record::Key),
     GetProviders(record::Key, Responder<GetProvidersOk>),
     PutRecord(record::Record, Responder<PutRecordOk>),
     GetRecord(record::Key, Responder<GetRecordOk>),
@@ -160,15 +160,15 @@ impl Node {
             .unwrap();
         resp_rx.await.unwrap()
     }
-
-    async fn stop_providing(&self, key: &str) {
-        let key = Key::new(&key.to_string());
-        self.command_bus
-            .send(Command::StopProviding(key))
-            .await
-            .unwrap();
-    }
-
+    /*
+        async fn stop_providing(&self, key: &str) {
+            let key = Key::new(&key.to_string());
+            self.command_bus
+                .send(Command::StopProviding(key))
+                .await
+                .unwrap();
+        }
+    */
     async fn try_get_providers(&self, key: Key) -> CommandResult<GetProvidersOk> {
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         self.command_bus
@@ -333,10 +333,12 @@ impl Node {
                                     },
                                 );
                             }
+                            /*
                             Command::StopProviding(key) => {
                                 swarm.behaviour_mut().local_provides.remove(&key);
                                 swarm.behaviour_mut().kademlia.stop_providing(&key);
                             }
+                            */
                             Command::GetProviders(key, responder) => {
                                 let query_id =
                                     swarm.behaviour_mut().kademlia.get_providers(key.clone());

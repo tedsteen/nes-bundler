@@ -55,12 +55,6 @@ impl P2PGame {
             .map(|slot_count_data| bincode::deserialize(&slot_count_data).unwrap())
     }
 
-    async fn get_name(&self) -> Option<String> {
-        self.get_record("name")
-            .await
-            .map(|name_data| bincode::deserialize(&name_data).unwrap())
-    }
-
     pub(crate) async fn current_state(&self, p2p: &mut P2P) -> GameState {
         if let Some(slots) = self.get_slots(p2p).await {
             let participants = slots

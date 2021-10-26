@@ -200,6 +200,7 @@ enum PlayState {
 }
 enum GameRunnerState {
     Playing(MyGameState, PlayState),
+    #[allow(dead_code)] // Calm down.. it's coming..
     Loading,
 }
 struct GameRunner {
