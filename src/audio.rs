@@ -1,10 +1,7 @@
 use cpal::traits::{DeviceTrait, HostTrait};
 use cpal::{Sample, StreamConfig};
+use ringbuf::Producer;
 use rusticnes_core::nes::NesState;
-use std::sync::atomic::AtomicU16;
-use std::sync::atomic::Ordering::SeqCst;
-use std::sync::Arc;
-use std::sync::Mutex;
 pub(crate) struct Audio {
     output_device: cpal::Device,
     output_config: cpal::SupportedStreamConfig,
@@ -13,9 +10,9 @@ pub(crate) struct Audio {
 pub(crate) struct Stream {
     #[allow(dead_code)] // This reference needs to be held on to to keep the stream running
     stream: cpal::Stream,
-    latency: Arc<AtomicU16>,
-    nes: Arc<Mutex<NesState>>,
-    sample_rate: f32,
+    latency: u16,
+    pub(crate) producer: Producer<i16>,
+    pub(crate) sample_rate: f32,
     channels: usize,
 }
 
@@ -23,8 +20,7 @@ impl Stream {
     fn new<T>(
         latency: u16,
         mut stream_config: StreamConfig,
-        output_device: &cpal::Device,
-        nes: Arc<Mutex<NesState>>,
+        output_device: &cpal::Device
     ) -> Self
     where
         T: cpal::Sample,
@@ -34,12 +30,6 @@ impl Stream {
         let sample_rate = stream_config.sample_rate.0 as f32;
         let channels = stream_config.channels as usize;
 
-        let buffer_size = Stream::calc_buffer_length(latency, sample_rate, channels);
-        {
-            let apu = &mut nes.lock().unwrap().apu;
-            apu.set_sample_rate(sample_rate as u64);
-            apu.set_buffer_size(buffer_size);
-        }
         let (mut producer, mut consumer) =
             ringbuf::RingBuffer::new(Stream::calc_buffer_length(500, sample_rate, channels) * 2)
                 .split(); // 500 is max latency
@@ -47,32 +37,6 @@ impl Stream {
         println!("Stream config: {:?}", stream_config);
 
         let mut nes_sample = 0;
-        let latency = Arc::new(AtomicU16::new(latency));
-        tokio::spawn({
-            let latency = latency.clone();
-            let nes = nes.clone();
-            async move {
-                loop {
-                    {
-                        let apu = &mut nes.lock().unwrap().apu;
-                        if apu.buffer_full {
-                            for sample in apu.output_buffer.to_owned() {
-                                if producer.push(sample).is_err() {
-                                    //eprintln!("Sound buffer full");
-                                }
-                            }
-                            apu.buffer_full = false;
-                        }
-                    }
-                    let latency = latency.load(SeqCst);
-                    tokio::time::sleep(std::time::Duration::from_micros(
-                        ((latency * 1000) / 2) as u64,
-                    ))
-                    .await;
-                }
-            }
-        });
-
         let stream = output_device
             .build_output_stream(
                 &stream_config,
@@ -92,9 +56,9 @@ impl Stream {
             .expect("Could not build sound output stream");
 
         Self {
-            stream,
             latency,
-            nes,
+            stream,
+            producer,
             sample_rate,
             channels,
         }
@@ -105,14 +69,13 @@ impl Stream {
         latency_frames as usize * channels as usize
     }
 
-    pub fn set_latency(&self, mut latency: u16) {
+    pub fn set_latency(&mut self, mut latency: u16, nes: &mut NesState) {
         latency = std::cmp::max(latency, 1);
 
-        if self.latency.load(SeqCst) != latency {
+        if self.latency != latency {
             let buffer_size = Stream::calc_buffer_length(latency, self.sample_rate, self.channels);
-            let apu = &mut self.nes.lock().unwrap().apu;
-            apu.set_buffer_size(buffer_size);
-            self.latency.store(latency, SeqCst);
+            nes.apu.set_buffer_size(buffer_size);
+            self.latency = latency;
         }
     }
 }
@@ -140,17 +103,17 @@ impl Audio {
         }
     }
 
-    pub(crate) fn start(&self, latency: u16, nes: Arc<Mutex<NesState>>) -> Stream {
+    pub(crate) fn start(&self, latency: u16) -> Stream {
         let stream_config = self.output_config.config();
         match self.output_config.sample_format() {
             cpal::SampleFormat::F32 => {
-                Stream::new::<f32>(latency, stream_config, &self.output_device, nes)
+                Stream::new::<f32>(latency, stream_config, &self.output_device)
             }
             cpal::SampleFormat::I16 => {
-                Stream::new::<i16>(latency, stream_config, &self.output_device, nes)
+                Stream::new::<i16>(latency, stream_config, &self.output_device)
             }
             cpal::SampleFormat::U16 => {
-                Stream::new::<u16>(latency, stream_config, &self.output_device, nes)
+                Stream::new::<u16>(latency, stream_config, &self.output_device)
             }
         }
     }

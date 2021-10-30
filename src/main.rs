@@ -1,8 +1,6 @@
 #![deny(clippy::all)]
 #![forbid(unsafe_code)]
 
-use std::sync::{Arc, Mutex};
-
 use crate::input::{JoypadInput, StaticJoypadInput};
 use crate::network::p2p::P2P;
 
@@ -16,7 +14,6 @@ use input::{JoypadKeyMap, JoypadKeyboardInput};
 use log::error;
 use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
 use rusticnes_core::cartridge::mapper_from_file;
-use rusticnes_core::mmc::none::NoneMapper;
 use rusticnes_core::nes::NesState;
 use rusticnes_core::palettes::NTSC_PAL;
 use winit::dpi::LogicalSize;
@@ -34,7 +31,7 @@ const INPUT_SIZE: usize = std::mem::size_of::<u8>();
 const MAX_PLAYERS: usize = 4;
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
-const ZOOM: f32 = 2.0;
+const ZOOM: f32 = 3.0;
 
 use rust_embed::RustEmbed;
 #[derive(RustEmbed)]
@@ -44,11 +41,13 @@ struct Asset;
 pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
     match mapper_from_file(cart_data.as_slice()) {
         Ok(mapper) => {
+            mapper.print_debug_status();
+            
             let mut nes = NesState::new(mapper);
             nes.power_on();
             Ok(nes)
         }
-        err => err.map(|_| NesState::new(Box::new(NoneMapper::new()))),
+        _err => Err("ouch".to_owned()),
     }
 }
 
@@ -110,7 +109,7 @@ async fn main() {
 }
 
 struct MyGameState {
-    nes: Arc<Mutex<NesState>>,
+    nes: Option<NesState>,
     sound_stream: Stream,
 }
 
@@ -125,41 +124,57 @@ impl MyGameState {
                 .into_owned(),
         };
 
-        let nes = Arc::new(Mutex::new(load_rom(rom_data).expect("Failed to load ROM")));
+        let mut nes = load_rom(rom_data).expect("Failed to load ROM");
 
         let audio = Audio::new();
-        let sound_stream = audio.start(50, nes.clone());
+        let sound_stream = audio.start(50);
+        nes.apu.set_sample_rate(sound_stream.sample_rate as u64);
 
-        Self { nes, sound_stream }
-    }
-    pub fn save(&self) -> Vec<u8> {
-        let nes = &*self.nes.lock().expect("Could not get lock on nes");
-        bincode::serialize(&nes).unwrap()
+        Self { nes: Some(nes), sound_stream }
     }
 
     pub fn load(&mut self, data: &[u8]) {
-        let mut nes = self.nes.lock().expect("Could not get lock on nes");
-        *nes = bincode::deserialize(data).unwrap();
+        if let Some(nes) = self.nes.take() {
+            self.nes = Some(nes.load_state(data));
+        }
+    }
+
+    pub fn save(&self) -> Option<Vec<u8>> {
+        self.nes.as_ref().map(|nes| nes.save_state())
     }
 
     pub fn advance(&mut self, inputs: Vec<StaticJoypadInput>) {
         //println!("Advancing! {:?}", inputs);
-        let mut nes = self.nes.lock().expect("Could not get lock on nes");
-        nes.p1_input = inputs[0].to_u8();
-        nes.p2_input = inputs[1].to_u8();
-        nes.run_until_vblank();
+        if let Some(nes) = &mut self.nes {
+            nes.p1_input = inputs[0].to_u8();
+            nes.p2_input = inputs[1].to_u8();
+            nes.run_until_vblank();
+
+            let apu = &mut nes.apu;
+            if apu.buffer_full {
+                for sample in apu.output_buffer.to_owned() {
+                    if self.sound_stream.producer.push(sample).is_err() {
+                        //eprintln!("Sound buffer full");
+                    }
+                }
+                apu.buffer_full = false;
+            }
+        }
+
     }
 
     fn render(&self, frame: &mut [u8]) {
-        let screen = {
-            let nes = self.nes.lock().expect("Could not get lock on nes");
-            nes.ppu.screen.clone() //TODO: Is it better to lock during the pixel copying or copy here and not lock? (thinking about the audio loop)
-        };
-
-        for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-            let palette_index = screen[i] as usize * 3;
-            let rgba = &NTSC_PAL[palette_index..palette_index + 4]; //TODO: cheating with the alpha channel here..
-            pixel.copy_from_slice(rgba);
+        if let Some(nes) = &self.nes {
+            let screen = {
+                //let nes = self.nes; //.lock().expect("Could not get lock on nes");
+                nes.ppu.screen.clone() //TODO: Is it better to lock during the pixel copying or copy here and not lock? (thinking about the audio loop and load/save state)
+            };
+    
+            for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
+                let palette_index = screen[i] as usize * 3;
+                let rgba = &NTSC_PAL[palette_index..palette_index + 4]; //TODO: cheating with the alpha channel here..
+                pixel.copy_from_slice(rgba);
+            }    
         }
     }
 }
@@ -244,6 +259,12 @@ impl GameRunner {
         let state = &mut self.state;
         match state {
             GameRunnerState::Playing(game_state, play_state) => {
+                if let Some(nes) = &mut game_state.nes {
+                    game_state
+                    .sound_stream
+                    .set_latency(self.settings.audio_latency, nes);
+                }
+
                 match play_state {
                     PlayState::LocalPlay() => {
                         let a = self
@@ -288,9 +309,7 @@ impl GameRunner {
                                             GGRSRequest::LoadGameState { cell } => {
                                                 let g_s = cell.load();
                                                 let frame = g_s.frame;
-                                                game_state
-                                                    .load(&g_s.buffer.expect("No state in cell?"));
-
+                                                game_state.load(&g_s.buffer.expect("No state in cell?"));
                                                 println!(
                                                     "LOAD {}, diff in frame: {}",
                                                     g_s.checksum,
@@ -300,8 +319,7 @@ impl GameRunner {
                                             }
                                             GGRSRequest::SaveGameState { cell, frame } => {
                                                 let state = game_state.save();
-                                                let game_state =
-                                                    GameState::new(frame, Some(state), None);
+                                                let game_state = GameState::new(frame, state, None);
                                                 //println!("SAVE {}", game_state.checksum);
                                                 cell.save(game_state);
                                             }
@@ -384,26 +402,42 @@ impl GameRunner {
 
             if let winit::event::WindowEvent::KeyboardInput { input, .. } = event {
                 if let Some(code) = input.virtual_keycode {
-                    match code {
-                        VirtualKeyCode::Escape => {
-                            if input.state == winit::event::ElementState::Pressed {
+                    if input.state == winit::event::ElementState::Pressed {
+                        match code {
+                            VirtualKeyCode::Escape => {
                                 self.gui.show_gui = !self.gui.show_gui;
                             }
-                        }
-                        _ => {
-                            for joypad_inputs in &mut self.settings.inputs {
-                                joypad_inputs.keyboard.apply(&input);
+                            VirtualKeyCode::F1 => {
+                                if let GameRunnerState::Playing(game_state, _) = &mut self.state {
+                                    let data = game_state.save();
+                                    if let Some(data) = data {
+                                        std::fs::remove_file("save.bin").expect("Could not remove old save file");
+                                        if let Err(err) = std::fs::write("save.bin", data) {
+                                            eprintln!("Could not write save file: {:?}", err);
+                                        }
+                                    }
+                                }
                             }
+                            VirtualKeyCode::F2 => {
+                                if let GameRunnerState::Playing(game_state, _) = &mut self.state {
+                                    match std::fs::read("save.bin") {
+                                        Ok(bytes) => { game_state.load(&bytes); },
+                                        Err(err) =>  eprintln!("Could not read savefile: {:?}", err)
+                                    }
+                                }
+                            }
+                            _ => {}
                         }
                     }
                 }
+                for joypad_inputs in &mut self.settings.inputs {
+                    joypad_inputs.keyboard.apply(&input);
+                }
             }
         }
-
-        if let GameRunnerState::Playing(game_state, play_state) = &mut self.state {
-            game_state
-                .sound_stream
-                .set_latency(self.settings.audio_latency);
+        
+        #[allow(clippy::collapsible_match)]
+        if let GameRunnerState::Playing(game_state, play_state) = &mut self.state {            
             if let PlayState::NetPlay(netplay_state) = play_state {
                 netplay_state.session.poll_remote_clients(); //TODO: Is this a good idea?..
             }

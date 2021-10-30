@@ -199,9 +199,10 @@ impl NetplayGui {
                             if ui.button("Start game!").clicked() {
                                 let (mut session, local_handle) =
                                     self.p2p.start_session(&ready_state);
-                                session.set_sparse_saving(true).unwrap();
+                                //session.set_sparse_saving(true).unwrap();
                                 session.set_fps(60).unwrap();
-                                session.set_frame_delay(4, local_handle).unwrap();
+                                // TODO: Make these values settings in the netplay ui
+                                session.set_frame_delay(2, local_handle).unwrap();
                                 session
                                     .start_session()
                                     .expect("Could not start P2P session");
