@@ -133,15 +133,17 @@ impl MyGameState {
         Self { nes: Some(nes), sound_stream }
     }
 
-    pub fn load(&mut self, data: &[u8]) {
+    pub fn load(&mut self, _data: &[u8]) {
         if let Some(nes) = self.nes.take() {
             //self.nes = Some(nes.load_state(data));
+            //TODO: Load it
             self.nes = Some(nes);
         }
     }
 
     pub fn save(&self) -> Option<Vec<u8>> {
         //self.nes.as_ref().map(|nes| nes.save_state())
+        //TODO: Save it
         Some(vec!())
     }
 
@@ -153,13 +155,10 @@ impl MyGameState {
             nes.run_until_vblank();
 
             let apu = &mut nes.apu;
-            if apu.buffer_full {
-                for sample in apu.output_buffer.to_owned() {
-                    if self.sound_stream.producer.push(sample).is_err() {
-                        //eprintln!("Sound buffer full");
-                    }
+            for sample in apu.consume_samples() {
+                if self.sound_stream.producer.push(sample).is_err() {
+                    //eprintln!("Sound buffer full");
                 }
-                apu.buffer_full = false;
             }
         }
 
@@ -436,7 +435,7 @@ impl GameRunner {
         }
         
         #[allow(clippy::collapsible_match)]
-        if let GameRunnerState::Playing(game_state, play_state) = &mut self.state {            
+        if let GameRunnerState::Playing(_, play_state) = &mut self.state {            
             if let PlayState::NetPlay(netplay_state) = play_state {
                 netplay_state.session.poll_remote_clients(); //TODO: Is this a good idea?..
             }

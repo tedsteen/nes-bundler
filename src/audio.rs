@@ -30,7 +30,7 @@ impl Stream {
         let sample_rate = stream_config.sample_rate.0 as f32;
         let channels = stream_config.channels as usize;
 
-        let (mut producer, mut consumer) =
+        let (producer, mut consumer) =
             ringbuf::RingBuffer::new(Stream::calc_buffer_length(500, sample_rate, channels) * 2)
                 .split(); // 500 is max latency
 
