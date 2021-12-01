@@ -4,18 +4,20 @@ use anyhow::Result;
 use libp2p::PeerId;
 use tokio::sync::watch::Receiver;
 use webrtc::{
-    api::{setting_engine::SettingEngine, APIBuilder},
-    data::data_channel::RTCDataChannel,
-    peer::{
-        configuration::RTCConfiguration,
-        ice::{
-            ice_candidate::{RTCIceCandidate, RTCIceCandidateInit},
-            ice_server::RTCIceServer,
-        },
-        peer_connection::RTCPeerConnection,
-        peer_connection_state::RTCPeerConnectionState,
-        sdp::session_description::RTCSessionDescription,
+    api::{
+        setting_engine::SettingEngine, APIBuilder
     },
+    data_channel::RTCDataChannel,
+    ice_transport::{
+        ice_candidate::{
+            RTCIceCandidate, RTCIceCandidateInit
+        },
+        ice_server::RTCIceServer
+    },
+    peer_connection::{
+        RTCPeerConnection, configuration::RTCConfiguration, peer_connection_state::RTCPeerConnectionState,
+        sdp::session_description::RTCSessionDescription
+    }
 };
 use webrtc_data::data_channel::DataChannel;
 

@@ -1,7 +1,7 @@
-use std::{collections::HashSet, str::FromStr, task::{Context, Poll}, time::Instant};
+use std::{collections::HashSet, task::{Context, Poll}, time::Instant};
 
 use futures::prelude::*;
-use libp2p::{Multiaddr, NetworkBehaviour, PeerId, development_transport, identity, kad::{
+use libp2p::{NetworkBehaviour, PeerId, development_transport, identity, kad::{
         record::{self, store::MemoryStore, Key},
         AddProviderOk, GetProvidersOk, GetRecordOk, KademliaEvent, PutRecordOk, QueryId,
         QueryResult, Quorum, Record,
@@ -241,12 +241,12 @@ impl Node {
             }
         }
     }
-    const BOOTNODES: [&'static str; 4] = [
-        "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
-        "QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
-        "QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
-        "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
-    ];
+    // const BOOTNODES: [&'static str; 4] = [
+    //     "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+    //     "QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
+    //     "QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
+    //     "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
+    // ];
 
     async fn setup_discovery() -> (CommandBus, PeerId) {
         // Create a random key for ourselves.
@@ -259,7 +259,7 @@ impl Node {
         // Create a swarm to manage peers and events.
         let mut swarm = {
             let mdns = Mdns::new(MdnsConfig::default()).await.unwrap();
-            let mut behaviour = MyBehaviour::new(local_peer_id, mdns);
+            let behaviour = MyBehaviour::new(local_peer_id, mdns);
 
 //            let bootaddr = Multiaddr::from_str("/dnsaddr/bootstrap.libp2p.io").unwrap();
 //            for peer in &Node::BOOTNODES {

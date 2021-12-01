@@ -10,7 +10,7 @@ echo "Building optimized binary for target '$TARGET' using '$ROM_FILE' to profil
 rm -rf /tmp/pgo-data/
 
 # STEP 1: Build the instrumented binaries
-RUSTFLAGS="-Cprofile-generate=/tmp/pgo-data" cargo build --release --target=$TARGET
+RUSTFLAGS="-Cprofile-generate=/tmp/pgo-data" cargo rustc -- -C link-args=-Wl,-stack_size,0x1000000 --target=$TARGET
 
 # STEP 2: Run the binary to generate profiler data
 ./target/$TARGET/release/rusticnes-test &

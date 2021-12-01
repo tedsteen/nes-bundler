@@ -135,12 +135,14 @@ impl MyGameState {
 
     pub fn load(&mut self, data: &[u8]) {
         if let Some(nes) = self.nes.take() {
-            self.nes = Some(nes.load_state(data));
+            //self.nes = Some(nes.load_state(data));
+            self.nes = Some(nes);
         }
     }
 
     pub fn save(&self) -> Option<Vec<u8>> {
-        self.nes.as_ref().map(|nes| nes.save_state())
+        //self.nes.as_ref().map(|nes| nes.save_state())
+        Some(vec!())
     }
 
     pub fn advance(&mut self, inputs: Vec<StaticJoypadInput>) {
@@ -165,10 +167,7 @@ impl MyGameState {
 
     fn render(&self, frame: &mut [u8]) {
         if let Some(nes) = &self.nes {
-            let screen = {
-                //let nes = self.nes; //.lock().expect("Could not get lock on nes");
-                nes.ppu.screen.clone() //TODO: Is it better to lock during the pixel copying or copy here and not lock? (thinking about the audio loop and load/save state)
-            };
+            let screen = &nes.ppu.screen;
     
             for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
                 let palette_index = screen[i] as usize * 3;
@@ -411,7 +410,7 @@ impl GameRunner {
                                 if let GameRunnerState::Playing(game_state, _) = &mut self.state {
                                     let data = game_state.save();
                                     if let Some(data) = data {
-                                        std::fs::remove_file("save.bin").expect("Could not remove old save file");
+                                        let _ = std::fs::remove_file("save.bin");
                                         if let Err(err) = std::fs::write("save.bin", data) {
                                             eprintln!("Could not write save file: {:?}", err);
                                         }
