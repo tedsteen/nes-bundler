@@ -1,6 +1,8 @@
+use std::sync::{Arc, Mutex};
+
 use cpal::traits::{DeviceTrait, HostTrait};
 use cpal::{Sample, StreamConfig};
-use ringbuf::Producer;
+use ringbuf::{Producer, Consumer};
 use rusticnes_core::nes::NesState;
 pub(crate) struct Audio {
     output_device: cpal::Device,
@@ -12,6 +14,7 @@ pub(crate) struct Stream {
     stream: cpal::Stream,
     latency: u16,
     pub(crate) producer: Producer<i16>,
+    consumer: Arc<Mutex<Consumer<i16>>>,
     pub(crate) sample_rate: f32,
     channels: usize,
 }
@@ -30,19 +33,21 @@ impl Stream {
         let sample_rate = stream_config.sample_rate.0 as f32;
         let channels = stream_config.channels as usize;
 
-        let (producer, mut consumer) =
+        let (producer, consumer) =
             ringbuf::RingBuffer::new(Stream::calc_buffer_length(500, sample_rate, channels) * 2)
                 .split(); // 500 is max latency
 
         println!("Stream config: {:?}", stream_config);
 
         let mut nes_sample = 0;
+        let consumer = Arc::new(Mutex::<Consumer<i16>>::new(consumer));
+        let c2 = consumer.clone();
         let stream = output_device
             .build_output_stream(
                 &stream_config,
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                     for sample in data {
-                        if let Some(sample) = consumer.pop() {
+                        if let Some(sample) = c2.lock().unwrap().pop() {
                             nes_sample = sample;
                         } else {
                             //eprintln!("Buffer underrun");
@@ -59,9 +64,14 @@ impl Stream {
             latency,
             stream,
             producer,
+            consumer,
             sample_rate,
             channels,
         }
+    }
+    
+    pub(crate) fn drain(&mut self) {
+        self.consumer.lock().unwrap().pop_each(|_| { true }, Option::None);
     }
 
     fn calc_buffer_length(latency: u16, sample_rate: f32, channels: usize) -> usize {

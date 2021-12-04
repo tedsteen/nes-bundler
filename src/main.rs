@@ -109,7 +109,7 @@ async fn main() {
 }
 
 struct MyGameState {
-    nes: Option<NesState>,
+    nes: NesState,
     sound_stream: Stream,
 }
 
@@ -130,49 +130,40 @@ impl MyGameState {
         let sound_stream = audio.start(50);
         nes.apu.set_sample_rate(sound_stream.sample_rate as u64);
 
-        Self { nes: Some(nes), sound_stream }
+        Self { nes, sound_stream }
     }
 
-    pub fn load(&mut self, _data: &[u8]) {
-        if let Some(nes) = self.nes.take() {
-            //self.nes = Some(nes.load_state(data));
-            //TODO: Load it
-            self.nes = Some(nes);
-        }
+    pub fn load(&mut self, data: &[u8]) {
+        self.nes.load_state(&mut data.to_vec());
+        self.nes.apu.consume_samples(); //Clear audio buffer so we don't build up a delay
+        self.sound_stream.drain();
     }
 
-    pub fn save(&self) -> Option<Vec<u8>> {
-        //self.nes.as_ref().map(|nes| nes.save_state())
-        //TODO: Save it
-        Some(vec!())
+    pub fn save(&self) -> Vec<u8> {
+        self.nes.save_state()
     }
 
     pub fn advance(&mut self, inputs: Vec<StaticJoypadInput>) {
         //println!("Advancing! {:?}", inputs);
-        if let Some(nes) = &mut self.nes {
-            nes.p1_input = inputs[0].to_u8();
-            nes.p2_input = inputs[1].to_u8();
-            nes.run_until_vblank();
+        self.nes.p1_input = inputs[0].to_u8();
+        self.nes.p2_input = inputs[1].to_u8();
+        self.nes.run_until_vblank();
 
-            let apu = &mut nes.apu;
-            for sample in apu.consume_samples() {
-                if self.sound_stream.producer.push(sample).is_err() {
-                    //eprintln!("Sound buffer full");
-                }
+        let apu = &mut self.nes.apu;
+        for sample in apu.consume_samples() {
+            if self.sound_stream.producer.push(sample).is_err() {
+                //eprintln!("Sound buffer full");
             }
         }
-
     }
 
     fn render(&self, frame: &mut [u8]) {
-        if let Some(nes) = &self.nes {
-            let screen = &nes.ppu.screen;
-    
-            for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-                let palette_index = screen[i] as usize * 3;
-                let rgba = &NTSC_PAL[palette_index..palette_index + 4]; //TODO: cheating with the alpha channel here..
-                pixel.copy_from_slice(rgba);
-            }    
+        let screen = &self.nes.ppu.screen;
+
+        for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
+            let palette_index = screen[i] as usize * 3;
+            let rgba = &NTSC_PAL[palette_index..palette_index + 4]; //TODO: cheating with the alpha channel here..
+            pixel.copy_from_slice(rgba);
         }
     }
 }
@@ -257,11 +248,9 @@ impl GameRunner {
         let state = &mut self.state;
         match state {
             GameRunnerState::Playing(game_state, play_state) => {
-                if let Some(nes) = &mut game_state.nes {
-                    game_state
-                    .sound_stream
-                    .set_latency(self.settings.audio_latency, nes);
-                }
+                game_state
+                .sound_stream
+                .set_latency(self.settings.audio_latency, &mut game_state.nes);
 
                 match play_state {
                     PlayState::LocalPlay() => {
@@ -317,7 +306,7 @@ impl GameRunner {
                                             }
                                             GGRSRequest::SaveGameState { cell, frame } => {
                                                 let state = game_state.save();
-                                                let game_state = GameState::new(frame, state, None);
+                                                let game_state = GameState::new(frame, Some(state), None);
                                                 //println!("SAVE {}", game_state.checksum);
                                                 cell.save(game_state);
                                             }
@@ -408,11 +397,9 @@ impl GameRunner {
                             VirtualKeyCode::F1 => {
                                 if let GameRunnerState::Playing(game_state, _) = &mut self.state {
                                     let data = game_state.save();
-                                    if let Some(data) = data {
-                                        let _ = std::fs::remove_file("save.bin");
-                                        if let Err(err) = std::fs::write("save.bin", data) {
-                                            eprintln!("Could not write save file: {:?}", err);
-                                        }
+                                    let _ = std::fs::remove_file("save.bin");
+                                    if let Err(err) = std::fs::write("save.bin", data) {
+                                        eprintln!("Could not write save file: {:?}", err);
                                     }
                                 }
                             }
