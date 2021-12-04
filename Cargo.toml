@@ -21,7 +21,6 @@ winit = "0.25"
 
 egui = "0.15"
 egui_wgpu_backend = "0.14"
-#egui_wgpu_backend = { git = "https://github.com/hasenbanck/egui_wgpu_backend/" }
 egui-winit = "0.15"
 
 cpal = "0.13"
