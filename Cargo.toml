@@ -18,7 +18,6 @@ pixels = "0.8"
 winit = "0.25"
 
 # rfd = "0.4" # Open file dialog for loading new ROMs?
-rust-embed = "6.3"
 
 egui = "0.15"
 egui_wgpu_backend = "0.14"

@@ -33,11 +33,6 @@ const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
 const ZOOM: f32 = 3.0;
 
-use rust_embed::RustEmbed;
-#[derive(RustEmbed)]
-#[folder = "assets/"]
-struct Asset;
-
 pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
     match mapper_from_file(cart_data.as_slice()) {
         Ok(mapper) => {
@@ -118,10 +113,7 @@ impl MyGameState {
         let rom_data = match std::env::var("ROM_FILE") {
             Ok(rom_file) => std::fs::read(&rom_file)
                 .unwrap_or_else(|_| panic!("Could not read ROM {}", rom_file)),
-            Err(_e) => Asset::get("rom.nes")
-                .expect("Missing embedded ROM")
-                .data
-                .into_owned(),
+            Err(_e) => include_bytes!("../assets/rom.nes").to_vec()
         };
 
         let mut nes = load_rom(rom_data).expect("Failed to load ROM");
