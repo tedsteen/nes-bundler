@@ -110,7 +110,7 @@ impl NetplayGui {
 
     pub(crate) fn handle_event(&mut self, _: &winit::event::WindowEvent) {}
 
-    pub(crate) fn ui(&mut self, ctx: &CtxRef, game_runner_state: &mut GameRunnerState) {
+    pub(crate) fn ui(&mut self, ctx: &CtxRef, audio_latency: u16, game_runner_state: &mut GameRunnerState) {
         Window::new("Netplay!").collapsible(false).show(ctx, |ui| {
             let state = &mut self.state;
             match state {
@@ -208,7 +208,7 @@ impl NetplayGui {
                                     .expect("Could not start P2P session");
 
                                 *game_runner_state = GameRunnerState::Playing(
-                                    MyGameState::new(),
+                                    MyGameState::new(audio_latency),
                                     PlayState::NetPlay(NetPlayState {
                                         session,
                                         player_count: ready_state.players.len(),

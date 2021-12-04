@@ -94,7 +94,7 @@ impl Gui {
         game_runner_state: &mut GameRunnerState,
     ) {
         self.settings_gui.ui(ctx, settings);
-        self.netplay_gui.ui(ctx, game_runner_state);
+        self.netplay_gui.ui(ctx, settings.audio_latency, game_runner_state);
     }
 
     /// Render egui.

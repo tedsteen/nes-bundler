@@ -109,7 +109,7 @@ struct MyGameState {
 }
 
 impl MyGameState {
-    fn new() -> Self {
+    fn new(audio_latency: u16) -> Self {
         let rom_data = match std::env::var("ROM_FILE") {
             Ok(rom_file) => std::fs::read(&rom_file)
                 .unwrap_or_else(|_| panic!("Could not read ROM {}", rom_file)),
@@ -119,7 +119,7 @@ impl MyGameState {
         let mut nes = load_rom(rom_data).expect("Failed to load ROM");
 
         let audio = Audio::new();
-        let sound_stream = audio.start(30);
+        let sound_stream = audio.start(audio_latency);
         nes.apu.set_sample_rate(sound_stream.sample_rate as u64);
 
         Self { nes, sound_stream }
@@ -208,12 +208,13 @@ struct GameRunner {
 
 impl GameRunner {
     pub async fn new(gui: Gui, pixels: Pixels) -> Self {
+        let audio_latency = 20;
         Self {
-            state: GameRunnerState::Playing(MyGameState::new(), PlayState::LocalPlay()),
+            state: GameRunnerState::Playing(MyGameState::new(audio_latency), PlayState::LocalPlay()),
             gui,
             pixels,
             settings: Settings {
-                audio_latency: 50,
+                audio_latency,
                 inputs: [
                     JoypadInputs {
                         selected: SelectedInput::Keyboard,
