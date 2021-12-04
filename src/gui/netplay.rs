@@ -202,7 +202,7 @@ impl NetplayGui {
                                 //session.set_sparse_saving(true).unwrap();
                                 session.set_fps(60).unwrap();
                                 // TODO: Make these values settings in the netplay ui
-                                session.set_frame_delay(2, local_handle).unwrap();
+                                session.set_frame_delay(1, local_handle).unwrap();
                                 session
                                     .start_session()
                                     .expect("Could not start P2P session");

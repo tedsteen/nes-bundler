@@ -119,7 +119,7 @@ impl MyGameState {
         let mut nes = load_rom(rom_data).expect("Failed to load ROM");
 
         let audio = Audio::new();
-        let sound_stream = audio.start(50);
+        let sound_stream = audio.start(30);
         nes.apu.set_sample_rate(sound_stream.sample_rate as u64);
 
         Self { nes, sound_stream }
