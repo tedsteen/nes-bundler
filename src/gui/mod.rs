@@ -3,12 +3,17 @@ use egui_wgpu_backend::{BackendError, RenderPass, ScreenDescriptor};
 use pixels::{wgpu, PixelsContext};
 use winit::window::Window;
 
+#[cfg(feature = "netplay")]
 use crate::network::p2p::P2P;
-use crate::{GameRunnerState, Settings};
+#[cfg(feature = "netplay")]
+use crate::GameRunnerState;
+use crate::{Settings};
 
+#[cfg(feature = "netplay")]
 use self::netplay::NetplayGui;
 use self::settings::SettingsGui;
 
+#[cfg(feature = "netplay")]
 mod netplay;
 mod settings;
 
@@ -23,11 +28,12 @@ pub(crate) struct Gui {
     // State for the demo app.
     pub(crate) show_gui: bool,
     settings_gui: SettingsGui,
+    #[cfg(feature = "netplay")]
     netplay_gui: NetplayGui,
 }
 // Render egui over pixels
 impl Gui {
-    pub(crate) fn new(window: &winit::window::Window, pixels: &pixels::Pixels, p2p: P2P) -> Self {
+    pub(crate) fn new(window: &winit::window::Window, pixels: &pixels::Pixels, #[cfg(feature = "netplay")] p2p: P2P) -> Self {
         let ctx = CtxRef::default();
         ctx.set_fonts(FontDefinitions::default());
         ctx.set_style(Style::default());
@@ -46,6 +52,7 @@ impl Gui {
 
             show_gui: false,
             settings_gui: SettingsGui::new(),
+            #[cfg(feature = "netplay")]
             netplay_gui: NetplayGui::new(p2p),
         }
     }
@@ -61,6 +68,7 @@ impl Gui {
             self.screen_descriptor.physical_height = size.height;
         }
         self.settings_gui.handle_event(event, settings);
+        #[cfg(feature = "netplay")]
         self.netplay_gui.handle_event(event);
         self.state.on_event(&self.ctx, event);
     }
@@ -70,13 +78,14 @@ impl Gui {
         &mut self,
         window: &Window,
         settings: &mut Settings,
+        #[cfg(feature = "netplay")]
         game_runner_state: &mut GameRunnerState,
     ) {
         // Begin the egui frame.
         self.ctx.begin_frame(self.state.take_egui_input(window));
 
         if self.show_gui {
-            self.ui(&self.ctx.clone(), settings, game_runner_state);
+            self.ui(&self.ctx.clone(), settings, #[cfg(feature = "netplay")] game_runner_state);
         }
 
         // End the egui frame and create all paint jobs to prepare for rendering.
@@ -91,9 +100,11 @@ impl Gui {
         &mut self,
         ctx: &CtxRef,
         settings: &mut Settings,
+        #[cfg(feature = "netplay")]
         game_runner_state: &mut GameRunnerState,
     ) {
         self.settings_gui.ui(ctx, settings);
+        #[cfg(feature = "netplay")]
         self.netplay_gui.ui(ctx, settings.audio_latency, game_runner_state);
     }
 

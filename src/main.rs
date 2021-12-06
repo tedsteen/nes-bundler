@@ -2,10 +2,12 @@
 #![forbid(unsafe_code)]
 
 use crate::input::{JoypadInput, StaticJoypadInput};
+#[cfg(feature = "netplay")]
 use crate::network::p2p::P2P;
 
 use audio::{Audio, Stream};
 use game_loop::game_loop;
+#[cfg(feature = "netplay")]
 use ggrs::{GGRSEvent, GGRSRequest, GameState, P2PSession, SessionState, NULL_FRAME};
 
 use egui_wgpu_backend::wgpu;
@@ -24,9 +26,11 @@ use winit::window::WindowBuilder;
 mod audio;
 mod gui;
 mod input;
+#[cfg(feature = "netplay")]
 mod network;
 
 const FPS: u32 = 60;
+#[cfg(feature = "netplay")]
 const INPUT_SIZE: usize = std::mem::size_of::<u8>();
 const MAX_PLAYERS: usize = 4;
 const WIDTH: u32 = 256;
@@ -73,8 +77,8 @@ async fn main() {
             })
             .build()
             .unwrap();
-
-        let gui = Gui::new(&window, &pixels, P2P::new(INPUT_SIZE).await);
+        let gui = Gui::new(&window, &pixels, #[cfg(feature = "netplay")] P2P::new(INPUT_SIZE).await);
+        
         (pixels, gui)
     };
 
@@ -181,8 +185,8 @@ impl JoypadInputs {
         }
     }
 }
+#[cfg(feature = "netplay")]
 struct NetPlayState {
-    session: P2PSession,
     player_count: usize,
     local_handle: usize,
     frames_to_skip: u32,
@@ -192,6 +196,7 @@ struct NetPlayState {
 #[allow(clippy::large_enum_variant)]
 enum PlayState {
     LocalPlay(),
+    #[cfg(feature = "netplay")]
     NetPlay(NetPlayState),
 }
 enum GameRunnerState {
@@ -253,31 +258,30 @@ impl GameRunner {
                             .iter()
                             .map(|inputs| match inputs.selected {
                                 SelectedInput::Keyboard => {
-                                    StaticJoypadInput(inputs.keyboard.to_u8())
+                                    StaticJoypadInput(inputs.get_pad().to_u8())
                                 }
                             })
                             .collect();
                         game_state.advance(a);
                     }
+                    #[cfg(feature = "netplay")]
                     PlayState::NetPlay(netplay_state) => {
+                        //TODO: Somewhere somehow do `session.poll_remote_clients()`
+                        
                         netplay_state.frame += 1;
                         let sess = &mut netplay_state.session;
                         sess.poll_remote_clients();
-
                         for event in sess.events() {
                             if let GGRSEvent::WaitRecommendation { skip_frames } = event {
                                 netplay_state.frames_to_skip += skip_frames;
                             }
                             println!("Event: {:?}", event);
                         }
-
                         if netplay_state.frames_to_skip > 0 {
                             netplay_state.frames_to_skip -= 1;
                             println!("Frame {} skipped: WaitRecommendation", netplay_state.frame);
                             return;
                         }
-
-                        //println!("State: {:?}", game.sess.current_state());
                         if sess.current_state() == SessionState::Running {
                             match sess.advance_frame(
                                 netplay_state.local_handle,
@@ -354,7 +358,7 @@ impl GameRunner {
         }
 
         let gui = &mut self.gui;
-        gui.prepare(window, &mut self.settings, &mut self.state);
+        gui.prepare(window, &mut self.settings, #[cfg(feature = "netplay")] &mut self.state);
 
         // Render everything together
         pixels
@@ -411,13 +415,6 @@ impl GameRunner {
                 for joypad_inputs in &mut self.settings.inputs {
                     joypad_inputs.keyboard.apply(&input);
                 }
-            }
-        }
-        
-        #[allow(clippy::collapsible_match)]
-        if let GameRunnerState::Playing(_, play_state) = &mut self.state {            
-            if let PlayState::NetPlay(netplay_state) = play_state {
-                netplay_state.session.poll_remote_clients(); //TODO: Is this a good idea?..
             }
         }
         true
