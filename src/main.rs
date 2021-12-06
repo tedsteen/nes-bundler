@@ -187,6 +187,7 @@ impl JoypadInputs {
 }
 #[cfg(feature = "netplay")]
 struct NetPlayState {
+    session: P2PSession,
     player_count: usize,
     local_handle: usize,
     frames_to_skip: u32,

@@ -241,6 +241,7 @@ impl Node {
             }
         }
     }
+    
     // const BOOTNODES: [&'static str; 4] = [
     //     "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
     //     "QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
@@ -261,10 +262,12 @@ impl Node {
             let mdns = Mdns::new(MdnsConfig::default()).await.unwrap();
             let behaviour = MyBehaviour::new(local_peer_id, mdns);
 
-//            let bootaddr = Multiaddr::from_str("/dnsaddr/bootstrap.libp2p.io").unwrap();
-//            for peer in &Node::BOOTNODES {
-//                behaviour.kademlia.add_address(&PeerId::from_str(peer).unwrap(), bootaddr.clone());
-//            }
+            // use std::str::FromStr;
+            // use libp2p::Multiaddr;
+            // let bootaddr = Multiaddr::from_str("/dnsaddr/bootstrap.libp2p.io").unwrap();
+            // for peer in &Node::BOOTNODES {
+            //     behaviour.kademlia.add_address(&PeerId::from_str(peer).unwrap(), bootaddr.clone());
+            // }
 
             SwarmBuilder::new(transport, behaviour, local_peer_id)
                 // We want the connection background tasks to be spawned
