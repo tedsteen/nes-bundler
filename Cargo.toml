@@ -14,15 +14,15 @@ netplay = ["ggrs", "webrtc", "webrtc_data", "libp2p", "futures", "serde"]
 [dependencies]
 env_logger = "0.9"
 log = "0.4"
-pixels = "0.8"
+pixels = "0.9"
 
-winit = "0.25"
+winit = "0.26"
 
 # rfd = "0.4" # Open file dialog for loading new ROMs?
 
-egui = "0.15"
-egui_wgpu_backend = "0.14"
-egui-winit = "0.15"
+egui = "0.16"
+egui_wgpu_backend = "0.16"
+egui-winit = "0.16"
 
 cpal = "0.13"
 ringbuf = "0.2"

@@ -1,4 +1,4 @@
-use egui_wgpu_backend::egui::{ClippedMesh, CtxRef, FontDefinitions, Style};
+use egui::{CtxRef, ClippedMesh, FontDefinitions, Style};
 use egui_wgpu_backend::{BackendError, RenderPass, ScreenDescriptor};
 use pixels::{wgpu, PixelsContext};
 use winit::window::Window;

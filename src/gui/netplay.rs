@@ -1,4 +1,4 @@
-use egui_wgpu_backend::egui::{Button, CtxRef, DragValue, ScrollArea, TextEdit, Window};
+use egui::{Button, CtxRef, DragValue, ScrollArea, TextEdit, Window};
 use libp2p::PeerId;
 
 use crate::{

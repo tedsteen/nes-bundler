@@ -1,4 +1,4 @@
-use egui_wgpu_backend::egui::{Button, Color32, CtxRef, Grid, Label, Slider, Ui, Window};
+use egui::{Button, Color32, CtxRef, Grid, Label, Slider, Ui, Window};
 use winit::event::ElementState;
 
 use crate::{
