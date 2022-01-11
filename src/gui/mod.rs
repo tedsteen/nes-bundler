@@ -117,7 +117,7 @@ impl Gui {
     ) -> Result<(), BackendError> {
         // Upload all resources to the GPU.
         self.rpass
-            .update_texture(&context.device, &context.queue, &self.ctx.texture());
+            .update_texture(&context.device, &context.queue, &self.ctx.font_image());
         self.rpass
             .update_user_textures(&context.device, &context.queue);
         self.rpass.update_buffers(

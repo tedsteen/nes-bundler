@@ -1,4 +1,4 @@
-use egui::{Button, Color32, CtxRef, Grid, Label, Slider, Ui, Window};
+use egui::{Button, Color32, CtxRef, Grid, Label, Slider, Ui, Window, RichText};
 use winit::event::ElementState;
 
 use crate::{
@@ -66,16 +66,16 @@ impl SettingsGui {
         keyboard_input: &mut JoypadKeyboardInput,
         button: JoypadButton,
     ) {
-        let mut label = Label::new(format!("{:?}", button));
+        let mut text = RichText::new(format!("{:?}", button));
         if keyboard_input.is_pressed(button) {
-            label = label.text_color(Color32::from_rgb(255, 255, 255));
+            text = text.color(Color32::from_rgb(255, 255, 255));
         }
-        ui.add(label);
+        ui.add(Label::new(text));
 
         match self.mapping_request {
             Some(MapRequest { pad: p, button: b }) if p == pad && b == button => {
                 if ui
-                    .add(Button::new("Cancel").text_color(Color32::from_rgb(255, 0, 0)))
+                    .add(Button::new(RichText::new("Cancel").color(Color32::from_rgb(255, 0, 0))))
                     .clicked()
                 {
                     self.mapping_request = None;
