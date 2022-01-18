@@ -291,10 +291,10 @@ impl GameRunner {
                                 Ok(requests) => {
                                     for request in requests {
                                         match request {
-                                            GGRSRequest::LoadGameState { cell } => {
+                                            GGRSRequest::LoadGameState { cell, frame: _ } => {
                                                 let g_s = cell.load();
                                                 let frame = g_s.frame;
-                                                game_state.load(&g_s.buffer.expect("No state in cell?"));
+                                                game_state.load(&g_s.data.expect("No data in cell?"));
                                                 println!(
                                                     "LOAD {}, diff in frame: {}",
                                                     g_s.checksum,
@@ -304,7 +304,7 @@ impl GameRunner {
                                             }
                                             GGRSRequest::SaveGameState { cell, frame } => {
                                                 let state = game_state.save();
-                                                let game_state = GameState::new(frame, Some(state), None);
+                                                let game_state = GameState::new(frame, Some(state));
                                                 //println!("SAVE {}", game_state.checksum);
                                                 cell.save(game_state);
                                             }

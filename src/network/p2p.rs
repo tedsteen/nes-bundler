@@ -233,8 +233,7 @@ impl P2P {
         println!("Players: {}", num_players);
 
         let sock = P2PGameNonBlockingSocket::new(ready_state);
-        let mut session = P2PSession::new_with_socket(num_players as u32, self.input_size, sock)
-            .expect("Could not create a P2P Session");
+        let mut session = P2PSession::new_with_socket(num_players as u32, self.input_size, 8, sock);
 
         let local_handle = {
             let mut local_handle = 0;
@@ -346,10 +345,11 @@ impl P2PGameNonBlockingSocket {
     }
 }
 
-impl NonBlockingSocket for P2PGameNonBlockingSocket {
-    fn send_to(&mut self, msg: &UdpMessage, addr: SocketAddr) {
+impl NonBlockingSocket<SocketAddr> for P2PGameNonBlockingSocket {
+    fn send_to(&mut self, msg: &UdpMessage, addr: &SocketAddr) {
         let msg = msg.clone();
         let sender = self.sender.clone();
+        let addr = *addr;
         self.runtime_handle.spawn(async move {
             sender.send((addr, msg)).await.unwrap();
         });
