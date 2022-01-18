@@ -46,7 +46,6 @@ impl std::fmt::Debug for PeerState {
 pub struct Peer {
     pub(crate) id: PeerId,
     pub(crate) connection_state: Receiver<PeerState>,
-    node: Node,
 }
 
 impl std::fmt::Debug for Peer {
@@ -141,7 +140,6 @@ impl Peer {
         Self {
             id,
             connection_state,
-            node: node.clone(),
         }
     }
 
