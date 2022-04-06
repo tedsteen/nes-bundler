@@ -1,4 +1,4 @@
-use egui::{Button, Color32, CtxRef, Grid, Label, Slider, Ui, Window, RichText};
+use egui::{Button, Color32, Context, Grid, Label, Slider, Ui, Window, RichText};
 use winit::event::ElementState;
 
 use crate::{
@@ -96,7 +96,7 @@ impl SettingsGui {
         ui.end_row();
     }
 
-    pub(crate) fn ui(&mut self, ctx: &CtxRef, settings: &mut Settings) {
+    pub(crate) fn ui(&mut self, ctx: &Context, settings: &mut Settings) {
         Window::new("Settings").collapsible(false).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label("Audio latency");

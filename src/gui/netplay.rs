@@ -1,4 +1,4 @@
-use egui::{Button, CtxRef, DragValue, ScrollArea, TextEdit, Window};
+use egui::{Button, Context, DragValue, ScrollArea, TextEdit, Window};
 use libp2p::PeerId;
 
 use crate::{
@@ -110,7 +110,7 @@ impl NetplayGui {
 
     pub(crate) fn handle_event(&mut self, _: &winit::event::WindowEvent) {}
 
-    pub(crate) fn ui(&mut self, ctx: &CtxRef, audio_latency: u16, game_runner_state: &mut GameRunnerState) {
+    pub(crate) fn ui(&mut self, ctx: &Context, audio_latency: u16, game_runner_state: &mut GameRunnerState) {
         Window::new("Netplay!").collapsible(false).show(ctx, |ui| {
             let state = &mut self.state;
             match state {

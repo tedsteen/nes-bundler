@@ -1,4 +1,4 @@
-use egui::{CtxRef, ClippedMesh, FontDefinitions, Style};
+use egui::{Context, ClippedMesh, FontDefinitions, Style};
 use egui_wgpu_backend::{BackendError, RenderPass, ScreenDescriptor};
 use pixels::{wgpu, PixelsContext};
 use winit::window::Window;
@@ -20,7 +20,7 @@ mod settings;
 pub(crate) struct Gui {
     // State for egui.
     state: egui_winit::State,
-    ctx: CtxRef,
+    ctx: Context,
     screen_descriptor: ScreenDescriptor,
     rpass: RenderPass,
     paint_jobs: Vec<ClippedMesh>,
@@ -34,7 +34,7 @@ pub(crate) struct Gui {
 // Render egui over pixels
 impl Gui {
     pub(crate) fn new(window: &winit::window::Window, pixels: &pixels::Pixels, #[cfg(feature = "netplay")] p2p: P2P) -> Self {
-        let ctx = CtxRef::default();
+        let ctx = Context::default();
         ctx.set_fonts(FontDefinitions::default());
         ctx.set_style(Style::default());
 
@@ -98,7 +98,7 @@ impl Gui {
     // Draw all ui
     fn ui(
         &mut self,
-        ctx: &CtxRef,
+        ctx: &Context,
         settings: &mut Settings,
         #[cfg(feature = "netplay")]
         game_runner_state: &mut GameRunnerState,
