@@ -110,7 +110,7 @@ impl NetplayGui {
 
     pub(crate) fn handle_event(&mut self, _: &winit::event::WindowEvent) {}
 
-    pub(crate) fn ui(&mut self, ctx: &Context, audio_latency: u16, game_runner_state: &mut GameRunnerState) {
+    pub(crate) fn ui(&mut self, ctx: &Context, game_runner_state: &mut GameRunnerState) {
         Window::new("Netplay!").collapsible(false).show(ctx, |ui| {
             let state = &mut self.state;
             match state {
@@ -198,22 +198,13 @@ impl NetplayGui {
                             ui.label(format!("State: Lobby is ready! - {:?}", ready_state));
                             if ui.button("Start game!").clicked() {
                                 let (mut session, local_handle) =
-                                    self.p2p.start_session(&ready_state);
-                                //session.set_sparse_saving(true).unwrap();
-                                session.set_fps(60).unwrap();
-                                // TODO: Make these values settings in the netplay ui
-                                session.set_frame_delay(1, local_handle).unwrap();
-                                session
-                                    .start_session()
-                                    .expect("Could not start P2P session");
-
+                                    self.p2p.create_session(&ready_state); // create a GGRS session
                                 *game_runner_state = GameRunnerState::Playing(
-                                    MyGameState::new(audio_latency),
+                                    MyGameState::new(),
                                     PlayState::NetPlay(NetPlayState {
                                         session,
                                         player_count: ready_state.players.len(),
                                         local_handle,
-                                        frames_to_skip: 0,
                                         frame: 0,
                                     }),
                                 );

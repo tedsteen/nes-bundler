@@ -1,5 +1,6 @@
 use tokio::runtime::Handle;
 
+use crate::MyGameState;
 use crate::network::discovery::{self, Node};
 use crate::network::peer::{Peer, PeerState};
 
@@ -7,8 +8,16 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::{collections::HashMap, net::SocketAddr};
 
-use ggrs::{NonBlockingSocket, P2PSession, PlayerType, UdpMessage};
+use ggrs::{NonBlockingSocket, P2PSession, PlayerType, Message, Config, SessionBuilder};
 use libp2p::{bytes::Bytes, PeerId};
+
+#[derive(Debug)]
+pub(crate) struct GGRSConfig;
+impl Config for GGRSConfig {
+    type Input = u8;
+    type State = MyGameState;
+    type Address = SocketAddr;
+}
 
 #[derive(Debug, Clone)]
 pub(crate) enum Participant {
@@ -228,24 +237,30 @@ impl P2P {
         game
     }
 
-    pub(crate) fn start_session(&self, ready_state: &ReadyState) -> (P2PSession, usize) {
+    pub(crate) fn create_session(&self, ready_state: &ReadyState) -> (P2PSession<GGRSConfig>, usize) {
         let num_players = ready_state.players.len() + ready_state.spectators.len();
         println!("Players: {}", num_players);
 
         let sock = P2PGameNonBlockingSocket::new(ready_state);
-        let mut session = P2PSession::new_with_socket(num_players as u32, self.input_size, 8, sock);
 
+        let mut sess_build = SessionBuilder::<GGRSConfig>::new()
+        .with_num_players(ready_state.players.len())
+        .with_fps(60).unwrap() // (optional) set expected update frequency
+        //.with_sparse_saving_mode(true)
+        // TODO: Make these values settings in the netplay ui
+        .with_input_delay(1); // (optional) set input delay for the local player
+        
         let local_handle = {
             let mut local_handle = 0;
             for (slot_idx, slot) in ready_state.players.iter().enumerate() {
                 match slot {
                     Participant::Local(_) => {
                         println!("Add local player {}", slot_idx);
-                        local_handle = session.add_player(PlayerType::Local, slot_idx).unwrap();
+                        sess_build = sess_build.add_player(PlayerType::Local, slot_idx).unwrap();
                     }
                     Participant::Remote(_, addr) => {
                         println!("Add remote player {:?}", addr);
-                        session
+                        sess_build = sess_build
                             .add_player(PlayerType::Remote(*addr), slot_idx)
                             .unwrap();
                     }
@@ -253,6 +268,8 @@ impl P2P {
             }
             local_handle
         };
+
+        let session = sess_build.start_p2p_session(sock).unwrap();
         (session, local_handle)
     }
 }
@@ -260,8 +277,8 @@ impl P2P {
 const RECV_BUFFER_SIZE: usize = 4096;
 pub(crate) struct P2PGameNonBlockingSocket {
     runtime_handle: Handle,
-    reader: tokio::sync::mpsc::Receiver<(std::net::SocketAddr, UdpMessage)>,
-    sender: tokio::sync::mpsc::Sender<(std::net::SocketAddr, UdpMessage)>,
+    reader: tokio::sync::mpsc::Receiver<(std::net::SocketAddr, Message)>,
+    sender: tokio::sync::mpsc::Sender<(std::net::SocketAddr, Message)>,
 }
 
 impl P2PGameNonBlockingSocket {
@@ -289,7 +306,7 @@ impl P2PGameNonBlockingSocket {
                             PeerState::Connected(channel) => {
                                 while let Ok(number_of_bytes) = channel.read(&mut buffer).await {
                                     assert!(number_of_bytes <= RECV_BUFFER_SIZE);
-                                    if let Ok(msg) = bincode::deserialize::<UdpMessage>(
+                                    if let Ok(msg) = bincode::deserialize::<Message>(
                                         &buffer[0..number_of_bytes],
                                     ) {
                                         //println!("READ: {:?} - {:?}", msg, src_addr);
@@ -315,7 +332,7 @@ impl P2PGameNonBlockingSocket {
         }
 
         // Write loop
-        let (sender, mut rx) = tokio::sync::mpsc::channel::<(SocketAddr, UdpMessage)>(100);
+        let (sender, mut rx) = tokio::sync::mpsc::channel::<(SocketAddr, Message)>(100);
         runtime_handle.spawn({
             async move {
                 while let Some((addr, msg)) = rx.recv().await {
@@ -346,7 +363,7 @@ impl P2PGameNonBlockingSocket {
 }
 
 impl NonBlockingSocket<SocketAddr> for P2PGameNonBlockingSocket {
-    fn send_to(&mut self, msg: &UdpMessage, addr: &SocketAddr) {
+    fn send_to(&mut self, msg: &Message, addr: &SocketAddr) {
         let msg = msg.clone();
         let sender = self.sender.clone();
         let addr = *addr;
@@ -355,7 +372,7 @@ impl NonBlockingSocket<SocketAddr> for P2PGameNonBlockingSocket {
         });
     }
 
-    fn receive_all_messages(&mut self) -> Vec<(SocketAddr, UdpMessage)> {
+    fn receive_all_messages(&mut self) -> Vec<(SocketAddr, Message)> {
         let mut messages = Vec::new();
         while let Ok(msg) = self.reader.try_recv() {
             messages.push(msg);

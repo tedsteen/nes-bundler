@@ -388,7 +388,7 @@ impl Node {
                             Command::GetRecord(key, responder) => {
                                 //println!("Getting record: {:?}", key);
                                 let query_id =
-                                    swarm.behaviour_mut().kademlia.get_record(&key, Quorum::One);
+                                    swarm.behaviour_mut().kademlia.get_record(key, Quorum::One);
                                 catch_event(
                                     Ok(query_id),
                                     event_bus.subscribe(),
