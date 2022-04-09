@@ -1,4 +1,4 @@
-use egui::{Context, ClippedMesh, FontDefinitions, Style};
+use egui::{Context, ClippedMesh, FontDefinitions, Style, TexturesDelta};
 use egui_wgpu_backend::{BackendError, RenderPass, ScreenDescriptor};
 use pixels::{wgpu, PixelsContext};
 use winit::window::Window;
@@ -19,11 +19,12 @@ mod settings;
 
 pub(crate) struct Gui {
     // State for egui.
-    state: egui_winit::State,
     ctx: Context,
+    state: egui_winit::State,
     screen_descriptor: ScreenDescriptor,
     rpass: RenderPass,
     paint_jobs: Vec<ClippedMesh>,
+    textures: TexturesDelta,
 
     // State for the demo app.
     pub(crate) show_gui: bool,
@@ -38,9 +39,13 @@ impl Gui {
         ctx.set_fonts(FontDefinitions::default());
         ctx.set_style(Style::default());
 
+        let max_texture_size = pixels.device().limits().max_texture_dimension_2d as usize;
         let window_size = window.inner_size();
+        let scale_factor = window.scale_factor() as f32;
+
+        let textures = TexturesDelta::default();
         Self {
-            state: egui_winit::State::new(window),
+            state: egui_winit::State::from_pixels_per_point(max_texture_size, scale_factor),
             ctx,
             screen_descriptor: ScreenDescriptor {
                 physical_width: window_size.width,
@@ -51,6 +56,7 @@ impl Gui {
             paint_jobs: Vec::new(),
 
             show_gui: false,
+            textures,
             settings_gui: SettingsGui::new(),
             #[cfg(feature = "netplay")]
             netplay_gui: NetplayGui::new(p2p),
@@ -81,18 +87,16 @@ impl Gui {
         #[cfg(feature = "netplay")]
         game_runner_state: &mut GameRunnerState,
     ) {
-        // Begin the egui frame.
-        self.ctx.begin_frame(self.state.take_egui_input(window));
+        let output = self.ctx.clone().run(self.state.take_egui_input(window), |ctx| {
+            if self.show_gui {
+                self.ui(&ctx, settings, #[cfg(feature = "netplay")] game_runner_state);
+            }
+        });
 
-        if self.show_gui {
-            self.ui(&self.ctx.clone(), settings, #[cfg(feature = "netplay")] game_runner_state);
-        }
-
-        // End the egui frame and create all paint jobs to prepare for rendering.
-        let (output, shapes) = self.ctx.end_frame();
-        self.state.handle_output(window, &self.ctx, output);
-
-        self.paint_jobs = self.ctx.tessellate(shapes);
+        self.textures.append(output.textures_delta);
+        self.state
+            .handle_platform_output(window, &self.ctx, output.platform_output);
+        self.paint_jobs = self.ctx.tessellate(output.shapes);
     }
 
     // Draw all ui
@@ -105,7 +109,7 @@ impl Gui {
     ) {
         self.settings_gui.ui(ctx, settings);
         #[cfg(feature = "netplay")]
-        self.netplay_gui.ui(ctx, settings.audio_latency, game_runner_state);
+        self.netplay_gui.ui(ctx, game_runner_state);
     }
 
     /// Render egui.
@@ -117,9 +121,7 @@ impl Gui {
     ) -> Result<(), BackendError> {
         // Upload all resources to the GPU.
         self.rpass
-            .update_texture(&context.device, &context.queue, &self.ctx.font_image());
-        self.rpass
-            .update_user_textures(&context.device, &context.queue);
+            .add_textures(&context.device, &context.queue, &self.textures)?;
         self.rpass.update_buffers(
             &context.device,
             &context.queue,
@@ -134,6 +136,10 @@ impl Gui {
             &self.paint_jobs,
             &self.screen_descriptor,
             None,
-        )
+        )?;
+
+        // Cleanup
+        let textures = std::mem::take(&mut self.textures);
+        self.rpass.remove_textures(textures)
     }
 }
