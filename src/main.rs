@@ -32,8 +32,6 @@ mod input;
 mod network;
 
 const FPS: u32 = 60;
-#[cfg(feature = "netplay")]
-const INPUT_SIZE: usize = std::mem::size_of::<u8>();
 const MAX_PLAYERS: usize = 4;
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
@@ -43,7 +41,6 @@ pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
     match mapper_from_file(cart_data.as_slice()) {
         Ok(mapper) => {
             mapper.print_debug_status();
-            
             let mut nes = NesState::new(mapper);
             nes.power_on();
             Ok(nes)
@@ -79,7 +76,7 @@ async fn main() {
             })
             .build()
             .unwrap();
-        let gui = Gui::new(&window, &pixels, #[cfg(feature = "netplay")] P2P::new(INPUT_SIZE).await);
+        let gui = Gui::new(&window, &pixels, #[cfg(feature = "netplay")] P2P::new().await);
         
         (pixels, gui)
     };
@@ -111,14 +108,15 @@ async fn main() {
 
 struct MyGameState {
     nes: NesState,
+    frame: Frame
 }
 
 impl Clone for MyGameState {
     fn clone(&self) -> Self {
         let data = self.nes.save_state();
-        let nes = NesState::new(self.nes.mapper);
-        self.nes.load_state(&mut data.to_vec());
-        Self { nes }
+        let mut nes = NesState::new(self.nes.mapper.clone());
+        nes.load_state(&mut data.to_vec());
+        Self { nes, frame: self.frame }
     }
 }
 
@@ -130,20 +128,26 @@ impl MyGameState {
             Err(_e) => include_bytes!("../assets/rom.nes").to_vec()
         };
 
-        let mut nes = load_rom(rom_data).expect("Failed to load ROM");
-        Self { nes }
+        let nes = load_rom(rom_data).expect("Failed to load ROM");
+        Self { nes, frame: 0 }
     }
-    
-    pub fn load(&mut self, data: &[u8]) {
-        self.nes.load_state(&mut data.to_vec());
+
+    fn load(&mut self, cell: GameStateCell<MyGameState>) {
+        //println!("Load state");
+        let loaded_state = cell.load().expect("No data found.");
+        self.nes = loaded_state.nes;
+        self.frame = loaded_state.frame;
         self.nes.apu.consume_samples(); //Clear audio buffer so we don't build up a delay
     }
 
-    pub fn save(&self) -> Vec<u8> {
-        self.nes.save_state()
+    fn save(&mut self, cell: GameStateCell<MyGameState>, frame: Frame) {
+        //println!("Save state");
+        assert_eq!(self.frame, frame);
+        cell.save(frame, Some(self.clone()), None);
     }
-
-    pub fn advance(&mut self, inputs: Vec<StaticJoypadInput>, sound_stream: Stream) {
+    
+    pub fn advance(&mut self, inputs: Vec<StaticJoypadInput>, sound_stream: &mut Stream) {
+        self.frame += 1;
         //println!("Advancing! {:?}", inputs);
         self.nes.p1_input = inputs[0].to_u8();
         self.nes.p2_input = inputs[1].to_u8();
@@ -193,8 +197,6 @@ impl JoypadInputs {
 pub(crate) struct NetPlayState {
     session: P2PSession<GGRSConfig>,
     player_count: usize,
-    local_handle: usize,
-    frame: i32,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -203,6 +205,8 @@ enum PlayState {
     #[cfg(feature = "netplay")]
     NetPlay(NetPlayState),
 }
+
+#[allow(clippy::large_enum_variant)]
 enum GameRunnerState {
     Playing(MyGameState, PlayState),
     #[allow(dead_code)] // Calm down.. it's coming..
@@ -254,42 +258,18 @@ impl GameRunner {
     }
 
     // for each request, call the appropriate function
-    pub fn handle_requests(&mut self, requests: Vec<GGRSRequest<GGRSConfig>>) {
+    pub fn handle_requests(game_state: &mut MyGameState, requests: Vec<GGRSRequest<GGRSConfig>>, sound_stream: &mut Stream) {
         for request in requests {
             match request {
-                GGRSRequest::LoadGameState { cell, .. } => self.load_game_state(cell),
-                GGRSRequest::SaveGameState { cell, frame } => self.save_game_state(cell, frame),
-                GGRSRequest::AdvanceFrame { inputs } => self.advance_frame(vec![StaticJoypadInput(inputs[0].0)]),
+                GGRSRequest::LoadGameState { cell, .. } => game_state.load(cell),
+                GGRSRequest::SaveGameState { cell, frame } => game_state.save(cell, frame),
+                GGRSRequest::AdvanceFrame { inputs } => game_state.advance(vec![StaticJoypadInput(inputs[0].0), StaticJoypadInput(inputs[1].0)], sound_stream),
             }
         }
     }
     
-    // save current gamestate, create a checksum
-    // creating a checksum here is only relevant for SyncTestSessions
-    fn save_game_state(&mut self, cell: GameStateCell<MyGameState>, frame: Frame) {
-        if let GameRunnerState::Playing(state, ..) = self.state {
-            //TODO: assert_eq!(state.frame, frame);
-            cell.save(frame, Some(state.clone()), None);
-        }
-    }
-
-    // load gamestate and overwrite
-    fn load_game_state(&mut self, cell: GameStateCell<MyGameState>) {
-        if let GameRunnerState::Playing(state, ..) = self.state {
-            state = cell.load().expect("No data found.");
-        }
-    }
-
-    fn advance_frame(&mut self, inputs: Vec<StaticJoypadInput>) {
-        // advance the game state
-        if let GameRunnerState::Playing(state, ..) = self.state {
-            state.advance(inputs, self.sound_stream);
-        }
-    }
-
     pub fn advance(&mut self) {
-        let state = &mut self.state;
-        match state {
+        match &mut self.state {
             GameRunnerState::Playing(game_state, play_state) => {
                 self
                 .sound_stream
@@ -297,7 +277,7 @@ impl GameRunner {
 
                 match play_state {
                     PlayState::LocalPlay() => {
-                        let a = self
+                        let inputs = self
                             .settings
                             .inputs
                             .iter()
@@ -307,20 +287,19 @@ impl GameRunner {
                                 }
                             })
                             .collect();
-                        let sound_data = game_state.advance(a, self.sound_stream);
+                        game_state.advance(inputs, &mut self.sound_stream);
                     }
                     #[cfg(feature = "netplay")]
                     PlayState::NetPlay(netplay_state) => {
                         //TODO: Somewhere somehow do `session.poll_remote_clients()`
                         
-                        netplay_state.frame += 1;
                         let sess = &mut netplay_state.session;
                         sess.poll_remote_clients();
                         for event in sess.events() {
                             println!("Event: {:?}", event);
                         }
                         if sess.frames_ahead() > 0 {
-                            println!("Frame {} skipped: WaitRecommendation", netplay_state.frame);
+                            println!("Frame {} skipped: WaitRecommendation", game_state.frame);
                             return;
                         }
                         if sess.current_state() == SessionState::Running {
@@ -330,18 +309,17 @@ impl GameRunner {
                             }
 
                             match sess.advance_frame() {
-                                Ok(requests) => { self.handle_requests(requests); }
+                                Ok(requests) => { GameRunner::handle_requests(game_state, requests, &mut self.sound_stream); }
                                 Err(ggrs::GGRSError::PredictionThreshold) => {
                                     println!(
-                                        "Frame {} skipped: PredictionThreshold",
-                                        netplay_state.frame
+                                        "Frame {} skipped: PredictionThreshold", game_state.frame
                                     );
                                 }
                                 Err(e) => eprintln!("Ouch :( {:?}", e),
                             }
 
                             //regularily print networks stats
-                            if netplay_state.frame % 120 == 0 {
+                            if game_state.frame % 120 == 0 {
                                 for i in 0..netplay_state.player_count {
                                     if let Ok(stats) = sess.network_stats(i as usize) {
                                         println!("NetworkStats to player {}: {:?}", i, stats);
@@ -400,7 +378,7 @@ impl GameRunner {
                             }
                             VirtualKeyCode::F1 => {
                                 if let GameRunnerState::Playing(game_state, _) = &mut self.state {
-                                    let data = game_state.save();
+                                    let data = game_state.nes.save_state();
                                     let _ = std::fs::remove_file("save.bin");
                                     if let Err(err) = std::fs::write("save.bin", data) {
                                         eprintln!("Could not write save file: {:?}", err);
@@ -410,8 +388,8 @@ impl GameRunner {
                             VirtualKeyCode::F2 => {
                                 if let GameRunnerState::Playing(game_state, _) = &mut self.state {
                                     match std::fs::read("save.bin") {
-                                        Ok(bytes) => {
-                                            game_state.load(&bytes);
+                                        Ok(mut bytes) => {
+                                            game_state.nes.load_state(&mut bytes);
                                             self.sound_stream.drain();
                                         },
                                         Err(err) =>  eprintln!("Could not read savefile: {:?}", err)

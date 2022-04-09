@@ -197,15 +197,12 @@ impl NetplayGui {
                         GameState::Ready(ready_state) => {
                             ui.label(format!("State: Lobby is ready! - {:?}", ready_state));
                             if ui.button("Start game!").clicked() {
-                                let (mut session, local_handle) =
-                                    self.p2p.create_session(&ready_state); // create a GGRS session
+                                let session = self.p2p.create_session(&ready_state); // create a GGRS session
                                 *game_runner_state = GameRunnerState::Playing(
                                     MyGameState::new(),
                                     PlayState::NetPlay(NetPlayState {
                                         session,
                                         player_count: ready_state.players.len(),
-                                        local_handle,
-                                        frame: 0,
                                     }),
                                 );
                             }

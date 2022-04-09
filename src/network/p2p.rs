@@ -174,16 +174,14 @@ impl P2PGame {
 #[derive(Debug, Clone)]
 pub(crate) struct P2P {
     node: Node,
-    pub(crate) input_size: usize,
     peers: Arc<Mutex<HashMap<PeerId, Peer>>>,
 }
 
 impl P2P {
-    pub(crate) async fn new(input_size: usize) -> Self {
+    pub(crate) async fn new() -> Self {
         let node = discovery::Node::new().await;
         Self {
             node,
-            input_size,
             peers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -237,7 +235,7 @@ impl P2P {
         game
     }
 
-    pub(crate) fn create_session(&self, ready_state: &ReadyState) -> (P2PSession<GGRSConfig>, usize) {
+    pub(crate) fn create_session(&self, ready_state: &ReadyState) -> P2PSession<GGRSConfig> {
         let num_players = ready_state.players.len() + ready_state.spectators.len();
         println!("Players: {}", num_players);
 
@@ -246,31 +244,26 @@ impl P2P {
         let mut sess_build = SessionBuilder::<GGRSConfig>::new()
         .with_num_players(ready_state.players.len())
         .with_fps(60).unwrap() // (optional) set expected update frequency
-        //.with_sparse_saving_mode(true)
+        .with_sparse_saving_mode(true)
         // TODO: Make these values settings in the netplay ui
         .with_input_delay(1); // (optional) set input delay for the local player
         
-        let local_handle = {
-            let mut local_handle = 0;
-            for (slot_idx, slot) in ready_state.players.iter().enumerate() {
-                match slot {
-                    Participant::Local(_) => {
-                        println!("Add local player {}", slot_idx);
-                        sess_build = sess_build.add_player(PlayerType::Local, slot_idx).unwrap();
-                    }
-                    Participant::Remote(_, addr) => {
-                        println!("Add remote player {:?}", addr);
-                        sess_build = sess_build
-                            .add_player(PlayerType::Remote(*addr), slot_idx)
-                            .unwrap();
-                    }
+        for (slot_idx, slot) in ready_state.players.iter().enumerate() {
+            match slot {
+                Participant::Local(_) => {
+                    println!("Add local player {}", slot_idx);
+                    sess_build = sess_build.add_player(PlayerType::Local, slot_idx).unwrap();
+                }
+                Participant::Remote(_, addr) => {
+                    println!("Add remote player {:?}", addr);
+                    sess_build = sess_build
+                        .add_player(PlayerType::Remote(*addr), slot_idx)
+                        .unwrap();
                 }
             }
-            local_handle
-        };
+        }
 
-        let session = sess_build.start_p2p_session(sock).unwrap();
-        (session, local_handle)
+        sess_build.start_p2p_session(sock).unwrap()
     }
 }
 

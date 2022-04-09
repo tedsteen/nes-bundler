@@ -89,7 +89,7 @@ impl Gui {
     ) {
         let output = self.ctx.clone().run(self.state.take_egui_input(window), |ctx| {
             if self.show_gui {
-                self.ui(&ctx, settings, #[cfg(feature = "netplay")] game_runner_state);
+                self.ui(ctx, settings, #[cfg(feature = "netplay")] game_runner_state);
             }
         });
 

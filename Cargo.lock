@@ -4406,7 +4406,6 @@ dependencies = [
 [[package]]
 name = "rusticnes-core"
 version = "0.2.0"
-source = "git+https://github.com/tedsteen/rusticnes-core?branch=for-rusticnes-test#84487e7521bc86eb1548bd86bbe704a5ab7d4d17"
 
 [[package]]
 name = "rusticnes-test"

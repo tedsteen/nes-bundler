@@ -187,7 +187,7 @@ impl Node {
     }
 
     pub(crate) async fn start_providing(&self, key: &str) {
-        let key = Key::new(&key.to_string());
+        let key = Key::new(&key);
         while let Err(err) = self.try_start_providing(key.clone()).await {
             eprintln!(
                 "Failed to start providing {:?} - ({:?}), retrying...",
@@ -198,7 +198,7 @@ impl Node {
     }
     pub(crate) async fn get_providers(&self, key: &str) -> HashSet<PeerId> {
         loop {
-            match self.try_get_providers(Key::new(&key.to_string())).await {
+            match self.try_get_providers(Key::new(&key)).await {
                 Ok(ok) => {
                     break ok.providers;
                 }
@@ -215,7 +215,7 @@ impl Node {
 
     //TODO: Make value type generic and user serde to serialize
     pub(crate) async fn put_record(&self, key: &str, value: Vec<u8>, expires: Option<Instant>) {
-        let key = Key::new(&key.to_string());
+        let key = Key::new(&key);
         let record = Record {
             key,
             value,
@@ -231,7 +231,7 @@ impl Node {
 
     //TODO: Make return type generic and user serde to deserialize
     pub(crate) async fn get_record(&self, key: &str) -> Option<Vec<u8>> {
-        match self.try_get_record(Key::new(&key.to_string())).await {
+        match self.try_get_record(Key::new(&key)).await {
             Ok(ok) => {
                 Some(ok.records[0].record.value.clone()) //TODO: How about not cloning?..
             }
