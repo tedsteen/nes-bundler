@@ -1,4 +1,6 @@
+use egui_winit::egui as egui;
 use egui::{Button, Color32, Context, Grid, Label, Slider, Ui, Window, RichText};
+use egui_winit::winit as winit;
 use winit::event::ElementState;
 
 use crate::{

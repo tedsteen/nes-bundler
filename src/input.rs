@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-
+use egui_winit::winit as winit;
 use winit::event::VirtualKeyCode;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

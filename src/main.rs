@@ -11,15 +11,15 @@ use ggrs::{P2PSession, GameStateCell, Frame};
 #[cfg(feature = "netplay")]
 use ggrs::{GGRSRequest, SessionState};
 
-use egui_wgpu_backend::wgpu;
 use gui::Gui;
 use input::{JoypadKeyMap, JoypadKeyboardInput};
 use log::error;
 use network::p2p::{GGRSConfig};
-use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
+use pixels::{Pixels, SurfaceTexture};
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
 use rusticnes_core::palettes::NTSC_PAL;
+use egui_winit::winit as winit;
 use winit::dpi::LogicalSize;
 use winit::event::{Event as WinitEvent, VirtualKeyCode};
 use winit::event_loop::EventLoop;
@@ -68,14 +68,7 @@ async fn main() {
         let window_size = window.inner_size();
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
 
-        let pixels = PixelsBuilder::new(WIDTH, HEIGHT, surface_texture)
-            .request_adapter_options(wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: None,
-                force_fallback_adapter: false,
-            })
-            .build()
-            .unwrap();
+        let pixels = Pixels::new(WIDTH, HEIGHT, surface_texture).expect("Could not create pixels");
         let gui = Gui::new(&window, &pixels, #[cfg(feature = "netplay")] P2P::new().await);
         
         (pixels, gui)
@@ -334,7 +327,7 @@ impl GameRunner {
         }
     }
 
-    pub fn render(&mut self, window: &winit::window::Window) -> bool {
+    pub fn render(&mut self, window: &winit::window::Window) {
         let pixels = &mut self.pixels;
 
         if let GameRunnerState::Playing(game_state, _) = &self.state {
@@ -346,24 +339,25 @@ impl GameRunner {
         gui.prepare(window, &mut self.settings, #[cfg(feature = "netplay")] &mut self.state);
 
         // Render everything together
-        pixels
-            .render_with(|encoder, render_target, context| {
-                // Render the world texture
-                context.scaling_renderer.render(encoder, render_target);
-                // Render egui
-                gui.render(encoder, render_target, context)
-                    .expect("GUI failed to render");
-                Ok(())
-            })
-            .map_err(|e| error!("pixels.render() failed: {}", e))
-            .is_err()
+        let render_result = pixels.render_with(|encoder, render_target, context| {
+            // Render the world texture
+            context.scaling_renderer.render(encoder, render_target);
+
+            // Render egui
+            gui.render(encoder, render_target, context);
+
+            Ok(())
+        });
+        if render_result.map_err(|e| error!("pixels.render() failed: {}", e)).is_err() {
+            //TODO: what to do here?
+        }
     }
 
-    pub fn handle(&mut self, event: winit::event::Event<()>) -> bool {
+    pub fn handle(&mut self, event: &winit::event::Event<()>) -> bool {
         // Handle input events
         if let WinitEvent::WindowEvent { event, .. } = event {
             // Update egui inputs
-            self.gui.handle_event(&event, &mut self.settings);
+            self.gui.handle_event(event, &mut self.settings);
 
             if let winit::event::WindowEvent::Resized(size) = event {
                 self.pixels.resize_surface(size.width, size.height);
@@ -401,7 +395,7 @@ impl GameRunner {
                     }
                 }
                 for joypad_inputs in &mut self.settings.inputs {
-                    joypad_inputs.keyboard.apply(&input);
+                    joypad_inputs.keyboard.apply(input);
                 }
             }
         }

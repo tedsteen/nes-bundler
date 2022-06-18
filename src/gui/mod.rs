@@ -1,6 +1,8 @@
-use egui::{Context, ClippedMesh, FontDefinitions, Style, TexturesDelta};
-use egui_wgpu_backend::{BackendError, RenderPass, ScreenDescriptor};
+use egui_winit::egui as egui;
+use egui::{Context, ClippedPrimitive, TexturesDelta};
+use egui_wgpu::renderer::{RenderPass, ScreenDescriptor};
 use pixels::{wgpu, PixelsContext};
+use egui_winit::winit as winit;
 use winit::window::Window;
 
 #[cfg(feature = "netplay")]
@@ -23,7 +25,7 @@ pub(crate) struct Gui {
     state: egui_winit::State,
     screen_descriptor: ScreenDescriptor,
     rpass: RenderPass,
-    paint_jobs: Vec<ClippedMesh>,
+    paint_jobs: Vec<ClippedPrimitive>,
     textures: TexturesDelta,
 
     // State for the demo app.
@@ -35,28 +37,25 @@ pub(crate) struct Gui {
 // Render egui over pixels
 impl Gui {
     pub(crate) fn new(window: &winit::window::Window, pixels: &pixels::Pixels, #[cfg(feature = "netplay")] p2p: P2P) -> Self {
-        let ctx = Context::default();
-        ctx.set_fonts(FontDefinitions::default());
-        ctx.set_style(Style::default());
-
         let max_texture_size = pixels.device().limits().max_texture_dimension_2d as usize;
+
         let window_size = window.inner_size();
+        let width = window_size.width;
+        let height = window_size.height;
         let scale_factor = window.scale_factor() as f32;
 
-        let textures = TexturesDelta::default();
         Self {
+            ctx: Context::default(),
             state: egui_winit::State::from_pixels_per_point(max_texture_size, scale_factor),
-            ctx,
             screen_descriptor: ScreenDescriptor {
-                physical_width: window_size.width,
-                physical_height: window_size.height,
-                scale_factor: window.scale_factor() as f32,
+                size_in_pixels: [width, height],
+                pixels_per_point: scale_factor,
             },
             rpass: RenderPass::new(pixels.device(), pixels.render_texture_format(), 1),
             paint_jobs: Vec::new(),
 
             show_gui: false,
-            textures,
+            textures: TexturesDelta::default(),
             settings_gui: SettingsGui::new(),
             #[cfg(feature = "netplay")]
             netplay_gui: NetplayGui::new(p2p),
@@ -70,27 +69,28 @@ impl Gui {
         settings: &mut Settings,
     ) {
         if let winit::event::WindowEvent::Resized(size) = event {
-            self.screen_descriptor.physical_width = size.width;
-            self.screen_descriptor.physical_height = size.height;
+            if size.width > 0 && size.height > 0 {
+                self.screen_descriptor.size_in_pixels = [size.width, size.height];
+            }
         }
+        //TODO: Check if scale factor changes
         self.settings_gui.handle_event(event, settings);
         #[cfg(feature = "netplay")]
         self.netplay_gui.handle_event(event);
         self.state.on_event(&self.ctx, event);
     }
 
-    /// Prepare egui.
     pub(crate) fn prepare(
         &mut self,
         window: &Window,
         settings: &mut Settings,
         #[cfg(feature = "netplay")]
-        game_runner_state: &mut GameRunnerState,
-    ) {
-        let output = self.ctx.clone().run(self.state.take_egui_input(window), |ctx| {
-            if self.show_gui {
-                self.ui(ctx, settings, #[cfg(feature = "netplay")] game_runner_state);
-            }
+        game_runner_state: &mut GameRunnerState) {
+        // Run the egui frame and create all paint jobs to prepare for rendering.
+        let raw_input = self.state.take_egui_input(window);
+        let output = self.ctx.clone().run(raw_input, |egui_ctx| {
+            // Draw the demo application.
+            self.ui(egui_ctx, settings, #[cfg(feature = "netplay")] game_runner_state);
         });
 
         self.textures.append(output.textures_delta);
@@ -118,10 +118,12 @@ impl Gui {
         encoder: &mut wgpu::CommandEncoder,
         render_target: &wgpu::TextureView,
         context: &PixelsContext,
-    ) -> Result<(), BackendError> {
+    ) {
         // Upload all resources to the GPU.
-        self.rpass
-            .add_textures(&context.device, &context.queue, &self.textures)?;
+        for (id, image_delta) in &self.textures.set {
+            self.rpass
+                .update_texture(&context.device, &context.queue, *id, image_delta);
+        }
         self.rpass.update_buffers(
             &context.device,
             &context.queue,
@@ -136,10 +138,12 @@ impl Gui {
             &self.paint_jobs,
             &self.screen_descriptor,
             None,
-        )?;
+        );
 
         // Cleanup
         let textures = std::mem::take(&mut self.textures);
-        self.rpass.remove_textures(textures)
+        for id in &textures.free {
+            self.rpass.free_texture(id);
+        }
     }
 }

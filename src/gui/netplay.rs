@@ -1,5 +1,7 @@
+use egui_winit::egui as egui;
 use egui::{Button, Context, DragValue, ScrollArea, TextEdit, Window};
 use libp2p::PeerId;
+use egui_winit::winit as winit;
 
 use crate::{
     network::p2p::{GameState, P2PGame, P2P},
