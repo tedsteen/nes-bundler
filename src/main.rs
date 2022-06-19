@@ -357,6 +357,9 @@ impl GameRunner {
     pub fn handle(&mut self, event: &winit::event::Event<()>) -> bool {
         // Handle input events
         if let WinitEvent::WindowEvent { event, .. } = event {
+            if let winit::event::WindowEvent::CloseRequested = event {
+                return false;
+            }
             if let winit::event::WindowEvent::ScaleFactorChanged{ scale_factor, new_inner_size: _ } = event {
                 self.gui_framework.scale_factor(*scale_factor);
             }
