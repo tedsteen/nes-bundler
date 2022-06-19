@@ -11,7 +11,7 @@ use ggrs::{P2PSession, GameStateCell, Frame};
 #[cfg(feature = "netplay")]
 use ggrs::{GGRSRequest, SessionState};
 
-use gui::Gui;
+use gui::Framework;
 use input::{JoypadKeyMap, JoypadKeyboardInput};
 use log::error;
 use network::p2p::{GGRSConfig};
@@ -64,17 +64,18 @@ async fn main() {
             .unwrap()
     };
 
-    let (pixels, gui) = {
+    let (pixels, framework) = {
         let window_size = window.inner_size();
+        let scale_factor = window.scale_factor() as f32;
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
+        let pixels = Pixels::new(WIDTH, HEIGHT, surface_texture).expect("No pixels available");
+        let framework =
+            Framework::new(window_size.width, window_size.height, scale_factor, &pixels, #[cfg(feature = "netplay")] P2P::new().await);
 
-        let pixels = Pixels::new(WIDTH, HEIGHT, surface_texture).expect("Could not create pixels");
-        let gui = Gui::new(&window, &pixels, #[cfg(feature = "netplay")] P2P::new().await);
-        
-        (pixels, gui)
+        (pixels, framework)
     };
-
-    let game_runner = GameRunner::new(gui, pixels).await;
+    
+    let game_runner = GameRunner::new(framework, pixels).await;
 
     game_loop(
         event_loop,
@@ -208,13 +209,13 @@ enum GameRunnerState {
 struct GameRunner {
     state: GameRunnerState,
     sound_stream: Stream,
-    gui: Gui,
+    gui_framework: Framework,
     pixels: Pixels,
     settings: Settings,
 }
 
 impl GameRunner {
-    pub async fn new(gui: Gui, pixels: Pixels) -> Self {
+    pub async fn new(gui_framework: Framework, pixels: Pixels) -> Self {
         let audio_latency = 20;
         let audio = Audio::new();
         let sound_stream = audio.start(audio_latency);
@@ -224,7 +225,7 @@ impl GameRunner {
         Self {
             state: GameRunnerState::Playing(my_state, PlayState::LocalPlay()),
             sound_stream,
-            gui,
+            gui_framework,
             pixels,
             settings: Settings {
                 audio_latency,
@@ -335,8 +336,8 @@ impl GameRunner {
             game_state.render(frame);
         }
 
-        let gui = &mut self.gui;
-        gui.prepare(window, &mut self.settings, #[cfg(feature = "netplay")] &mut self.state);
+        let gui_framework = &mut self.gui_framework;
+        gui_framework.prepare(window, &mut self.settings, #[cfg(feature = "netplay")] &mut self.state);
 
         // Render everything together
         let render_result = pixels.render_with(|encoder, render_target, context| {
@@ -344,7 +345,7 @@ impl GameRunner {
             context.scaling_renderer.render(encoder, render_target);
 
             // Render egui
-            gui.render(encoder, render_target, context);
+            gui_framework.render(encoder, render_target, context);
 
             Ok(())
         });
@@ -356,20 +357,19 @@ impl GameRunner {
     pub fn handle(&mut self, event: &winit::event::Event<()>) -> bool {
         // Handle input events
         if let WinitEvent::WindowEvent { event, .. } = event {
-            // Update egui inputs
-            self.gui.handle_event(event, &mut self.settings);
-
+            if let winit::event::WindowEvent::ScaleFactorChanged{ scale_factor, new_inner_size: _ } = event {
+                self.gui_framework.scale_factor(*scale_factor);
+            }
+    
             if let winit::event::WindowEvent::Resized(size) = event {
                 self.pixels.resize_surface(size.width, size.height);
+                self.gui_framework.resize(size.width, size.height)
             }
 
             if let winit::event::WindowEvent::KeyboardInput { input, .. } = event {
                 if let Some(code) = input.virtual_keycode {
                     if input.state == winit::event::ElementState::Pressed {
                         match code {
-                            VirtualKeyCode::Escape => {
-                                self.gui.show_gui = !self.gui.show_gui;
-                            }
                             VirtualKeyCode::F1 => {
                                 if let GameRunnerState::Playing(game_state, _) = &mut self.state {
                                     let data = game_state.nes.save_state();
@@ -394,10 +394,13 @@ impl GameRunner {
                         }
                     }
                 }
+                
                 for joypad_inputs in &mut self.settings.inputs {
                     joypad_inputs.keyboard.apply(input);
                 }
             }
+            // Update egui inputs
+            self.gui_framework.handle_event(event, &mut self.settings);
         }
         true
     }
