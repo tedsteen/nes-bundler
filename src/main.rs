@@ -357,33 +357,29 @@ impl GameRunner {
     pub fn handle(&mut self, event: &winit::event::Event<()>) -> bool {
         // Handle input events
         if let WinitEvent::WindowEvent { event, .. } = event {
-            if let winit::event::WindowEvent::CloseRequested = event {
-                return false;
-            }
-            if let winit::event::WindowEvent::ScaleFactorChanged{ scale_factor, new_inner_size: _ } = event {
-                self.gui_framework.scale_factor(*scale_factor);
-            }
-    
-            if let winit::event::WindowEvent::Resized(size) = event {
-                self.pixels.resize_surface(size.width, size.height);
-                self.gui_framework.resize(size.width, size.height)
-            }
-
-            if let winit::event::WindowEvent::KeyboardInput { input, .. } = event {
-                if let Some(code) = input.virtual_keycode {
-                    if input.state == winit::event::ElementState::Pressed {
-                        match code {
-                            VirtualKeyCode::F1 => {
-                                if let GameRunnerState::Playing(game_state, _) = &mut self.state {
+            match event {
+                winit::event::WindowEvent::CloseRequested => {
+                    return false;
+                },
+                winit::event::WindowEvent::ScaleFactorChanged{ scale_factor, new_inner_size: _ } => {
+                    self.gui_framework.scale_factor(*scale_factor);
+                },
+                winit::event::WindowEvent::Resized(size) => {
+                    self.pixels.resize_surface(size.width, size.height);
+                    self.gui_framework.resize(size.width, size.height)
+                },
+                winit::event::WindowEvent::KeyboardInput { input, .. } => {
+                    if let GameRunnerState::Playing(game_state, _) = &mut self.state {
+                        if input.state == winit::event::ElementState::Pressed {
+                            match input.virtual_keycode {
+                                Some(VirtualKeyCode::F1) => {
                                     let data = game_state.nes.save_state();
                                     let _ = std::fs::remove_file("save.bin");
                                     if let Err(err) = std::fs::write("save.bin", data) {
                                         eprintln!("Could not write save file: {:?}", err);
                                     }
                                 }
-                            }
-                            VirtualKeyCode::F2 => {
-                                if let GameRunnerState::Playing(game_state, _) = &mut self.state {
+                                Some(VirtualKeyCode::F2) => {
                                     match std::fs::read("save.bin") {
                                         Ok(mut bytes) => {
                                             game_state.nes.load_state(&mut bytes);
@@ -392,16 +388,17 @@ impl GameRunner {
                                         Err(err) =>  eprintln!("Could not read savefile: {:?}", err)
                                     }
                                 }
+                                _ => {}
                             }
-                            _ => {}
                         }
                     }
+                    for joypad_inputs in &mut self.settings.inputs {
+                        joypad_inputs.keyboard.apply(input);
+                    }
                 }
-                
-                for joypad_inputs in &mut self.settings.inputs {
-                    joypad_inputs.keyboard.apply(input);
-                }
+                _ => {}
             }
+
             // Update egui inputs
             self.gui_framework.handle_event(event, &mut self.settings);
         }
