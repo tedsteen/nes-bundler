@@ -4,7 +4,6 @@
 use crate::input::{JoypadInput, StaticJoypadInput};
 #[cfg(feature = "netplay")]
 use crate::network::p2p::P2P;
-
 use audio::{Audio, Stream};
 use game_loop::game_loop;
 use ggrs::{P2PSession, GameStateCell, Frame};
@@ -15,10 +14,10 @@ use gui::Framework;
 use input::{JoypadKeyMap, JoypadKeyboardInput};
 use log::error;
 use network::p2p::{GGRSConfig};
+use palette::NTSC_PAL;
 use pixels::{Pixels, SurfaceTexture};
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
-use rusticnes_core::palettes::NTSC_PAL;
 use egui_winit::winit as winit;
 use winit::dpi::LogicalSize;
 use winit::event::{Event as WinitEvent, VirtualKeyCode};
@@ -28,6 +27,7 @@ use winit::window::WindowBuilder;
 mod audio;
 mod gui;
 mod input;
+mod palette;
 #[cfg(feature = "netplay")]
 mod network;
 
@@ -123,6 +123,7 @@ impl MyGameState {
         };
 
         let nes = load_rom(rom_data).expect("Failed to load ROM");
+
         Self { nes, frame: 0 }
     }
 
@@ -158,9 +159,8 @@ impl MyGameState {
         let screen = &self.nes.ppu.screen;
 
         for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-            let palette_index = screen[i] as usize * 3;
-            let rgba = &NTSC_PAL[palette_index..palette_index + 4]; //TODO: cheating with the alpha channel here..
-            pixel.copy_from_slice(rgba);
+            let palette_index = screen[i] as usize * 4;
+            pixel.copy_from_slice(&NTSC_PAL[palette_index..palette_index + 4]);
         }
     }
 }
