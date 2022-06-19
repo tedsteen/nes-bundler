@@ -96,8 +96,7 @@ impl Framework {
         });
 
         self.textures.append(output.textures_delta);
-        self.egui_state
-            .handle_platform_output(window, &self.egui_ctx, output.platform_output);
+        self.egui_state.handle_platform_output(window, &self.egui_ctx, output.platform_output);
         self.paint_jobs = self.egui_ctx.tessellate(output.shapes);
     }
 
@@ -110,8 +109,7 @@ impl Framework {
     ) {
         // Upload all resources to the GPU.
         for (id, image_delta) in &self.textures.set {
-            self.rpass
-                .update_texture(&context.device, &context.queue, *id, image_delta);
+            self.rpass.update_texture(&context.device, &context.queue, *id, image_delta);
         }
         self.rpass.update_buffers(
             &context.device,

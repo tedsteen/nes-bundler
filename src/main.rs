@@ -147,10 +147,9 @@ impl MyGameState {
         self.nes.p2_input = inputs[1].to_u8();
         self.nes.run_until_vblank();
         let sound_data = self.nes.apu.consume_samples();
-
         for sample in sound_data {
-            if sound_stream.producer.push(sample).is_err() {
-                //eprintln!("Sound buffer full");
+            if sound_stream.producer.push(sample).map_err(|e| error!("sound_stream.producer.push(...) failed: {}", e)).is_err() {
+                //Not much to do
             }
         }
     }
@@ -220,7 +219,7 @@ impl GameRunner {
         let audio = Audio::new();
         let sound_stream = audio.start(audio_latency);
         let mut my_state = MyGameState::new();
-        my_state.nes.apu.set_sample_rate(audio_latency as u64);
+        my_state.nes.apu.set_sample_rate(sound_stream.sample_rate as u64);
 
         Self {
             state: GameRunnerState::Playing(my_state, PlayState::LocalPlay()),
