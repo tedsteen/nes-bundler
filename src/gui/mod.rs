@@ -1,4 +1,4 @@
-use egui_winit::{egui as egui, winit as winit, winit::event::VirtualKeyCode};
+use egui_winit::{winit::event::VirtualKeyCode};
 use egui::{Context, ClippedPrimitive, TexturesDelta};
 use egui_wgpu::renderer::{RenderPass, ScreenDescriptor};
 use pixels::{wgpu, PixelsContext};

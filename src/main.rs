@@ -18,7 +18,6 @@ use palette::NTSC_PAL;
 use pixels::{Pixels, SurfaceTexture};
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
-use egui_winit::winit as winit;
 use winit::dpi::LogicalSize;
 use winit::event::{Event as WinitEvent, VirtualKeyCode};
 use winit::event_loop::EventLoop;
