@@ -4,18 +4,10 @@ use egui_wgpu::renderer::{RenderPass, ScreenDescriptor};
 use pixels::{wgpu, PixelsContext};
 use winit::window::Window;
 
-#[cfg(feature = "netplay")]
-use crate::network::p2p::P2P;
-#[cfg(feature = "netplay")]
-use crate::GameRunnerState;
 use crate::{Settings};
 
-#[cfg(feature = "netplay")]
-use self::netplay::NetplayGui;
 use self::settings::SettingsGui;
 
-#[cfg(feature = "netplay")]
-mod netplay;
 mod settings;
 /// Manages all state required for rendering egui over `Pixels`.
 pub(crate) struct Framework {
@@ -33,15 +25,13 @@ pub(crate) struct Framework {
 pub(crate) struct Gui {
     // State for the demo app.
     visible: bool,
-    settings: SettingsGui,
-    #[cfg(feature = "netplay")]
-    netplay: NetplayGui    
+    settings: SettingsGui
 }
 
 // Render egui over pixels
 impl Framework {
     /// Create egui.
-    pub(crate) fn new(width: u32, height: u32, scale_factor: f32, pixels: &pixels::Pixels, #[cfg(feature = "netplay")] p2p: P2P) -> Self {
+    pub(crate) fn new(width: u32, height: u32, scale_factor: f32, pixels: &pixels::Pixels) -> Self {
         let max_texture_size = pixels.device().limits().max_texture_dimension_2d as usize;
 
         let egui_ctx = Context::default();
@@ -52,7 +42,7 @@ impl Framework {
         };
         let rpass = RenderPass::new(pixels.device(), pixels.render_texture_format(), 1);
         let textures = TexturesDelta::default();
-        let gui = Gui::new(p2p);
+        let gui = Gui::new();
 
         Self {
             egui_ctx,
@@ -86,13 +76,11 @@ impl Framework {
     /// Prepare egui.
     pub(crate) fn prepare(&mut self,
         window: &Window,
-        settings: &mut Settings,
-        #[cfg(feature = "netplay")]
-        game_runner_state: &mut GameRunnerState) {
+        settings: &mut Settings) {
         // Run the egui frame and create all paint jobs to prepare for rendering.
         let raw_input = self.egui_state.take_egui_input(window);
         let output = self.egui_ctx.run(raw_input, |egui_ctx| {
-            self.gui.ui(egui_ctx, settings, #[cfg(feature = "netplay")] game_runner_state);
+            self.gui.ui(egui_ctx, settings);
         });
 
         self.textures.append(output.textures_delta);
@@ -136,12 +124,10 @@ impl Framework {
 }
 
 impl Gui {
-    fn new(#[cfg(feature = "netplay")] p2p: P2P) -> Self {
+    fn new() -> Self {
         Self {
             visible: false,
-            settings: SettingsGui::new(),
-            #[cfg(feature = "netplay")]
-            netplay: NetplayGui::new(p2p),
+            settings: SettingsGui::new()
         }
     }
 
@@ -154,19 +140,13 @@ impl Gui {
             }
         }
         self.settings.handle_event(event, settings);
-        #[cfg(feature = "netplay")]
-        self.netplay.handle_event(event);
     }
 
     fn ui(&mut self,
         ctx: &Context,
-        settings: &mut Settings,
-        #[cfg(feature = "netplay")]
-        game_runner_state: &mut GameRunnerState) {
+        settings: &mut Settings) {
             if self.visible {
                 self.settings.ui(ctx, settings);
-                #[cfg(feature = "netplay")]
-                self.netplay.ui(ctx, game_runner_state);
             }
         }
 }
