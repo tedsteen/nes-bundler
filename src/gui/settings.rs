@@ -2,8 +2,7 @@ use egui::{Button, Color32, Context, Grid, Label, Slider, Ui, Window, RichText};
 use winit::event::ElementState;
 
 use crate::{
-    input::{JoypadButton, JoypadInput, JoypadKeyboardInput},
-    Settings,
+    input::{JoypadButton, JoypadInput, JoypadKeyboardInput}, settings::Settings
 };
 
 #[derive(Debug)]

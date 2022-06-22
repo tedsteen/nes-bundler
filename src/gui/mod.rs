@@ -4,7 +4,7 @@ use egui_wgpu::renderer::{RenderPass, ScreenDescriptor};
 use pixels::{wgpu, PixelsContext};
 use winit::window::Window;
 
-use crate::{Settings};
+use crate::settings::Settings;
 
 use self::settings::SettingsGui;
 
@@ -21,11 +21,6 @@ pub(crate) struct Framework {
 
     // State for the GUI
     gui: Gui,
-}
-pub(crate) struct Gui {
-    // State for the demo app.
-    visible: bool,
-    settings: SettingsGui
 }
 
 // Render egui over pixels
@@ -121,6 +116,12 @@ impl Framework {
             self.rpass.free_texture(id);
         }
     }
+}
+
+pub(crate) struct Gui {
+    // State for the demo app.
+    visible: bool,
+    settings: SettingsGui
 }
 
 impl Gui {

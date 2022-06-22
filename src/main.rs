@@ -6,12 +6,12 @@ use audio::{Audio, Stream};
 use game_loop::game_loop;
 
 use gui::Framework;
-use input::{JoypadKeyMap, JoypadKeyboardInput};
 use log::error;
 use palette::NTSC_PAL;
 use pixels::{Pixels, SurfaceTexture};
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
+use settings::{Settings, SelectedInput};
 use winit::dpi::LogicalSize;
 use winit::event::{Event as WinitEvent, VirtualKeyCode};
 use winit::event_loop::EventLoop;
@@ -21,11 +21,12 @@ mod audio;
 mod gui;
 mod input;
 mod palette;
+mod settings;
 #[cfg(feature = "netplay")]
 mod network;
 
 const FPS: u32 = 60;
-const MAX_PLAYERS: usize = 4;
+const MAX_PLAYERS: usize = 2;
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
 const ZOOM: f32 = 2.0;
@@ -136,28 +137,6 @@ impl MyGameState {
     }
 }
 
-enum SelectedInput {
-    Keyboard,
-}
-
-struct JoypadInputs {
-    selected: SelectedInput,
-    keyboard: JoypadKeyboardInput,
-}
-
-struct Settings {
-    audio_latency: u16,
-    inputs: [JoypadInputs; MAX_PLAYERS],
-}
-
-impl JoypadInputs {
-    fn get_pad(&self) -> &dyn JoypadInput {
-        match self.selected {
-            SelectedInput::Keyboard => &self.keyboard,
-        }
-    }
-}
-
 #[allow(clippy::large_enum_variant)]
 enum PlayState {
     LocalPlay()
@@ -179,9 +158,10 @@ struct GameRunner {
 
 impl GameRunner {
     pub fn new(gui_framework: Framework, pixels: Pixels) -> Self {
-        let audio_latency = 20;
+        let settings = settings::DEFAULT;
+
         let audio = Audio::new();
-        let sound_stream = audio.start(audio_latency);
+        let sound_stream = audio.start(settings.audio_latency);
         let mut my_state = MyGameState::new();
         my_state.nes.apu.set_sample_rate(sound_stream.sample_rate as u64);
 
@@ -190,27 +170,7 @@ impl GameRunner {
             sound_stream,
             gui_framework,
             pixels,
-            settings: Settings {
-                audio_latency,
-                inputs: [
-                    JoypadInputs {
-                        selected: SelectedInput::Keyboard,
-                        keyboard: JoypadKeyboardInput::new(JoypadKeyMap::default_pad1()),
-                    },
-                    JoypadInputs {
-                        selected: SelectedInput::Keyboard,
-                        keyboard: JoypadKeyboardInput::new(JoypadKeyMap::default_pad2()),
-                    },
-                    JoypadInputs {
-                        selected: SelectedInput::Keyboard,
-                        keyboard: JoypadKeyboardInput::new(JoypadKeyMap::unmapped()),
-                    },
-                    JoypadInputs {
-                        selected: SelectedInput::Keyboard,
-                        keyboard: JoypadKeyboardInput::new(JoypadKeyMap::unmapped()),
-                    },
-                ],
-            },
+            settings
         }
     }
     
