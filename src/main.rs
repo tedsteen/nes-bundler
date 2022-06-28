@@ -3,6 +3,7 @@
 
 use crate::input::{JoypadInput, StaticJoypadInput};
 use audio::{Audio, Stream};
+
 use game_loop::game_loop;
 
 use gui::Framework;
@@ -43,7 +44,13 @@ pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
     }
 }
 
-fn main() {
+
+#[tokio::main]
+async fn main() {
+    async_main().await;
+}
+
+async fn async_main() {
     env_logger::init();
 
     let event_loop = EventLoop::new();
@@ -67,7 +74,11 @@ fn main() {
 
         (pixels, framework)
     };
-    
+    let players = 2;
+
+    #[cfg(feature = "netplay")]
+    let mut netplay = network::connect(FPS, players).await;
+
     let game_runner = GameRunner::new(framework, pixels);
 
     game_loop(
@@ -78,7 +89,28 @@ fn main() {
         0.08,
         move |g| {
             let game_runner = &mut g.game;
-            game_runner.advance();
+            let inputs = game_runner
+                .settings
+                .inputs
+                .iter()
+                .map(|inputs| match inputs.selected {
+                    SelectedInput::Keyboard => {
+                        StaticJoypadInput(inputs.get_pad().to_u8())
+                    }
+                })
+                .collect();
+            
+            #[cfg(not(feature = "netplay"))]
+            game_runner.advance(inputs);
+
+            #[cfg(feature = "netplay")]
+            netplay.advance(inputs, game_runner);
+
+            if game_runner.run_slow {
+                g.set_updates_per_second((FPS as f32 * 0.9) as u32 )
+            } else {
+                g.set_updates_per_second(FPS)
+            }
         },
         move |g| {
             let game_runner = &mut g.game;
@@ -93,11 +125,20 @@ fn main() {
     );
 }
 
-pub type Frame = i32;
+pub(crate) type Frame = i32;
 
-struct MyGameState {
+pub(crate) struct MyGameState {
     nes: NesState,
     frame: Frame
+}
+
+impl Clone for MyGameState {
+    fn clone(&self) -> Self {
+        let data = self.nes.save_state();
+        let mut nes = NesState::new(self.nes.mapper.clone());
+        nes.load_state(&mut data.to_vec());
+        Self { nes, frame: self.frame }
+    }
 }
 
 impl MyGameState {
@@ -138,18 +179,14 @@ impl MyGameState {
 }
 
 #[allow(clippy::large_enum_variant)]
-enum PlayState {
-    LocalPlay()
-}
-
-#[allow(clippy::large_enum_variant)]
 enum GameRunnerState {
-    Playing(MyGameState, PlayState),
+    Playing(MyGameState),
     #[allow(dead_code)] // Calm down.. it's coming..
     Loading,
 }
 struct GameRunner {
     state: GameRunnerState,
+    run_slow: bool,
     sound_stream: Stream,
     gui_framework: Framework,
     pixels: Pixels,
@@ -166,36 +203,28 @@ impl GameRunner {
         my_state.nes.apu.set_sample_rate(sound_stream.sample_rate as u64);
 
         Self {
-            state: GameRunnerState::Playing(my_state, PlayState::LocalPlay()),
+            state: GameRunnerState::Playing(my_state),
             sound_stream,
+            run_slow: false,
             gui_framework,
             pixels,
             settings
         }
     }
-    
-    pub fn advance(&mut self) {
+    fn get_frame(&self) -> Frame {
+        match &self.state {
+            GameRunnerState::Playing(game_state) => game_state.frame,
+            GameRunnerState::Loading => 0,
+        }
+    }
+    pub fn advance(&mut self, inputs: Vec<StaticJoypadInput>) {
         match &mut self.state {
-            GameRunnerState::Playing(game_state, play_state) => {
+            GameRunnerState::Playing(game_state) => {
                 self
                 .sound_stream
                 .set_latency(self.settings.audio_latency, &mut game_state.nes);
-
-                match play_state {
-                    PlayState::LocalPlay() => {
-                        let inputs = self
-                            .settings
-                            .inputs
-                            .iter()
-                            .map(|inputs| match inputs.selected {
-                                SelectedInput::Keyboard => {
-                                    StaticJoypadInput(inputs.get_pad().to_u8())
-                                }
-                            })
-                            .collect();
-                        game_state.advance(inputs, &mut self.sound_stream);
-                    }
-                }
+                
+                game_state.advance(inputs, &mut self.sound_stream);
             }
             GameRunnerState::Loading => todo!(),
         }
@@ -204,7 +233,7 @@ impl GameRunner {
     pub fn render(&mut self, window: &winit::window::Window) {
         let pixels = &mut self.pixels;
 
-        if let GameRunnerState::Playing(game_state, _) = &self.state {
+        if let GameRunnerState::Playing(game_state) = &self.state {
             let frame = pixels.get_frame();
             game_state.render(frame);
         }
@@ -242,7 +271,7 @@ impl GameRunner {
                     self.gui_framework.resize(size.width, size.height)
                 },
                 winit::event::WindowEvent::KeyboardInput { input, .. } => {
-                    if let GameRunnerState::Playing(game_state, _) = &mut self.state {
+                    if let GameRunnerState::Playing(game_state) = &mut self.state {
                         if input.state == winit::event::ElementState::Pressed {
                             match input.virtual_keycode {
                                 Some(VirtualKeyCode::F1) => {
