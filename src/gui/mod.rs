@@ -118,17 +118,25 @@ impl Framework {
     }
 }
 
+trait GuiComponent {
+    fn handle_event(&mut self, event: &winit::event::WindowEvent, settings: &mut Settings);
+    fn ui(&mut self, ctx: &Context, settings: &mut Settings);
+}
+
 pub(crate) struct Gui {
     // State for the demo app.
     visible: bool,
-    settings: SettingsGui
+    gui_components:  Vec<Box<dyn GuiComponent>>
 }
 
 impl Gui {
     fn new() -> Self {
+        let gui_components: Vec<Box<dyn GuiComponent>> = vec![
+            Box::new(SettingsGui::new())
+            ];
         Self {
             visible: false,
-            settings: SettingsGui::new()
+            gui_components
         }
     }
 
@@ -140,14 +148,18 @@ impl Gui {
                 }
             }
         }
-        self.settings.handle_event(event, settings);
+        for g in &mut self.gui_components {
+            g.handle_event(event, settings);
+        }
     }
 
     fn ui(&mut self,
         ctx: &Context,
         settings: &mut Settings) {
             if self.visible {
-                self.settings.ui(ctx, settings);
+                for g in &mut self.gui_components {
+                    g.ui(ctx, settings);
+                }
             }
         }
 }

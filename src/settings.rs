@@ -23,6 +23,7 @@ pub(crate) struct Settings {
     pub(crate) audio_latency: u16,
     pub(crate) inputs: [JoypadInputs; MAX_PLAYERS],
 }
+//TODO: Use Default trait
 const DEFAULT_INPUTS: [JoypadInputs; MAX_PLAYERS] = [
     JoypadInputs {
         selected: SelectedInput::Keyboard,

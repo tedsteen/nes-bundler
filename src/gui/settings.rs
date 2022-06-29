@@ -5,6 +5,8 @@ use crate::{
     input::{JoypadButton, JoypadInput, JoypadKeyboardInput}, settings::Settings
 };
 
+use super::GuiComponent;
+
 #[derive(Debug)]
 struct MapRequest {
     pad: usize,
@@ -14,29 +16,10 @@ struct MapRequest {
 pub(crate) struct SettingsGui {
     mapping_request: Option<MapRequest>,
 }
-
 impl SettingsGui {
     pub(crate) fn new() -> Self {
         Self {
             mapping_request: None,
-        }
-    }
-    pub(crate) fn handle_event(
-        &mut self,
-        event: &winit::event::WindowEvent,
-        settings: &mut Settings,
-    ) {
-        if let winit::event::WindowEvent::KeyboardInput { input, .. } = event {
-            if let Some(code) = input.virtual_keycode {
-                if let ElementState::Pressed = input.state {
-                    if let Some(map_request) = &self.mapping_request {
-                        let inputs = &mut settings.inputs[map_request.pad as usize];
-                        let current_key_code = inputs.keyboard.mapping.lookup(&map_request.button);
-                        *current_key_code = Some(code);
-                        self.mapping_request = None;
-                    }
-                }
-            }
         }
     }
 
@@ -94,8 +77,29 @@ impl SettingsGui {
         }
         ui.end_row();
     }
+}
 
-    pub(crate) fn ui(&mut self, ctx: &Context, settings: &mut Settings) {
+impl GuiComponent for SettingsGui {
+    fn handle_event(
+        &mut self,
+        event: &winit::event::WindowEvent,
+        settings: &mut Settings,
+    ) {
+        if let winit::event::WindowEvent::KeyboardInput { input, .. } = event {
+            if let Some(code) = input.virtual_keycode {
+                if let ElementState::Pressed = input.state {
+                    if let Some(map_request) = &self.mapping_request {
+                        let inputs = &mut settings.inputs[map_request.pad as usize];
+                        let current_key_code = inputs.keyboard.mapping.lookup(&map_request.button);
+                        *current_key_code = Some(code);
+                        self.mapping_request = None;
+                    }
+                }
+            }
+        }
+    }
+
+    fn ui(&mut self, ctx: &Context, settings: &mut Settings) {
         Window::new("Settings").collapsible(false).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label("Audio latency");
