@@ -9,6 +9,9 @@ use crate::settings::Settings;
 use self::settings::SettingsGui;
 
 mod settings;
+#[cfg(feature = "netplay")]
+mod netplay;
+
 /// Manages all state required for rendering egui over `Pixels`.
 pub(crate) struct Framework {
     // State for egui.
@@ -132,7 +135,8 @@ pub(crate) struct Gui {
 impl Gui {
     fn new() -> Self {
         let gui_components: Vec<Box<dyn GuiComponent>> = vec![
-            Box::new(SettingsGui::new())
+            Box::new(SettingsGui::new()),
+            #[cfg(feature = "netplay")] Box::new(netplay::NetplayGui::new()),
             ];
         Self {
             visible: false,

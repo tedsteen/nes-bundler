@@ -6,13 +6,14 @@ use audio::{Audio, Stream};
 
 use game_loop::game_loop;
 
+use ggrs::GGRSRequest;
 use gui::Framework;
 use log::error;
 use palette::NTSC_PAL;
 use pixels::{Pixels, SurfaceTexture};
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
-use settings::{Settings, SelectedInput};
+use settings::{Settings, SelectedInput, MAX_PLAYERS};
 use winit::dpi::LogicalSize;
 use winit::event::{Event as WinitEvent, VirtualKeyCode};
 use winit::event_loop::EventLoop;
@@ -27,7 +28,6 @@ mod settings;
 mod network;
 
 const FPS: u32 = 60;
-const MAX_PLAYERS: usize = 2;
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
 const ZOOM: f32 = 2.0;
@@ -74,10 +74,6 @@ async fn async_main() {
 
         (pixels, framework)
     };
-    let players = 2;
-
-    #[cfg(feature = "netplay")]
-    let mut netplay = network::connect(FPS, players).await;
 
     let game_runner = GameRunner::new(framework, pixels);
 
@@ -100,11 +96,7 @@ async fn async_main() {
                 })
                 .collect();
             
-            #[cfg(not(feature = "netplay"))]
             game_runner.advance(inputs);
-
-            #[cfg(feature = "netplay")]
-            netplay.advance(inputs, game_runner);
 
             if game_runner.run_slow {
                 g.set_updates_per_second((FPS as f32 * 0.9) as u32 )
@@ -178,14 +170,8 @@ impl MyGameState {
     }
 }
 
-#[allow(clippy::large_enum_variant)]
-enum GameRunnerState {
-    Playing(MyGameState),
-    #[allow(dead_code)] // Calm down.. it's coming..
-    Loading,
-}
 struct GameRunner {
-    state: GameRunnerState,
+    state: MyGameState,
     run_slow: bool,
     sound_stream: Stream,
     gui_framework: Framework,
@@ -203,7 +189,7 @@ impl GameRunner {
         my_state.nes.apu.set_sample_rate(sound_stream.sample_rate as u64);
 
         Self {
-            state: GameRunnerState::Playing(my_state),
+            state: my_state,
             sound_stream,
             run_slow: false,
             gui_framework,
@@ -211,32 +197,87 @@ impl GameRunner {
             settings
         }
     }
-    fn get_frame(&self) -> Frame {
-        match &self.state {
-            GameRunnerState::Playing(game_state) => game_state.frame,
-            GameRunnerState::Loading => 0,
-        }
-    }
     pub fn advance(&mut self, inputs: Vec<StaticJoypadInput>) {
-        match &mut self.state {
-            GameRunnerState::Playing(game_state) => {
-                self
-                .sound_stream
-                .set_latency(self.settings.audio_latency, &mut game_state.nes);
+        self.sound_stream.set_latency(self.settings.audio_latency, &mut self.state.nes);
+        #[cfg(not(feature = "netplay"))]
+        self.state.advance(inputs, &mut self.sound_stream);
+
+        #[cfg(feature = "netplay")]
+        match &mut self.settings.netplay_state {
+            network::NetplayState::Disconnected => self.state.advance(inputs, &mut self.sound_stream),
+            network::NetplayState::Connecting(_) => {
+                self.state.frame = 0;
+                self.state.nes.reset();
+            },
+            network::NetplayState::Connected(sess) => {
                 
-                game_state.advance(inputs, &mut self.sound_stream);
+                sess.poll_remote_clients();
+                for event in sess.events() {
+                    println!("Event: {:?}", event);
+                }
+                self.run_slow = sess.frames_ahead() > 0;
+
+                for handle in sess.local_player_handles() {
+                    let local_input = 0;
+                    sess.add_local_input(handle, inputs[local_input].to_u8()).unwrap();
+                }
+
+                match sess.advance_frame() {
+                    Ok(requests) => {
+                        for request in requests {
+                            match request {
+                                GGRSRequest::LoadGameState { cell, .. } => {
+                                    let game_state = &mut self.state;                                    
+                                    println!("Loading (frame {:?})", game_state.frame);
+                                    let loaded_state = cell.load().expect("No data found.");
+                                    game_state.nes = loaded_state.nes;
+                                    game_state.frame = loaded_state.frame;
+                                    game_state.nes.apu.consume_samples(); //Clear audio buffer so we don't build up a delay
+                                },
+                                GGRSRequest::SaveGameState { cell, frame } => {
+                                    let game_state = &mut self.state;
+                                    assert_eq!(game_state.frame, frame);
+                                    if game_state.frame - frame != 0 {
+                                        eprintln!("{:?} should be 0", game_state.frame - frame);
+                                    }
+                                    cell.save(frame, Some(game_state.clone()), None);
+                                },
+                                GGRSRequest::AdvanceFrame { inputs } => {
+                                    //println!("Advancing (frame {:?})", game_runner.get_frame());
+                                    self.state.advance(vec![StaticJoypadInput(inputs[0].0), StaticJoypadInput(inputs[1].0)], &mut self.sound_stream)
+                                }
+                            }
+                        }
+                    }
+                    Err(ggrs::GGRSError::PredictionThreshold) => {
+                        let game_state = &mut self.state;
+                        println!(
+                            "Frame {} skipped: PredictionThreshold", game_state.frame
+                        );
+                    }
+                    Err(ggrs::GGRSError::NotSynchronized) => {
+                        println!("Synchronizing...");
+                    }
+                    Err(e) => eprintln!("Ouch :( {:?}", e),
+                }
+
+                //regularily print networks stats
+                if self.state.frame % 120 == 0 {
+                    for i in 0..MAX_PLAYERS {
+                        if let Ok(stats) = sess.network_stats(i as usize) {
+                            println!("NetworkStats to player {}: {:?}", i, stats);
+                        }
+                    }
+                }
             }
-            GameRunnerState::Loading => todo!(),
         }
     }
 
     pub fn render(&mut self, window: &winit::window::Window) {
         let pixels = &mut self.pixels;
 
-        if let GameRunnerState::Playing(game_state) = &self.state {
-            let frame = pixels.get_frame();
-            game_state.render(frame);
-        }
+        let frame = pixels.get_frame();
+        self.state.render(frame);
 
         let gui_framework = &mut self.gui_framework;
         gui_framework.prepare(window, &mut self.settings);
@@ -271,27 +312,25 @@ impl GameRunner {
                     self.gui_framework.resize(size.width, size.height)
                 },
                 winit::event::WindowEvent::KeyboardInput { input, .. } => {
-                    if let GameRunnerState::Playing(game_state) = &mut self.state {
-                        if input.state == winit::event::ElementState::Pressed {
-                            match input.virtual_keycode {
-                                Some(VirtualKeyCode::F1) => {
-                                    let data = game_state.nes.save_state();
-                                    let _ = std::fs::remove_file("save.bin");
-                                    if let Err(err) = std::fs::write("save.bin", data) {
-                                        eprintln!("Could not write save file: {:?}", err);
-                                    }
+                    if input.state == winit::event::ElementState::Pressed {
+                        match input.virtual_keycode {
+                            Some(VirtualKeyCode::F1) => {
+                                let data = self.state.nes.save_state();
+                                let _ = std::fs::remove_file("save.bin");
+                                if let Err(err) = std::fs::write("save.bin", data) {
+                                    eprintln!("Could not write save file: {:?}", err);
                                 }
-                                Some(VirtualKeyCode::F2) => {
-                                    match std::fs::read("save.bin") {
-                                        Ok(mut bytes) => {
-                                            game_state.nes.load_state(&mut bytes);
-                                            self.sound_stream.drain();
-                                        },
-                                        Err(err) =>  eprintln!("Could not read savefile: {:?}", err)
-                                    }
-                                }
-                                _ => {}
                             }
+                            Some(VirtualKeyCode::F2) => {
+                                match std::fs::read("save.bin") {
+                                    Ok(mut bytes) => {
+                                        self.state.nes.load_state(&mut bytes);
+                                        self.sound_stream.drain();
+                                    },
+                                    Err(err) =>  eprintln!("Could not read savefile: {:?}", err)
+                                }
+                            }
+                            _ => {}
                         }
                     }
                     for joypad_inputs in &mut self.settings.inputs {
