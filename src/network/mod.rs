@@ -130,7 +130,7 @@ impl Netplay {
 pub(crate) async fn connect(fps: u32, players: usize) -> Netplay {
     println!("Connecting...");
 
-    let (socket, loop_fut) = WebRtcSocket::new("ws://localhost:3536/example_room");
+    let (socket, loop_fut) = WebRtcSocket::new("ws://matchbox.marati.s3n.io:3536/example_room");
 
     println!("my id is {:?}", socket.id());
 
