@@ -6,14 +6,13 @@ use audio::{Audio, Stream};
 
 use game_loop::game_loop;
 
-use ggrs::GGRSRequest;
 use gui::Framework;
 use log::error;
 use palette::NTSC_PAL;
 use pixels::{Pixels, SurfaceTexture};
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
-use settings::{Settings, SelectedInput, MAX_PLAYERS};
+use settings::{Settings, SelectedInput};
 use winit::dpi::LogicalSize;
 use winit::event::{Event as WinitEvent, VirtualKeyCode};
 use winit::event_loop::EventLoop;
@@ -203,74 +202,7 @@ impl GameRunner {
         self.state.advance(inputs, &mut self.sound_stream);
 
         #[cfg(feature = "netplay")]
-        match &mut self.settings.netplay_state {
-            network::NetplayState::Disconnected => self.state.advance(inputs, &mut self.sound_stream),
-            network::NetplayState::Connecting(_) => {
-                self.state.frame = 0;
-                self.state.nes.reset();
-            },
-            network::NetplayState::Connected(sess) => {
-                
-                sess.poll_remote_clients();
-                for event in sess.events() {
-                    println!("Event: {:?}", event);
-                }
-                self.run_slow = sess.frames_ahead() > 0;
-
-                for handle in sess.local_player_handles() {
-                    let local_input = 0;
-                    sess.add_local_input(handle, inputs[local_input].to_u8()).unwrap();
-                }
-
-                match sess.advance_frame() {
-                    Ok(requests) => {
-                        for request in requests {
-                            match request {
-                                GGRSRequest::LoadGameState { cell, .. } => {
-                                    let game_state = &mut self.state;                                    
-                                    println!("Loading (frame {:?})", game_state.frame);
-                                    let loaded_state = cell.load().expect("No data found.");
-                                    game_state.nes = loaded_state.nes;
-                                    game_state.frame = loaded_state.frame;
-                                    game_state.nes.apu.consume_samples(); //Clear audio buffer so we don't build up a delay
-                                },
-                                GGRSRequest::SaveGameState { cell, frame } => {
-                                    let game_state = &mut self.state;
-                                    assert_eq!(game_state.frame, frame);
-                                    if game_state.frame - frame != 0 {
-                                        eprintln!("{:?} should be 0", game_state.frame - frame);
-                                    }
-                                    cell.save(frame, Some(game_state.clone()), None);
-                                },
-                                GGRSRequest::AdvanceFrame { inputs } => {
-                                    //println!("Advancing (frame {:?})", game_runner.get_frame());
-                                    self.state.advance(vec![StaticJoypadInput(inputs[0].0), StaticJoypadInput(inputs[1].0)], &mut self.sound_stream)
-                                }
-                            }
-                        }
-                    }
-                    Err(ggrs::GGRSError::PredictionThreshold) => {
-                        let game_state = &mut self.state;
-                        println!(
-                            "Frame {} skipped: PredictionThreshold", game_state.frame
-                        );
-                    }
-                    Err(ggrs::GGRSError::NotSynchronized) => {
-                        println!("Synchronizing...");
-                    }
-                    Err(e) => eprintln!("Ouch :( {:?}", e),
-                }
-
-                //regularily print networks stats
-                if self.state.frame % 120 == 0 {
-                    for i in 0..MAX_PLAYERS {
-                        if let Ok(stats) = sess.network_stats(i as usize) {
-                            println!("NetworkStats to player {}: {:?}", i, stats);
-                        }
-                    }
-                }
-            }
-        }
+        network::advance(self, inputs)
     }
 
     pub fn render(&mut self, window: &winit::window::Window) {
