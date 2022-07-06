@@ -180,7 +180,7 @@ struct GameRunner {
 
 impl GameRunner {
     pub fn new(gui_framework: Framework, pixels: Pixels) -> Self {
-        let settings = settings::DEFAULT;
+        let settings: Settings = Default::default();
 
         let audio = Audio::new();
         let sound_stream = audio.start(settings.audio_latency);

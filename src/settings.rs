@@ -27,25 +27,23 @@ pub(crate) struct Settings {
     #[cfg(feature = "netplay")]
     pub(crate) netplay_state: crate::network::NetplayState,
 }
-//TODO: Use Default trait
-const DEFAULT_INPUTS: [JoypadInputs; MAX_PLAYERS] = [
-    JoypadInputs {
-        selected: SelectedInput::Keyboard,
-        keyboard: JoypadKeyboardInput::new(JoypadKeyMap::default_pad1()),
-    },
-    JoypadInputs {
-        selected: SelectedInput::Keyboard,
-        keyboard: JoypadKeyboardInput::new(JoypadKeyMap::default_pad2()),
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            audio_latency: 20,
+            inputs:
+            [
+                JoypadInputs {
+                    selected: SelectedInput::Keyboard,
+                    keyboard: JoypadKeyboardInput::new(JoypadKeyMap::default_pad1()),
+                },
+                JoypadInputs {
+                    selected: SelectedInput::Keyboard,
+                    keyboard: JoypadKeyboardInput::new(JoypadKeyMap::default_pad2()),
+                }
+            ],
+            fps: 60,
+            netplay_state: crate::network::NetplayState::Disconnected
+        }
     }
-];
-
-const DEFAULT_AUDIO_LATENCY: u16 = 20;
-const DEFAULT_FPS: u32 = 60;
-
-pub(crate) const DEFAULT: Settings = Settings {
-    audio_latency: DEFAULT_AUDIO_LATENCY,
-    inputs: DEFAULT_INPUTS,
-    fps: DEFAULT_FPS,
-    #[cfg(feature = "netplay")]
-    netplay_state: crate::network::NetplayState::Disconnected
-};
+}
