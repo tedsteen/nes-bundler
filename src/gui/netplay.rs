@@ -15,15 +15,24 @@ impl GuiComponent for NetplayGui {
         Window::new("Netplay!").collapsible(false).show(ctx, |ui| {
             match &mut settings.netplay_state {
                 NetplayState::Disconnected => {
-                    ui.add(TextEdit::singleline(&mut self.room_name)
-                            .hint_text("Name of room to join"));
-                    if ui
-                        .add_enabled(!self.room_name.is_empty(), Button::new("Join"))
-                        .on_disabled_hover_text("What room do you want to join?")
-                        .clicked()
-                    {
-                        settings.netplay_state = NetplayState::Connecting(Some(connect(&self.room_name)));
-                    }
+                    ui.label("Either join a game by name");
+                    ui.horizontal(|ui| {
+                        ui.add(TextEdit::singleline(&mut self.room_name).desired_width(140.0)
+                            .hint_text("Name of network game"));
+                        if ui
+                            .add_enabled(!self.room_name.is_empty(), Button::new("Join"))
+                            .on_disabled_hover_text("Which network game do you want to join?")
+                            .clicked()
+                        {
+                            settings.netplay_state = NetplayState::Connecting(Some(connect(&self.room_name)));
+                        }
+                    });
+                    ui.label("... or simply");
+                    ui.horizontal(|ui| {
+                        if ui.button("Match with a random player").clicked() {
+                            settings.netplay_state = NetplayState::Connecting(Some(connect("beta-0?next=2")));
+                        }
+                    });
                 }
                 NetplayState::Connecting(s) => {
                     if let Some(socket) = s {
