@@ -1,8 +1,7 @@
 use egui::{Button, Context, Window, TextEdit};
-use ggrs::SessionBuilder;
 
 use crate::{
-    settings::{Settings, MAX_PLAYERS}, network::{NetplayState, GGRSConfig, connect},
+    settings::{Settings, MAX_PLAYERS}, network::{NetplayState, connect},
 };
 
 use super::GuiComponent;
@@ -28,33 +27,10 @@ impl GuiComponent for NetplayGui {
                 }
                 NetplayState::Connecting(s) => {
                     if let Some(socket) = s {
-                        socket.accept_new_connections();
                         let connected_peers = socket.connected_peers().len();
                         let remaining = MAX_PLAYERS - (connected_peers + 1);
                         ui.label(format!("Waiting for {} players", remaining));
                         //TODO: Cancel button
-                        if remaining == 0 {
-                            let players = socket.players();
-
-                            let max_prediction = 12;
-
-                            let mut sess_build = SessionBuilder::<GGRSConfig>::new()
-                                .with_num_players(MAX_PLAYERS)
-                                .with_max_prediction_window(max_prediction)
-                                .with_input_delay(2)
-                                .with_fps(settings.fps as usize)
-                                .expect("invalid fps");
-
-                            for (i, player) in players.into_iter().enumerate() {
-                                sess_build = sess_build
-                                    .add_player(player, i)
-                                    .expect("failed to add player");
-                            }
-
-                            settings.netplay_state = NetplayState::Connected(sess_build
-                                .start_p2p_session(s.take().unwrap())
-                                .expect("failed to start session"));
-                        }
                     }
                 }
                 NetplayState::Connected(_session) => {
