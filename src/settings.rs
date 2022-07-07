@@ -23,7 +23,6 @@ impl JoypadInputs {
 pub(crate) struct Settings {
     pub(crate) audio_latency: u16,
     pub(crate) inputs: [JoypadInputs; MAX_PLAYERS],
-    pub(crate) fps: u32,
     #[cfg(feature = "netplay")]
     pub(crate) netplay_state: crate::network::NetplayState,
 }
@@ -42,7 +41,6 @@ impl Default for Settings {
                     keyboard: JoypadKeyboardInput::new(JoypadKeyMap::default_pad2()),
                 }
             ],
-            fps: 60,
             netplay_state: crate::network::NetplayState::Disconnected
         }
     }

@@ -123,15 +123,6 @@ pub(crate) struct MyGameState {
     frame: Frame
 }
 
-impl Clone for MyGameState {
-    fn clone(&self) -> Self {
-        let data = self.nes.save_state();
-        let mut nes = NesState::new(self.nes.mapper.clone());
-        nes.load_state(&mut data.to_vec());
-        Self { nes, frame: self.frame }
-    }
-}
-
 impl MyGameState {
     fn new() -> Self {
         let rom_data = match std::env::var("ROM_FILE") {
@@ -167,6 +158,19 @@ impl MyGameState {
             pixel.copy_from_slice(&NTSC_PAL[palette_index..palette_index + 4]);
         }
     }
+
+    fn save(&self) -> Vec<u8> {
+        let mut data = vec!();
+        data.extend(self.frame.to_le_bytes());
+        data.extend(self.nes.save_state());
+        data
+    }
+    fn load(&mut self, data: &mut Vec<u8>) {
+        self.nes.load_state(data);
+        self.frame = i32::from_le_bytes(data.split_off(data.len() - 4).try_into().unwrap());
+        self.nes.apu.consume_samples(); // clear buffer so we don't build up a delay
+    }
+
 }
 
 struct GameRunner {
@@ -247,7 +251,7 @@ impl GameRunner {
                     if input.state == winit::event::ElementState::Pressed {
                         match input.virtual_keycode {
                             Some(VirtualKeyCode::F1) => {
-                                let data = self.state.nes.save_state();
+                                let data = self.state.save();
                                 let _ = std::fs::remove_file("save.bin");
                                 if let Err(err) = std::fs::write("save.bin", data) {
                                     eprintln!("Could not write save file: {:?}", err);
@@ -256,8 +260,7 @@ impl GameRunner {
                             Some(VirtualKeyCode::F2) => {
                                 match std::fs::read("save.bin") {
                                     Ok(mut bytes) => {
-                                        self.state.nes.load_state(&mut bytes);
-                                        self.sound_stream.drain();
+                                        self.state.load(&mut bytes);
                                     },
                                     Err(err) =>  eprintln!("Could not read savefile: {:?}", err)
                                 }

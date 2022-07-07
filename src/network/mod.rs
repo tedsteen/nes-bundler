@@ -2,9 +2,19 @@ use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, P2PSession, GGRSRequest, SessionBuilder};
 use matchbox_socket::WebRtcSocket;
+use rusticnes_core::nes::NesState;
 use std::time::Duration;
 
-use crate::{MyGameState, GameRunner, input::{StaticJoypadInput, JoypadInput}, settings::MAX_PLAYERS};
+use crate::{MyGameState, GameRunner, input::{StaticJoypadInput, JoypadInput}, settings::MAX_PLAYERS, FPS};
+
+impl Clone for MyGameState {
+    fn clone(&self) -> Self {
+        let data = &mut self.save();
+        let mut clone = Self { nes: NesState::new(self.nes.mapper.clone()), frame: self.frame };
+        clone.load(data);
+        clone
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct GGRSConfig;
@@ -71,7 +81,7 @@ pub(crate) fn advance(game_runner: &mut GameRunner, inputs: Vec<StaticJoypadInpu
                         .with_num_players(MAX_PLAYERS)
                         .with_max_prediction_window(max_prediction)
                         .with_input_delay(2)
-                        .with_fps(settings.fps as usize)
+                        .with_fps(FPS as usize)
                         .expect("invalid fps");
 
                     for (i, player) in players.into_iter().enumerate() {
@@ -109,10 +119,7 @@ pub(crate) fn advance(game_runner: &mut GameRunner, inputs: Vec<StaticJoypadInpu
                             GGRSRequest::LoadGameState { cell, .. } => {
                                 let game_state = &mut game_runner.state;
                                 println!("Loading (frame {:?})", game_state.frame);
-                                let loaded_state = cell.load().expect("No data found.");
-                                game_state.nes = loaded_state.nes;
-                                game_state.frame = loaded_state.frame;
-                                game_state.nes.apu.consume_samples(); //Clear audio buffer so we don't build up a delay
+                                game_runner.state = cell.load().expect("No data found.");
                             },
                             GGRSRequest::SaveGameState { cell, frame } => {
                                 let game_state = &mut game_runner.state;

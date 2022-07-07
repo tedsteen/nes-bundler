@@ -14,7 +14,6 @@ pub(crate) struct Stream {
     stream: cpal::Stream,
     latency: u16,
     pub(crate) producer: Producer<i16>,
-    consumer: Arc<Mutex<Consumer<i16>>>,
     pub(crate) sample_rate: f32,
     channels: usize,
 }
@@ -41,13 +40,12 @@ impl Stream {
 
         let mut nes_sample = 0;
         let consumer = Arc::new(Mutex::<Consumer<i16>>::new(consumer));
-        let c2 = consumer.clone();
         let stream = output_device
             .build_output_stream(
                 &stream_config,
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                     for sample in data {
-                        if let Some(sample) = c2.lock().unwrap().pop() {
+                        if let Some(sample) = consumer.lock().unwrap().pop() {
                             nes_sample = sample;
                         } else {
                             //eprintln!("Buffer underrun");
@@ -64,14 +62,9 @@ impl Stream {
             latency,
             stream,
             producer,
-            consumer,
             sample_rate,
             channels,
         }
-    }
-    
-    pub(crate) fn drain(&mut self) {
-        self.consumer.lock().unwrap().pop_each(|_| { true }, Option::None);
     }
 
     fn calc_buffer_length(latency: u16, sample_rate: f32, channels: usize) -> usize {
