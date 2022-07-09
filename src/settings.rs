@@ -24,7 +24,7 @@ pub(crate) struct Settings {
     pub(crate) audio_latency: u16,
     pub(crate) inputs: [JoypadInputs; MAX_PLAYERS],
     #[cfg(feature = "netplay")]
-    pub(crate) netplay_state: crate::network::NetplayState,
+    pub(crate) netplay: crate::network::Netplay,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -41,7 +41,7 @@ impl Default for Settings {
                     keyboard: JoypadKeyboardInput::new(JoypadKeyMap::default_pad2()),
                 }
             ],
-            netplay_state: crate::network::NetplayState::Disconnected
+            netplay: crate::network::Netplay::new()
         }
     }
 }

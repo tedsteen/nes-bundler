@@ -1,7 +1,7 @@
 use egui::{Button, Context, Window, TextEdit};
 
 use crate::{
-    settings::{Settings, MAX_PLAYERS}, network::{NetplayState, connect},
+    settings::{Settings, MAX_PLAYERS}, network::{NetplayState},
 };
 
 use super::GuiComponent;
@@ -13,7 +13,7 @@ impl GuiComponent for NetplayGui {
     fn handle_event(&mut self, _event: &winit::event::WindowEvent, _settings: &mut Settings) {}
     fn ui(&mut self, ctx: &Context, settings: &mut Settings) {
         Window::new("Netplay!").collapsible(false).show(ctx, |ui| {
-            match &mut settings.netplay_state {
+            match &mut settings.netplay.state {
                 NetplayState::Disconnected => {
                     ui.label("Either join a game by name");
                     ui.horizontal(|ui| {
@@ -24,13 +24,13 @@ impl GuiComponent for NetplayGui {
                             .on_disabled_hover_text("Which network game do you want to join?")
                             .clicked()
                         {
-                            settings.netplay_state = NetplayState::Connecting(Some(connect(&self.room_name)));
+                            settings.netplay.connect(&self.room_name);
                         }
                     });
                     ui.label("... or simply");
                     ui.horizontal(|ui| {
                         if ui.button("Match with a random player").clicked() {
-                            settings.netplay_state = NetplayState::Connecting(Some(connect("beta-0?next=2")));
+                            settings.netplay.connect("beta-0?next=2");
                         }
                     });
                 }

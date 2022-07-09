@@ -96,8 +96,9 @@ async fn async_main() {
                 .collect();
             
             game_runner.advance(inputs);
-
-            if game_runner.run_slow {
+            
+            #[cfg(feature = "netplay")]
+            if game_runner.settings.netplay.run_slow {
                 g.set_updates_per_second((FPS as f32 * 0.9) as u32 )
             } else {
                 g.set_updates_per_second(FPS)
@@ -116,11 +117,8 @@ async fn async_main() {
     );
 }
 
-pub(crate) type Frame = i32;
-
 pub(crate) struct MyGameState {
-    nes: NesState,
-    frame: Frame
+    nes: NesState
 }
 
 impl MyGameState {
@@ -133,21 +131,14 @@ impl MyGameState {
 
         let nes = load_rom(rom_data).expect("Failed to load ROM");
 
-        Self { nes, frame: 0 }
+        Self { nes }
     }
 
-    pub fn advance(&mut self, inputs: Vec<StaticJoypadInput>, sound_stream: &mut Stream) {
-        self.frame += 1;
+    pub fn advance(&mut self, inputs: Vec<StaticJoypadInput>) {
         //println!("Advancing! {:?}", inputs);
         self.nes.p1_input = inputs[0].to_u8();
         self.nes.p2_input = inputs[1].to_u8();
         self.nes.run_until_vblank();
-        let sound_data = self.nes.apu.consume_samples();
-        for sample in sound_data {
-            if sound_stream.producer.push(sample).map_err(|e| error!("sound_stream.producer.push(...) failed: {}", e)).is_err() {
-                //Not much to do
-            }
-        }
     }
 
     fn render(&self, frame: &mut [u8]) {
@@ -161,13 +152,11 @@ impl MyGameState {
 
     fn save(&self) -> Vec<u8> {
         let mut data = vec!();
-        data.extend(self.frame.to_le_bytes());
         data.extend(self.nes.save_state());
         data
     }
     fn load(&mut self, data: &mut Vec<u8>) {
         self.nes.load_state(data);
-        self.frame = i32::from_le_bytes(data.split_off(data.len() - 4).try_into().unwrap());
         self.nes.apu.consume_samples(); // clear buffer so we don't build up a delay
     }
 
@@ -175,7 +164,6 @@ impl MyGameState {
 
 struct GameRunner {
     state: MyGameState,
-    run_slow: bool,
     sound_stream: Stream,
     gui_framework: Framework,
     pixels: Pixels,
@@ -194,7 +182,6 @@ impl GameRunner {
         Self {
             state: my_state,
             sound_stream,
-            run_slow: false,
             gui_framework,
             pixels,
             settings
@@ -206,7 +193,14 @@ impl GameRunner {
         self.state.advance(inputs, &mut self.sound_stream);
 
         #[cfg(feature = "netplay")]
-        network::advance(self, inputs)
+        self.settings.netplay.advance(&mut self.state, inputs);
+
+        let sound_data = self.state.nes.apu.consume_samples();
+        for sample in sound_data {
+            if self.sound_stream.producer.push(sample).map_err(|e| error!("sound_stream.producer.push(...) failed: {}", e)).is_err() {
+                //Not much to do
+            }
+        }
     }
 
     pub fn render(&mut self, window: &winit::window::Window) {
