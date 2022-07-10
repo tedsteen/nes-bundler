@@ -34,12 +34,23 @@ pub(crate) enum NetplayState {
 type Frame = i32;
 pub(crate) struct Netplay {
     pub(crate) state: NetplayState,
-    pub(crate) run_slow: bool
+    pub(crate) run_slow: bool,
+
+    pub(crate) room_name: String,
+    pub(crate) max_prediction: usize,
+    pub(crate) input_delay: usize
 }
 
 impl Netplay {
     pub(crate) fn new() -> Self {
-        Netplay { state: NetplayState::Disconnected, run_slow: false }
+        Netplay {
+            state: NetplayState::Disconnected,
+            run_slow: false,
+
+            room_name: "example_room".to_string(),
+            max_prediction: 12,
+            input_delay: 2
+        }
     }
 
     pub(crate) fn connect(&mut self, room: &str) {
@@ -82,13 +93,11 @@ impl Netplay {
                     let remaining = MAX_PLAYERS - (connected_peers + 1);
                     if remaining == 0 {
                         let players = socket.players();
-    
-                        let max_prediction = 12;
-                        
+
                         let mut sess_build = SessionBuilder::<GGRSConfig>::new()
                             .with_num_players(MAX_PLAYERS)
-                            .with_max_prediction_window(max_prediction)
-                            .with_input_delay(2)
+                            .with_max_prediction_window(self.max_prediction)
+                            .with_input_delay(self.input_delay)
                             .with_fps(FPS as usize)
                             .expect("invalid fps");
     
