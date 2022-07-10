@@ -49,11 +49,15 @@ impl GuiComponent for NetplayGui {
                         let connected_peers = socket.connected_peers().len();
                         let remaining = MAX_PLAYERS - (connected_peers + 1);
                         ui.label(format!("Waiting for {} players", remaining));
-                        //TODO: Cancel button
+                        if ui.button("Cancel").clicked() {
+                            settings.netplay.state = NetplayState::Disconnected;
+                        }
                     }
                 }
-                NetplayState::Connected(_session) => {
-                    //TODO: Disconnect button
+                NetplayState::Connected(_) => {
+                    if ui.button("Disconnect").clicked() {
+                        settings.netplay.state = NetplayState::Disconnected;
+                    }
                 },
             }
         });

@@ -73,7 +73,8 @@ impl Netplay {
                         break;
                     }
                 }
-            }    
+            }
+            println!("LOOP ENDED");
         });
     
         self.state = NetplayState::Connecting(Some(socket));
