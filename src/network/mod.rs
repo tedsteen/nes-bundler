@@ -74,7 +74,6 @@ impl Netplay {
                     }
                 }
             }
-            println!("LOOP ENDED");
         });
     
         self.state = NetplayState::Connecting(Some(socket));
@@ -117,8 +116,16 @@ impl Netplay {
             },
             NetplayState::Connected((sess, frame)) => {
                 sess.poll_remote_clients();
+                let mut disconnected = false;
                 for event in sess.events() {
-                    println!("Event: {:?}", event);
+                    if let ggrs::GGRSEvent::Disconnected { addr } = event {
+                        eprintln!("Lost peer {}, disconnecting...", addr);
+                        disconnected = true;
+                    }
+                }
+                if disconnected {
+                    self.state = NetplayState::Disconnected;
+                    return;
                 }
     
                 for handle in sess.local_player_handles() {
