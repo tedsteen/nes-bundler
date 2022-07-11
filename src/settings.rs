@@ -29,7 +29,7 @@ pub(crate) struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            audio_latency: 20,
+            audio_latency: 30,
             inputs:
             [
                 JoypadInputs {

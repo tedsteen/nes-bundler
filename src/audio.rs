@@ -3,7 +3,6 @@ use std::sync::{Arc, Mutex};
 use cpal::traits::{DeviceTrait, HostTrait};
 use cpal::{Sample, StreamConfig};
 use ringbuf::{Producer, Consumer};
-use rusticnes_core::nes::NesState;
 pub(crate) struct Audio {
     output_device: cpal::Device,
     output_config: cpal::SupportedStreamConfig,
@@ -14,15 +13,16 @@ pub(crate) struct Stream {
     stream: cpal::Stream,
     latency: u16,
     pub(crate) producer: Producer<i16>,
+    consumer: Arc<Mutex<Consumer<i16>>>,
     pub(crate) sample_rate: f32,
-    channels: usize,
 }
 
 impl Stream {
     fn new<T>(
         latency: u16,
         mut stream_config: StreamConfig,
-        output_device: &cpal::Device
+        output_device: &cpal::Device,
+        previous_stream: Option<&mut Stream>
     ) -> Self
     where
         T: cpal::Sample,
@@ -32,20 +32,32 @@ impl Stream {
         let sample_rate = stream_config.sample_rate.0 as f32;
         let channels = stream_config.channels as usize;
 
-        let (producer, consumer) =
-            ringbuf::RingBuffer::new(Stream::calc_buffer_length(500, sample_rate, channels) * 2)
-                .split(); // 500 is max latency
+        let (mut producer, consumer) =
+            ringbuf::RingBuffer::new(Stream::calc_buffer_length(latency, sample_rate, channels))
+                .split();
 
-        println!("Stream config: {:?}", stream_config);
+        if let Some(s) = previous_stream {
+            let mut consumer = s.consumer.lock().unwrap();
+            //Fill buffer with previous buffers sound
+            for _ in 0..producer.capacity() {
+                producer.push(consumer.pop().unwrap_or(0)).unwrap();
+            }
+        } else {
+            //Fill buffer with silence
+            for _ in 0..producer.capacity() {
+                producer.push(0).unwrap();
+            }
+        }
 
         let mut nes_sample = 0;
         let consumer = Arc::new(Mutex::<Consumer<i16>>::new(consumer));
+        let c2 = consumer.clone();
         let stream = output_device
             .build_output_stream(
                 &stream_config,
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                     for sample in data {
-                        if let Some(sample) = consumer.lock().unwrap().pop() {
+                        if let Some(sample) = c2.lock().unwrap().pop() {
                             nes_sample = sample;
                         } else {
                             //eprintln!("Buffer underrun");
@@ -62,8 +74,8 @@ impl Stream {
             latency,
             stream,
             producer,
+            consumer,
             sample_rate,
-            channels,
         }
     }
 
@@ -72,14 +84,8 @@ impl Stream {
         latency_frames as usize * channels as usize
     }
 
-    pub fn set_latency(&mut self, mut latency: u16, nes: &mut NesState) {
-        latency = std::cmp::max(latency, 1);
-
-        if self.latency != latency {
-            let buffer_size = Stream::calc_buffer_length(latency, self.sample_rate, self.channels);
-            nes.apu.set_buffer_size(buffer_size);
-            self.latency = latency;
-        }
+    pub fn get_latency(&self) -> u16 {
+        self.latency
     }
 }
 
@@ -106,17 +112,17 @@ impl Audio {
         }
     }
 
-    pub(crate) fn start(&self, latency: u16) -> Stream {
+    pub(crate) fn start(&self, latency: u16, previous_stream: Option<&mut Stream>) -> Stream {
         let stream_config = self.output_config.config();
         match self.output_config.sample_format() {
             cpal::SampleFormat::F32 => {
-                Stream::new::<f32>(latency, stream_config, &self.output_device)
+                Stream::new::<f32>(latency, stream_config, &self.output_device, previous_stream)
             }
             cpal::SampleFormat::I16 => {
-                Stream::new::<i16>(latency, stream_config, &self.output_device)
+                Stream::new::<i16>(latency, stream_config, &self.output_device, previous_stream)
             }
             cpal::SampleFormat::U16 => {
-                Stream::new::<u16>(latency, stream_config, &self.output_device)
+                Stream::new::<u16>(latency, stream_config, &self.output_device, previous_stream)
             }
         }
     }

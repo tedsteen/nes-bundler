@@ -164,6 +164,7 @@ impl MyGameState {
 
 struct GameRunner {
     state: MyGameState,
+    audio: Audio,
     sound_stream: Stream,
     gui_framework: Framework,
     pixels: Pixels,
@@ -175,12 +176,13 @@ impl GameRunner {
         let settings: Settings = Default::default();
 
         let audio = Audio::new();
-        let sound_stream = audio.start(settings.audio_latency);
+        let sound_stream = audio.start(settings.audio_latency, None);
         let mut my_state = MyGameState::new();
         my_state.nes.apu.set_sample_rate(sound_stream.sample_rate as u64);
 
         Self {
             state: my_state,
+            audio,
             sound_stream,
             gui_framework,
             pixels,
@@ -188,7 +190,12 @@ impl GameRunner {
         }
     }
     pub fn advance(&mut self, inputs: Vec<StaticJoypadInput>) {
-        self.sound_stream.set_latency(self.settings.audio_latency, &mut self.state.nes);
+        if self.sound_stream.get_latency() != self.settings.audio_latency {
+            self.sound_stream = self.audio.start(self.settings.audio_latency, Some(&mut self.sound_stream));
+            //clear buffer
+            self.state.nes.apu.consume_samples();
+        }
+
         #[cfg(not(feature = "netplay"))]
         self.state.advance(inputs, &mut self.sound_stream);
 
@@ -197,9 +204,7 @@ impl GameRunner {
 
         let sound_data = self.state.nes.apu.consume_samples();
         for sample in sound_data {
-            if self.sound_stream.producer.push(sample).map_err(|e| error!("sound_stream.producer.push(...) failed: {}", e)).is_err() {
-                //Not much to do
-            }
+            let _ = self.sound_stream.producer.push(sample);
         }
     }
 
