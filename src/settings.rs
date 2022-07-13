@@ -1,4 +1,4 @@
-use crate::input::keyboard::{JoypadKeyboardInput, JoypadKeyMap};
+use crate::input::keyboard::{JoypadKeyboardInput, DEFAULT_KEYBOARD_MAPPINGS};
 
 
 pub(crate) const MAX_PLAYERS: usize = 2;
@@ -18,8 +18,8 @@ impl Default for Settings {
             audio_latency: 30,
             inputs:
             [
-                SelectedInput::Keyboard(JoypadKeyboardInput::new(JoypadKeyMap::default_pad1())),
-                SelectedInput::Keyboard(JoypadKeyboardInput::new(JoypadKeyMap::default_pad2())),
+                SelectedInput::Keyboard(JoypadKeyboardInput::new(DEFAULT_KEYBOARD_MAPPINGS[0])),
+                SelectedInput::Keyboard(JoypadKeyboardInput::new(DEFAULT_KEYBOARD_MAPPINGS[1])),
             ],
         }
     }
