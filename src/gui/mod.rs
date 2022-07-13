@@ -4,7 +4,7 @@ use egui_wgpu::renderer::{RenderPass, ScreenDescriptor};
 use pixels::{wgpu, PixelsContext};
 use winit::window::Window;
 
-use crate::settings::Settings;
+use crate::{GameRunner};
 
 use self::settings::SettingsGui;
 
@@ -54,9 +54,9 @@ impl Framework {
     }
 
     /// Handle input events from the window manager.
-    pub(crate) fn handle_event(&mut self, event: &winit::event::WindowEvent, settings: &mut Settings) {
+    pub(crate) fn handle_event(&mut self, event: &winit::event::WindowEvent, game_runner: &mut GameRunner) {
         self.egui_state.on_event(&self.egui_ctx, event);
-        self.gui.handle_event(event, settings);
+        self.gui.handle_event(event, game_runner);
     }
 
     /// Resize egui.
@@ -74,11 +74,11 @@ impl Framework {
     /// Prepare egui.
     pub(crate) fn prepare(&mut self,
         window: &Window,
-        settings: &mut Settings) {
+        game_runner: &mut GameRunner) {
         // Run the egui frame and create all paint jobs to prepare for rendering.
         let raw_input = self.egui_state.take_egui_input(window);
         let output = self.egui_ctx.run(raw_input, |egui_ctx| {
-            self.gui.ui(egui_ctx, settings);
+            self.gui.ui(egui_ctx, game_runner);
         });
 
         self.textures.append(output.textures_delta);
@@ -122,8 +122,8 @@ impl Framework {
 }
 
 trait GuiComponent {
-    fn handle_event(&mut self, event: &winit::event::WindowEvent, settings: &mut Settings);
-    fn ui(&mut self, ctx: &Context, settings: &mut Settings);
+    fn handle_event(&mut self, event: &winit::event::WindowEvent, game_runner: &mut GameRunner);
+    fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner);
 }
 
 pub(crate) struct Gui {
@@ -144,7 +144,7 @@ impl Gui {
         }
     }
 
-    fn handle_event(&mut self, event: &winit::event::WindowEvent, settings: &mut Settings) {
+    fn handle_event(&mut self, event: &winit::event::WindowEvent, game_runner: &mut GameRunner) {
         if let winit::event::WindowEvent::KeyboardInput { input, .. } = event {
             if let Some(code) = input.virtual_keycode {
                 if input.state == winit::event::ElementState::Pressed && code == VirtualKeyCode::Escape {
@@ -153,16 +153,16 @@ impl Gui {
             }
         }
         for g in &mut self.gui_components {
-            g.handle_event(event, settings);
+            g.handle_event(event, game_runner);
         }
     }
 
     fn ui(&mut self,
         ctx: &Context,
-        settings: &mut Settings) {
+        game_runner: &mut GameRunner) {
             if self.visible {
                 for g in &mut self.gui_components {
-                    g.ui(ctx, settings);
+                    g.ui(ctx, game_runner);
                 }
             }
         }

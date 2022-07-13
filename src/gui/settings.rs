@@ -2,7 +2,7 @@ use egui::{Button, Color32, Context, Grid, Label, Slider, Ui, Window, RichText};
 use winit::event::ElementState;
 
 use crate::{
-    input::{JoypadButton, JoypadInput, JoypadKeyboardInput}, settings::Settings
+    input::{JoypadButton, JoypadInput, JoypadKeyboardInput}, GameRunner
 };
 
 use super::GuiComponent;
@@ -83,13 +83,13 @@ impl GuiComponent for SettingsGui {
     fn handle_event(
         &mut self,
         event: &winit::event::WindowEvent,
-        settings: &mut Settings,
+        game_runner: &mut GameRunner,
     ) {
         if let winit::event::WindowEvent::KeyboardInput { input, .. } = event {
             if let Some(code) = input.virtual_keycode {
                 if let ElementState::Pressed = input.state {
                     if let Some(map_request) = &self.mapping_request {
-                        let inputs = &mut settings.inputs[map_request.pad as usize];
+                        let inputs = &mut game_runner.settings.inputs[map_request.pad as usize];
                         let current_key_code = inputs.keyboard.mapping.lookup(&map_request.button);
                         *current_key_code = Some(code);
                         self.mapping_request = None;
@@ -99,14 +99,14 @@ impl GuiComponent for SettingsGui {
         }
     }
 
-    fn ui(&mut self, ctx: &Context, settings: &mut Settings) {
+    fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner) {
         Window::new("Settings").collapsible(false).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label("Audio latency");
-                ui.add(Slider::new(&mut settings.audio_latency, 1..=500).suffix("ms"));
+                ui.add(Slider::new(&mut game_runner.settings.audio_latency, 1..=500).suffix("ms"));
             });
             ui.horizontal(|ui| {
-                for (pad, joypad_inputs) in &mut settings.inputs.iter_mut().enumerate() {
+                for (pad, joypad_inputs) in &mut game_runner.settings.inputs.iter_mut().enumerate() {
                     ui.vertical(|ui| {
                         self.key_map_ui(ui, &mut joypad_inputs.keyboard, pad);
                     });

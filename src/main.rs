@@ -74,16 +74,16 @@ async fn async_main() {
         (pixels, framework)
     };
 
-    let game_runner = GameRunner::new(framework, pixels);
+    let game_runner = GameRunner::new(pixels);
 
     game_loop(
         event_loop,
         window,
-        game_runner,
+        (game_runner, framework),
         FPS,
         0.08,
         move |g| {
-            let game_runner = &mut g.game;
+            let game_runner = &mut g.game.0;
             let inputs = game_runner
                 .settings
                 .inputs
@@ -98,19 +98,19 @@ async fn async_main() {
             game_runner.advance(inputs);
             
             #[cfg(feature = "netplay")]
-            if game_runner.settings.netplay.run_slow {
+            if game_runner.netplay.run_slow {
                 g.set_updates_per_second((FPS as f32 * 0.9) as u32 )
             } else {
                 g.set_updates_per_second(FPS)
             }
         },
         move |g| {
-            let game_runner = &mut g.game;
-            game_runner.render(&g.window);
+            let game_runner = &mut g.game.0;
+            game_runner.render(&g.window, &mut g.game.1);
         },
         move |g, event| {
-            let game_runner = &mut g.game;
-            if !game_runner.handle(event) {
+            let game_runner = &mut g.game.0;
+            if !game_runner.handle(event, &mut g.game.1) {
                 g.exit();
             }
         },
@@ -166,13 +166,15 @@ struct GameRunner {
     state: MyGameState,
     audio: Audio,
     sound_stream: Stream,
-    gui_framework: Framework,
     pixels: Pixels,
     settings: Settings,
+
+    #[cfg(feature = "netplay")]
+    netplay: network::Netplay
 }
 
 impl GameRunner {
-    pub fn new(gui_framework: Framework, pixels: Pixels) -> Self {
+    pub fn new(pixels: Pixels) -> Self {
         let settings: Settings = Default::default();
 
         let audio = Audio::new();
@@ -184,9 +186,10 @@ impl GameRunner {
             state: my_state,
             audio,
             sound_stream,
-            gui_framework,
             pixels,
-            settings
+            settings,
+            #[cfg(feature = "netplay")]
+            netplay: network::Netplay::new()
         }
     }
     pub fn advance(&mut self, inputs: Vec<StaticJoypadInput>) {
@@ -200,7 +203,7 @@ impl GameRunner {
         self.state.advance(inputs);
 
         #[cfg(feature = "netplay")]
-        self.settings.netplay.advance(&mut self.state, inputs);
+        self.netplay.advance(&mut self.state, inputs);
 
         let sound_data = self.state.nes.apu.consume_samples();
         for sample in sound_data {
@@ -208,14 +211,13 @@ impl GameRunner {
         }
     }
 
-    pub fn render(&mut self, window: &winit::window::Window) {
+    pub fn render(&mut self, window: &winit::window::Window, gui_framework: &mut Framework) {
+        gui_framework.prepare(window, self);
+
         let pixels = &mut self.pixels;
 
         let frame = pixels.get_frame();
         self.state.render(frame);
-
-        let gui_framework = &mut self.gui_framework;
-        gui_framework.prepare(window, &mut self.settings);
 
         // Render everything together
         let render_result = pixels.render_with(|encoder, render_target, context| {
@@ -232,7 +234,7 @@ impl GameRunner {
         }
     }
 
-    pub fn handle(&mut self, event: &winit::event::Event<()>) -> bool {
+    pub fn handle(&mut self, event: &winit::event::Event<()>, gui_framework: &mut Framework) -> bool {
         // Handle input events
         if let WinitEvent::WindowEvent { event, .. } = event {
             match event {
@@ -240,11 +242,11 @@ impl GameRunner {
                     return false;
                 },
                 winit::event::WindowEvent::ScaleFactorChanged{ scale_factor, new_inner_size: _ } => {
-                    self.gui_framework.scale_factor(*scale_factor);
+                    gui_framework.scale_factor(*scale_factor);
                 },
                 winit::event::WindowEvent::Resized(size) => {
                     self.pixels.resize_surface(size.width, size.height);
-                    self.gui_framework.resize(size.width, size.height)
+                    gui_framework.resize(size.width, size.height)
                 },
                 winit::event::WindowEvent::KeyboardInput { input, .. } => {
                     if input.state == winit::event::ElementState::Pressed {
@@ -275,7 +277,7 @@ impl GameRunner {
             }
 
             // Update egui inputs
-            self.gui_framework.handle_event(event, &mut self.settings);
+            gui_framework.handle_event(event, self);
         }
         true
     }
