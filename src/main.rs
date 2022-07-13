@@ -88,10 +88,9 @@ async fn async_main() {
                 .settings
                 .inputs
                 .iter()
-                .map(|inputs| match inputs.selected {
-                    SelectedInput::Keyboard => {
-                        StaticJoypadInput(inputs.get_pad().to_u8())
-                    }
+                .map(|inputs| match inputs {
+                    SelectedInput::Keyboard(keyboard) => StaticJoypadInput(keyboard.to_u8()),
+                    SelectedInput::Controller(_) => StaticJoypadInput(0),
                 })
                 .collect();
             
@@ -269,8 +268,13 @@ impl GameRunner {
                             _ => {}
                         }
                     }
-                    for joypad_inputs in &mut self.settings.inputs {
-                        joypad_inputs.keyboard.apply(input);
+                    for selected_input in &mut self.settings.inputs {
+                        match selected_input {
+                            SelectedInput::Keyboard(keyboard) => {
+                                keyboard.apply(input);
+                            },
+                            SelectedInput::Controller(_) => todo!(),
+                        }
                     }
                 }
                 _ => {}

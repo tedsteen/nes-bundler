@@ -2,7 +2,7 @@ use egui::{Button, Color32, Context, Grid, Label, Slider, Ui, Window, RichText};
 use winit::event::ElementState;
 
 use crate::{
-    input::{JoypadButton, JoypadInput, JoypadKeyboardInput}, GameRunner
+    input::{JoypadButton, keyboard::JoypadKeyboardInput, JoypadInput}, GameRunner, settings::SelectedInput
 };
 
 use super::GuiComponent;
@@ -23,22 +23,29 @@ impl SettingsGui {
         }
     }
 
-    fn key_map_ui(&mut self, ui: &mut Ui, keyboard_input: &mut JoypadKeyboardInput, pad: usize) {
+    fn key_map_ui(&mut self, ui: &mut Ui, selected_input: &mut SelectedInput, pad: usize) {
         ui.label(format!("Joypad #{}", pad + 1));
-        Grid::new("joymap_grid")
-            .num_columns(2)
-            .striped(true)
-            .show(ui, |ui| {
-                use JoypadButton::*;
-                self.make_button_combo(ui, pad, keyboard_input, Up);
-                self.make_button_combo(ui, pad, keyboard_input, Down);
-                self.make_button_combo(ui, pad, keyboard_input, Left);
-                self.make_button_combo(ui, pad, keyboard_input, Right);
-                self.make_button_combo(ui, pad, keyboard_input, Start);
-                self.make_button_combo(ui, pad, keyboard_input, Select);
-                self.make_button_combo(ui, pad, keyboard_input, B);
-                self.make_button_combo(ui, pad, keyboard_input, A);
-            });
+        match selected_input {
+            SelectedInput::Keyboard(keyboard_input) => {
+                Grid::new("joymap_grid")
+                    .num_columns(2)
+                    .striped(true)
+                    .show(ui, |ui| {
+                        use JoypadButton::*;
+                        self.make_button_combo(ui, pad, keyboard_input, Up);
+                        self.make_button_combo(ui, pad, keyboard_input, Down);
+                        self.make_button_combo(ui, pad, keyboard_input, Left);
+                        self.make_button_combo(ui, pad, keyboard_input, Right);
+                        self.make_button_combo(ui, pad, keyboard_input, Start);
+                        self.make_button_combo(ui, pad, keyboard_input, Select);
+                        self.make_button_combo(ui, pad, keyboard_input, B);
+                        self.make_button_combo(ui, pad, keyboard_input, A);
+                    });
+            },
+            SelectedInput::Controller(_) => todo!(),
+        }
+
+        
     }
 
     fn make_button_combo(
@@ -89,10 +96,15 @@ impl GuiComponent for SettingsGui {
             if let Some(code) = input.virtual_keycode {
                 if let ElementState::Pressed = input.state {
                     if let Some(map_request) = &self.mapping_request {
-                        let inputs = &mut game_runner.settings.inputs[map_request.pad as usize];
-                        let current_key_code = inputs.keyboard.mapping.lookup(&map_request.button);
-                        *current_key_code = Some(code);
-                        self.mapping_request = None;
+                        let selected_input = &mut game_runner.settings.inputs[map_request.pad as usize];
+                        match selected_input {
+                            SelectedInput::Keyboard(keyboard_input) => {
+                                let current_key_code = keyboard_input.mapping.lookup(&map_request.button);
+                                *current_key_code = Some(code);
+                                self.mapping_request = None;
+                            },
+                            SelectedInput::Controller(_) => todo!(),
+                        }
                     }
                 }
             }
@@ -108,7 +120,7 @@ impl GuiComponent for SettingsGui {
             ui.horizontal(|ui| {
                 for (pad, joypad_inputs) in &mut game_runner.settings.inputs.iter_mut().enumerate() {
                     ui.vertical(|ui| {
-                        self.key_map_ui(ui, &mut joypad_inputs.keyboard, pad);
+                        self.key_map_ui(ui, joypad_inputs, pad);
                     });
                 }
             });
