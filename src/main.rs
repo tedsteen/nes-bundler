@@ -197,7 +197,7 @@ impl GameRunner {
         }
 
         #[cfg(not(feature = "netplay"))]
-        self.state.advance(inputs, &mut self.sound_stream);
+        self.state.advance(inputs);
 
         #[cfg(feature = "netplay")]
         self.settings.netplay.advance(&mut self.state, inputs);

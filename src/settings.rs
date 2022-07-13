@@ -41,6 +41,7 @@ impl Default for Settings {
                     keyboard: JoypadKeyboardInput::new(JoypadKeyMap::default_pad2()),
                 }
             ],
+            #[cfg(feature = "netplay")]
             netplay: crate::network::Netplay::new()
         }
     }
