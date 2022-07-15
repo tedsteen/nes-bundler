@@ -79,7 +79,7 @@ impl Netplay {
         self.state = NetplayState::Connecting(Some(socket));
     }
     
-    pub(crate) fn advance(&mut self, game_state: &mut MyGameState, inputs: Vec<StaticJoypadInput>) {
+    pub(crate) fn advance(&mut self, game_state: &mut MyGameState, inputs: [&StaticJoypadInput; MAX_PLAYERS]) {
         match &mut self.state {
             NetplayState::Disconnected => {
                 game_state.advance(inputs);
@@ -148,7 +148,7 @@ impl Netplay {
                                 },
                                 GGRSRequest::AdvanceFrame { inputs } => {
                                     //println!("Advancing (frame {:?})", game_runner.get_frame());
-                                    game_state.advance(vec![StaticJoypadInput(inputs[0].0), StaticJoypadInput(inputs[1].0)]);
+                                    game_state.advance([&StaticJoypadInput(inputs[0].0), &StaticJoypadInput(inputs[1].0)]);
                                     *frame += 1;
                                 }
                             }

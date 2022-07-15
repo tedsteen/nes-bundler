@@ -7,12 +7,13 @@ use audio::{Audio, Stream};
 use game_loop::game_loop;
 
 use gui::Framework;
+use input::{Inputs};
 use log::error;
 use palette::NTSC_PAL;
 use pixels::{Pixels, SurfaceTexture};
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
-use settings::{Settings, SelectedInput};
+use settings::{Settings, MAX_PLAYERS};
 use winit::dpi::LogicalSize;
 use winit::event::{Event as WinitEvent, VirtualKeyCode};
 use winit::event_loop::EventLoop;
@@ -83,18 +84,8 @@ async fn async_main() {
         FPS,
         0.08,
         move |g| {
-            let game_runner = &mut g.game.0;
-            let inputs = game_runner
-                .settings
-                .inputs
-                .iter()
-                .map(|inputs| match inputs {
-                    SelectedInput::Keyboard(keyboard) => StaticJoypadInput(keyboard.to_u8()),
-                    SelectedInput::Controller(_) => StaticJoypadInput(0),
-                })
-                .collect();
-            
-            game_runner.advance(inputs);
+            let game_runner = &mut g.game.0;            
+            game_runner.advance();
             
             #[cfg(feature = "netplay")]
             if game_runner.netplay.run_slow {
@@ -133,7 +124,7 @@ impl MyGameState {
         Self { nes }
     }
 
-    pub fn advance(&mut self, inputs: Vec<StaticJoypadInput>) {
+    pub fn advance(&mut self, inputs: [&StaticJoypadInput; MAX_PLAYERS]) {
         //println!("Advancing! {:?}", inputs);
         self.nes.p1_input = inputs[0].to_u8();
         self.nes.p2_input = inputs[1].to_u8();
@@ -167,6 +158,7 @@ struct GameRunner {
     sound_stream: Stream,
     pixels: Pixels,
     settings: Settings,
+    inputs: Inputs,
 
     #[cfg(feature = "netplay")]
     netplay: network::Netplay
@@ -174,6 +166,7 @@ struct GameRunner {
 
 impl GameRunner {
     pub fn new(pixels: Pixels) -> Self {
+        let inputs = Inputs::new();
         let settings: Settings = Default::default();
 
         let audio = Audio::new();
@@ -187,22 +180,25 @@ impl GameRunner {
             sound_stream,
             pixels,
             settings,
+            inputs,
+
             #[cfg(feature = "netplay")]
             netplay: network::Netplay::new()
         }
     }
-    pub fn advance(&mut self, inputs: Vec<StaticJoypadInput>) {
+    pub fn advance(&mut self) {
         if self.sound_stream.get_latency() != self.settings.audio_latency {
             self.sound_stream = self.audio.start(self.settings.audio_latency, Some(&mut self.sound_stream));
             //clear buffer
             self.state.nes.apu.consume_samples();
         }
+        self.inputs.advance(None, &mut self.settings);
 
         #[cfg(not(feature = "netplay"))]
-        self.state.advance(inputs);
+        self.state.advance([self.inputs.p1, self.inputs.p2]);
 
         #[cfg(feature = "netplay")]
-        self.netplay.advance(&mut self.state, inputs);
+        self.netplay.advance(&mut self.state, [&self.inputs.p1, &self.inputs.p2]);
 
         let sound_data = self.state.nes.apu.consume_samples();
         for sample in sound_data {
@@ -248,6 +244,7 @@ impl GameRunner {
                     gui_framework.resize(size.width, size.height)
                 },
                 winit::event::WindowEvent::KeyboardInput { input, .. } => {
+                    self.inputs.advance(Some(input), &mut self.settings);
                     if input.state == winit::event::ElementState::Pressed {
                         match input.virtual_keycode {
                             Some(VirtualKeyCode::F1) => {
@@ -266,14 +263,6 @@ impl GameRunner {
                                 }
                             }
                             _ => {}
-                        }
-                    }
-                    for selected_input in &mut self.settings.inputs {
-                        match selected_input {
-                            SelectedInput::Keyboard(keyboard) => {
-                                keyboard.apply(input);
-                            },
-                            SelectedInput::Controller(_) => todo!(),
                         }
                     }
                 }
