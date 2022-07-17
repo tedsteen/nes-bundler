@@ -1,10 +1,7 @@
 use std::{collections::{HashMap, HashSet}};
-
 use gilrs::{Gilrs, Button, Event, EventType, GamepadId};
-
 use crate::{settings::Settings, input::{self, InputConfigurationKind}};
-
-use super::{JoypadKeyMap, InputId, StaticJoypadInput};
+use super::{JoypadKeyMap, InputId, JoypadInput};
 
 pub(crate) type JoypadGamepadKeyMap = JoypadKeyMap<Button>;
 
@@ -80,7 +77,7 @@ impl Gamepads {
         }
     }
 
-    pub(crate) fn get(&mut self, id: &InputId, mapping: &JoypadGamepadKeyMap) -> StaticJoypadInput {
+    pub(crate) fn get(&mut self, id: &InputId, mapping: &JoypadGamepadKeyMap) -> JoypadInput {
         mapping.calculate_state(&self.get_gamepad_by_input_id(id).pressed_keys)
     }
 }

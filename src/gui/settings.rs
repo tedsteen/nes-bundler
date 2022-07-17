@@ -1,9 +1,9 @@
-use std::fmt::Debug;
+use std::fmt::{Debug};
 
 use egui::{Button, Color32, Context, Grid, Label, Slider, Ui, Window, RichText};
 
 use crate::{
-    input::{JoypadButton, JoypadInput, JoypadKeyMap, StaticJoypadInput, InputConfigurationKind, InputConfiguration}, GameRunner, settings::Settings
+    input::{JoypadButton, JoypadKeyMap, JoypadInput, InputConfigurationKind, InputConfiguration}, GameRunner, settings::Settings
 };
 
 use super::GuiComponent;
@@ -23,8 +23,27 @@ impl SettingsGui {
             mapping_request: None,
         }
     }
+    fn map_grid_ui<T>(&mut self, ui: &mut Ui, mapping: &mut JoypadKeyMap<T>, joypad_input: &JoypadInput, pad: usize)
+    where
+        T: PartialEq + Debug
+    {
+        Grid::new(format!("joymap_grid_1_{}", pad))
+                    .num_columns(2)
+                    .striped(true)
+                    .show(ui, |ui| {
+                        use JoypadButton::*;
+                        self.make_button_combo(ui, pad, mapping, joypad_input, Up);
+                        self.make_button_combo(ui, pad, mapping, joypad_input, Down);
+                        self.make_button_combo(ui, pad, mapping, joypad_input, Left);
+                        self.make_button_combo(ui, pad, mapping, joypad_input, Right);
+                        self.make_button_combo(ui, pad, mapping, joypad_input, Start);
+                        self.make_button_combo(ui, pad, mapping, joypad_input, Select);
+                        self.make_button_combo(ui, pad, mapping, joypad_input, B);
+                        self.make_button_combo(ui, pad, mapping, joypad_input, A);
+                    });
+    }
 
-    fn key_map_ui(&mut self, ui: &mut Ui, settings: &mut Settings, joypad_input: &StaticJoypadInput, pad: usize) {
+    fn key_map_ui(&mut self, ui: &mut Ui, settings: &mut Settings, joypad_input: &JoypadInput, pad: usize) {
         
         let input_configuration: &InputConfiguration = if pad == 0 { settings.get_p1_config() } else { settings.get_p2_config() };
 
@@ -48,36 +67,10 @@ impl SettingsGui {
         let input_configuration = if pad == 0 { settings.get_p1_config() } else { settings.get_p2_config() };
         match &mut input_configuration.kind {
             InputConfigurationKind::Keyboard(mapping) => {
-                Grid::new(format!("joymap_grid_1_{}", pad))
-                    .num_columns(2)
-                    .striped(true)
-                    .show(ui, |ui| {
-                        use JoypadButton::*;
-                        self.make_button_combo(ui, pad, mapping, joypad_input, Up);
-                        self.make_button_combo(ui, pad, mapping, joypad_input, Down);
-                        self.make_button_combo(ui, pad, mapping, joypad_input, Left);
-                        self.make_button_combo(ui, pad, mapping, joypad_input, Right);
-                        self.make_button_combo(ui, pad, mapping, joypad_input, Start);
-                        self.make_button_combo(ui, pad, mapping, joypad_input, Select);
-                        self.make_button_combo(ui, pad, mapping, joypad_input, B);
-                        self.make_button_combo(ui, pad, mapping, joypad_input, A);
-                    });
+                self.map_grid_ui(ui, mapping, joypad_input, pad);
             },
             InputConfigurationKind::Gamepad(mapping) => {
-                Grid::new(format!("joymap_grid_2_{}", pad))
-                .num_columns(2)
-                .striped(true)
-                .show(ui, |ui| {
-                    use JoypadButton::*;
-                    self.make_button_combo(ui, pad, mapping, joypad_input, Up);
-                    self.make_button_combo(ui, pad, mapping, joypad_input, Down);
-                    self.make_button_combo(ui, pad, mapping, joypad_input, Left);
-                    self.make_button_combo(ui, pad, mapping, joypad_input, Right);
-                    self.make_button_combo(ui, pad, mapping, joypad_input, Start);
-                    self.make_button_combo(ui, pad, mapping, joypad_input, Select);
-                    self.make_button_combo(ui, pad, mapping, joypad_input, B);
-                    self.make_button_combo(ui, pad, mapping, joypad_input, A);
-                });
+                self.map_grid_ui(ui, mapping, joypad_input, pad);
             },
         }
     }
@@ -87,7 +80,7 @@ impl SettingsGui {
         ui: &mut Ui,
         pad: usize,
         mapping: &mut JoypadKeyMap<T>,
-        joypad_input: &StaticJoypadInput,
+        joypad_input: &JoypadInput,
         button: JoypadButton,
     ) where
         T: PartialEq + Debug
@@ -153,24 +146,8 @@ impl GuiComponent for SettingsGui {
             } else {
                 game_runner.settings.get_p2_config()
             };
-
-            match &mut input_configuration.kind {
-                InputConfigurationKind::Keyboard(mapping) => {
-                    let current_key_code = mapping.lookup(&map_request.button);
-                    if let Some(code) = game_runner.inputs.keyboards.pressed_keys.iter().next() {
-                        //If there's any key pressed, use the first found.
-                        let _ = current_key_code.insert(*code);
-                        self.mapping_request = None;
-                    }
-                },
-                InputConfigurationKind::Gamepad(mapping) => {
-                    let current_key_code = mapping.lookup(&map_request.button);
-                    if let Some(code) = game_runner.inputs.gamepads.get_gamepad_by_input_id(&input_configuration.id).pressed_keys.iter().next() {
-                        //If there's any key pressed, use the first found.
-                        let _ = current_key_code.insert(*code);
-                        self.mapping_request = None;
-                    }
-                },
+            if game_runner.inputs.remap_configuration(input_configuration, &map_request.button) {
+                self.mapping_request = None;
             }
         }
     }

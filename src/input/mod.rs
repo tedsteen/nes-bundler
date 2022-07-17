@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet};
 
 use winit::event::KeyboardInput;
 
@@ -70,44 +70,24 @@ impl<KeyType> JoypadKeyMap<KeyType> where
         buttons
     }
 
-    fn calculate_state(&self, keys: &HashSet<KeyType>) -> StaticJoypadInput {
-        let mut buttons = HashSet::new();
-        for key in keys {
-            buttons.extend(self.reverse_lookup(key));
-        }
-        let state = buttons
+    fn calculate_state(&self, keys: &HashSet<KeyType>) -> JoypadInput {
+        JoypadInput(keys
             .iter()
-            .fold(0_u8, |acc, &button| acc | button as u8);
-        StaticJoypadInput(state)
+            .fold(0_u8, |mut acc, key| {
+                for button in self.reverse_lookup(key) {
+                    acc |= button as u8;
+                }
+                acc
+            }))
     }
-}
-
-pub(crate) trait JoypadInput {
-    fn is_pressed(&self, button: JoypadButton) -> bool {
-        self.to_u8() & (button as u8) != 0
-    }
-    
-    fn to_mask(buttons: HashSet<JoypadButton>) -> u8 {
-        buttons
-            .iter()
-            .fold(0_u8, |acc, &button| acc | button as u8)
-    }
-
-    fn to_u8(&self) -> u8;
-
-    fn get_name(&self) -> String;
 }
 
 #[derive(Debug)]
-pub(crate) struct StaticJoypadInput(pub u8);
+pub(crate) struct JoypadInput(pub(crate) u8);
 
-impl JoypadInput for StaticJoypadInput {
-    fn to_u8(&self) -> u8 {
-        self.0
-    }
-
-    fn get_name(&self) -> String {
-        format!("Static [{}]", self.0)
+impl JoypadInput {
+    pub(crate) fn is_pressed(&self, button: JoypadButton) -> bool {
+        self.0 & (button as u8) != 0
     }
 }
 
@@ -126,10 +106,10 @@ pub(crate) enum InputConfigurationKind {
     Gamepad(JoypadGamepadKeyMap)
 }
 pub(crate) struct Inputs {
-    pub(crate) keyboards: Keyboards,
-    pub(crate) gamepads: Gamepads,
-    pub(crate) p1: StaticJoypadInput,
-    pub(crate) p2: StaticJoypadInput
+    keyboards: Keyboards,
+    gamepads: Gamepads,
+    pub(crate) p1: JoypadInput,
+    pub(crate) p2: JoypadInput
 }
 
 impl Inputs {
@@ -137,7 +117,7 @@ impl Inputs {
         let gamepads = Gamepads::new();
         let keyboards = Keyboards::new();
 
-        Self { keyboards, gamepads, p1: StaticJoypadInput(0), p2: StaticJoypadInput(0) }
+        Self { keyboards, gamepads, p1: JoypadInput(0), p2: JoypadInput(0) }
     }
     
     pub(crate) fn advance(&mut self, input: Option<&KeyboardInput>, settings: &mut Settings) {
@@ -146,10 +126,10 @@ impl Inputs {
             self.keyboards.advance(input);
         }
 
-        self.p1 = self.advance_input(settings.get_p1_config());
-        self.p2 = self.advance_input(settings.get_p2_config());
+        self.p1 = self.get_state(settings.get_p1_config());
+        self.p2 = self.get_state(settings.get_p2_config());
     }
-    fn advance_input(&mut self, input_conf: &mut InputConfiguration) -> StaticJoypadInput {
+    fn get_state(&mut self, input_conf: &mut InputConfiguration) -> JoypadInput {
         match &input_conf.kind {
             InputConfigurationKind::Keyboard(mapping) => {
                 self.keyboards.get(mapping)
@@ -158,5 +138,27 @@ impl Inputs {
                 self.gamepads.get(&input_conf.id, mapping)
             },
         }
+    }
+
+    pub(crate) fn remap_configuration(&mut self, input_configuration: &mut InputConfiguration, button: &JoypadButton) -> bool {
+        match &mut input_configuration.kind {
+            InputConfigurationKind::Keyboard(mapping) => {
+                let current_key_code = mapping.lookup(button);
+                if let Some(code) = self.keyboards.pressed_keys.iter().next() {
+                    //If there's any key pressed, use the first found.
+                    let _ = current_key_code.insert(*code);
+                    return true;
+                }
+            },
+            InputConfigurationKind::Gamepad(mapping) => {
+                let current_key_code = mapping.lookup(button);
+                if let Some(code) = self.gamepads.get_gamepad_by_input_id(&input_configuration.id).pressed_keys.iter().next() {
+                    //If there's any key pressed, use the first found.
+                    let _ = current_key_code.insert(*code);
+                    return true;
+                }
+            }
+        }
+        false
     }
 }

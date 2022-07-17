@@ -5,7 +5,7 @@ use matchbox_socket::WebRtcSocket;
 use rusticnes_core::nes::NesState;
 use std::time::Duration;
 
-use crate::{MyGameState, input::{StaticJoypadInput, JoypadInput}, settings::MAX_PLAYERS, FPS};
+use crate::{MyGameState, input::{JoypadInput}, settings::MAX_PLAYERS, FPS};
 
 impl Clone for MyGameState {
     fn clone(&self) -> Self {
@@ -79,7 +79,7 @@ impl Netplay {
         self.state = NetplayState::Connecting(Some(socket));
     }
     
-    pub(crate) fn advance(&mut self, game_state: &mut MyGameState, inputs: [&StaticJoypadInput; MAX_PLAYERS]) {
+    pub(crate) fn advance(&mut self, game_state: &mut MyGameState, inputs: [&JoypadInput; MAX_PLAYERS]) {
         match &mut self.state {
             NetplayState::Disconnected => {
                 game_state.advance(inputs);
@@ -130,7 +130,7 @@ impl Netplay {
     
                 for handle in sess.local_player_handles() {
                     let local_input = 0;
-                    sess.add_local_input(handle, inputs[local_input].to_u8()).unwrap();
+                    sess.add_local_input(handle, inputs[local_input].0).unwrap();
                 }
     
                 match sess.advance_frame() {
@@ -148,7 +148,7 @@ impl Netplay {
                                 },
                                 GGRSRequest::AdvanceFrame { inputs } => {
                                     //println!("Advancing (frame {:?})", game_runner.get_frame());
-                                    game_state.advance([&StaticJoypadInput(inputs[0].0), &StaticJoypadInput(inputs[1].0)]);
+                                    game_state.advance([&JoypadInput(inputs[0].0), &JoypadInput(inputs[1].0)]);
                                     *frame += 1;
                                 }
                             }

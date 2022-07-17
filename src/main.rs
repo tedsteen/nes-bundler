@@ -1,7 +1,7 @@
 #![deny(clippy::all)]
 #![forbid(unsafe_code)]
 
-use crate::input::{JoypadInput, StaticJoypadInput};
+use crate::input::{JoypadInput};
 use audio::{Audio, Stream};
 
 use game_loop::game_loop;
@@ -124,10 +124,10 @@ impl MyGameState {
         Self { nes }
     }
 
-    pub fn advance(&mut self, inputs: [&StaticJoypadInput; MAX_PLAYERS]) {
+    pub fn advance(&mut self, inputs: [&JoypadInput; MAX_PLAYERS]) {
         //println!("Advancing! {:?}", inputs);
-        self.nes.p1_input = inputs[0].to_u8();
-        self.nes.p2_input = inputs[1].to_u8();
+        self.nes.p1_input = inputs[0].0;
+        self.nes.p2_input = inputs[1].0;
         self.nes.run_until_vblank();
     }
 
