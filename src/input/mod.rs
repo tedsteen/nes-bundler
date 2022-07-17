@@ -1,6 +1,6 @@
 use std::{collections::HashSet};
 
-use winit::event::KeyboardInput;
+use winit::event::Event;
 
 use crate::settings::{Settings};
 
@@ -120,9 +120,9 @@ impl Inputs {
         Self { keyboards, gamepads, p1: JoypadInput(0), p2: JoypadInput(0) }
     }
     
-    pub(crate) fn advance(&mut self, input: Option<&KeyboardInput>, settings: &mut Settings) {
+    pub(crate) fn advance(&mut self, event: &winit::event::Event<()>, settings: &mut Settings) {
         self.gamepads.advance(settings);
-        if let Some(input) = input {
+        if let Event::WindowEvent { event: winit::event::WindowEvent::KeyboardInput { input, .. }, .. } = event {
             self.keyboards.advance(input);
         }
 

@@ -15,7 +15,7 @@ use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
 use settings::{Settings, MAX_PLAYERS};
 use winit::dpi::LogicalSize;
-use winit::event::{Event as WinitEvent, VirtualKeyCode};
+use winit::event::{Event, VirtualKeyCode};
 use winit::event_loop::EventLoop;
 use winit::window::WindowBuilder;
 
@@ -192,7 +192,6 @@ impl GameRunner {
             //clear buffer
             self.state.nes.apu.consume_samples();
         }
-        self.inputs.advance(None, &mut self.settings);
 
         #[cfg(not(feature = "netplay"))]
         self.state.advance([self.inputs.p1, self.inputs.p2]);
@@ -230,8 +229,9 @@ impl GameRunner {
     }
 
     pub fn handle(&mut self, event: &winit::event::Event<()>, gui_framework: &mut Framework) -> bool {
+        self.inputs.advance(event, &mut self.settings);
         // Handle input events
-        if let WinitEvent::WindowEvent { event, .. } = event {
+        if let Event::WindowEvent { event, .. } = event {
             match event {
                 winit::event::WindowEvent::CloseRequested => {
                     return false;
@@ -244,7 +244,6 @@ impl GameRunner {
                     gui_framework.resize(size.width, size.height)
                 },
                 winit::event::WindowEvent::KeyboardInput { input, .. } => {
-                    self.inputs.advance(Some(input), &mut self.settings);
                     if input.state == winit::event::ElementState::Pressed {
                         match input.virtual_keycode {
                             Some(VirtualKeyCode::F1) => {
