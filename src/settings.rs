@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap};
 
 use crate::input::{InputConfiguration, InputId, keyboard::{JoypadKeyboardKeyMap}, InputConfigurationKind};
 
@@ -32,29 +32,26 @@ impl Settings {
         })}
     }
 
-    pub(crate) fn get_p1_config(&mut self) -> &mut InputConfiguration {
-        let default = Settings::default_p1_conf();
-        let id = self.selected_inputs[0].get_or_insert(default.id.clone()).clone();
-                
-        let config = self.input_configurations.entry(id).or_insert(default);
-        if config.disconnected {
-            self.selected_inputs[0] = Some(DEFAULT_P1_INPUT_ID.to_string());
-            config //TODO: This will result in a disconnected config for one tick.
-        } else {
-            config
+    fn get_config(&mut self, player: usize, default: InputConfiguration) -> &mut InputConfiguration {
+        let default_id = default.id.clone();
+        let mut id = self.selected_inputs[player].get_or_insert(default_id.clone()).clone();
+
+        //Make sure we switch to default if it's disconnected.
+        if let Some(config) = self.input_configurations.get(&id) {
+            if config.disconnected {
+                id = default_id;
+                self.selected_inputs[player] = Some(id.clone());
+            }
         }
+
+        self.input_configurations.entry(id).or_insert(default)
+    }
+
+    pub(crate) fn get_p1_config(&mut self) -> &mut InputConfiguration {
+        self.get_config(0, Settings::default_p1_conf())
     }
     pub(crate) fn get_p2_config(&mut self) -> &mut InputConfiguration {
-        let default = Settings::default_p2_conf();
-        let id = self.selected_inputs[1].get_or_insert(default.id.clone()).clone();
-                
-        let config = self.input_configurations.entry(id).or_insert(default);
-        if config.disconnected {
-            self.selected_inputs[1] = Some(DEFAULT_P2_INPUT_ID.to_string());
-            config //TODO: This will result in a disconnected config for one tick.
-        } else {
-            config
-        }
+        self.get_config(1, Settings::default_p2_conf())
     }
     pub(crate) fn get_or_create_configuration(&mut self, id: &InputId, default: InputConfiguration) -> &mut InputConfiguration {
         self.input_configurations.entry(id.clone()).or_insert(default)
