@@ -93,7 +93,7 @@ impl JoypadInput {
 
 pub(crate) type InputId = String;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct InputConfiguration {
     pub(crate) id: InputId,
     pub(crate) name: String,
@@ -126,8 +126,8 @@ impl Inputs {
             self.keyboards.advance(input);
         }
 
-        self.p1 = self.get_state(settings.get_p1_config());
-        self.p2 = self.get_state(settings.get_p2_config());
+        self.p1 = self.get_state(settings.get_config(0));
+        self.p2 = self.get_state(settings.get_config(1));
     }
     fn get_state(&mut self, input_conf: &mut InputConfiguration) -> JoypadInput {
         match &input_conf.kind {

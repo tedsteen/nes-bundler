@@ -14,22 +14,23 @@ pub(crate) struct Settings {
 use winit::event::VirtualKeyCode::*;
 
 impl Settings {
-    fn default_p1_conf() -> InputConfiguration {
-        InputConfiguration { name: "Keyboard mapping #1".to_string(), id: "00-keyboard-1".to_string(), disconnected: false, kind: InputConfigurationKind::Keyboard(JoypadKeyboardKeyMap {
-            up: Some(Up), down: Some(Down), left: Some(Left), right: Some(Right),
-            start: Some(Return), select: Some(RShift),
-            b: Some(Key1), a: Some(Key2)
-        })}
-    }
-    fn default_p2_conf() -> InputConfiguration {
-        InputConfiguration { name: "Keyboard mapping #2".to_string(), id: "00-keyboard-2".to_string(), disconnected: false, kind: InputConfigurationKind::Keyboard(JoypadKeyboardKeyMap {
-            up: Some(W), down: Some(S), left: Some(A), right: Some(D),
-            start: Some(Key9), select: Some(Key0),
-            b: Some(LAlt), a: Some(LControl)
-        })}
+    fn default_configs() -> [InputConfiguration; MAX_PLAYERS] {
+        [
+            InputConfiguration { name: "Keyboard mapping #1".to_string(), id: "00-keyboard-1".to_string(), disconnected: false, kind: InputConfigurationKind::Keyboard(JoypadKeyboardKeyMap {
+                up: Some(Up), down: Some(Down), left: Some(Left), right: Some(Right),
+                start: Some(Return), select: Some(RShift),
+                b: Some(Key1), a: Some(Key2)
+            })},
+            InputConfiguration { name: "Keyboard mapping #2".to_string(), id: "00-keyboard-2".to_string(), disconnected: false, kind: InputConfigurationKind::Keyboard(JoypadKeyboardKeyMap {
+                up: Some(W), down: Some(S), left: Some(A), right: Some(D),
+                start: Some(Key9), select: Some(Key0),
+                b: Some(LAlt), a: Some(LControl)
+            })}
+        ]
     }
 
-    fn get_config(&mut self, player: usize, default: InputConfiguration) -> &mut InputConfiguration {
+    pub(crate) fn get_config(&mut self, player: usize) -> &mut InputConfiguration {
+        let default = Settings::default_configs()[player].clone();
         let mut id = self.selected_inputs[player].get_or_insert(default.id.clone()).clone();
 
         //Make sure we switch to default if it's disconnected.
@@ -43,12 +44,6 @@ impl Settings {
         self.input_configurations.entry(id).or_insert(default)
     }
 
-    pub(crate) fn get_p1_config(&mut self) -> &mut InputConfiguration {
-        self.get_config(0, Settings::default_p1_conf())
-    }
-    pub(crate) fn get_p2_config(&mut self) -> &mut InputConfiguration {
-        self.get_config(1, Settings::default_p2_conf())
-    }
     pub(crate) fn get_or_create_configuration(&mut self, id: &InputId, default: InputConfiguration) -> &mut InputConfiguration {
         self.input_configurations.entry(id.clone()).or_insert(default)
     }

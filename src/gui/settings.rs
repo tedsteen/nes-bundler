@@ -45,7 +45,7 @@ impl SettingsGui {
 
     fn key_map_ui(&mut self, ui: &mut Ui, settings: &mut Settings, joypad_input: &JoypadInput, pad: usize) {
         
-        let input_configuration: &InputConfiguration = if pad == 0 { settings.get_p1_config() } else { settings.get_p2_config() };
+        let input_configuration: &InputConfiguration = settings.get_config(pad);
 
         egui::ComboBox::from_label(format!("Joypad #{}", pad + 1))
         .width(160.0)
@@ -64,7 +64,7 @@ impl SettingsGui {
             }
         });
 
-        let input_configuration = if pad == 0 { settings.get_p1_config() } else { settings.get_p2_config() };
+        let input_configuration = settings.get_config(pad);
         match &mut input_configuration.kind {
             InputConfigurationKind::Keyboard(mapping) => {
                 self.map_grid_ui(ui, mapping, joypad_input, pad);
@@ -141,11 +141,7 @@ impl GuiComponent for SettingsGui {
         });
 
         if let Some(map_request) = &self.mapping_request {
-            let input_configuration = if map_request.pad == 0 {
-                game_runner.settings.get_p1_config()
-            } else {
-                game_runner.settings.get_p2_config()
-            };
+            let input_configuration = game_runner.settings.get_config(map_request.pad);
             if game_runner.inputs.remap_configuration(input_configuration, &map_request.button) {
                 self.mapping_request = None;
             }
