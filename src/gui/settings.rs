@@ -3,7 +3,7 @@ use std::fmt::{Debug};
 use egui::{Button, Color32, Context, Grid, Label, Slider, Ui, Window, RichText};
 
 use crate::{
-    input::{JoypadButton, JoypadKeyMap, JoypadInput, InputConfigurationKind, InputConfiguration}, GameRunner, settings::Settings
+    input::{JoypadButton, JoypadKeyMap, JoypadInput, InputConfigurationKind, InputConfiguration}, GameRunner, settings::{InputSettings}
 };
 
 use super::GuiComponent;
@@ -43,16 +43,16 @@ impl SettingsGui {
                     });
     }
 
-    fn key_map_ui(&mut self, ui: &mut Ui, settings: &mut Settings, joypad_input: &JoypadInput, pad: usize) {
+    fn key_map_ui(&mut self, ui: &mut Ui, input_settings: &mut InputSettings, joypad_input: &JoypadInput, pad: usize) {
         
-        let input_configuration: &InputConfiguration = settings.get_config(pad);
+        let input_configuration: &InputConfiguration = input_settings.get_config(pad);
 
         egui::ComboBox::from_label(format!("Joypad #{}", pad + 1))
         .width(160.0)
         .selected_text(format!("{:?}", input_configuration.name))
         .show_ui(ui, |ui| {
-            let selected_input = &mut settings.selected_inputs[pad];
-            let mut sorted_configurations: Vec<&InputConfiguration> = settings.input_configurations
+            let selected_input = &mut input_settings.selected[pad];
+            let mut sorted_configurations: Vec<&InputConfiguration> = input_settings.configurations
             .values()
             .filter(|&e| !e.disconnected)
             .collect();
@@ -64,7 +64,7 @@ impl SettingsGui {
             }
         });
 
-        let input_configuration = settings.get_config(pad);
+        let input_configuration = input_settings.get_config(pad);
         match &mut input_configuration.kind {
             InputConfigurationKind::Keyboard(mapping) => {
                 self.map_grid_ui(ui, mapping, joypad_input, pad);
@@ -128,20 +128,20 @@ impl GuiComponent for SettingsGui {
         Window::new("Settings").collapsible(false).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label("Audio latency");
-                ui.add(Slider::new(&mut game_runner.settings.audio_latency, 1..=500).suffix("ms"));
+                ui.add(Slider::new(&mut game_runner.settings.audio.latency, 1..=500).suffix("ms"));
             });
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
-                    self.key_map_ui(ui, &mut game_runner.settings, &game_runner.inputs.p1, 0);
+                    self.key_map_ui(ui, &mut game_runner.settings.input, &game_runner.inputs.p1, 0);
                 });
                 ui.vertical(|ui| {
-                    self.key_map_ui(ui, &mut game_runner.settings, &game_runner.inputs.p2, 1);
+                    self.key_map_ui(ui, &mut game_runner.settings.input, &game_runner.inputs.p2, 1);
                 });
             });
         });
 
         if let Some(map_request) = &self.mapping_request {
-            let input_configuration = game_runner.settings.get_config(map_request.pad);
+            let input_configuration = game_runner.settings.input.get_config(map_request.pad);
             if game_runner.inputs.remap_configuration(input_configuration, &map_request.button) {
                 self.mapping_request = None;
             }

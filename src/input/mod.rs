@@ -2,7 +2,7 @@ use std::{collections::HashSet};
 
 use winit::event::Event;
 
-use crate::settings::{Settings};
+use crate::settings::{InputSettings};
 
 use self::{keyboard::{Keyboards, JoypadKeyboardKeyMap}, gamepad::{Gamepads, JoypadGamepadKeyMap}};
 
@@ -120,14 +120,14 @@ impl Inputs {
         Self { keyboards, gamepads, p1: JoypadInput(0), p2: JoypadInput(0) }
     }
     
-    pub(crate) fn advance(&mut self, event: &winit::event::Event<()>, settings: &mut Settings) {
-        self.gamepads.advance(settings);
+    pub(crate) fn advance(&mut self, event: &winit::event::Event<()>, input_settings: &mut InputSettings) {
+        self.gamepads.advance(input_settings);
         if let Event::WindowEvent { event: winit::event::WindowEvent::KeyboardInput { input, .. }, .. } = event {
             self.keyboards.advance(input);
         }
 
-        self.p1 = self.get_state(settings.get_config(0));
-        self.p2 = self.get_state(settings.get_config(1));
+        self.p1 = self.get_state(input_settings.get_config(0));
+        self.p2 = self.get_state(input_settings.get_config(1));
     }
     fn get_state(&mut self, input_conf: &mut InputConfiguration) -> JoypadInput {
         match &input_conf.kind {

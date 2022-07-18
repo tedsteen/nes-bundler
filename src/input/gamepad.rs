@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}};
 use gilrs::{Gilrs, Button, Event, EventType, GamepadId};
-use crate::{settings::Settings, input::{self, InputConfigurationKind}};
+use crate::{settings::{InputSettings}, input::{self, InputConfigurationKind}};
 use super::{JoypadKeyMap, InputId, JoypadInput};
 
 pub(crate) type JoypadGamepadKeyMap = JoypadKeyMap<Button>;
@@ -45,19 +45,19 @@ impl Gamepads {
         self.all.entry(id.clone()).or_insert_with(GamepadState::new)
     }
 
-    pub(crate) fn advance(&mut self, settings: &mut Settings) {
+    pub(crate) fn advance(&mut self, input_settings: &mut InputSettings) {
         while let Some(Event { id: gamepad_id, event, ..}) = self.gilrs.next_event() {
             let id = self.map_id(gamepad_id);
 
             match event {
                 EventType::Connected => {
                     println!("Gamepad connected {}", gamepad_id);
-                    let conf = settings.get_or_create_config(id, input::InputConfiguration{ name: format!("Gamepad #{}", gamepad_id), id: id.clone(), disconnected: false, kind: InputConfigurationKind::Gamepad(Gamepads::create_default_mapping())});
+                    let conf = input_settings.get_or_create_config(id, input::InputConfiguration{ name: format!("Gamepad #{}", gamepad_id), id: id.clone(), disconnected: false, kind: InputConfigurationKind::Gamepad(Gamepads::create_default_mapping())});
                     conf.disconnected = false;
                 },
                 EventType::Disconnected => {
                     println!("Gamepad disconnected {}", gamepad_id);
-                    let conf = settings.get_or_create_config(id, input::InputConfiguration{ name: format!("Gamepad #{}", gamepad_id), id: id.clone(), disconnected: false, kind: InputConfigurationKind::Gamepad(Gamepads::create_default_mapping())});
+                    let conf = input_settings.get_or_create_config(id, input::InputConfiguration{ name: format!("Gamepad #{}", gamepad_id), id: id.clone(), disconnected: false, kind: InputConfigurationKind::Gamepad(Gamepads::create_default_mapping())});
                     conf.disconnected = true;
                 },
 

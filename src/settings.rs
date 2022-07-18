@@ -5,15 +5,24 @@ use crate::input::{InputConfiguration, InputId, keyboard::{JoypadKeyboardKeyMap}
 pub(crate) const MAX_PLAYERS: usize = 2;
 
 #[derive(Debug)]
+pub(crate) struct InputSettings {
+    pub(crate) selected: [Option<InputId>; MAX_PLAYERS],
+    pub(crate) configurations: HashMap<InputId, InputConfiguration>
+}
+#[derive(Debug)]
+pub(crate) struct AudioSettings {
+    pub(crate) latency: u16
+}
+
+#[derive(Debug)]
 pub(crate) struct Settings {
-    pub(crate) audio_latency: u16,
-    pub(crate) selected_inputs: [Option<InputId>; MAX_PLAYERS],
-    pub(crate) input_configurations: HashMap<InputId, InputConfiguration>
+    pub(crate) audio: AudioSettings,
+    pub(crate) input: InputSettings
 }
 
 use winit::event::VirtualKeyCode::*;
 
-impl Settings {
+impl InputSettings {
     fn default_configs() -> [InputConfiguration; MAX_PLAYERS] {
         [
             InputConfiguration { name: "Keyboard mapping #1".to_string(), id: "00-keyboard-1".to_string(), disconnected: false, kind: InputConfigurationKind::Keyboard(JoypadKeyboardKeyMap {
@@ -30,14 +39,14 @@ impl Settings {
     }
 
     pub(crate) fn get_config(&mut self, player: usize) -> &mut InputConfiguration {
-        let default = Settings::default_configs()[player].clone();
-        let mut id = self.selected_inputs[player].get_or_insert(default.id.clone()).clone();
+        let default = InputSettings::default_configs()[player].clone();
+        let mut id = self.selected[player].get_or_insert(default.id.clone()).clone();
 
         //Make sure we switch to default if it's disconnected.
-        if let Some(config) = self.input_configurations.get(&id) {
+        if let Some(config) = self.configurations.get(&id) {
             if config.disconnected {
                 id = default.id.clone();
-                self.selected_inputs[player] = Some(id.clone());
+                self.selected[player] = Some(id.clone());
             }
         }
 
@@ -45,15 +54,21 @@ impl Settings {
     }
 
     pub(crate) fn get_or_create_config(&mut self, id: &InputId, default: InputConfiguration) -> &mut InputConfiguration {
-        self.input_configurations.entry(id.clone()).or_insert(default)
+        self.configurations.entry(id.clone()).or_insert(default)
     }
 }
+
 impl Default for Settings {
     fn default() -> Self {
-        Self {
-            audio_latency: 30,
-            selected_inputs: [None, None],
-            input_configurations: HashMap::new()
-        }
+        let audio = AudioSettings {
+            latency: 40
+        };
+        
+        let input = InputSettings {
+            selected: [None, None],
+            configurations: HashMap::new()
+        };
+
+        Self { audio, input }
     }
 }

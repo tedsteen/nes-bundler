@@ -170,7 +170,7 @@ impl GameRunner {
         let settings: Settings = Default::default();
 
         let audio = Audio::new();
-        let sound_stream = audio.start(settings.audio_latency, None);
+        let sound_stream = audio.start(settings.audio.latency, None);
         let mut my_state = MyGameState::new();
         my_state.nes.apu.set_sample_rate(sound_stream.sample_rate as u64);
 
@@ -187,8 +187,8 @@ impl GameRunner {
         }
     }
     pub fn advance(&mut self) {
-        if self.sound_stream.get_latency() != self.settings.audio_latency {
-            self.sound_stream = self.audio.start(self.settings.audio_latency, Some(&mut self.sound_stream));
+        if self.sound_stream.get_latency() != self.settings.audio.latency {
+            self.sound_stream = self.audio.start(self.settings.audio.latency, Some(&mut self.sound_stream));
             //clear buffer
             self.state.nes.apu.consume_samples();
         }
@@ -229,7 +229,7 @@ impl GameRunner {
     }
 
     pub fn handle(&mut self, event: &winit::event::Event<()>, gui_framework: &mut Framework) -> bool {
-        self.inputs.advance(event, &mut self.settings);
+        self.inputs.advance(event, &mut self.settings.input);
         // Handle input events
         if let Event::WindowEvent { event, .. } = event {
             match event {
