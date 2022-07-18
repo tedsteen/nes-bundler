@@ -41,10 +41,10 @@ impl Settings {
             }
         }
 
-        self.input_configurations.entry(id).or_insert(default)
+        self.get_or_create_config(&id, default)
     }
 
-    pub(crate) fn get_or_create_configuration(&mut self, id: &InputId, default: InputConfiguration) -> &mut InputConfiguration {
+    pub(crate) fn get_or_create_config(&mut self, id: &InputId, default: InputConfiguration) -> &mut InputConfiguration {
         self.input_configurations.entry(id.clone()).or_insert(default)
     }
 }

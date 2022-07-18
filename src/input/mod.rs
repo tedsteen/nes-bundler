@@ -11,16 +11,16 @@ pub(crate) mod gamepad;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum JoypadButton {
-    Up = 0b00010000isize,
-    Down = 0b00100000isize,
-    Left = 0b01000000isize,
-    Right = 0b10000000isize,
+    Up = 0b00010000,
+    Down = 0b00100000,
+    Left = 0b01000000,
+    Right = 0b10000000,
 
-    Start = 0b00001000isize,
-    Select = 0b00000100isize,
+    Start = 0b00001000,
+    Select = 0b00000100,
 
-    B = 0b00000010isize,
-    A = 0b00000001isize,
+    B = 0b00000010,
+    A = 0b00000001,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -143,18 +143,16 @@ impl Inputs {
     pub(crate) fn remap_configuration(&mut self, input_configuration: &mut InputConfiguration, button: &JoypadButton) -> bool {
         match &mut input_configuration.kind {
             InputConfigurationKind::Keyboard(mapping) => {
-                let current_key_code = mapping.lookup(button);
                 if let Some(code) = self.keyboards.pressed_keys.iter().next() {
                     //If there's any key pressed, use the first found.
-                    let _ = current_key_code.insert(*code);
+                    let _ = mapping.lookup(button).insert(*code);
                     return true;
                 }
             },
             InputConfigurationKind::Gamepad(mapping) => {
-                let current_key_code = mapping.lookup(button);
                 if let Some(code) = self.gamepads.get_gamepad_by_input_id(&input_configuration.id).pressed_keys.iter().next() {
-                    //If there's any key pressed, use the first found.
-                    let _ = current_key_code.insert(*code);
+                    //If there's any button pressed, use the first found.
+                    let _ = mapping.lookup(button).insert(*code);
                     return true;
                 }
             }

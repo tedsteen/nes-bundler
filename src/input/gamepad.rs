@@ -52,12 +52,12 @@ impl Gamepads {
             match event {
                 EventType::Connected => {
                     println!("Gamepad connected {}", gamepad_id);
-                    let conf = settings.get_or_create_configuration(id, input::InputConfiguration{ name: format!("Gamepad #{}", gamepad_id), id: id.clone(), disconnected: false, kind: InputConfigurationKind::Gamepad(Gamepads::create_default_mapping())});
+                    let conf = settings.get_or_create_config(id, input::InputConfiguration{ name: format!("Gamepad #{}", gamepad_id), id: id.clone(), disconnected: false, kind: InputConfigurationKind::Gamepad(Gamepads::create_default_mapping())});
                     conf.disconnected = false;
                 },
                 EventType::Disconnected => {
                     println!("Gamepad disconnected {}", gamepad_id);
-                    let conf = settings.get_or_create_configuration(id, input::InputConfiguration{ name: format!("Gamepad #{}", gamepad_id), id: id.clone(), disconnected: false, kind: InputConfigurationKind::Gamepad(Gamepads::create_default_mapping())});
+                    let conf = settings.get_or_create_config(id, input::InputConfiguration{ name: format!("Gamepad #{}", gamepad_id), id: id.clone(), disconnected: false, kind: InputConfigurationKind::Gamepad(Gamepads::create_default_mapping())});
                     conf.disconnected = true;
                 },
 
