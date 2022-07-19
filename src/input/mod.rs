@@ -1,11 +1,14 @@
+use self::{
+    gamepad::{Gamepads, JoypadGamepadKeyMap},
+    keyboard::{JoypadKeyboardKeyMap, Keyboards},
+};
+use crate::settings::input::{InputConfigurationRef, InputSettings};
+use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, rc::Rc};
-use serde::{Serialize, Deserialize};
 use winit::event::Event;
-use crate::settings::input::{InputSettings, InputConfigurationRef};
-use self::{keyboard::{Keyboards, JoypadKeyboardKeyMap}, gamepad::{Gamepads, JoypadGamepadKeyMap}};
 
-pub(crate) mod keyboard;
 pub(crate) mod gamepad;
+pub(crate) mod keyboard;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum JoypadButton {
@@ -30,11 +33,12 @@ pub(crate) struct JoypadKeyMap<KeyType> {
     pub(crate) start: Option<KeyType>,
     pub(crate) select: Option<KeyType>,
     pub(crate) b: Option<KeyType>,
-    pub(crate) a: Option<KeyType>
+    pub(crate) a: Option<KeyType>,
 }
 
-impl<KeyType> JoypadKeyMap<KeyType> where
-    KeyType: PartialEq
+impl<KeyType> JoypadKeyMap<KeyType>
+where
+    KeyType: PartialEq,
 {
     pub(crate) fn lookup_mut(&mut self, button: &JoypadButton) -> &mut Option<KeyType> {
         match button {
@@ -45,7 +49,7 @@ impl<KeyType> JoypadKeyMap<KeyType> where
             JoypadButton::Start => &mut self.start,
             JoypadButton::Select => &mut self.select,
             JoypadButton::B => &mut self.b,
-            JoypadButton::A => &mut self.a
+            JoypadButton::A => &mut self.a,
         }
     }
     pub(crate) fn lookup(&self, button: &JoypadButton) -> &Option<KeyType> {
@@ -57,11 +61,16 @@ impl<KeyType> JoypadKeyMap<KeyType> where
             JoypadButton::Start => &self.start,
             JoypadButton::Select => &self.select,
             JoypadButton::B => &self.b,
-            JoypadButton::A => &self.a
+            JoypadButton::A => &self.a,
         }
     }
 
-    fn insert_if_mapped(buttons: &mut HashSet<JoypadButton>, mapping: &Option<KeyType>, a_key: &KeyType, button: JoypadButton) {
+    fn insert_if_mapped(
+        buttons: &mut HashSet<JoypadButton>,
+        mapping: &Option<KeyType>,
+        a_key: &KeyType,
+        button: JoypadButton,
+    ) {
         if let Some(key) = mapping {
             if a_key.eq(key) {
                 buttons.insert(button);
@@ -82,14 +91,12 @@ impl<KeyType> JoypadKeyMap<KeyType> where
     }
 
     fn calculate_state(&self, keys: &HashSet<KeyType>) -> JoypadInput {
-        JoypadInput(keys
-            .iter()
-            .fold(0_u8, |mut acc, key| {
-                for button in self.reverse_lookup(key) {
-                    acc |= button as u8;
-                }
-                acc
-            }))
+        JoypadInput(keys.iter().fold(0_u8, |mut acc, key| {
+            for button in self.reverse_lookup(key) {
+                acc |= button as u8;
+            }
+            acc
+        }))
     }
 }
 
@@ -109,18 +116,18 @@ pub(crate) struct InputConfiguration {
     pub(crate) id: InputId,
     pub(crate) name: String,
     pub(crate) disconnected: bool,
-    pub(crate) kind: InputConfigurationKind
+    pub(crate) kind: InputConfigurationKind,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq)]
 pub(crate) enum InputConfigurationKind {
     Keyboard(JoypadKeyboardKeyMap),
-    Gamepad(JoypadGamepadKeyMap)
+    Gamepad(JoypadGamepadKeyMap),
 }
 pub(crate) struct Inputs {
     keyboards: Keyboards,
     gamepads: Gamepads,
     pub(crate) p1: JoypadInput,
-    pub(crate) p2: JoypadInput
+    pub(crate) p2: JoypadInput,
 }
 
 impl Inputs {
@@ -128,12 +135,25 @@ impl Inputs {
         let gamepads = Gamepads::new();
         let keyboards = Keyboards::new();
 
-        Self { keyboards, gamepads, p1: JoypadInput(0), p2: JoypadInput(0) }
+        Self {
+            keyboards,
+            gamepads,
+            p1: JoypadInput(0),
+            p2: JoypadInput(0),
+        }
     }
-    
-    pub(crate) fn advance(&mut self, event: &winit::event::Event<()>, input_settings: &mut InputSettings) {
+
+    pub(crate) fn advance(
+        &mut self,
+        event: &winit::event::Event<()>,
+        input_settings: &mut InputSettings,
+    ) {
         self.gamepads.advance(input_settings);
-        if let Event::WindowEvent { event: winit::event::WindowEvent::KeyboardInput { input, .. }, .. } = event {
+        if let Event::WindowEvent {
+            event: winit::event::WindowEvent::KeyboardInput { input, .. },
+            ..
+        } = event
+        {
             self.keyboards.advance(input);
         }
         //Check if somethings been disconnected..
@@ -149,16 +169,16 @@ impl Inputs {
     }
     fn get_state(&mut self, input_conf: &InputConfiguration) -> JoypadInput {
         match &input_conf.kind {
-            InputConfigurationKind::Keyboard(mapping) => {
-                self.keyboards.get(mapping)
-            },
-            InputConfigurationKind::Gamepad(mapping) => {
-                self.gamepads.get(&input_conf.id, mapping)
-            },
+            InputConfigurationKind::Keyboard(mapping) => self.keyboards.get(mapping),
+            InputConfigurationKind::Gamepad(mapping) => self.gamepads.get(&input_conf.id, mapping),
         }
     }
 
-    pub(crate) fn remap_configuration(&mut self, input_configuration: &InputConfigurationRef, button: &JoypadButton) -> bool {
+    pub(crate) fn remap_configuration(
+        &mut self,
+        input_configuration: &InputConfigurationRef,
+        button: &JoypadButton,
+    ) -> bool {
         match &mut input_configuration.borrow_mut().kind {
             InputConfigurationKind::Keyboard(mapping) => {
                 if let Some(code) = self.keyboards.pressed_keys.iter().next() {
@@ -166,9 +186,15 @@ impl Inputs {
                     let _ = mapping.lookup_mut(button).insert(*code);
                     return true;
                 }
-            },
+            }
             InputConfigurationKind::Gamepad(mapping) => {
-                if let Some(code) = self.gamepads.get_gamepad_by_input_id(&input_configuration.borrow().id).pressed_keys.iter().next() {
+                if let Some(code) = self
+                    .gamepads
+                    .get_gamepad_by_input_id(&input_configuration.borrow().id)
+                    .pressed_keys
+                    .iter()
+                    .next()
+                {
                     //If there's any button pressed, use the first found.
                     let _ = mapping.lookup_mut(button).insert(*code);
                     return true;

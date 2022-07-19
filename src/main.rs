@@ -2,16 +2,16 @@
 #![forbid(unsafe_code)]
 
 use std::fs::File;
-use std::io::{Write, Read};
+use std::io::{Read, Write};
 
-use crate::input::{JoypadInput};
+use crate::input::JoypadInput;
 use anyhow::Result;
 use audio::{Audio, Stream};
 
 use game_loop::game_loop;
 
 use gui::Framework;
-use input::{Inputs};
+use input::Inputs;
 use log::error;
 use palette::NTSC_PAL;
 use pixels::{Pixels, SurfaceTexture};
@@ -26,10 +26,10 @@ use winit::window::WindowBuilder;
 mod audio;
 mod gui;
 mod input;
-mod palette;
-mod settings;
 #[cfg(feature = "netplay")]
 mod network;
+mod palette;
+mod settings;
 
 const FPS: u32 = 60;
 const WIDTH: u32 = 256;
@@ -47,7 +47,6 @@ pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
         _err => Err("ouch".to_owned()),
     }
 }
-
 
 #[tokio::main]
 async fn main() {
@@ -88,12 +87,12 @@ async fn async_main() {
         FPS,
         0.08,
         move |g| {
-            let game_runner = &mut g.game.0;            
+            let game_runner = &mut g.game.0;
             game_runner.advance();
-            
+
             #[cfg(feature = "netplay")]
             if game_runner.netplay.run_slow {
-                g.set_updates_per_second((FPS as f32 * 0.9) as u32 )
+                g.set_updates_per_second((FPS as f32 * 0.9) as u32)
             } else {
                 g.set_updates_per_second(FPS)
             }
@@ -114,13 +113,12 @@ async fn async_main() {
             if !game_runner.handle(event, &mut g.game.1) {
                 g.exit();
             }
-            
         },
     );
 }
 
 pub(crate) struct MyGameState {
-    nes: NesState
+    nes: NesState,
 }
 
 impl MyGameState {
@@ -128,7 +126,7 @@ impl MyGameState {
         let rom_data = match std::env::var("ROM_FILE") {
             Ok(rom_file) => std::fs::read(&rom_file)
                 .unwrap_or_else(|_| panic!("Could not read ROM {}", rom_file)),
-            Err(_e) => include_bytes!("../assets/rom.nes").to_vec()
+            Err(_e) => include_bytes!("../assets/rom.nes").to_vec(),
         };
 
         let nes = load_rom(rom_data).expect("Failed to load ROM");
@@ -153,7 +151,7 @@ impl MyGameState {
     }
 
     fn save(&self) -> Vec<u8> {
-        let mut data = vec!();
+        let mut data = vec![];
         data.extend(self.nes.save_state());
         data
     }
@@ -161,7 +159,6 @@ impl MyGameState {
         self.nes.load_state(data);
         self.nes.apu.consume_samples(); // clear buffer so we don't build up a delay
     }
-
 }
 
 struct GameRunner {
@@ -173,7 +170,7 @@ struct GameRunner {
     inputs: Inputs,
 
     #[cfg(feature = "netplay")]
-    netplay: network::Netplay
+    netplay: network::Netplay,
 }
 
 impl GameRunner {
@@ -184,7 +181,10 @@ impl GameRunner {
         let audio = Audio::new();
         let sound_stream = audio.start(settings.audio.latency, None);
         let mut my_state = MyGameState::new();
-        my_state.nes.apu.set_sample_rate(sound_stream.sample_rate as u64);
+        my_state
+            .nes
+            .apu
+            .set_sample_rate(sound_stream.sample_rate as u64);
 
         Self {
             state: my_state,
@@ -195,12 +195,14 @@ impl GameRunner {
             inputs,
 
             #[cfg(feature = "netplay")]
-            netplay: network::Netplay::new()
+            netplay: network::Netplay::new(),
         }
     }
     pub fn advance(&mut self) {
         if self.sound_stream.get_latency() != self.settings.audio.latency {
-            self.sound_stream = self.audio.start(self.settings.audio.latency, Some(&mut self.sound_stream));
+            self.sound_stream = self
+                .audio
+                .start(self.settings.audio.latency, Some(&mut self.sound_stream));
             //clear buffer
             self.state.nes.apu.consume_samples();
         }
@@ -209,7 +211,8 @@ impl GameRunner {
         self.state.advance([self.inputs.p1, self.inputs.p2]);
 
         #[cfg(feature = "netplay")]
-        self.netplay.advance(&mut self.state, [&self.inputs.p1, &self.inputs.p2]);
+        self.netplay
+            .advance(&mut self.state, [&self.inputs.p1, &self.inputs.p2]);
 
         let sound_data = self.state.nes.apu.consume_samples();
         for sample in sound_data {
@@ -235,26 +238,36 @@ impl GameRunner {
 
             Ok(())
         });
-        if render_result.map_err(|e| error!("pixels.render() failed: {}", e)).is_err() {
+        if render_result
+            .map_err(|e| error!("pixels.render() failed: {}", e))
+            .is_err()
+        {
             //TODO: what to do here?
         }
     }
 
-    pub fn handle(&mut self, event: &winit::event::Event<()>, gui_framework: &mut Framework) -> bool {
+    pub fn handle(
+        &mut self,
+        event: &winit::event::Event<()>,
+        gui_framework: &mut Framework,
+    ) -> bool {
         self.inputs.advance(event, &mut self.settings.input);
         // Handle input events
         if let Event::WindowEvent { event, .. } = event {
             match event {
                 winit::event::WindowEvent::CloseRequested => {
                     return false;
-                },
-                winit::event::WindowEvent::ScaleFactorChanged{ scale_factor, new_inner_size: _ } => {
+                }
+                winit::event::WindowEvent::ScaleFactorChanged {
+                    scale_factor,
+                    new_inner_size: _,
+                } => {
                     gui_framework.scale_factor(*scale_factor);
-                },
+                }
                 winit::event::WindowEvent::Resized(size) => {
                     self.pixels.resize_surface(size.width, size.height);
                     gui_framework.resize(size.width, size.height)
-                },
+                }
                 winit::event::WindowEvent::KeyboardInput { input, .. } => {
                     if input.state == winit::event::ElementState::Pressed {
                         match input.virtual_keycode {
@@ -291,7 +304,7 @@ impl GameRunner {
         let mut file = File::open("save.bin")?;
         let buf = &mut Vec::new();
         file.read_to_end(buf)?;
-        
+
         self.state.load(buf);
         Ok(())
     }

@@ -1,42 +1,44 @@
-use std::{collections::{HashMap, hash_map::DefaultHasher}, rc::Rc, cell::RefCell, hash::{Hash, Hasher}, fs::File, io::{BufWriter, BufReader}};
-use serde::{Serialize, Deserialize};
-use crate::input::{keyboard::{Keyboards}};
 use self::{audio::AudioSettings, input::InputSettings};
+use crate::input::keyboard::Keyboards;
+use serde::{Deserialize, Serialize};
+use std::{
+    cell::RefCell,
+    collections::{hash_map::DefaultHasher, HashMap},
+    fs::File,
+    hash::{Hash, Hasher},
+    io::{BufReader, BufWriter},
+    rc::Rc,
+};
 
-pub(crate) mod input;
 mod audio;
+pub(crate) mod input;
 
 pub(crate) const MAX_PLAYERS: usize = 2;
 
 #[derive(Debug, Serialize, Deserialize, Hash)]
 pub(crate) struct Settings {
     pub(crate) audio: AudioSettings,
-    pub(crate) input: InputSettings
+    pub(crate) input: InputSettings,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Settings::load_settings().unwrap_or_else(|_| {
-            let audio = AudioSettings {
-                latency: 40
-            };
+            let audio = AudioSettings { latency: 40 };
             let default_input_1 = Rc::new(RefCell::new(Keyboards::default_configurations(0)));
             let default_input_2 = Rc::new(RefCell::new(Keyboards::default_configurations(1)));
-    
+
             let mut configurations = HashMap::new();
             configurations.insert(default_input_1.borrow().id.clone(), default_input_1.clone());
             configurations.insert(default_input_2.borrow().id.clone(), default_input_2.clone());
-    
-            let selected = [
-                Rc::clone(&default_input_1),
-                Rc::clone(&default_input_2),
-            ];
-    
+
+            let selected = [Rc::clone(&default_input_1), Rc::clone(&default_input_2)];
+
             let input = InputSettings {
                 selected,
-                configurations
+                configurations,
             };
-    
+
             Self { audio, input }
         })
     }

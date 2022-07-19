@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait};
 use cpal::{Sample, StreamConfig};
-use ringbuf::{Producer, Consumer};
+use ringbuf::{Consumer, Producer};
 pub(crate) struct Audio {
     output_device: cpal::Device,
     output_config: cpal::SupportedStreamConfig,
@@ -22,7 +22,7 @@ impl Stream {
         latency: u16,
         mut stream_config: StreamConfig,
         output_device: &cpal::Device,
-        previous_stream: Option<&mut Stream>
+        previous_stream: Option<&mut Stream>,
     ) -> Self
     where
         T: cpal::Sample,
