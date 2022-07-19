@@ -1,6 +1,6 @@
 use std::{fmt::{Debug}, rc::Rc, collections::HashMap};
 
-use egui::{Button, Color32, Context, Grid, Label, Slider, Ui, Window, RichText};
+use egui::{Button, Color32, Context, Grid, Label, Ui, Window, RichText};
 
 use crate::{
     input::{JoypadButton, JoypadInput, InputId}, GameRunner, settings::{InputConfigurationRef}
@@ -14,10 +14,10 @@ struct MapRequest {
     button: JoypadButton,
 }
 
-pub(crate) struct SettingsGui {
+pub(crate) struct InputSettingsGui {
     mapping_request: Option<MapRequest>,
 }
-impl SettingsGui {
+impl InputSettingsGui {
     pub(crate) fn new() -> Self {
         Self {
             mapping_request: None,
@@ -100,7 +100,7 @@ impl SettingsGui {
     }
 }
 
-impl GuiComponent for SettingsGui {
+impl GuiComponent for InputSettingsGui {
     fn handle_event(
         &mut self,
         _event: &winit::event::WindowEvent,
@@ -109,11 +109,7 @@ impl GuiComponent for SettingsGui {
     }
 
     fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner) {
-        Window::new("Settings").collapsible(false).show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.label("Audio latency");
-                ui.add(Slider::new(&mut game_runner.settings.audio.latency, 1..=500).suffix("ms"));
-            });
+        Window::new("Input").collapsible(false).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     self.key_map_ui(ui, &game_runner.settings.input.configurations, &game_runner.inputs.p1, &mut game_runner.settings.input.selected[0], 1);

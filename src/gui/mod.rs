@@ -6,9 +6,10 @@ use winit::window::Window;
 
 use crate::{GameRunner};
 
-use self::settings::SettingsGui;
+use self::{audio::AudioSettingsGui, input::InputSettingsGui};
 
-mod settings;
+mod audio;
+mod input;
 #[cfg(feature = "netplay")]
 mod netplay;
 
@@ -135,7 +136,8 @@ pub(crate) struct Gui {
 impl Gui {
     fn new() -> Self {
         let gui_components: Vec<Box<dyn GuiComponent>> = vec![
-            Box::new(SettingsGui::new()),
+            Box::new(AudioSettingsGui::new()),
+            Box::new(InputSettingsGui::new()),
             #[cfg(feature = "netplay")] Box::new(netplay::NetplayGui::new()),
             ];
         Self {
