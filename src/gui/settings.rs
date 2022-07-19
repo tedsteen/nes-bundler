@@ -1,16 +1,16 @@
-use std::fmt::{Debug};
+use std::{fmt::{Debug}, rc::Rc, collections::HashMap};
 
 use egui::{Button, Color32, Context, Grid, Label, Slider, Ui, Window, RichText};
 
 use crate::{
-    input::{JoypadButton, JoypadKeyMap, JoypadInput, InputConfigurationKind, InputConfiguration}, GameRunner, settings::{InputSettings}
+    input::{JoypadButton, JoypadInput, InputId}, GameRunner, settings::{InputConfigurationRef}
 };
 
 use super::GuiComponent;
 
 #[derive(Debug)]
 struct MapRequest {
-    pad: usize,
+    input_configuration: InputConfigurationRef,
     button: JoypadButton,
 }
 
@@ -23,74 +23,55 @@ impl SettingsGui {
             mapping_request: None,
         }
     }
-    fn map_grid_ui<T>(&mut self, ui: &mut Ui, mapping: &mut JoypadKeyMap<T>, joypad_input: &JoypadInput, pad: usize)
-    where
-        T: PartialEq + Debug
-    {
-        Grid::new(format!("joymap_grid_1_{}", pad))
+
+    fn key_map_ui(&mut self, ui: &mut Ui, available_configurations: &HashMap<InputId, InputConfigurationRef>, joypad_input: &JoypadInput, selected_configuration: &mut InputConfigurationRef, pad: usize) {
+        ui.label(format!("Joypad #{}", pad));
+        egui::ComboBox::from_id_source(format!("joypad-{}", pad))
+        .width(160.0)
+        .selected_text(format!("{:?}", selected_configuration.borrow().name))
+        .show_ui(ui, |ui| {
+            let mut sorted_configurations: Vec<&InputConfigurationRef> = available_configurations
+            .values()
+            .filter(|e| !e.borrow().disconnected)
+            .collect();
+            
+            sorted_configurations.sort_by(|a, b| a.borrow().id.cmp(&b.borrow().id));
+            
+            for input_configuration in sorted_configurations {
+                ui.selectable_value(selected_configuration, Rc::clone(input_configuration), input_configuration.borrow().name.clone());
+            }
+        });
+
+        let input_configuration = selected_configuration;
+        Grid::new(format!("joypadmap_grid_{}", pad))
                     .num_columns(2)
                     .striped(true)
                     .show(ui, |ui| {
                         use JoypadButton::*;
-                        self.make_button_combo(ui, pad, mapping, joypad_input, Up);
-                        self.make_button_combo(ui, pad, mapping, joypad_input, Down);
-                        self.make_button_combo(ui, pad, mapping, joypad_input, Left);
-                        self.make_button_combo(ui, pad, mapping, joypad_input, Right);
-                        self.make_button_combo(ui, pad, mapping, joypad_input, Start);
-                        self.make_button_combo(ui, pad, mapping, joypad_input, Select);
-                        self.make_button_combo(ui, pad, mapping, joypad_input, B);
-                        self.make_button_combo(ui, pad, mapping, joypad_input, A);
+                        self.button_map_ui(ui, input_configuration, joypad_input, Up);
+                        self.button_map_ui(ui, input_configuration, joypad_input, Down);
+                        self.button_map_ui(ui, input_configuration, joypad_input, Left);
+                        self.button_map_ui(ui, input_configuration, joypad_input, Right);
+                        self.button_map_ui(ui, input_configuration, joypad_input, Start);
+                        self.button_map_ui(ui, input_configuration, joypad_input, Select);
+                        self.button_map_ui(ui, input_configuration, joypad_input, B);
+                        self.button_map_ui(ui, input_configuration, joypad_input, A);
                     });
     }
 
-    fn key_map_ui(&mut self, ui: &mut Ui, input_settings: &mut InputSettings, joypad_input: &JoypadInput, pad: usize) {
-        
-        let input_configuration: &InputConfiguration = input_settings.get_config(pad);
-
-        egui::ComboBox::from_label(format!("Joypad #{}", pad + 1))
-        .width(160.0)
-        .selected_text(format!("{:?}", input_configuration.name))
-        .show_ui(ui, |ui| {
-            let selected_input = &mut input_settings.selected[pad];
-            let mut sorted_configurations: Vec<&InputConfiguration> = input_settings.configurations
-            .values()
-            .filter(|&e| !e.disconnected)
-            .collect();
-            
-            sorted_configurations.sort_by(|&a, &b| a.id.cmp(&b.id));
-
-            for input_configuration in sorted_configurations {
-                ui.selectable_value(selected_input, Some(input_configuration.id.clone()), input_configuration.name.clone());
-            }
-        });
-
-        let input_configuration = input_settings.get_config(pad);
-        match &mut input_configuration.kind {
-            InputConfigurationKind::Keyboard(mapping) => {
-                self.map_grid_ui(ui, mapping, joypad_input, pad);
-            },
-            InputConfigurationKind::Gamepad(mapping) => {
-                self.map_grid_ui(ui, mapping, joypad_input, pad);
-            },
-        }
-    }
-
-    fn make_button_combo<T>(
+    fn button_map_ui(
         &mut self,
         ui: &mut Ui,
-        pad: usize,
-        mapping: &mut JoypadKeyMap<T>,
+        input_configuration: &InputConfigurationRef,
         joypad_input: &JoypadInput,
         button: JoypadButton,
-    ) where
-        T: PartialEq + Debug
-    {
+    ) {
         let mut text = RichText::new(format!("{:?}", button));
         if joypad_input.is_pressed(button) {
             text = text.color(Color32::from_rgb(255, 255, 255));
         }
-        match self.mapping_request {
-            Some(MapRequest { pad: p, button: b }) if p == pad && b == button => {
+        match &self.mapping_request {
+            Some(MapRequest { input_configuration: map_conf, button: b }) if map_conf == input_configuration && *b == button => {
                 if ui
                     .add(Button::new(RichText::new("Cancel").color(Color32::from_rgb(255, 0, 0))))
                     .clicked()
@@ -99,14 +80,17 @@ impl SettingsGui {
                 };
             }
             _ => {
-                let key_to_map = mapping.lookup(&button);
-                let key_to_map = match key_to_map {
-                    Some(k) => format!("{:?}", k),
-                    None => "-".to_string(),
-                };
-
+                let key_to_map = match input_configuration.borrow().kind {
+                    crate::input::InputConfigurationKind::Keyboard(mapping) => {
+                        mapping.lookup(&button).map(|v| format!("{:?}", v))
+                    },
+                    crate::input::InputConfigurationKind::Gamepad(mapping) => {
+                        mapping.lookup(&button).map(|v| format!("{:?}", v))
+                    },
+                }.unwrap_or_else(|| "-".to_string());
+                
                 if ui.button(key_to_map).clicked() {
-                    self.mapping_request = Some(MapRequest { pad, button });
+                    self.mapping_request = Some(MapRequest { input_configuration: input_configuration.clone(), button });
                 }
             }
         }
@@ -132,17 +116,16 @@ impl GuiComponent for SettingsGui {
             });
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
-                    self.key_map_ui(ui, &mut game_runner.settings.input, &game_runner.inputs.p1, 0);
+                    self.key_map_ui(ui, &game_runner.settings.input.configurations, &game_runner.inputs.p1, &mut game_runner.settings.input.selected[0], 1);
                 });
                 ui.vertical(|ui| {
-                    self.key_map_ui(ui, &mut game_runner.settings.input, &game_runner.inputs.p2, 1);
+                    self.key_map_ui(ui, &game_runner.settings.input.configurations, &game_runner.inputs.p2, &mut game_runner.settings.input.selected[1], 2);
                 });
             });
         });
 
         if let Some(map_request) = &self.mapping_request {
-            let input_configuration = game_runner.settings.input.get_config(map_request.pad);
-            if game_runner.inputs.remap_configuration(input_configuration, &map_request.button) {
+            if game_runner.inputs.remap_configuration(&map_request.input_configuration, &map_request.button) {
                 self.mapping_request = None;
             }
         }
