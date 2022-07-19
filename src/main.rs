@@ -2,9 +2,10 @@
 #![forbid(unsafe_code)]
 
 use std::fs::File;
-use std::io::{BufReader, BufWriter};
+use std::io::{BufReader, BufWriter, Write, Read};
 
 use crate::input::{JoypadInput};
+use anyhow::Result;
 use audio::{Audio, Stream};
 
 use game_loop::game_loop;
@@ -108,7 +109,7 @@ async fn async_main() {
                 last_settings = curr_settings;
                 //println!("before: {}, after: {}", settings_before, settings_after);
                 if let anyhow::private::Err(err) = game_runner.save_settings() {
-                    eprintln!("Failed to save the settings: {:?}", err);
+                    eprintln!("Failed to save the settings: {}", err);
                 }
             }
             if !game_runner.handle(event, &mut g.game.1) {
@@ -177,18 +178,6 @@ struct GameRunner {
 }
 
 impl GameRunner {
-    fn load_settings() -> anyhow::Result<Settings> {
-        let file = File::open("settings.json")?;
-        let settings = serde_json::from_reader(BufReader::new(file))?;
-        Ok(settings)
-    }
-    fn save_settings(&self) -> anyhow::Result<()>{
-        let file = File::create("settings.json")?;
-
-        serde_json::to_writer(BufWriter::new(file), &self.settings)?;
-        Ok(())
-    }
-
     pub fn new(pixels: Pixels) -> Self {
         let inputs = Inputs::new();
         let settings = GameRunner::load_settings().unwrap_or_default();
@@ -271,18 +260,13 @@ impl GameRunner {
                     if input.state == winit::event::ElementState::Pressed {
                         match input.virtual_keycode {
                             Some(VirtualKeyCode::F1) => {
-                                let data = self.state.save();
-                                let _ = std::fs::remove_file("save.bin");
-                                if let Err(err) = std::fs::write("save.bin", data) {
-                                    eprintln!("Could not write save file: {:?}", err);
+                                if let Err(err) = self.save_state() {
+                                    eprintln!("Could not write save file: {}", err);
                                 }
                             }
                             Some(VirtualKeyCode::F2) => {
-                                match std::fs::read("save.bin") {
-                                    Ok(mut bytes) => {
-                                        self.state.load(&mut bytes);
-                                    },
-                                    Err(err) =>  eprintln!("Could not read savefile: {:?}", err)
+                                if let Err(err) = self.load_state() {
+                                    eprintln!("Could not read savefile: {}", err);
                                 }
                             }
                             _ => {}
@@ -295,5 +279,33 @@ impl GameRunner {
             gui_framework.handle_event(event, self);
         }
         true
+    }
+
+    fn load_settings() -> anyhow::Result<Settings> {
+        let file = File::open("settings.json")?;
+        let settings = serde_json::from_reader(BufReader::new(file))?;
+        Ok(settings)
+    }
+    fn save_settings(&self) -> anyhow::Result<()>{
+        let file = File::create("settings.json")?;
+
+        serde_json::to_writer(BufWriter::new(file), &self.settings)?;
+        Ok(())
+    }
+
+    fn save_state(&self) -> Result<()> {
+        let mut file = File::create("save.bin")?;
+        let data = self.state.save();
+        file.write_all(&data)?;
+        Ok(())
+    }
+
+    fn load_state(&mut self) -> Result<()> {
+        let mut file = File::open("save.bin")?;
+        let buf = &mut Vec::new();
+        file.read_to_end(buf)?;
+        
+        self.state.load(buf);
+        Ok(())
     }
 }
