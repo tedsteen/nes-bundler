@@ -14,10 +14,11 @@ netplay = ["matchbox_socket", "ggrs", "futures-timer", "futures"]
 env_logger = "0.9"
 log = "0.4"
 anyhow = "1.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+gilrs = { version = "0.9", features = ["serde-serialize"] }
 
-gilrs = "0.9"
-
-winit = "0.26"
+winit = {version = "0.26", features = ["serde"] }
 pixels = "0.9"
 # rfd = "0.4" # Open file dialog for loading new ROMs?
 egui = "0.18"

@@ -1,5 +1,6 @@
 use std::{collections::HashSet, rc::Rc};
 
+use serde::{Serialize, Deserialize};
 use winit::event::Event;
 
 use crate::settings::{InputSettings, InputConfigurationRef};
@@ -23,7 +24,7 @@ pub(crate) enum JoypadButton {
     A = 0b00000001,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, PartialEq)]
 pub(crate) struct JoypadKeyMap<KeyType> {
     pub(crate) up: Option<KeyType>,
     pub(crate) down: Option<KeyType>,
@@ -106,14 +107,14 @@ impl JoypadInput {
 
 pub(crate) type InputId = String;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq)]
 pub(crate) struct InputConfiguration {
     pub(crate) id: InputId,
     pub(crate) name: String,
     pub(crate) disconnected: bool,
     pub(crate) kind: InputConfigurationKind
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq)]
 pub(crate) enum InputConfigurationKind {
     Keyboard(JoypadKeyboardKeyMap),
     Gamepad(JoypadGamepadKeyMap)
@@ -125,11 +126,6 @@ pub(crate) struct Inputs {
     pub(crate) p2: JoypadInput
 }
 
-impl PartialEq for InputConfiguration {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
 impl Inputs {
     pub(crate) fn new() -> Self {
         let gamepads = Gamepads::new();
