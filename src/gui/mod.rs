@@ -125,24 +125,26 @@ impl Framework {
 trait GuiComponent {
     fn handle_event(&mut self, event: &winit::event::WindowEvent, game_runner: &mut GameRunner);
     fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner);
+    fn is_open(&mut self) -> &mut bool;
+    fn name(&self) -> String;
 }
 
 pub(crate) struct Gui {
     // State for the demo app.
     visible: bool,
-    gui_components:  Vec<Box<dyn GuiComponent>>
+    settings:  Vec<Box<dyn GuiComponent>>
 }
 
 impl Gui {
     fn new() -> Self {
-        let gui_components: Vec<Box<dyn GuiComponent>> = vec![
+        let settings: Vec<Box<dyn GuiComponent>> = vec![
             Box::new(AudioSettingsGui::new()),
             Box::new(InputSettingsGui::new()),
             #[cfg(feature = "netplay")] Box::new(netplay::NetplayGui::new()),
             ];
         Self {
             visible: false,
-            gui_components
+            settings
         }
     }
 
@@ -154,7 +156,7 @@ impl Gui {
                 }
             }
         }
-        for g in &mut self.gui_components {
+        for g in &mut self.settings {
             g.handle_event(event, game_runner);
         }
     }
@@ -163,8 +165,21 @@ impl Gui {
         ctx: &Context,
         game_runner: &mut GameRunner) {
             if self.visible {
-                for g in &mut self.gui_components {
-                    g.ui(ctx, game_runner);
+                egui::TopBottomPanel::top("menubar_container").show(ctx, |ui| {
+                    egui::menu::bar(ui, |ui| {
+                        ui.menu_button("Settings", |ui| {
+                            for setting in &mut self.settings {
+                                if ui.button(setting.name()).clicked() {
+                                    *setting.is_open() = !*setting.is_open();
+                                    ui.close_menu();
+                                }
+                            }
+                        })
+                    });
+                });
+
+                for setting in &mut self.settings {
+                    setting.ui(ctx, game_runner);
                 }
             }
         }

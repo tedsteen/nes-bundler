@@ -6,12 +6,17 @@ use crate::{
 
 use super::GuiComponent;
 pub(crate) struct NetplayGui {
+    is_open: bool
 }
 
 impl GuiComponent for NetplayGui {
     fn handle_event(&mut self, _event: &winit::event::WindowEvent, _: &mut GameRunner) {}
     fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner) {
-        Window::new("Netplay!").collapsible(false).show(ctx, |ui| {
+        Window::new("Netplay!")
+        .open(&mut self.is_open)
+        .collapsible(false)
+        .resizable(false)
+        .show(ctx, |ui| {
             let netplay = &mut game_runner.netplay;
             match &mut netplay.state {
                 NetplayState::Disconnected => {
@@ -63,10 +68,18 @@ impl GuiComponent for NetplayGui {
             }
         });
     }
+
+    fn is_open(&mut self) -> &mut bool {
+        &mut self.is_open
+    }
+
+    fn name(&self) -> String {
+        "Netplay!".to_string()
+    }
 }
 
 impl NetplayGui {
     pub(crate) fn new() -> Self {
-        Self { }
+        Self { is_open: false }
     }
 }
