@@ -3,9 +3,7 @@ use egui::{Context, ClippedPrimitive, TexturesDelta};
 use egui_wgpu::renderer::{RenderPass, ScreenDescriptor};
 use pixels::{wgpu, PixelsContext};
 use winit::window::Window;
-
 use crate::{GameRunner};
-
 use self::{audio::AudioSettingsGui, input::InputSettingsGui};
 
 mod audio;

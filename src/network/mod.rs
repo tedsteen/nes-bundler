@@ -4,7 +4,6 @@ use ggrs::{Config, P2PSession, GGRSRequest, SessionBuilder};
 use matchbox_socket::WebRtcSocket;
 use rusticnes_core::nes::NesState;
 use std::time::Duration;
-
 use crate::{MyGameState, input::{JoypadInput}, settings::MAX_PLAYERS, FPS};
 
 impl Clone for MyGameState {

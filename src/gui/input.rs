@@ -1,11 +1,7 @@
 use std::{fmt::{Debug}, rc::Rc, collections::HashMap};
-
 use egui::{Button, Color32, Context, Grid, Label, Ui, Window, RichText};
-
 use crate::{
-    input::{JoypadButton, JoypadInput, InputId}, GameRunner, settings::{InputConfigurationRef}
-};
-
+    input::{JoypadButton, JoypadInput, InputId}, GameRunner, settings::input::InputConfigurationRef};
 use super::GuiComponent;
 
 #[derive(Debug)]
@@ -18,6 +14,7 @@ pub(crate) struct InputSettingsGui {
     mapping_request: Option<MapRequest>,
     is_open: bool
 }
+
 impl InputSettingsGui {
     pub(crate) fn new() -> Self {
         Self {
@@ -140,5 +137,4 @@ impl GuiComponent for InputSettingsGui {
     fn name(&self) -> String {
         "Input".to_string()
     }
-
 }

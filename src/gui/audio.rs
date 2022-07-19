@@ -1,17 +1,17 @@
 use egui::{Context, Slider, Window};
-
 use crate::{ GameRunner };
-
 use super::GuiComponent;
 
 pub(crate) struct AudioSettingsGui { 
     is_open: bool
 }
+
 impl AudioSettingsGui {
     pub(crate) fn new() -> Self {
         Self { is_open: false }
     }
 }
+
 impl GuiComponent for AudioSettingsGui {
     fn handle_event(
         &mut self,

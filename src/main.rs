@@ -2,7 +2,7 @@
 #![forbid(unsafe_code)]
 
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Write, Read};
+use std::io::{Write, Read};
 
 use crate::input::{JoypadInput};
 use anyhow::Result;
@@ -107,8 +107,7 @@ async fn async_main() {
             let curr_settings = game_runner.settings.get_hash();
             if last_settings != curr_settings {
                 last_settings = curr_settings;
-                //println!("before: {}, after: {}", settings_before, settings_after);
-                if let anyhow::private::Err(err) = game_runner.save_settings() {
+                if let anyhow::private::Err(err) = game_runner.settings.save() {
                     eprintln!("Failed to save the settings: {}", err);
                 }
             }
@@ -180,7 +179,7 @@ struct GameRunner {
 impl GameRunner {
     pub fn new(pixels: Pixels) -> Self {
         let inputs = Inputs::new();
-        let settings = GameRunner::load_settings().unwrap_or_default();
+        let settings: Settings = Default::default();
 
         let audio = Audio::new();
         let sound_stream = audio.start(settings.audio.latency, None);
@@ -279,18 +278,6 @@ impl GameRunner {
             gui_framework.handle_event(event, self);
         }
         true
-    }
-
-    fn load_settings() -> anyhow::Result<Settings> {
-        let file = File::open("settings.json")?;
-        let settings = serde_json::from_reader(BufReader::new(file))?;
-        Ok(settings)
-    }
-    fn save_settings(&self) -> anyhow::Result<()>{
-        let file = File::create("settings.json")?;
-
-        serde_json::to_writer(BufWriter::new(file), &self.settings)?;
-        Ok(())
     }
 
     fn save_state(&self) -> Result<()> {

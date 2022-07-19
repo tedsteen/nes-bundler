@@ -1,10 +1,7 @@
 use std::{collections::HashSet, rc::Rc};
-
 use serde::{Serialize, Deserialize};
 use winit::event::Event;
-
-use crate::settings::{InputSettings, InputConfigurationRef};
-
+use crate::settings::input::{InputSettings, InputConfigurationRef};
 use self::{keyboard::{Keyboards, JoypadKeyboardKeyMap}, gamepad::{Gamepads, JoypadGamepadKeyMap}};
 
 pub(crate) mod keyboard;

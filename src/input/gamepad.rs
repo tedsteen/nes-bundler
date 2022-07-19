@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}};
 use gilrs::{Gilrs, Button, Event, EventType, GamepadId};
-use crate::{settings::{InputSettings}, input::{self, InputConfigurationKind}};
+use crate::{input::{self, InputConfigurationKind}, settings::input::InputSettings};
 use super::{JoypadKeyMap, InputId, JoypadInput};
 
 pub(crate) type JoypadGamepadKeyMap = JoypadKeyMap<Button>;
