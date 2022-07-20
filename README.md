@@ -34,6 +34,7 @@ It's built on [rusticnes-core](https://github.com/zeta0134/rusticnes-core) so it
   * More control over output device?
   * Volume slider?
 * Netplay
+  * Support STUN servers
   * Save and restore session - save game state every 100th or so frame (when all peers have reached that 100th frame)
   * More control on who becomes P1 and P2 etc
   * Make it possible to wait for peers to reconnect if disconnected
