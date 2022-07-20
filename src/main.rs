@@ -56,6 +56,7 @@ async fn main() {
 #[derive(Deserialize)]
 struct BuildConfiguration {
     window_title: String,
+    default_settings: Settings,
 }
 async fn async_main() {
     env_logger::init();
@@ -83,7 +84,7 @@ async fn async_main() {
         (pixels, framework)
     };
 
-    let game_runner = GameRunner::new(pixels);
+    let game_runner = GameRunner::new(pixels, &build_configuration.default_settings);
     let mut last_settings = game_runner.settings.get_hash();
     game_loop(
         event_loop,
@@ -175,9 +176,9 @@ struct GameRunner {
     netplay: network::Netplay,
 }
 impl GameRunner {
-    pub fn new(pixels: Pixels) -> Self {
+    pub fn new(pixels: Pixels, default_settings: &Settings) -> Self {
         let inputs = Inputs::new();
-        let settings: Settings = Default::default();
+        let settings: Settings = Settings::new(default_settings);
 
         let audio = Audio::new();
         let sound_stream = audio.start(settings.audio.latency);

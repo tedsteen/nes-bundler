@@ -5,7 +5,7 @@ use std::{cell::RefCell, collections::HashMap, hash::Hash, rc::Rc};
 
 pub(crate) type InputConfigurationRef = Rc<RefCell<InputConfiguration>>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct InputSettings {
     pub(crate) selected: [InputConfigurationRef; MAX_PLAYERS],
     pub(crate) configurations: HashMap<InputId, InputConfigurationRef>,
