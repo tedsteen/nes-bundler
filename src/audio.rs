@@ -46,10 +46,11 @@ impl Stream {
                 .split();
 
         if let Some(previous_stream) = previous_stream {
+            let mut previous_stream = previous_stream.lock().unwrap();
             //Fill buffer with previous buffers sound
             for _ in 0..producer.capacity() {
                 producer
-                    .push(previous_stream.lock().unwrap().pop().unwrap_or(0))
+                    .push(previous_stream.pop().unwrap_or(0))
                     .unwrap();
             }
         } else {
@@ -103,6 +104,7 @@ impl Stream {
         self.producer = producer;
         self.consumer = consumer;
         self.stream = stream;
+        self.latency = latency;
     }
 
     pub(crate) fn get_sample_rate(&self) -> u64 {
