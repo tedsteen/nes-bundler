@@ -88,12 +88,12 @@ impl InputSettings {
                 Rc::clone(
                     configurations
                         .get(&source.selected[0])
-                        .expect("non-existant configuration selected"),
+                        .unwrap_or_else(|| panic!("non-existant input configuration selected for player 2 ({})", source.selected[0])),
                 ),
                 Rc::clone(
                     configurations
                         .get(&source.selected[1])
-                        .expect("non-existant configuration selected"),
+                        .unwrap_or_else(|| panic!("non-existant input configuration selected for player 1 ({})", source.selected[1])),
                 ),
             ],
             configurations,
