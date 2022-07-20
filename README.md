@@ -26,3 +26,19 @@ If you want to target other operating systems please read the rust documentation
 ## Limitations
 
 It's built on [rusticnes-core](https://github.com/zeta0134/rusticnes-core) so it's limited to what that can emulate (f.ex no PAL)
+
+## Future stuff/ideas/todo
+* Input
+  * Autoselect gamepads if they connect (Enable in build configuration?)
+* Audio
+  * More control over output device?
+  * Volume slider?
+* Netplay
+  * Save and restore session - save game state every 100th or so frame (when all peers have reached that 100th frame)
+  * More control on who becomes P1 and P2 etc
+  * Make it possible to wait for peers to reconnect if disconnected
+  * Move strange settings (max prediction + input delay) from UI -> build configuration and make UI simpler or try to auto tune it.
+  * Default room name as build config
+* More customizable UI
+* wasm?
+* ...
