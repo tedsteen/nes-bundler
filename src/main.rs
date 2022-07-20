@@ -49,17 +49,12 @@ pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
     }
 }
 
-#[tokio::main]
-async fn main() {
-    async_main().await;
-}
 #[derive(Deserialize)]
 struct BuildConfiguration {
     window_title: String,
     default_settings: Settings,
 }
-async fn async_main() {
-    env_logger::init();
+fn main() {
     let build_configuration: BuildConfiguration =
         serde_json::from_str(include_str!("../assets/build_config.json")).unwrap();
 

@@ -13,9 +13,9 @@ rm -rf /tmp/pgo-data/
 RUSTFLAGS="-Cprofile-generate=/tmp/pgo-data" cargo rustc -- -C link-args=-Wl,-stack_size,0x1000000 --target=$TARGET
 
 # STEP 2: Run the binary to generate profiler data
-./target/$TARGET/release/rusticnes-test &
+./target/$TARGET/release/nes-bundler &
 PID=$!
-./target/$TARGET/release/rusticnes-test &
+./target/$TARGET/release/nes-bundler &
 PID2=$!
 
 # Collect profiler data for 3 mins...

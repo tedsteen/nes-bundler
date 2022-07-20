@@ -4,6 +4,7 @@ use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, P2PSession, SessionBuilder};
 use matchbox_socket::WebRtcSocket;
 use rusticnes_core::nes::NesState;
+use tokio::runtime::Runtime;
 use std::time::Duration;
 
 impl Clone for MyGameState {
@@ -34,6 +35,7 @@ pub(crate) enum NetplayState {
 
 type Frame = i32;
 pub(crate) struct Netplay {
+    rt: Runtime,
     pub(crate) state: NetplayState,
 
     pub(crate) room_name: String,
@@ -43,6 +45,7 @@ pub(crate) struct Netplay {
 impl Netplay {
     pub(crate) fn new() -> Self {
         Netplay {
+            rt: Runtime::new().expect("Could not create an async runtime"),
             state: NetplayState::Disconnected,
             room_name: "example_room".to_string(),
             max_prediction: 12,
@@ -55,7 +58,7 @@ impl Netplay {
             WebRtcSocket::new(format!("ws://matchbox.marati.s3n.io:3536/{}", room));
 
         let loop_fut = loop_fut.fuse();
-        tokio::spawn(async move {
+        self.rt.spawn(async move {
             futures::pin_mut!(loop_fut);
 
             let timeout = Delay::new(Duration::from_millis(100));
