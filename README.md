@@ -10,6 +10,10 @@ What you get is a single executable with
 * Save/Restore state (F1 = Save, F2 = Load).
 * Netplay! (Optional feature, can be disabled if not wanted).
 
+<p align="center">
+  <img src="https://github.com/tedsteen/nes-bundler/blob/screenshot/screenshot.png?raw=true" alt="Super Mario!"/>
+</p>
+
 ## Bundling
 
 To create a bundle you need to do the following
