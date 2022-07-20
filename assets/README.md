@@ -1,7 +1,9 @@
 ## Assets needed for building
 
-In order to build you need two files in this directory.  
-A build configuration-file and a ROM-file.
+In order to build your bundle you need two files in this directory.  
+
+* A `build_configuration.json` with the build configuration
+* A `nes.rom` with your game
 
 ### Build configuration
 
@@ -79,4 +81,4 @@ It's pretty self explanatory, but if you want to read more about how to do the i
 ### ROM-file
 
 A file named `rom.nes` containing your actual game.  
-You can try it out with the demo.nes included here.
+You can try it out with the `demo.nes` included.
