@@ -61,19 +61,22 @@ impl Stream {
 
         let mut nes_sample = 0;
         let consumer = Arc::new(Mutex::<Consumer<i16>>::new(consumer));
-        let c2 = consumer.clone();
         let stream = output_device
             .build_output_stream(
                 stream_config,
-                move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                    for sample in data {
-                        if let Some(sample) = c2.lock().unwrap().pop() {
-                            nes_sample = sample;
-                        } else {
-                            //eprintln!("Buffer underrun");
-                        }
+                {
+                    let consumer = consumer.clone();
+                    move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                        let mut consumer = consumer.lock().unwrap();
+                        for sample in data {
+                            if let Some(sample) = consumer.pop() {
+                                nes_sample = sample;
+                            } else {
+                                //eprintln!("Buffer underrun");
+                            }
 
-                        *sample = Sample::from(&nes_sample);
+                            *sample = Sample::from(&nes_sample);
+                        }
                     }
                 },
                 |err| eprintln!("an error occurred on the output audio stream: {}", err),
