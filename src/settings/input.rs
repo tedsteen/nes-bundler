@@ -1,5 +1,6 @@
 use super::MAX_PLAYERS;
 use crate::input::{keyboard::Keyboards, InputConfiguration, InputId};
+use core::fmt;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{cell::RefCell, collections::HashMap, hash::Hash, rc::Rc};
 
@@ -72,31 +73,70 @@ impl<'de> Deserialize<'de> for InputSettings {
     where
         D: Deserializer<'de>,
     {
-        SerializableInputSettings::deserialize(deserializer).map(InputSettings::from)
+        SerializableInputSettings::deserialize(deserializer)
+            .and_then(|s| InputSettings::from::<D>(s))
     }
 }
 
-impl InputSettings {
-    fn from(source: SerializableInputSettings) -> Self {
+impl<'de> InputSettings {
+    fn from<D>(source: SerializableInputSettings) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
         let configurations: HashMap<InputId, InputConfigurationRef> = source
             .configurations
             .iter()
             .map(|(k, v)| (k.clone(), Rc::new(RefCell::new(v.clone()))))
             .collect();
-        Self {
+        Ok(Self {
             selected: [
                 Rc::clone(
-                    configurations
-                        .get(&source.selected[0])
-                        .unwrap_or_else(|| panic!("non-existant input configuration selected for player 2 ({})", source.selected[0])),
+                    map_selected(&configurations, &source.selected[0])
+                        .map_err(serde::de::Error::custom)?,
                 ),
                 Rc::clone(
-                    configurations
-                        .get(&source.selected[1])
-                        .unwrap_or_else(|| panic!("non-existant input configuration selected for player 1 ({})", source.selected[1])),
+                    map_selected(&configurations, &source.selected[1])
+                        .map_err(serde::de::Error::custom)?,
                 ),
             ],
             configurations,
+        })
+    }
+}
+
+#[derive(Debug)]
+struct SettingsParseError {
+    details: String,
+}
+
+impl SettingsParseError {
+    fn new(msg: &str) -> SettingsParseError {
+        SettingsParseError {
+            details: msg.to_string(),
         }
     }
+}
+
+impl fmt::Display for SettingsParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.details)
+    }
+}
+
+impl std::error::Error for SettingsParseError {
+    fn description(&self) -> &str {
+        &self.details
+    }
+}
+
+fn map_selected<'a>(
+    configurations: &'a HashMap<String, Rc<RefCell<InputConfiguration>>>,
+    id: &'a InputId,
+) -> Result<&'a Rc<RefCell<InputConfiguration>>, SettingsParseError> {
+    #[allow(clippy::or_fun_call)]
+    configurations
+        .get(id)
+        .ok_or(SettingsParseError::new(&format!(
+            "non-existant input configuration '{id}' selected for player 1"
+        )))
 }

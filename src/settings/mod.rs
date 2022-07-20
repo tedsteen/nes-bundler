@@ -1,7 +1,7 @@
 use self::{audio::AudioSettings, input::InputSettings};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{hash_map::DefaultHasher},
+    collections::hash_map::DefaultHasher,
     fs::File,
     hash::{Hash, Hasher},
     io::{BufReader, BufWriter},
@@ -19,8 +19,8 @@ pub(crate) struct Settings {
 }
 
 impl Settings {
-    pub(crate) fn new(default: &Settings) -> Self {
-        Settings::load().unwrap_or_else(|_| default.clone())
+    pub(crate) fn new() -> anyhow::Result<Self> {
+        Settings::load()
     }
 }
 

@@ -60,7 +60,8 @@ struct BuildConfiguration {
 }
 async fn async_main() {
     env_logger::init();
-    let build_configuration: BuildConfiguration = serde_json::from_str(include_str!("../assets/build_config.json")).unwrap();
+    let build_configuration: BuildConfiguration =
+        serde_json::from_str(include_str!("../assets/build_config.json")).unwrap();
 
     let event_loop = EventLoop::new();
 
@@ -178,7 +179,10 @@ struct GameRunner {
 impl GameRunner {
     pub fn new(pixels: Pixels, default_settings: &Settings) -> Self {
         let inputs = Inputs::new();
-        let settings: Settings = Settings::new(default_settings);
+        let settings: Settings = Settings::new().unwrap_or_else(|err| {
+            eprintln!("Failed to load config ({err}), falling back to default settings");
+            default_settings.clone()
+        });
 
         let audio = Audio::new();
         let sound_stream = audio.start(settings.audio.latency);

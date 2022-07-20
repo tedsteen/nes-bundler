@@ -49,9 +49,7 @@ impl Stream {
             let mut previous_stream = previous_stream.lock().unwrap();
             //Fill buffer with previous buffers sound
             for _ in 0..producer.capacity() {
-                producer
-                    .push(previous_stream.pop().unwrap_or(0))
-                    .unwrap();
+                producer.push(previous_stream.pop().unwrap_or(0)).unwrap();
             }
         } else {
             //Fill buffer with silence
