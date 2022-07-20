@@ -100,11 +100,13 @@ async fn async_main() {
             let curr_settings = game_runner.settings.get_hash();
             if last_settings != curr_settings {
                 if game_runner.sound_stream.get_latency() != game_runner.settings.audio.latency {
-                    game_runner.sound_stream.set_latency(game_runner.settings.audio.latency);
+                    game_runner
+                        .sound_stream
+                        .set_latency(game_runner.settings.audio.latency);
                     //clear buffer
                     game_runner.state.nes.apu.consume_samples();
                 }
-        
+
                 last_settings = curr_settings;
                 if let anyhow::private::Err(err) = game_runner.settings.save() {
                     eprintln!("Failed to save the settings: {}", err);
@@ -202,7 +204,9 @@ impl GameRunner {
 
         #[cfg(feature = "netplay")]
         {
-            fps = self.netplay.advance(&mut self.state, [&self.inputs.p1, &self.inputs.p2]);
+            fps = self
+                .netplay
+                .advance(&mut self.state, [&self.inputs.p1, &self.inputs.p2]);
         }
 
         let sound_data = self.state.nes.apu.consume_samples();
@@ -221,15 +225,17 @@ impl GameRunner {
         self.state.render(frame);
 
         // Render everything together
-        pixels.render_with(|encoder, render_target, context| {
-            // Render the world texture
-            context.scaling_renderer.render(encoder, render_target);
+        pixels
+            .render_with(|encoder, render_target, context| {
+                // Render the world texture
+                context.scaling_renderer.render(encoder, render_target);
 
-            // Render egui
-            gui_framework.render(encoder, render_target, context);
+                // Render egui
+                gui_framework.render(encoder, render_target, context);
 
-            Ok(())
-        }).expect("Failed to render :(");
+                Ok(())
+            })
+            .expect("Failed to render :(");
     }
 
     pub fn handle(
@@ -246,7 +252,7 @@ impl GameRunner {
                 }
                 winit::event::WindowEvent::Resized(size) => {
                     self.pixels.resize_surface(size.width, size.height);
-                }    
+                }
                 winit::event::WindowEvent::KeyboardInput { input, .. } => {
                     if input.state == winit::event::ElementState::Pressed {
                         match input.virtual_keycode {

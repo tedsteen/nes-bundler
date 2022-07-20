@@ -10,19 +10,16 @@ pub(crate) struct Stream {
     latency: u16,
     producer: Producer<i16>,
     consumer: Arc<Mutex<Consumer<i16>>>,
-    output_device: cpal::Device
+    output_device: cpal::Device,
 }
 
 impl Stream {
-    fn new<T>(
-        latency: u16,
-        mut stream_config: StreamConfig,
-        output_device: cpal::Device,
-    ) -> Self
+    fn new<T>(latency: u16, mut stream_config: StreamConfig, output_device: cpal::Device) -> Self
     where
         T: cpal::Sample,
     {
-        let (producer, consumer, stream) = Stream::setup_stream(&mut stream_config, latency, None, &output_device);
+        let (producer, consumer, stream) =
+            Stream::setup_stream(&mut stream_config, latency, None, &output_device);
         Self {
             stream_config,
             latency,
@@ -33,7 +30,12 @@ impl Stream {
         }
     }
 
-    fn setup_stream(stream_config: &mut StreamConfig, latency: u16, previous_stream: Option<&mut Arc<Mutex<Consumer<i16>>>>, output_device: &cpal::Device) -> (Producer<i16>, Arc<Mutex<Consumer<i16>>>, cpal::Stream) {
+    fn setup_stream(
+        stream_config: &mut StreamConfig,
+        latency: u16,
+        previous_stream: Option<&mut Arc<Mutex<Consumer<i16>>>>,
+        output_device: &cpal::Device,
+    ) -> (Producer<i16>, Arc<Mutex<Consumer<i16>>>, cpal::Stream) {
         stream_config.channels = 1;
 
         let sample_rate = stream_config.sample_rate.0 as f32;
@@ -46,7 +48,9 @@ impl Stream {
         if let Some(previous_stream) = previous_stream {
             //Fill buffer with previous buffers sound
             for _ in 0..producer.capacity() {
-                producer.push(previous_stream.lock().unwrap().pop().unwrap_or(0)).unwrap();
+                producer
+                    .push(previous_stream.lock().unwrap().pop().unwrap_or(0))
+                    .unwrap();
             }
         } else {
             //Fill buffer with silence
@@ -87,7 +91,12 @@ impl Stream {
         self.latency
     }
     pub fn set_latency(&mut self, latency: u16) {
-        let (producer, consumer, stream) = Stream::setup_stream(&mut self.stream_config, latency, Some(&mut self.consumer), &self.output_device);
+        let (producer, consumer, stream) = Stream::setup_stream(
+            &mut self.stream_config,
+            latency,
+            Some(&mut self.consumer),
+            &self.output_device,
+        );
         self.producer = producer;
         self.consumer = consumer;
         self.stream = stream;
@@ -114,7 +123,8 @@ impl Audio {
     }
 
     pub(crate) fn start(&self, latency: u16) -> Stream {
-        let output_device = self.host
+        let output_device = self
+            .host
             .default_output_device()
             .expect("no sound output device available");
         println!("Sound output device: {}", output_device.name().unwrap());
@@ -129,15 +139,9 @@ impl Audio {
 
         let stream_config = output_config.config();
         match output_config.sample_format() {
-            cpal::SampleFormat::F32 => {
-                Stream::new::<f32>(latency, stream_config, output_device)
-            }
-            cpal::SampleFormat::I16 => {
-                Stream::new::<i16>(latency, stream_config, output_device)
-            }
-            cpal::SampleFormat::U16 => {
-                Stream::new::<u16>(latency, stream_config, output_device)
-            }
+            cpal::SampleFormat::F32 => Stream::new::<f32>(latency, stream_config, output_device),
+            cpal::SampleFormat::I16 => Stream::new::<i16>(latency, stream_config, output_device),
+            cpal::SampleFormat::U16 => Stream::new::<u16>(latency, stream_config, output_device),
         }
     }
 }

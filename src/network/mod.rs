@@ -1,10 +1,10 @@
-use crate::{input::JoypadInput, settings::MAX_PLAYERS, MyGameState, FPS, Fps};
+use crate::{input::JoypadInput, settings::MAX_PLAYERS, Fps, MyGameState, FPS};
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, P2PSession, SessionBuilder};
 use matchbox_socket::WebRtcSocket;
 use rusticnes_core::nes::NesState;
-use std::{time::Duration};
+use std::time::Duration;
 
 impl Clone for MyGameState {
     fn clone(&self) -> Self {
@@ -186,7 +186,7 @@ impl Netplay {
                     }
                 }
                 if sess.frames_ahead() > 0 {
-                    return (FPS as f32 * 0.9) as u32
+                    return (FPS as f32 * 0.9) as u32;
                 }
             }
         }
