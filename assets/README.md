@@ -1,12 +1,17 @@
 ## Assets needed for building
-In order to build you need two files in this directory.
+
+In order to build you need two files in this directory.  
 A build configuration-file and a ROM-file.
 
 ### Build configuration
-A file named `build_configuration.json` looking something like this:
+
+A file named `build_configuration.json` looking something like this (a more detailed description further below):
 ```json
 {
     "window_title": "My Awesome Game!",
+    "netplay": {
+        "matchbox_server": "matchbox.your-domain.io:3536"
+    },
     "default_settings": {
         "audio": {
             "latency": 40
@@ -56,6 +61,22 @@ A file named `build_configuration.json` looking something like this:
     }
 }
 ```
+#### `window_title`
+
+The title of the window...
+
+#### `netplay`
+
+If you have netplay enabled you need to provide a `matchbox_server`.  
+You can read all about it [here](https://github.com/johanhelsing/matchbox), but for quick and easy setup have a look [over here](../matchbox_server/).
+
+#### `default_settings`
+
+This will be the default settings for the bundle.  
+It's pretty self explanatory, but if you want to read more about how to do the input mapping look [here for keyboard](https://docs.rs/winit/latest/winit/event/enum.VirtualKeyCode.html) and [here for gamepads](https://docs.rs/gilrs/latest/gilrs/ev/enum.Button.html).
+
 
 ### ROM-file
-A file named `rom.nes` containing your actual game.
+
+A file named `rom.nes` containing your actual game.  
+You can try it out with the demo.nes included here.

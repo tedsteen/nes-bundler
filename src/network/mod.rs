@@ -1,4 +1,4 @@
-use crate::{input::JoypadInput, settings::MAX_PLAYERS, Fps, MyGameState, FPS};
+use crate::{input::JoypadInput, settings::MAX_PLAYERS, Fps, MyGameState, FPS, NetplayBuildConfiguration};
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, P2PSession, SessionBuilder};
@@ -36,6 +36,7 @@ pub(crate) enum NetplayState {
 type Frame = i32;
 pub(crate) struct Netplay {
     rt: Runtime,
+    matchbox_server: String,
     pub(crate) state: NetplayState,
 
     pub(crate) room_name: String,
@@ -43,9 +44,10 @@ pub(crate) struct Netplay {
     pub(crate) input_delay: usize,
 }
 impl Netplay {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(netplay_build_configuration: &NetplayBuildConfiguration) -> Self {
         Netplay {
             rt: Runtime::new().expect("Could not create an async runtime"),
+            matchbox_server: netplay_build_configuration.matchbox_server.clone(),
             state: NetplayState::Disconnected,
             room_name: "example_room".to_string(),
             max_prediction: 12,
@@ -54,8 +56,9 @@ impl Netplay {
     }
 
     pub(crate) fn connect(&mut self, room: &str) {
+        let matchbox_server = &self.matchbox_server;
         let (socket, loop_fut) =
-            WebRtcSocket::new(format!("ws://matchbox.marati.s3n.io:3536/{}", room));
+            WebRtcSocket::new(format!("ws://{matchbox_server}/{room}"));
 
         let loop_fut = loop_fut.fuse();
         self.rt.spawn(async move {

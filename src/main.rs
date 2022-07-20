@@ -50,8 +50,13 @@ pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
 }
 
 #[derive(Deserialize)]
+struct NetplayBuildConfiguration {
+    matchbox_server: String
+}
+#[derive(Deserialize)]
 struct BuildConfiguration {
     window_title: String,
+    netplay: NetplayBuildConfiguration,
     default_settings: Settings,
 }
 fn main() {
@@ -62,7 +67,7 @@ fn main() {
 
     let window = {
         WindowBuilder::new()
-            .with_title(build_configuration.window_title)
+            .with_title(&build_configuration.window_title)
             .with_inner_size(LogicalSize::new(WIDTH as f32 * ZOOM, HEIGHT as f32 * ZOOM))
             .with_min_inner_size(LogicalSize::new(WIDTH, HEIGHT))
             .build(&event_loop)
@@ -80,7 +85,7 @@ fn main() {
         (pixels, framework)
     };
 
-    let game_runner = GameRunner::new(pixels, &build_configuration.default_settings);
+    let game_runner = GameRunner::new(pixels, &build_configuration);
     let mut last_settings = game_runner.settings.get_hash();
     game_loop(
         event_loop,
@@ -172,11 +177,11 @@ struct GameRunner {
     netplay: network::Netplay,
 }
 impl GameRunner {
-    pub fn new(pixels: Pixels, default_settings: &Settings) -> Self {
+    pub fn new(pixels: Pixels, build_configuration: &BuildConfiguration) -> Self {
         let inputs = Inputs::new();
         let settings: Settings = Settings::new().unwrap_or_else(|err| {
             eprintln!("Failed to load config ({err}), falling back to default settings");
-            default_settings.clone()
+            build_configuration.default_settings.clone()
         });
 
         let audio = Audio::new();
@@ -195,7 +200,7 @@ impl GameRunner {
             inputs,
 
             #[cfg(feature = "netplay")]
-            netplay: network::Netplay::new(),
+            netplay: network::Netplay::new(&build_configuration.netplay),
         }
     }
     pub fn advance(&mut self) -> Fps {
