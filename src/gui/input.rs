@@ -132,6 +132,7 @@ impl InputSettingsGui {
         if joypad_input.is_pressed(button) {
             text = text.color(Color32::from_rgb(255, 255, 255));
         }
+        ui.add(Label::new(text));
         match map_request {
             Some(MapRequest {
                 input_configuration: map_conf,
@@ -165,8 +166,6 @@ impl InputSettingsGui {
                 }
             }
         }
-        ui.add(Label::new(text));
-
         ui.end_row();
     }
 }
