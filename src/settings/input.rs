@@ -91,11 +91,11 @@ impl<'de> InputSettings {
         Ok(Self {
             selected: [
                 Rc::clone(
-                    Self::map_selected(&configurations, &source.selected[0])
+                    Self::map_selected(&configurations, &source.selected[0], 1)
                         .map_err(serde::de::Error::custom)?,
                 ),
                 Rc::clone(
-                    Self::map_selected(&configurations, &source.selected[1])
+                    Self::map_selected(&configurations, &source.selected[1], 2)
                         .map_err(serde::de::Error::custom)?,
                 ),
             ],
@@ -105,12 +105,13 @@ impl<'de> InputSettings {
     fn map_selected<'a>(
         configurations: &'a HashMap<String, Rc<RefCell<InputConfiguration>>>,
         id: &'a InputId,
+        player: usize,
     ) -> Result<&'a Rc<RefCell<InputConfiguration>>, SettingsParseError> {
         #[allow(clippy::or_fun_call)]
         configurations
             .get(id)
             .ok_or(SettingsParseError::new(&format!(
-                "non-existant input configuration '{id}' selected for player 1"
+                "non-existant input configuration '{id}' selected for player {player}"
             )))
     }
 }
