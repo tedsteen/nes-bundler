@@ -50,12 +50,14 @@ pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
 }
 
 #[derive(Deserialize)]
+#[cfg(feature = "netplay")]
 struct NetplayBuildConfiguration {
     matchbox_server: String
 }
 #[derive(Deserialize)]
 struct BuildConfiguration {
     window_title: String,
+    #[cfg(feature = "netplay")]
     netplay: NetplayBuildConfiguration,
     default_settings: Settings,
 }
