@@ -3002,7 +3002,7 @@ dependencies = [
 [[package]]
 name = "rusticnes-core"
 version = "0.2.0"
-source = "git+https://github.com/tedsteen/rusticnes-core?branch=for-rusticnes-test#b0c8221115e5288f05fa9afcb66b3ef6047a588e"
+source = "git+https://github.com/tedsteen/rusticnes-core?branch=for-rusticnes-test#0b7cf1af4d69cccbb4f2c7d560afb8a98337d1e2"
 
 [[package]]
 name = "rustls"
