@@ -16,6 +16,7 @@ use palette::NTSC_PAL;
 use pixels::{Pixels, SurfaceTexture};
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
+use serde::Deserialize;
 use settings::{Settings, MAX_PLAYERS};
 use winit::dpi::LogicalSize;
 use winit::event::{Event, VirtualKeyCode};
@@ -52,15 +53,19 @@ pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
 async fn main() {
     async_main().await;
 }
-
+#[derive(Deserialize)]
+struct BuildConfiguration {
+    window_title: String,
+}
 async fn async_main() {
     env_logger::init();
+    let build_configuration: BuildConfiguration = serde_json::from_str(include_str!("../assets/build_config.json")).unwrap();
 
     let event_loop = EventLoop::new();
 
     let window = {
         WindowBuilder::new()
-            .with_title("Hello rusticnes!")
+            .with_title(build_configuration.window_title)
             .with_inner_size(LogicalSize::new(WIDTH as f32 * ZOOM, HEIGHT as f32 * ZOOM))
             .with_min_inner_size(LogicalSize::new(WIDTH, HEIGHT))
             .build(&event_loop)
