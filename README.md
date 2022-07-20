@@ -11,7 +11,7 @@ What you get is a single executable with
 * Netplay! (Optional feature, can be disabled if not wanted).
 
 <p align="center">
-  <img src="https://github.com/tedsteen/nes-bundler/blob/screenshot/screenshot.png?raw=true" alt="Super Mario!"/>
+  <img src="https://github.com/tedsteen/nes-bundler/blob/master/screenshot.png?raw=true" alt="Super Mario!"/>
 </p>
 
 ## Bundling
