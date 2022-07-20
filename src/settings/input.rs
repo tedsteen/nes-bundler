@@ -91,16 +91,27 @@ impl<'de> InputSettings {
         Ok(Self {
             selected: [
                 Rc::clone(
-                    map_selected(&configurations, &source.selected[0])
+                    Self::map_selected(&configurations, &source.selected[0])
                         .map_err(serde::de::Error::custom)?,
                 ),
                 Rc::clone(
-                    map_selected(&configurations, &source.selected[1])
+                    Self::map_selected(&configurations, &source.selected[1])
                         .map_err(serde::de::Error::custom)?,
                 ),
             ],
             configurations,
         })
+    }
+    fn map_selected<'a>(
+        configurations: &'a HashMap<String, Rc<RefCell<InputConfiguration>>>,
+        id: &'a InputId,
+    ) -> Result<&'a Rc<RefCell<InputConfiguration>>, SettingsParseError> {
+        #[allow(clippy::or_fun_call)]
+        configurations
+            .get(id)
+            .ok_or(SettingsParseError::new(&format!(
+                "non-existant input configuration '{id}' selected for player 1"
+            )))
     }
 }
 
@@ -127,16 +138,4 @@ impl std::error::Error for SettingsParseError {
     fn description(&self) -> &str {
         &self.details
     }
-}
-
-fn map_selected<'a>(
-    configurations: &'a HashMap<String, Rc<RefCell<InputConfiguration>>>,
-    id: &'a InputId,
-) -> Result<&'a Rc<RefCell<InputConfiguration>>, SettingsParseError> {
-    #[allow(clippy::or_fun_call)]
-    configurations
-        .get(id)
-        .ok_or(SettingsParseError::new(&format!(
-            "non-existant input configuration '{id}' selected for player 1"
-        )))
 }
