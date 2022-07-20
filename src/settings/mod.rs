@@ -23,7 +23,7 @@ pub(crate) struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings::load_settings().unwrap_or_else(|_| {
+        Settings::load().unwrap_or_else(|_| {
             let audio = AudioSettings { latency: 40 };
             let default_input_1 = Rc::new(RefCell::new(Keyboards::default_configurations(0)));
             let default_input_2 = Rc::new(RefCell::new(Keyboards::default_configurations(1)));
@@ -45,7 +45,7 @@ impl Default for Settings {
 }
 
 impl Settings {
-    fn load_settings() -> anyhow::Result<Settings> {
+    fn load() -> anyhow::Result<Settings> {
         let file = File::open("settings.json")?;
         let settings = serde_json::from_reader(BufReader::new(file))?;
         Ok(settings)

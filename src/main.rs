@@ -12,7 +12,6 @@ use game_loop::game_loop;
 
 use gui::Framework;
 use input::Inputs;
-use log::error;
 use palette::NTSC_PAL;
 use pixels::{Pixels, SurfaceTexture};
 use rusticnes_core::cartridge::mapper_from_file;
@@ -105,6 +104,14 @@ async fn async_main() {
             let game_runner = &mut g.game.0;
             let curr_settings = game_runner.settings.get_hash();
             if last_settings != curr_settings {
+                if game_runner.sound_stream.get_latency() != game_runner.settings.audio.latency {
+                    game_runner.sound_stream = game_runner
+                        .audio
+                        .start(game_runner.settings.audio.latency, Some(&mut game_runner.sound_stream));
+                    //clear buffer
+                    game_runner.state.nes.apu.consume_samples();
+                }
+        
                 last_settings = curr_settings;
                 if let anyhow::private::Err(err) = game_runner.settings.save() {
                     eprintln!("Failed to save the settings: {}", err);
@@ -151,9 +158,7 @@ impl MyGameState {
     }
 
     fn save(&self) -> Vec<u8> {
-        let mut data = vec![];
-        data.extend(self.nes.save_state());
-        data
+        self.nes.save_state()
     }
     fn load(&mut self, data: &mut Vec<u8>) {
         self.nes.load_state(data);
@@ -180,14 +185,14 @@ impl GameRunner {
 
         let audio = Audio::new();
         let sound_stream = audio.start(settings.audio.latency, None);
-        let mut my_state = MyGameState::new();
-        my_state
+        let mut state = MyGameState::new();
+        state
             .nes
             .apu
             .set_sample_rate(sound_stream.sample_rate as u64);
 
         Self {
-            state: my_state,
+            state,
             audio,
             sound_stream,
             pixels,
@@ -199,14 +204,6 @@ impl GameRunner {
         }
     }
     pub fn advance(&mut self) {
-        if self.sound_stream.get_latency() != self.settings.audio.latency {
-            self.sound_stream = self
-                .audio
-                .start(self.settings.audio.latency, Some(&mut self.sound_stream));
-            //clear buffer
-            self.state.nes.apu.consume_samples();
-        }
-
         #[cfg(not(feature = "netplay"))]
         self.state.advance([self.inputs.p1, self.inputs.p2]);
 
@@ -229,7 +226,7 @@ impl GameRunner {
         self.state.render(frame);
 
         // Render everything together
-        let render_result = pixels.render_with(|encoder, render_target, context| {
+        pixels.render_with(|encoder, render_target, context| {
             // Render the world texture
             context.scaling_renderer.render(encoder, render_target);
 
@@ -237,13 +234,7 @@ impl GameRunner {
             gui_framework.render(encoder, render_target, context);
 
             Ok(())
-        });
-        if render_result
-            .map_err(|e| error!("pixels.render() failed: {}", e))
-            .is_err()
-        {
-            //TODO: what to do here?
-        }
+        }).expect("Failed to render :(");
     }
 
     pub fn handle(
@@ -258,16 +249,9 @@ impl GameRunner {
                 winit::event::WindowEvent::CloseRequested => {
                     return false;
                 }
-                winit::event::WindowEvent::ScaleFactorChanged {
-                    scale_factor,
-                    new_inner_size: _,
-                } => {
-                    gui_framework.scale_factor(*scale_factor);
-                }
                 winit::event::WindowEvent::Resized(size) => {
                     self.pixels.resize_surface(size.width, size.height);
-                    gui_framework.resize(size.width, size.height)
-                }
+                }    
                 winit::event::WindowEvent::KeyboardInput { input, .. } => {
                     if input.state == winit::event::ElementState::Pressed {
                         match input.virtual_keycode {

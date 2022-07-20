@@ -58,20 +58,23 @@ impl Framework {
         event: &winit::event::WindowEvent,
         game_runner: &mut GameRunner,
     ) {
+        match event {
+            winit::event::WindowEvent::ScaleFactorChanged {
+                scale_factor,
+                new_inner_size: _,
+            } => {
+                self.screen_descriptor.pixels_per_point = *scale_factor as f32;
+            }
+            winit::event::WindowEvent::Resized(size) => {
+                if size.width > 0 && size.height > 0 {
+                    self.screen_descriptor.size_in_pixels = [size.width, size.height];
+                }
+            }
+            _ => {}
+        }
+
         self.egui_state.on_event(&self.egui_ctx, event);
         self.gui.handle_event(event, game_runner);
-    }
-
-    /// Resize egui.
-    pub(crate) fn resize(&mut self, width: u32, height: u32) {
-        if width > 0 && height > 0 {
-            self.screen_descriptor.size_in_pixels = [width, height];
-        }
-    }
-
-    /// Update scaling factor.
-    pub(crate) fn scale_factor(&mut self, scale_factor: f64) {
-        self.screen_descriptor.pixels_per_point = scale_factor as f32;
     }
 
     /// Prepare egui.

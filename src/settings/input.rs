@@ -83,20 +83,19 @@ impl InputSettings {
             .iter()
             .map(|(k, v)| (k.clone(), Rc::new(RefCell::new(v.clone()))))
             .collect();
-        let selected = [
-            Rc::clone(
-                configurations
-                    .get(&source.selected[0])
-                    .expect("non-existant configuration selected"),
-            ),
-            Rc::clone(
-                configurations
-                    .get(&source.selected[1])
-                    .expect("non-existant configuration selected"),
-            ),
-        ];
         Self {
-            selected,
+            selected: [
+                Rc::clone(
+                    configurations
+                        .get(&source.selected[0])
+                        .expect("non-existant configuration selected"),
+                ),
+                Rc::clone(
+                    configurations
+                        .get(&source.selected[1])
+                        .expect("non-existant configuration selected"),
+                ),
+            ],
             configurations,
         }
     }
