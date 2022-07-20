@@ -30,7 +30,8 @@ mod network;
 mod palette;
 mod settings;
 
-const FPS: u32 = 60;
+type Fps = u32;
+const FPS: Fps = 60;
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
 const ZOOM: f32 = 2.0;
@@ -87,14 +88,8 @@ async fn async_main() {
         0.08,
         move |g| {
             let game_runner = &mut g.game.0;
-            game_runner.advance();
-
-            #[cfg(feature = "netplay")]
-            if game_runner.netplay.run_slow {
-                g.set_updates_per_second((FPS as f32 * 0.9) as u32)
-            } else {
-                g.set_updates_per_second(FPS)
-            }
+            let fps = game_runner.advance();
+            g.set_updates_per_second(fps);
         },
         move |g| {
             let game_runner = &mut g.game.0;
@@ -177,7 +172,6 @@ struct GameRunner {
     #[cfg(feature = "netplay")]
     netplay: network::Netplay,
 }
-
 impl GameRunner {
     pub fn new(pixels: Pixels) -> Self {
         let inputs = Inputs::new();
@@ -203,18 +197,23 @@ impl GameRunner {
             netplay: network::Netplay::new(),
         }
     }
-    pub fn advance(&mut self) {
+    pub fn advance(&mut self) -> Fps {
+        #[allow(unused_assignments)]
+        #[allow(unused_mut)]
+        let mut fps = FPS;
         #[cfg(not(feature = "netplay"))]
-        self.state.advance([self.inputs.p1, self.inputs.p2]);
+        self.state.advance([&self.inputs.p1, &self.inputs.p2]);
 
         #[cfg(feature = "netplay")]
-        self.netplay
-            .advance(&mut self.state, [&self.inputs.p1, &self.inputs.p2]);
+        {
+            fps = self.netplay.advance(&mut self.state, [&self.inputs.p1, &self.inputs.p2]);
+        }
 
         let sound_data = self.state.nes.apu.consume_samples();
         for sample in sound_data {
             let _ = self.sound_stream.producer.push(sample);
         }
+        fps
     }
 
     pub fn render(&mut self, window: &winit::window::Window, gui_framework: &mut Framework) {

@@ -1,10 +1,10 @@
-use crate::{input::JoypadInput, settings::MAX_PLAYERS, MyGameState, FPS};
+use crate::{input::JoypadInput, settings::MAX_PLAYERS, MyGameState, FPS, Fps};
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, P2PSession, SessionBuilder};
 use matchbox_socket::WebRtcSocket;
 use rusticnes_core::nes::NesState;
-use std::time::Duration;
+use std::{time::Duration};
 
 impl Clone for MyGameState {
     fn clone(&self) -> Self {
@@ -35,19 +35,15 @@ pub(crate) enum NetplayState {
 type Frame = i32;
 pub(crate) struct Netplay {
     pub(crate) state: NetplayState,
-    pub(crate) run_slow: bool,
 
     pub(crate) room_name: String,
     pub(crate) max_prediction: usize,
     pub(crate) input_delay: usize,
 }
-
 impl Netplay {
     pub(crate) fn new() -> Self {
         Netplay {
             state: NetplayState::Disconnected,
-            run_slow: false,
-
             room_name: "example_room".to_string(),
             max_prediction: 12,
             input_delay: 2,
@@ -85,7 +81,7 @@ impl Netplay {
         &mut self,
         game_state: &mut MyGameState,
         inputs: [&JoypadInput; MAX_PLAYERS],
-    ) {
+    ) -> Fps {
         match &mut self.state {
             NetplayState::Disconnected => {
                 game_state.advance(inputs);
@@ -134,7 +130,7 @@ impl Netplay {
                 }
                 if disconnected {
                     self.state = NetplayState::Disconnected;
-                    return;
+                    return FPS;
                 }
 
                 for handle in sess.local_player_handles() {
@@ -189,8 +185,11 @@ impl Netplay {
                         }
                     }
                 }
-                self.run_slow = sess.frames_ahead() > 0;
+                if sess.frames_ahead() > 0 {
+                    return (FPS as f32 * 0.9) as u32
+                }
             }
         }
+        FPS
     }
 }
