@@ -100,9 +100,7 @@ async fn async_main() {
             let curr_settings = game_runner.settings.get_hash();
             if last_settings != curr_settings {
                 if game_runner.sound_stream.get_latency() != game_runner.settings.audio.latency {
-                    game_runner.sound_stream = game_runner
-                        .audio
-                        .start(game_runner.settings.audio.latency, Some(&mut game_runner.sound_stream));
+                    game_runner.sound_stream.set_latency(game_runner.settings.audio.latency);
                     //clear buffer
                     game_runner.state.nes.apu.consume_samples();
                 }
@@ -163,7 +161,6 @@ impl MyGameState {
 
 struct GameRunner {
     state: MyGameState,
-    audio: Audio,
     sound_stream: Stream,
     pixels: Pixels,
     settings: Settings,
@@ -178,16 +175,15 @@ impl GameRunner {
         let settings: Settings = Default::default();
 
         let audio = Audio::new();
-        let sound_stream = audio.start(settings.audio.latency, None);
+        let sound_stream = audio.start(settings.audio.latency);
         let mut state = MyGameState::new();
         state
             .nes
             .apu
-            .set_sample_rate(sound_stream.sample_rate as u64);
+            .set_sample_rate(sound_stream.get_sample_rate());
 
         Self {
             state,
-            audio,
             sound_stream,
             pixels,
             settings,
@@ -211,7 +207,7 @@ impl GameRunner {
 
         let sound_data = self.state.nes.apu.consume_samples();
         for sample in sound_data {
-            let _ = self.sound_stream.producer.push(sample);
+            self.sound_stream.push_sample(sample);
         }
         fps
     }

@@ -3,30 +3,37 @@ use std::sync::{Arc, Mutex};
 use cpal::traits::{DeviceTrait, HostTrait};
 use cpal::{Sample, StreamConfig};
 use ringbuf::{Consumer, Producer};
-pub(crate) struct Audio {
-    output_device: cpal::Device,
-    output_config: cpal::SupportedStreamConfig,
-}
 
 pub(crate) struct Stream {
-    #[allow(dead_code)] // This reference needs to be held on to to keep the stream running
+    stream_config: StreamConfig,
     stream: cpal::Stream,
     latency: u16,
-    pub(crate) producer: Producer<i16>,
+    producer: Producer<i16>,
     consumer: Arc<Mutex<Consumer<i16>>>,
-    pub(crate) sample_rate: f32,
+    output_device: cpal::Device
 }
 
 impl Stream {
     fn new<T>(
         latency: u16,
         mut stream_config: StreamConfig,
-        output_device: &cpal::Device,
-        previous_stream: Option<&mut Stream>,
+        output_device: cpal::Device,
     ) -> Self
     where
         T: cpal::Sample,
     {
+        let (producer, consumer, stream) = Stream::setup_stream(&mut stream_config, latency, None, &output_device);
+        Self {
+            stream_config,
+            latency,
+            stream,
+            producer,
+            consumer,
+            output_device,
+        }
+    }
+
+    fn setup_stream(stream_config: &mut StreamConfig, latency: u16, previous_stream: Option<&mut Arc<Mutex<Consumer<i16>>>>, output_device: &cpal::Device) -> (Producer<i16>, Arc<Mutex<Consumer<i16>>>, cpal::Stream) {
         stream_config.channels = 1;
 
         let sample_rate = stream_config.sample_rate.0 as f32;
@@ -36,11 +43,10 @@ impl Stream {
             ringbuf::RingBuffer::new(Stream::calc_buffer_length(latency, sample_rate, channels))
                 .split();
 
-        if let Some(s) = previous_stream {
-            let mut consumer = s.consumer.lock().unwrap();
+        if let Some(previous_stream) = previous_stream {
             //Fill buffer with previous buffers sound
             for _ in 0..producer.capacity() {
-                producer.push(consumer.pop().unwrap_or(0)).unwrap();
+                producer.push(previous_stream.lock().unwrap().pop().unwrap_or(0)).unwrap();
             }
         } else {
             //Fill buffer with silence
@@ -54,7 +60,7 @@ impl Stream {
         let c2 = consumer.clone();
         let stream = output_device
             .build_output_stream(
-                &stream_config,
+                stream_config,
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                     for sample in data {
                         if let Some(sample) = c2.lock().unwrap().pop() {
@@ -69,14 +75,7 @@ impl Stream {
                 |err| eprintln!("an error occurred on the output audio stream: {}", err),
             )
             .expect("Could not build sound output stream");
-
-        Self {
-            latency,
-            stream,
-            producer,
-            consumer,
-            sample_rate,
-        }
+        (producer, consumer, stream)
     }
 
     fn calc_buffer_length(latency: u16, sample_rate: f32, channels: usize) -> usize {
@@ -87,13 +86,35 @@ impl Stream {
     pub fn get_latency(&self) -> u16 {
         self.latency
     }
+    pub fn set_latency(&mut self, latency: u16) {
+        let (producer, consumer, stream) = Stream::setup_stream(&mut self.stream_config, latency, Some(&mut self.consumer), &self.output_device);
+        self.producer = producer;
+        self.consumer = consumer;
+        self.stream = stream;
+    }
+
+    pub(crate) fn get_sample_rate(&self) -> u64 {
+        self.stream_config.sample_rate.0.into()
+    }
+
+    pub(crate) fn push_sample(&mut self, sample: i16) {
+        let _ = self.producer.push(sample);
+    }
+}
+
+pub(crate) struct Audio {
+    host: cpal::Host,
 }
 
 impl Audio {
     pub fn new() -> Self {
-        let host = cpal::default_host();
+        Self {
+            host: cpal::default_host(),
+        }
+    }
 
-        let output_device = host
+    pub(crate) fn start(&self, latency: u16) -> Stream {
+        let output_device = self.host
             .default_output_device()
             .expect("no sound output device available");
         println!("Sound output device: {}", output_device.name().unwrap());
@@ -106,23 +127,16 @@ impl Audio {
             .expect("no supported config?!")
             .with_max_sample_rate();
 
-        Self {
-            output_device,
-            output_config,
-        }
-    }
-
-    pub(crate) fn start(&self, latency: u16, previous_stream: Option<&mut Stream>) -> Stream {
-        let stream_config = self.output_config.config();
-        match self.output_config.sample_format() {
+        let stream_config = output_config.config();
+        match output_config.sample_format() {
             cpal::SampleFormat::F32 => {
-                Stream::new::<f32>(latency, stream_config, &self.output_device, previous_stream)
+                Stream::new::<f32>(latency, stream_config, output_device)
             }
             cpal::SampleFormat::I16 => {
-                Stream::new::<i16>(latency, stream_config, &self.output_device, previous_stream)
+                Stream::new::<i16>(latency, stream_config, output_device)
             }
             cpal::SampleFormat::U16 => {
-                Stream::new::<u16>(latency, stream_config, &self.output_device, previous_stream)
+                Stream::new::<u16>(latency, stream_config, output_device)
             }
         }
     }
