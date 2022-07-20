@@ -7,6 +7,7 @@ Put your ROM and configuration in this Nes Bundler and build an executable for M
 What you get is a single executable with
 * Simple UI for settings (Show and hide with ESC).
 * Re-mappable Keyboard and Gamepad input (you bundle your default mappings).
+* Save/Restore state (F1 = Save, F2 = Load).
 * Netplay! (Optional feature, can be disabled if not wanted).
 
 ## Bundling
