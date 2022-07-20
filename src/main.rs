@@ -103,8 +103,6 @@ async fn async_main() {
                     game_runner
                         .sound_stream
                         .set_latency(game_runner.settings.audio.latency);
-                    //clear buffer
-                    game_runner.state.nes.apu.consume_samples();
                 }
 
                 last_settings = curr_settings;
