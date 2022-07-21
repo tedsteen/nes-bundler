@@ -16,7 +16,8 @@ A file named `build_config.json` looking something like this (a more detailed de
     },
     "default_settings": {
         "audio": {
-            "latency": 40
+            "latency": 40,
+            "volume": 100
         },
         "input": {
             "selected": [
