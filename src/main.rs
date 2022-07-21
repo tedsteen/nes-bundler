@@ -62,14 +62,14 @@ pub struct BuildConfiguration {
     default_settings: Settings,
 }
 fn main() {
-    let build_configuration: BuildConfiguration =
+    let build_config: BuildConfiguration =
         serde_json::from_str(include_str!("../assets/build_config.json")).unwrap();
 
     let event_loop = EventLoop::new();
 
     let window = {
         WindowBuilder::new()
-            .with_title(&build_configuration.window_title)
+            .with_title(&build_config.window_title)
             .with_inner_size(LogicalSize::new(WIDTH as f32 * ZOOM, HEIGHT as f32 * ZOOM))
             .with_min_inner_size(LogicalSize::new(WIDTH, HEIGHT))
             .build(&event_loop)
@@ -87,7 +87,7 @@ fn main() {
         (pixels, framework)
     };
 
-    let game_runner = GameRunner::new(pixels, &build_configuration);
+    let game_runner = GameRunner::new(pixels, &build_config);
     let mut last_settings = game_runner.settings.get_hash();
     game_loop(
         event_loop,
@@ -179,11 +179,11 @@ pub struct GameRunner {
     netplay: network::Netplay,
 }
 impl GameRunner {
-    pub fn new(pixels: Pixels, build_configuration: &BuildConfiguration) -> Self {
+    pub fn new(pixels: Pixels, build_config: &BuildConfiguration) -> Self {
         let inputs = Inputs::new();
         let settings: Settings = Settings::new().unwrap_or_else(|err| {
             eprintln!("Failed to load config ({err}), falling back to default settings");
-            build_configuration.default_settings.clone()
+            build_config.default_settings.clone()
         });
 
         let audio = Audio::new();
@@ -202,7 +202,7 @@ impl GameRunner {
             inputs,
 
             #[cfg(feature = "netplay")]
-            netplay: network::Netplay::new(&build_configuration.netplay),
+            netplay: network::Netplay::new(&build_config.netplay),
         }
     }
     pub fn advance(&mut self) -> Fps {

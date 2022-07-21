@@ -44,10 +44,10 @@ pub struct Netplay {
     pub input_delay: usize,
 }
 impl Netplay {
-    pub fn new(netplay_build_configuration: &NetplayBuildConfiguration) -> Self {
+    pub fn new(netplay_build_config: &NetplayBuildConfiguration) -> Self {
         Netplay {
             rt: Runtime::new().expect("Could not create an async runtime"),
-            matchbox_server: netplay_build_configuration.matchbox_server.clone(),
+            matchbox_server: netplay_build_config.matchbox_server.clone(),
             state: NetplayState::Disconnected,
             room_name: "example_room".to_string(),
             max_prediction: 12,

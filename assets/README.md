@@ -2,12 +2,12 @@
 
 In order to build your bundle you need two files in this directory.  
 
-* A `build_configuration.json` containing the build configuration
+* A `build_config.json` containing the build configuration
 * A `nes.rom` with your game
 
 ## Build configuration
 
-A file named `build_configuration.json` looking something like this (a more detailed description further below):
+A file named `build_config.json` looking something like this (a more detailed description further below):
 ```json
 {
     "window_title": "My Awesome Game!",
