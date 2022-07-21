@@ -1,28 +1,33 @@
 use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait};
-use cpal::{Sample, StreamConfig};
+use cpal::{StreamConfig, Sample};
 use ringbuf::{Consumer, Producer};
+
+use crate::settings::audio::AudioSettings;
 
 pub struct Stream {
     stream_config: StreamConfig,
     stream: cpal::Stream,
     latency: u16,
-    producer: Producer<i16>,
-    consumer: Arc<Mutex<Consumer<i16>>>,
+    volume: f32,
+    producer: Producer<f32>,
+    consumer: Arc<Mutex<Consumer<f32>>>,
     output_device: cpal::Device,
 }
 
 impl Stream {
-    fn new<T>(latency: u16, mut stream_config: StreamConfig, output_device: cpal::Device) -> Self
+    fn new<T>(audio_settings: &AudioSettings, mut stream_config: StreamConfig, output_device: cpal::Device) -> Self
     where
         T: cpal::Sample,
     {
+        let latency = audio_settings.latency;
         let (producer, consumer, stream) =
             Stream::setup_stream(&mut stream_config, latency, None, &output_device);
         Self {
             stream_config,
             latency,
+            volume: audio_settings.volume as f32 / 100.0,
             stream,
             producer,
             consumer,
@@ -33,9 +38,9 @@ impl Stream {
     fn setup_stream(
         stream_config: &mut StreamConfig,
         latency: u16,
-        previous_stream: Option<&mut Arc<Mutex<Consumer<i16>>>>,
+        previous_stream: Option<&mut Arc<Mutex<Consumer<f32>>>>,
         output_device: &cpal::Device,
-    ) -> (Producer<i16>, Arc<Mutex<Consumer<i16>>>, cpal::Stream) {
+    ) -> (Producer<f32>, Arc<Mutex<Consumer<f32>>>, cpal::Stream) {
         stream_config.channels = 1;
 
         let sample_rate = stream_config.sample_rate.0 as f32;
@@ -49,17 +54,16 @@ impl Stream {
             let mut previous_stream = previous_stream.lock().unwrap();
             //Fill buffer with previous buffers sound
             for _ in 0..producer.capacity() {
-                producer.push(previous_stream.pop().unwrap_or(0)).unwrap();
+                producer.push(previous_stream.pop().unwrap_or(0.0)).unwrap();
             }
         } else {
             //Fill buffer with silence
             for _ in 0..producer.capacity() {
-                producer.push(0).unwrap();
+                producer.push(0.0).unwrap();
             }
         }
-
-        let mut nes_sample = 0;
-        let consumer = Arc::new(Mutex::<Consumer<i16>>::new(consumer));
+        let mut nes_sample = 0.0;
+        let consumer = Arc::new(Mutex::<Consumer<f32>>::new(consumer));
         let stream = output_device
             .build_output_stream(
                 stream_config,
@@ -74,7 +78,7 @@ impl Stream {
                                 //eprintln!("Buffer underrun");
                             }
 
-                            *sample = Sample::from(&nes_sample);
+                            *sample = nes_sample;
                         }
                     }
                 },
@@ -105,12 +109,23 @@ impl Stream {
         self.latency = latency;
     }
 
+    pub fn set_volume(&mut self, volume: u8) {
+        self.volume = volume as f32 / 100.0;
+    }
+
     pub fn get_sample_rate(&self) -> u64 {
         self.stream_config.sample_rate.0.into()
     }
 
     pub fn push_sample(&mut self, sample: i16) {
-        let _ = self.producer.push(sample);
+        let _ = self.producer.push(Sample::to_f32(&sample) * self.volume);
+    }
+
+    pub fn drain(&mut self) {
+        let mut consumer = self.consumer.lock().unwrap();
+        for _ in consumer.by_ref() {
+            // Consume everything
+        }
     }
 }
 
@@ -125,7 +140,7 @@ impl Audio {
         }
     }
 
-    pub fn start(&self, latency: u16) -> Stream {
+    pub fn start(&self, audio_settings: &AudioSettings) -> Stream {
         let output_device = self
             .host
             .default_output_device()
@@ -142,9 +157,9 @@ impl Audio {
 
         let stream_config = output_config.config();
         match output_config.sample_format() {
-            cpal::SampleFormat::F32 => Stream::new::<f32>(latency, stream_config, output_device),
-            cpal::SampleFormat::I16 => Stream::new::<i16>(latency, stream_config, output_device),
-            cpal::SampleFormat::U16 => Stream::new::<u16>(latency, stream_config, output_device),
+            cpal::SampleFormat::F32 => Stream::new::<f32>(audio_settings, stream_config, output_device),
+            cpal::SampleFormat::I16 => Stream::new::<i16>(audio_settings, stream_config, output_device),
+            cpal::SampleFormat::U16 => Stream::new::<u16>(audio_settings, stream_config, output_device),
         }
     }
 }

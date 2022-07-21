@@ -7,7 +7,7 @@ use std::{
     io::{BufReader, BufWriter},
 };
 
-mod audio;
+pub mod audio;
 pub mod input;
 
 pub const MAX_PLAYERS: usize = 2;

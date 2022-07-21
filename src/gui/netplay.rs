@@ -18,7 +18,7 @@ impl GuiComponent for NetplayGui {
                 let netplay = &mut game_runner.netplay;
                 match &mut netplay.state {
                     NetplayState::Disconnected => {
-                        egui::Grid::new("my_grid")
+                        egui::Grid::new("netplay_grid")
                             .num_columns(2)
                             .spacing([10.0, 4.0])
                             .striped(true)

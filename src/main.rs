@@ -113,6 +113,9 @@ fn main() {
                         .sound_stream
                         .set_latency(game_runner.settings.audio.latency);
                 }
+                game_runner
+                    .sound_stream
+                    .set_volume(game_runner.settings.audio.volume);
 
                 last_settings = curr_settings;
                 if let anyhow::private::Err(err) = game_runner.settings.save() {
@@ -164,7 +167,6 @@ impl MyGameState {
     }
     fn load(&mut self, data: &mut Vec<u8>) {
         self.nes.load_state(data);
-        self.nes.apu.consume_samples(); // clear buffer so we don't build up a delay
     }
 }
 
@@ -187,7 +189,7 @@ impl GameRunner {
         });
 
         let audio = Audio::new();
-        let sound_stream = audio.start(settings.audio.latency);
+        let sound_stream = audio.start(&settings.audio);
         let mut state = MyGameState::new();
         state
             .nes
@@ -216,7 +218,7 @@ impl GameRunner {
         {
             fps = self
                 .netplay
-                .advance(&mut self.state, [&self.inputs.p1, &self.inputs.p2]);
+                .advance(&mut self.state, &mut self.sound_stream, [&self.inputs.p1, &self.inputs.p2]);
         }
 
         let sound_data = self.state.nes.apu.consume_samples();
@@ -301,6 +303,7 @@ impl GameRunner {
         file.read_to_end(buf)?;
 
         self.state.load(buf);
+        self.sound_stream.drain(); //make sure we don't build up a delay
         Ok(())
     }
 }

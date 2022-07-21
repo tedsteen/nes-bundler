@@ -1,4 +1,4 @@
-use crate::{input::JoypadInput, settings::MAX_PLAYERS, Fps, MyGameState, FPS, NetplayBuildConfiguration};
+use crate::{input::JoypadInput, settings::MAX_PLAYERS, Fps, MyGameState, FPS, NetplayBuildConfiguration, audio::Stream};
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, P2PSession, SessionBuilder};
@@ -86,6 +86,7 @@ impl Netplay {
     pub fn advance(
         &mut self,
         game_state: &mut MyGameState,
+        sound_stream: &mut Stream,
         inputs: [&JoypadInput; MAX_PLAYERS],
     ) -> Fps {
         match &mut self.state {
@@ -155,6 +156,7 @@ impl Netplay {
                                     println!("Loading (frame {:?})", frame);
                                     *game_state = cell.load().expect("No data found.");
                                     *frame = load_state_frame;
+                                    sound_stream.drain(); //make sure we don't build up a delay
                                 }
                                 GGRSRequest::SaveGameState {
                                     cell,

@@ -32,7 +32,6 @@ If you want to target other operating systems please read the rust documentation
 * Implement `save_state(...)`/`load_state(...)` for all the mappers.
 * Audio
   * More control over output device?
-  * Volume slider?
 * Netplay
   * Support STUN servers.
   * Save and restore session - save game state every 100th or so frame (when all peers have reached that 100th frame).

@@ -22,10 +22,21 @@ impl GuiComponent for AudioSettingsGui {
             .resizable(false)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label("Audio latency");
-                    ui.add(
-                        Slider::new(&mut game_runner.settings.audio.latency, 1..=500).suffix("ms"),
-                    );
+                    egui::Grid::new("netplay_grid")
+                            .num_columns(2)
+                            .spacing([10.0, 4.0])
+                            .striped(true)
+                            .show(ui, |ui| {
+                                ui.label("Latency");
+                                ui.add(
+                                    Slider::new(&mut game_runner.settings.audio.latency, 1..=500).suffix("ms"),
+                                );
+                                ui.end_row();
+                                ui.label("Volume");
+                                ui.add(
+                                    Slider::new(&mut game_runner.settings.audio.volume, 0..=100).suffix("%"),
+                                );
+                            });
                 });
             });
     }
