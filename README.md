@@ -33,7 +33,7 @@ If you want to target other operating systems please read the rust documentation
 * Audio
   * More control over output device?
 * Netplay
-  * Support STUN servers.
+  * Support TURN servers.
   * Save and restore session - save game state every 100th or so frame (when all peers have reached that 100th frame).
   * More control on who becomes P1 and P2 etc.
   * Make it possible to wait for peers to reconnect if disconnected.
