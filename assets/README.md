@@ -1,4 +1,4 @@
-# Things needed for building your bundle
+# Configure your bundle
 
 In order to build your bundle you need two files in this directory.  
 
