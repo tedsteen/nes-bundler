@@ -8,18 +8,18 @@ use std::{
 };
 
 mod audio;
-pub(crate) mod input;
+pub mod input;
 
-pub(crate) const MAX_PLAYERS: usize = 2;
+pub const MAX_PLAYERS: usize = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
-pub(crate) struct Settings {
-    pub(crate) audio: AudioSettings,
-    pub(crate) input: InputSettings,
+pub struct Settings {
+    pub audio: AudioSettings,
+    pub input: InputSettings,
 }
 
 impl Settings {
-    pub(crate) fn new() -> anyhow::Result<Self> {
+    pub fn new() -> anyhow::Result<Self> {
         Settings::load()
     }
 }
@@ -30,13 +30,13 @@ impl Settings {
         let settings = serde_json::from_reader(BufReader::new(file))?;
         Ok(settings)
     }
-    pub(crate) fn save(&self) -> anyhow::Result<()> {
+    pub fn save(&self) -> anyhow::Result<()> {
         let file = File::create("settings.json")?;
         serde_json::to_writer(BufWriter::new(file), &self)?;
         Ok(())
     }
 
-    pub(crate) fn get_hash(&self) -> u64 {
+    pub fn get_hash(&self) -> u64 {
         let hasher = &mut DefaultHasher::new();
         self.hash(hasher);
         hasher.finish()

@@ -13,13 +13,13 @@ struct MapRequest {
     button: JoypadButton,
 }
 
-pub(crate) struct InputSettingsGui {
+pub struct InputSettingsGui {
     mapping_request: Option<MapRequest>,
     is_open: bool,
 }
 
 impl InputSettingsGui {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             mapping_request: None,
             is_open: false,

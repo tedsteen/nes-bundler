@@ -7,11 +7,11 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, rc::Rc};
 use winit::event::Event;
 
-pub(crate) mod gamepad;
-pub(crate) mod keyboard;
+pub mod gamepad;
+pub mod keyboard;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum JoypadButton {
+pub enum JoypadButton {
     Up = 0b00010000,
     Down = 0b00100000,
     Left = 0b01000000,
@@ -25,22 +25,22 @@ pub(crate) enum JoypadButton {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, PartialEq)]
-pub(crate) struct JoypadKeyMap<KeyType> {
-    pub(crate) up: Option<KeyType>,
-    pub(crate) down: Option<KeyType>,
-    pub(crate) left: Option<KeyType>,
-    pub(crate) right: Option<KeyType>,
-    pub(crate) start: Option<KeyType>,
-    pub(crate) select: Option<KeyType>,
-    pub(crate) b: Option<KeyType>,
-    pub(crate) a: Option<KeyType>,
+pub struct JoypadKeyMap<KeyType> {
+    pub up: Option<KeyType>,
+    pub down: Option<KeyType>,
+    pub left: Option<KeyType>,
+    pub right: Option<KeyType>,
+    pub start: Option<KeyType>,
+    pub select: Option<KeyType>,
+    pub b: Option<KeyType>,
+    pub a: Option<KeyType>,
 }
 
 impl<KeyType> JoypadKeyMap<KeyType>
 where
     KeyType: PartialEq,
 {
-    pub(crate) fn lookup_mut(&mut self, button: &JoypadButton) -> &mut Option<KeyType> {
+    pub fn lookup_mut(&mut self, button: &JoypadButton) -> &mut Option<KeyType> {
         match button {
             JoypadButton::Up => &mut self.up,
             JoypadButton::Down => &mut self.down,
@@ -52,7 +52,7 @@ where
             JoypadButton::A => &mut self.a,
         }
     }
-    pub(crate) fn lookup(&self, button: &JoypadButton) -> &Option<KeyType> {
+    pub fn lookup(&self, button: &JoypadButton) -> &Option<KeyType> {
         match button {
             JoypadButton::Up => &self.up,
             JoypadButton::Down => &self.down,
@@ -101,37 +101,37 @@ where
 }
 
 #[derive(Debug)]
-pub(crate) struct JoypadInput(pub(crate) u8);
+pub struct JoypadInput(pub u8);
 
 impl JoypadInput {
-    pub(crate) fn is_pressed(&self, button: JoypadButton) -> bool {
+    pub fn is_pressed(&self, button: JoypadButton) -> bool {
         self.0 & (button as u8) != 0
     }
 }
 
-pub(crate) type InputId = String;
+pub type InputId = String;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq)]
-pub(crate) struct InputConfiguration {
-    pub(crate) id: InputId,
-    pub(crate) name: String,
-    pub(crate) disconnected: bool,
-    pub(crate) kind: InputConfigurationKind,
+pub struct InputConfiguration {
+    pub id: InputId,
+    pub name: String,
+    pub disconnected: bool,
+    pub kind: InputConfigurationKind,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq)]
-pub(crate) enum InputConfigurationKind {
+pub enum InputConfigurationKind {
     Keyboard(JoypadKeyboardKeyMap),
     Gamepad(JoypadGamepadKeyMap),
 }
-pub(crate) struct Inputs {
+pub struct Inputs {
     keyboards: Keyboards,
     gamepads: Gamepads,
-    pub(crate) p1: JoypadInput,
-    pub(crate) p2: JoypadInput,
+    pub p1: JoypadInput,
+    pub p2: JoypadInput,
 }
 
 impl Inputs {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         let gamepads = Gamepads::new();
         let keyboards = Keyboards::new();
 
@@ -143,7 +143,7 @@ impl Inputs {
         }
     }
 
-    pub(crate) fn advance(
+    pub fn advance(
         &mut self,
         event: &winit::event::Event<()>,
         input_settings: &mut InputSettings,
@@ -174,7 +174,7 @@ impl Inputs {
         }
     }
 
-    pub(crate) fn remap_configuration(
+    pub fn remap_configuration(
         &mut self,
         input_configuration: &InputConfigurationRef,
         button: &JoypadButton,
