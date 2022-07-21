@@ -4,7 +4,10 @@ use crate::{
     settings::input::InputSettings,
 };
 use gilrs::{Button, Event, EventType, GamepadId, Gilrs};
-use std::{collections::{HashMap, HashSet}, rc::Rc};
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 pub type JoypadGamepadKeyMap = JoypadKeyMap<Button>;
 
@@ -17,7 +20,7 @@ impl GamepadState {
     pub fn new() -> Self {
         Self {
             pressed_keys: HashSet::new(),
-            disconnected: false
+            disconnected: false,
         }
     }
 
@@ -66,7 +69,7 @@ impl Gamepads {
     pub fn get_gamepad_by_input_id(&self, id: &InputId) -> Option<&GamepadState> {
         self.all.get(id)
     }
-    
+
     pub fn advance(&mut self, input_settings: &mut InputSettings) {
         while let Some(Event {
             id: gamepad_id,
@@ -80,23 +83,26 @@ impl Gamepads {
                 EventType::Connected => {
                     println!("Gamepad connected {}", gamepad_id);
                     self.get_or_create_gamepad(gamepad_id).disconnected = false;
-                    let conf = input_settings
-                        .get_or_create_config(
-                            &id,
-                            input::InputConfiguration {
-                                name: format!("Gamepad #{}", gamepad_id),
-                                id: id.clone(),
-                                kind: InputConfigurationKind::Gamepad(
-                                    Gamepads::create_default_mapping(),
-                                ),
-                            },
-                        );
+                    let conf = input_settings.get_or_create_config(
+                        &id,
+                        input::InputConfiguration {
+                            name: format!("Gamepad #{}", gamepad_id),
+                            id: id.clone(),
+                            kind: InputConfigurationKind::Gamepad(
+                                Gamepads::create_default_mapping(),
+                            ),
+                        },
+                    );
 
                     // Automatically select a gamepad if it's connected and keyboard is currently selected.
                     let conf = Rc::clone(conf);
-                    if let InputConfigurationKind::Keyboard(_) = Rc::clone(&input_settings.selected[0]).borrow().kind {
+                    if let InputConfigurationKind::Keyboard(_) =
+                        Rc::clone(&input_settings.selected[0]).borrow().kind
+                    {
                         input_settings.selected[0] = conf;
-                    } else if let InputConfigurationKind::Keyboard(_) = Rc::clone(&input_settings.selected[1]).borrow().kind {
+                    } else if let InputConfigurationKind::Keyboard(_) =
+                        Rc::clone(&input_settings.selected[1]).borrow().kind
+                    {
                         input_settings.selected[1] = conf;
                     }
                 }
@@ -106,10 +112,14 @@ impl Gamepads {
                 }
 
                 EventType::ButtonPressed(button, _) => {
-                    self.get_or_create_gamepad(gamepad_id).pressed_keys.insert(button);
+                    self.get_or_create_gamepad(gamepad_id)
+                        .pressed_keys
+                        .insert(button);
                 }
                 EventType::ButtonReleased(button, _) => {
-                    self.get_or_create_gamepad(gamepad_id).pressed_keys.remove(&button);
+                    self.get_or_create_gamepad(gamepad_id)
+                        .pressed_keys
+                        .remove(&button);
                 }
 
                 EventType::ButtonRepeated(_, _) => {}

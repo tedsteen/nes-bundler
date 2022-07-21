@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait};
-use cpal::{StreamConfig, Sample};
+use cpal::{Sample, StreamConfig};
 use ringbuf::{Consumer, Producer};
 
 use crate::settings::audio::AudioSettings;
@@ -17,7 +17,11 @@ pub struct Stream {
 }
 
 impl Stream {
-    fn new<T>(audio_settings: &AudioSettings, mut stream_config: StreamConfig, output_device: cpal::Device) -> Self
+    fn new<T>(
+        audio_settings: &AudioSettings,
+        mut stream_config: StreamConfig,
+        output_device: cpal::Device,
+    ) -> Self
     where
         T: cpal::Sample,
     {
@@ -157,9 +161,15 @@ impl Audio {
 
         let stream_config = output_config.config();
         match output_config.sample_format() {
-            cpal::SampleFormat::F32 => Stream::new::<f32>(audio_settings, stream_config, output_device),
-            cpal::SampleFormat::I16 => Stream::new::<i16>(audio_settings, stream_config, output_device),
-            cpal::SampleFormat::U16 => Stream::new::<u16>(audio_settings, stream_config, output_device),
+            cpal::SampleFormat::F32 => {
+                Stream::new::<f32>(audio_settings, stream_config, output_device)
+            }
+            cpal::SampleFormat::I16 => {
+                Stream::new::<i16>(audio_settings, stream_config, output_device)
+            }
+            cpal::SampleFormat::U16 => {
+                Stream::new::<u16>(audio_settings, stream_config, output_device)
+            }
         }
     }
 }

@@ -6,7 +6,8 @@ use std::{
     collections::hash_map::DefaultHasher,
     fs::File,
     hash::{Hash, Hasher},
-    io::{BufReader, BufWriter}, rc::Rc,
+    io::{BufReader, BufWriter},
+    rc::Rc,
 };
 
 pub mod audio;
@@ -25,10 +26,14 @@ impl Settings {
         let mut settings = Settings::load();
         if let Ok(settings) = &mut settings {
             //Make sure no gamepads are selected after loading settings (they will be autoselected later if they are connected)
-            if let InputConfigurationKind::Gamepad(_) = Rc::clone(&settings.input.selected[0]).borrow().kind {
+            if let InputConfigurationKind::Gamepad(_) =
+                Rc::clone(&settings.input.selected[0]).borrow().kind
+            {
                 settings.input.selected[0] = Rc::clone(settings.input.get_default_config(0));
             }
-            if let InputConfigurationKind::Gamepad(_) = Rc::clone(&settings.input.selected[1]).borrow().kind {
+            if let InputConfigurationKind::Gamepad(_) =
+                Rc::clone(&settings.input.selected[1]).borrow().kind
+            {
                 settings.input.selected[1] = Rc::clone(settings.input.get_default_config(1));
             }
         }

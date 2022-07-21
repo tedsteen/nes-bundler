@@ -6,4 +6,6 @@ pub struct AudioSettings {
     #[serde(default = "default_volume")]
     pub volume: u8,
 }
-fn default_volume() -> u8 { 100 }
+fn default_volume() -> u8 {
+    100
+}

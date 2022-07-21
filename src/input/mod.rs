@@ -2,9 +2,12 @@ use self::{
     gamepad::{Gamepads, JoypadGamepadKeyMap},
     keyboard::{JoypadKeyboardKeyMap, Keyboards},
 };
-use crate::settings::{input::{InputConfigurationRef, InputSettings}, MAX_PLAYERS};
+use crate::settings::{
+    input::{InputConfigurationRef, InputSettings},
+    MAX_PLAYERS,
+};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet};
+use std::collections::HashSet;
 use winit::event::Event;
 
 pub mod gamepad;
@@ -125,7 +128,7 @@ pub enum InputConfigurationKind {
 pub struct Inputs {
     keyboards: Keyboards,
     gamepads: Gamepads,
-    joypads: [JoypadInput; MAX_PLAYERS]
+    joypads: [JoypadInput; MAX_PLAYERS],
 }
 
 impl Inputs {
@@ -140,11 +143,7 @@ impl Inputs {
         }
     }
 
-    pub fn advance(
-        &mut self,
-        event: &winit::event::Event<()>,
-        input_settings: &mut InputSettings,
-    ) {
+    pub fn advance(&mut self, event: &winit::event::Event<()>, input_settings: &mut InputSettings) {
         self.gamepads.advance(input_settings);
         if let Event::WindowEvent {
             event: winit::event::WindowEvent::KeyboardInput { input, .. },
@@ -155,25 +154,36 @@ impl Inputs {
         }
         input_settings.reset_selected_disconnected_inputs(self);
 
-        self.joypads[0] = self.get_joypad_for_input_configuration(&input_settings.selected[0].borrow());
-        self.joypads[1] = self.get_joypad_for_input_configuration(&input_settings.selected[1].borrow());
+        self.joypads[0] =
+            self.get_joypad_for_input_configuration(&input_settings.selected[0].borrow());
+        self.joypads[1] =
+            self.get_joypad_for_input_configuration(&input_settings.selected[1].borrow());
     }
 
     pub fn get_joypad(&self, player: usize) -> JoypadInput {
         self.joypads[player]
     }
 
-    fn get_joypad_for_input_configuration(&mut self, input_conf: &InputConfiguration) -> JoypadInput {
+    fn get_joypad_for_input_configuration(
+        &mut self,
+        input_conf: &InputConfiguration,
+    ) -> JoypadInput {
         match &input_conf.kind {
             InputConfigurationKind::Keyboard(mapping) => self.keyboards.get_joypad(mapping),
-            InputConfigurationKind::Gamepad(mapping) => self.gamepads.get_joypad(&input_conf.id, mapping),
+            InputConfigurationKind::Gamepad(mapping) => {
+                self.gamepads.get_joypad(&input_conf.id, mapping)
+            }
         }
     }
 
     pub fn is_connected(&self, input_conf: &InputConfiguration) -> bool {
         match &input_conf.kind {
             InputConfigurationKind::Keyboard(_) => true,
-            InputConfigurationKind::Gamepad(_) => self.gamepads.get_gamepad_by_input_id(&input_conf.id).map(|state| state.is_connected()).unwrap_or(false),
+            InputConfigurationKind::Gamepad(_) => self
+                .gamepads
+                .get_gamepad_by_input_id(&input_conf.id)
+                .map(|state| state.is_connected())
+                .unwrap_or(false),
         }
     }
 
@@ -193,12 +203,11 @@ impl Inputs {
                 }
             }
             InputConfigurationKind::Gamepad(mapping) => {
-                if let Some(state) = self.gamepads.get_gamepad_by_input_id(&input_configuration_id) {
-                    if let Some(code) = state
-                        .pressed_keys
-                        .iter()
-                        .next()
-                    {
+                if let Some(state) = self
+                    .gamepads
+                    .get_gamepad_by_input_id(&input_configuration_id)
+                {
+                    if let Some(code) = state.pressed_keys.iter().next() {
                         //If there's any button pressed, use the first found.
                         let _ = mapping.lookup_mut(button).insert(*code);
                         return true;

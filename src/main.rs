@@ -208,9 +208,11 @@ impl GameRunner {
         let fps = self.state.advance([&self.inputs.p1, &self.inputs.p2]);
 
         #[cfg(feature = "netplay")]
-        let fps = self
-            .netplay
-            .advance(&mut self.state, &mut self.sound_stream, [self.inputs.get_joypad(0), self.inputs.get_joypad(1)]);
+        let fps = self.netplay.advance(
+            &mut self.state,
+            &mut self.sound_stream,
+            [self.inputs.get_joypad(0), self.inputs.get_joypad(1)],
+        );
 
         let sound_data = self.state.nes.apu.consume_samples();
         for sample in sound_data {

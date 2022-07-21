@@ -1,16 +1,16 @@
-use crate::{input::JoypadInput, settings::MAX_PLAYERS, Fps, MyGameState, FPS, audio::Stream};
+use crate::{audio::Stream, input::JoypadInput, settings::MAX_PLAYERS, Fps, MyGameState, FPS};
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, P2PSession, SessionBuilder};
 use matchbox_socket::WebRtcSocket;
 use rusticnes_core::nes::NesState;
 use serde::Deserialize;
-use tokio::runtime::Runtime;
 use std::time::Duration;
+use tokio::runtime::Runtime;
 
 #[derive(Deserialize)]
 pub struct NetplayBuildConfiguration {
-    matchbox_server: String
+    matchbox_server: String,
 }
 
 impl Clone for MyGameState {
@@ -63,8 +63,7 @@ impl Netplay {
 
     pub fn connect(&mut self, room: &str) {
         let matchbox_server = &self.matchbox_server;
-        let (socket, loop_fut) =
-            WebRtcSocket::new(format!("ws://{matchbox_server}/{room}"));
+        let (socket, loop_fut) = WebRtcSocket::new(format!("ws://{matchbox_server}/{room}"));
 
         let loop_fut = loop_fut.fuse();
         self.rt.spawn(async move {
