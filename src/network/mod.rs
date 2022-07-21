@@ -19,7 +19,7 @@ impl Clone for MyGameState {
 }
 
 #[derive(Debug)]
-pub(crate) struct GGRSConfig;
+pub struct GGRSConfig;
 impl Config for GGRSConfig {
     type Input = u8;
     type State = MyGameState;
@@ -27,24 +27,24 @@ impl Config for GGRSConfig {
 }
 
 #[allow(clippy::large_enum_variant)]
-pub(crate) enum NetplayState {
+pub enum NetplayState {
     Disconnected,
     Connecting(Option<WebRtcSocket>),
     Connected((P2PSession<GGRSConfig>, Frame)),
 }
 
 type Frame = i32;
-pub(crate) struct Netplay {
+pub struct Netplay {
     rt: Runtime,
     matchbox_server: String,
-    pub(crate) state: NetplayState,
+    pub state: NetplayState,
 
-    pub(crate) room_name: String,
-    pub(crate) max_prediction: usize,
-    pub(crate) input_delay: usize,
+    pub room_name: String,
+    pub max_prediction: usize,
+    pub input_delay: usize,
 }
 impl Netplay {
-    pub(crate) fn new(netplay_build_configuration: &NetplayBuildConfiguration) -> Self {
+    pub fn new(netplay_build_configuration: &NetplayBuildConfiguration) -> Self {
         Netplay {
             rt: Runtime::new().expect("Could not create an async runtime"),
             matchbox_server: netplay_build_configuration.matchbox_server.clone(),
@@ -55,7 +55,7 @@ impl Netplay {
         }
     }
 
-    pub(crate) fn connect(&mut self, room: &str) {
+    pub fn connect(&mut self, room: &str) {
         let matchbox_server = &self.matchbox_server;
         let (socket, loop_fut) =
             WebRtcSocket::new(format!("ws://{matchbox_server}/{room}"));
@@ -83,7 +83,7 @@ impl Netplay {
         self.state = NetplayState::Connecting(Some(socket));
     }
 
-    pub(crate) fn advance(
+    pub fn advance(
         &mut self,
         game_state: &mut MyGameState,
         inputs: [&JoypadInput; MAX_PLAYERS],

@@ -3,7 +3,7 @@ use egui::{Button, Context, TextEdit, Window};
 use crate::{network::NetplayState, settings::MAX_PLAYERS, GameRunner};
 
 use super::GuiComponent;
-pub(crate) struct NetplayGui {
+pub struct NetplayGui {
     is_open: bool,
 }
 
@@ -89,7 +89,7 @@ impl GuiComponent for NetplayGui {
 }
 
 impl NetplayGui {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self { is_open: false }
     }
 }

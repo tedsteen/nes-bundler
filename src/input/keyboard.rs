@@ -3,14 +3,14 @@ use egui_winit::winit;
 use std::collections::HashSet;
 use winit::event::{KeyboardInput, VirtualKeyCode};
 
-pub(crate) type JoypadKeyboardKeyMap = JoypadKeyMap<VirtualKeyCode>;
+pub type JoypadKeyboardKeyMap = JoypadKeyMap<VirtualKeyCode>;
 
-pub(crate) struct Keyboards {
-    pub(crate) pressed_keys: HashSet<VirtualKeyCode>,
+pub struct Keyboards {
+    pub pressed_keys: HashSet<VirtualKeyCode>,
 }
 use winit::event::VirtualKeyCode::*;
 impl Keyboards {
-    pub(crate) fn default_configurations(player: usize) -> InputConfiguration {
+    pub fn default_configurations(player: usize) -> InputConfiguration {
         [
             InputConfiguration {
                 name: "Keyboard mapping #1".to_string(),
@@ -46,20 +46,21 @@ impl Keyboards {
             .clone()
     }
 
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Keyboards {
             pressed_keys: HashSet::new(),
         }
     }
-    pub(crate) fn advance(&mut self, input: &KeyboardInput) {
-        let key = input.virtual_keycode.unwrap();
-        match input.state {
-            winit::event::ElementState::Pressed => self.pressed_keys.insert(key),
-            winit::event::ElementState::Released => self.pressed_keys.remove(&key),
-        };
+    pub fn advance(&mut self, input: &KeyboardInput) {
+        if let Some(key) = input.virtual_keycode {
+            match input.state {
+                winit::event::ElementState::Pressed => self.pressed_keys.insert(key),
+                winit::event::ElementState::Released => self.pressed_keys.remove(&key),
+            };
+        }
     }
 
-    pub(crate) fn get(&mut self, mapping: &JoypadKeyboardKeyMap) -> JoypadInput {
+    pub fn get(&mut self, mapping: &JoypadKeyboardKeyMap) -> JoypadInput {
         mapping.calculate_state(&self.pressed_keys)
     }
 }

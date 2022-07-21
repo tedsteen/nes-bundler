@@ -25,7 +25,8 @@ If you want to target other operating systems please read the rust documentation
 
 ## Limitations
 
-It's built on [rusticnes-core](https://github.com/zeta0134/rusticnes-core) so it's limited to what that can emulate (f.ex no PAL)
+* It's built on [rusticnes-core](https://github.com/zeta0134/rusticnes-core) so it's limited to what that can emulate (f.ex no PAL)
+* Save/load state and netplay is currently only working for the mmc3 mapper. This is due to `Clone()` only being implemented for this mapper. Fortunately this is pretty easy to implement so more will come.
 
 ## Future stuff/ideas/todo
 * Input

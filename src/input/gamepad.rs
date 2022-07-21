@@ -6,28 +6,28 @@ use crate::{
 use gilrs::{Button, Event, EventType, GamepadId, Gilrs};
 use std::collections::{HashMap, HashSet};
 
-pub(crate) type JoypadGamepadKeyMap = JoypadKeyMap<Button>;
+pub type JoypadGamepadKeyMap = JoypadKeyMap<Button>;
 
-pub(crate) struct GamepadState {
-    pub(crate) pressed_keys: HashSet<Button>,
+pub struct GamepadState {
+    pub pressed_keys: HashSet<Button>,
 }
 
 impl GamepadState {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             pressed_keys: HashSet::new(),
         }
     }
 }
 
-pub(crate) struct Gamepads {
+pub struct Gamepads {
     gilrs: Gilrs,
     all: HashMap<InputId, GamepadState>,
     id_map: HashMap<GamepadId, InputId>,
 }
 
 impl Gamepads {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Gamepads {
             gilrs: Gilrs::new().unwrap(),
             all: HashMap::new(),
@@ -57,11 +57,11 @@ impl Gamepads {
         self.all.entry(id).or_insert_with(GamepadState::new)
     }
 
-    pub(crate) fn get_gamepad_by_input_id(&mut self, id: &InputId) -> &mut GamepadState {
+    pub fn get_gamepad_by_input_id(&mut self, id: &InputId) -> &mut GamepadState {
         self.all.entry(id.clone()).or_insert_with(GamepadState::new)
     }
 
-    pub(crate) fn advance(&mut self, input_settings: &mut InputSettings) {
+    pub fn advance(&mut self, input_settings: &mut InputSettings) {
         while let Some(Event {
             id: gamepad_id,
             event,
@@ -122,7 +122,7 @@ impl Gamepads {
         }
     }
 
-    pub(crate) fn get(&mut self, id: &InputId, mapping: &JoypadGamepadKeyMap) -> JoypadInput {
+    pub fn get(&mut self, id: &InputId, mapping: &JoypadGamepadKeyMap) -> JoypadInput {
         mapping.calculate_state(&self.get_gamepad_by_input_id(id).pressed_keys)
     }
 }

@@ -4,16 +4,16 @@ use core::fmt;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{cell::RefCell, collections::HashMap, hash::Hash, rc::Rc};
 
-pub(crate) type InputConfigurationRef = Rc<RefCell<InputConfiguration>>;
+pub type InputConfigurationRef = Rc<RefCell<InputConfiguration>>;
 
 #[derive(Debug, Clone)]
-pub(crate) struct InputSettings {
-    pub(crate) selected: [InputConfigurationRef; MAX_PLAYERS],
-    pub(crate) configurations: HashMap<InputId, InputConfigurationRef>,
+pub struct InputSettings {
+    pub selected: [InputConfigurationRef; MAX_PLAYERS],
+    pub configurations: HashMap<InputId, InputConfigurationRef>,
 }
 
 impl InputSettings {
-    pub(crate) fn get_or_create_config(
+    pub fn get_or_create_config(
         &mut self,
         id: &InputId,
         default: InputConfiguration,
@@ -22,7 +22,7 @@ impl InputSettings {
             .entry(id.clone())
             .or_insert_with(|| Rc::new(RefCell::new(default)))
     }
-    pub(crate) fn get_default_config(&mut self, player: usize) -> &InputConfigurationRef {
+    pub fn get_default_config(&mut self, player: usize) -> &InputConfigurationRef {
         let default = Keyboards::default_configurations(player);
         self.get_or_create_config(&default.id.clone(), default)
     }

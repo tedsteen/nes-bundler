@@ -4,7 +4,7 @@ use cpal::traits::{DeviceTrait, HostTrait};
 use cpal::{Sample, StreamConfig};
 use ringbuf::{Consumer, Producer};
 
-pub(crate) struct Stream {
+pub struct Stream {
     stream_config: StreamConfig,
     stream: cpal::Stream,
     latency: u16,
@@ -105,16 +105,16 @@ impl Stream {
         self.latency = latency;
     }
 
-    pub(crate) fn get_sample_rate(&self) -> u64 {
+    pub fn get_sample_rate(&self) -> u64 {
         self.stream_config.sample_rate.0.into()
     }
 
-    pub(crate) fn push_sample(&mut self, sample: i16) {
+    pub fn push_sample(&mut self, sample: i16) {
         let _ = self.producer.push(sample);
     }
 }
 
-pub(crate) struct Audio {
+pub struct Audio {
     host: cpal::Host,
 }
 
@@ -125,7 +125,7 @@ impl Audio {
         }
     }
 
-    pub(crate) fn start(&self, latency: u16) -> Stream {
+    pub fn start(&self, latency: u16) -> Stream {
         let output_device = self
             .host
             .default_output_device()

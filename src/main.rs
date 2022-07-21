@@ -51,11 +51,11 @@ pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
 
 #[derive(Deserialize)]
 #[cfg(feature = "netplay")]
-struct NetplayBuildConfiguration {
+pub struct NetplayBuildConfiguration {
     matchbox_server: String
 }
 #[derive(Deserialize)]
-struct BuildConfiguration {
+pub struct BuildConfiguration {
     window_title: String,
     #[cfg(feature = "netplay")]
     netplay: NetplayBuildConfiguration,
@@ -126,7 +126,7 @@ fn main() {
     );
 }
 
-pub(crate) struct MyGameState {
+pub struct MyGameState {
     nes: NesState,
 }
 
@@ -168,7 +168,7 @@ impl MyGameState {
     }
 }
 
-struct GameRunner {
+pub struct GameRunner {
     state: MyGameState,
     sound_stream: Stream,
     pixels: Pixels,
