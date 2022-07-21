@@ -79,7 +79,7 @@ This will be the default settings for the bundle.
 
 Right now only audio `latency`.
 #### `input`
- * `selected` - Two id's that corresponds to the selected input of P1 and P2.
+ * `selected` - Two ids that corresponds to the selected input of P1 and P2.
  * `configurations` - A list of input mapping configurations.  It's pretty self explanatory, but if you want to read more about how to do the input mapping look [here for keyboard](https://docs.rs/winit/latest/winit/event/enum.VirtualKeyCode.html) and [here for gamepads](https://docs.rs/gilrs/latest/gilrs/ev/enum.Button.html).  
 
 Regarding gamepads, they will get assigned ids like `01-gamepad-0`, `01-gamepad-1`, `01-gamepad-2` etc. So if you want to give a default configuration for the first gamepad that connects, add something like the following under `default_settings.input.configurations`.
