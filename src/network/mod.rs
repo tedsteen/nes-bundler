@@ -1,11 +1,17 @@
-use crate::{input::JoypadInput, settings::MAX_PLAYERS, Fps, MyGameState, FPS, NetplayBuildConfiguration, audio::Stream};
+use crate::{input::JoypadInput, settings::MAX_PLAYERS, Fps, MyGameState, FPS, audio::Stream};
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, P2PSession, SessionBuilder};
 use matchbox_socket::WebRtcSocket;
 use rusticnes_core::nes::NesState;
+use serde::Deserialize;
 use tokio::runtime::Runtime;
 use std::time::Duration;
+
+#[derive(Deserialize)]
+pub struct NetplayBuildConfiguration {
+    matchbox_server: String
+}
 
 impl Clone for MyGameState {
     fn clone(&self) -> Self {

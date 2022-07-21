@@ -50,15 +50,10 @@ pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
 }
 
 #[derive(Deserialize)]
-#[cfg(feature = "netplay")]
-pub struct NetplayBuildConfiguration {
-    matchbox_server: String
-}
-#[derive(Deserialize)]
 pub struct BuildConfiguration {
     window_title: String,
     #[cfg(feature = "netplay")]
-    netplay: NetplayBuildConfiguration,
+    netplay: network::NetplayBuildConfiguration,
     default_settings: Settings,
 }
 fn main() {
@@ -146,11 +141,12 @@ impl MyGameState {
         Self { nes }
     }
 
-    pub fn advance(&mut self, inputs: [&JoypadInput; MAX_PLAYERS]) {
+    pub fn advance(&mut self, inputs: [&JoypadInput; MAX_PLAYERS]) -> Fps {
         //println!("Advancing! {:?}", inputs);
         self.nes.p1_input = inputs[0].0;
         self.nes.p2_input = inputs[1].0;
         self.nes.run_until_vblank();
+        FPS
     }
 
     fn render(&self, frame: &mut [u8]) {
@@ -208,18 +204,13 @@ impl GameRunner {
         }
     }
     pub fn advance(&mut self) -> Fps {
-        #[allow(unused_assignments)]
-        #[allow(unused_mut)]
-        let mut fps = FPS;
         #[cfg(not(feature = "netplay"))]
-        self.state.advance([&self.inputs.p1, &self.inputs.p2]);
+        let fps = self.state.advance([&self.inputs.p1, &self.inputs.p2]);
 
         #[cfg(feature = "netplay")]
-        {
-            fps = self
-                .netplay
-                .advance(&mut self.state, &mut self.sound_stream, [&self.inputs.p1, &self.inputs.p2]);
-        }
+        let fps = self
+            .netplay
+            .advance(&mut self.state, &mut self.sound_stream, [&self.inputs.p1, &self.inputs.p2]);
 
         let sound_data = self.state.nes.apu.consume_samples();
         for sample in sound_data {
