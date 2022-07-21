@@ -28,7 +28,6 @@ A file named `build_config.json` looking something like this (a more detailed de
                 "00-keyboard-1": {
                     "id": "00-keyboard-1",
                     "name": "Keyboard mapping #1",
-                    "disconnected": false,
                     "kind": {
                         "Keyboard": {
                             "up": "Up",
@@ -45,7 +44,6 @@ A file named `build_config.json` looking something like this (a more detailed de
                 "00-keyboard-2": {
                     "id": "00-keyboard-2",
                     "name": "Keyboard mapping #2",
-                    "disconnected": false,
                     "kind": {
                         "Keyboard": {
                             "up": "W",
@@ -88,7 +86,6 @@ Regarding gamepads, they will get assigned ids like `01-gamepad-0`, `01-gamepad-
 "01-gamepad-0": {
     "id": "01-gamepad-0",
     "name": "Gamepad #0",
-    "disconnected": true,
     "kind": {
         "Gamepad": {
             "up": "DPadUp",

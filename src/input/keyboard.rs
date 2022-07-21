@@ -15,7 +15,6 @@ impl Keyboards {
             InputConfiguration {
                 name: "Keyboard mapping #1".to_string(),
                 id: "00-keyboard-1".to_string(),
-                disconnected: false,
                 kind: InputConfigurationKind::Keyboard(JoypadKeyboardKeyMap {
                     up: Some(Up),
                     down: Some(Down),
@@ -30,7 +29,6 @@ impl Keyboards {
             InputConfiguration {
                 name: "Keyboard mapping #2".to_string(),
                 id: "00-keyboard-2".to_string(),
-                disconnected: false,
                 kind: InputConfigurationKind::Keyboard(JoypadKeyboardKeyMap {
                     up: Some(W),
                     down: Some(S),
@@ -60,7 +58,7 @@ impl Keyboards {
         }
     }
 
-    pub fn get(&mut self, mapping: &JoypadKeyboardKeyMap) -> JoypadInput {
+    pub fn get_joypad(&mut self, mapping: &JoypadKeyboardKeyMap) -> JoypadInput {
         mapping.calculate_state(&self.pressed_keys)
     }
 }

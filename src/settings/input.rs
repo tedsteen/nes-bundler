@@ -1,5 +1,5 @@
 use super::MAX_PLAYERS;
-use crate::input::{keyboard::Keyboards, InputConfiguration, InputId};
+use crate::input::{keyboard::Keyboards, InputConfiguration, InputId, Inputs};
 use core::fmt;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{cell::RefCell, collections::HashMap, hash::Hash, rc::Rc};
@@ -25,6 +25,15 @@ impl InputSettings {
     pub fn get_default_config(&mut self, player: usize) -> &InputConfigurationRef {
         let default = Keyboards::default_configurations(player);
         self.get_or_create_config(&default.id.clone(), default)
+    }
+
+    pub(crate) fn reset_selected_disconnected_inputs(&mut self, inputs: &Inputs) {
+        if !inputs.is_connected(&self.selected[0].borrow()) {
+            self.selected[0] = Rc::clone(self.get_default_config(0));
+        }
+        if !inputs.is_connected(&self.selected[1].borrow()) {
+            self.selected[1] = Rc::clone(self.get_default_config(1));
+        }
     }
 }
 

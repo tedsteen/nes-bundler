@@ -93,7 +93,7 @@ impl Netplay {
         &mut self,
         game_state: &mut MyGameState,
         sound_stream: &mut Stream,
-        inputs: [&JoypadInput; MAX_PLAYERS],
+        inputs: [JoypadInput; MAX_PLAYERS],
     ) -> Fps {
         match &mut self.state {
             NetplayState::Disconnected => {
@@ -174,8 +174,8 @@ impl Netplay {
                                 GGRSRequest::AdvanceFrame { inputs } => {
                                     //println!("Advancing (frame {:?})", game_runner.get_frame());
                                     game_state.advance([
-                                        &JoypadInput(inputs[0].0),
-                                        &JoypadInput(inputs[1].0),
+                                        JoypadInput(inputs[0].0),
+                                        JoypadInput(inputs[1].0),
                                     ]);
                                     *frame += 1;
                                 }

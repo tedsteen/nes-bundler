@@ -1,6 +1,6 @@
 use super::GuiComponent;
 use crate::{
-    input::{InputId, JoypadButton, JoypadInput},
+    input::{InputId, JoypadButton, JoypadInput, Inputs},
     settings::input::InputConfigurationRef,
     GameRunner,
 };
@@ -30,19 +30,19 @@ impl InputSettingsGui {
         map_request: &mut Option<MapRequest>,
         ui: &mut Ui,
         available_configurations: &HashMap<InputId, InputConfigurationRef>,
-        joypad_input: &JoypadInput,
+        inputs: &Inputs,
         selected_configuration: &mut InputConfigurationRef,
-        pad: usize,
+        player: usize,
     ) {
-        ui.label(format!("Joypad #{}", pad));
-        egui::ComboBox::from_id_source(format!("joypad-{}", pad))
+        ui.label(format!("Joypad #{}", player + 1));
+        egui::ComboBox::from_id_source(format!("joypad-{}", player))
             .width(160.0)
             .selected_text(format!("{:?}", selected_configuration.borrow().name))
             .show_ui(ui, |ui| {
                 let mut sorted_configurations: Vec<&InputConfigurationRef> =
                     available_configurations
                         .values()
-                        .filter(|e| !e.borrow().disconnected)
+                        .filter(|e| inputs.is_connected(&e.borrow()))
                         .collect();
 
                 sorted_configurations.sort_by(|a, b| a.borrow().id.cmp(&b.borrow().id));
@@ -57,7 +57,8 @@ impl InputSettingsGui {
             });
 
         let input_configuration = selected_configuration;
-        Grid::new(format!("joypadmap_grid_{}", pad))
+        let joypad_input = inputs.get_joypad(player);
+        Grid::new(format!("joypadmap_grid_{}", player))
             .num_columns(2)
             .striped(true)
             .show(ui, |ui| {
@@ -125,7 +126,7 @@ impl InputSettingsGui {
         map_request: &mut Option<MapRequest>,
         ui: &mut Ui,
         input_configuration: &InputConfigurationRef,
-        joypad_input: &JoypadInput,
+        joypad_input: JoypadInput,
         button: JoypadButton,
     ) {
         let mut text = RichText::new(format!("{:?}", button));
@@ -185,9 +186,9 @@ impl GuiComponent for InputSettingsGui {
                             &mut self.mapping_request,
                             ui,
                             &game_runner.settings.input.configurations,
-                            &game_runner.inputs.p1,
+                            &game_runner.inputs,
                             &mut game_runner.settings.input.selected[0],
-                            1,
+                            0,
                         );
                     });
                     ui.vertical(|ui| {
@@ -195,9 +196,9 @@ impl GuiComponent for InputSettingsGui {
                             &mut self.mapping_request,
                             ui,
                             &game_runner.settings.input.configurations,
-                            &game_runner.inputs.p2,
+                            &game_runner.inputs,
                             &mut game_runner.settings.input.selected[1],
-                            2,
+                            1,
                         );
                     });
                 });

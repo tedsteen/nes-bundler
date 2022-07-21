@@ -141,7 +141,7 @@ impl MyGameState {
         Self { nes }
     }
 
-    pub fn advance(&mut self, inputs: [&JoypadInput; MAX_PLAYERS]) -> Fps {
+    pub fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps {
         //println!("Advancing! {:?}", inputs);
         self.nes.p1_input = inputs[0].0;
         self.nes.p2_input = inputs[1].0;
@@ -210,7 +210,7 @@ impl GameRunner {
         #[cfg(feature = "netplay")]
         let fps = self
             .netplay
-            .advance(&mut self.state, &mut self.sound_stream, [&self.inputs.p1, &self.inputs.p2]);
+            .advance(&mut self.state, &mut self.sound_stream, [self.inputs.get_joypad(0), self.inputs.get_joypad(1)]);
 
         let sound_data = self.state.nes.apu.consume_samples();
         for sample in sound_data {
