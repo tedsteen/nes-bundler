@@ -52,11 +52,12 @@ impl Keyboards {
         }
     }
     pub(crate) fn advance(&mut self, input: &KeyboardInput) {
-        let key = input.virtual_keycode.unwrap();
-        match input.state {
-            winit::event::ElementState::Pressed => self.pressed_keys.insert(key),
-            winit::event::ElementState::Released => self.pressed_keys.remove(&key),
-        };
+        if let Some(key) = input.virtual_keycode {
+            match input.state {
+                winit::event::ElementState::Pressed => self.pressed_keys.insert(key),
+                winit::event::ElementState::Released => self.pressed_keys.remove(&key),
+            };
+        }
     }
 
     pub(crate) fn get(&mut self, mapping: &JoypadKeyboardKeyMap) -> JoypadInput {
