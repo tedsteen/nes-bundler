@@ -4,7 +4,7 @@ use crate::{
     settings::input::InputSettings,
 };
 use gilrs::{Button, Event, EventType, GamepadId, Gilrs};
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, rc::Rc};
 
 pub type JoypadGamepadKeyMap = JoypadKeyMap<Button>;
 
@@ -73,7 +73,7 @@ impl Gamepads {
             match event {
                 EventType::Connected => {
                     println!("Gamepad connected {}", gamepad_id);
-                    let mut conf = input_settings
+                    let conf = input_settings
                         .get_or_create_config(
                             id,
                             input::InputConfiguration {
@@ -84,9 +84,16 @@ impl Gamepads {
                                     Gamepads::create_default_mapping(),
                                 ),
                             },
-                        )
-                        .borrow_mut();
-                    conf.disconnected = false;
+                        );
+                    conf.borrow_mut().disconnected = false;
+
+                    // Automatically select a gamepad if it's connected and keyboard is currently selected.
+                    let conf = Rc::clone(conf);
+                    if let InputConfigurationKind::Keyboard(_) = Rc::clone(&input_settings.selected[0]).borrow().kind {
+                        input_settings.selected[0] = conf;
+                    } else if let InputConfigurationKind::Keyboard(_) = Rc::clone(&input_settings.selected[1]).borrow().kind {
+                        input_settings.selected[1] = conf;
+                    }
                 }
                 EventType::Disconnected => {
                     println!("Gamepad disconnected {}", gamepad_id);

@@ -30,8 +30,6 @@ If you want to target other operating systems please read the rust documentation
 
 ## Future stuff/ideas/todo
 * Implement `save_state(...)`/`load_state(...)` for all the mappers.
-* Input
-  * Autoselect gamepads if they connect (Enable in build configuration?)
 * Audio
   * More control over output device?
   * Volume slider?
