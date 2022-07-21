@@ -57,6 +57,16 @@ A file named `build_config.json` looking something like this (a more detailed de
                         }
                     }
                 }
+            },
+            "default_gamepad_mapping": {
+                "up": "DPadUp",
+                "down": "DPadDown",
+                "left": "DPadLeft",
+                "right": "DPadRight",
+                "start": "Start",
+                "select": "Select",
+                "b": "West",
+                "a": "South"
             }
         }
     }
@@ -80,27 +90,7 @@ Right now only audio `latency`.
 #### `input`
  * `selected` - Two ids that corresponds to the selected input of P1 and P2.
  * `configurations` - A list of input mapping configurations.  It's pretty self explanatory, but if you want to read more about how to do the input mapping look [here for keyboard](https://docs.rs/winit/latest/winit/event/enum.VirtualKeyCode.html) and [here for gamepads](https://docs.rs/gilrs/latest/gilrs/ev/enum.Button.html).  
-
-Regarding gamepads, they will get assigned ids like `01-gamepad-0`, `01-gamepad-1`, `01-gamepad-2` etc. So if you want to give a default configuration for the first gamepad that connects, add something like the following under `default_settings.input.configurations`.
-```json
-"01-gamepad-0": {
-    "id": "01-gamepad-0",
-    "name": "Gamepad #0",
-    "kind": {
-        "Gamepad": {
-            "up": "DPadUp",
-            "down": "DPadDown",
-            "left": "DPadLeft",
-            "right": "DPadRight",
-            "start": "Start",
-            "select": "Select",
-            "b": "West",
-            "a": "South"
-        }
-    }
-}
-```
-All gamepads without default configurations will get the same configuration as in the example above (with different name and id).
+ * `default_gamepad_mapping` - the default mapping for newly connected gamepads
 ## ROM-file
 
 A file named `rom.nes` containing your actual game.  

@@ -1,5 +1,7 @@
 use super::MAX_PLAYERS;
-use crate::input::{keyboard::Keyboards, InputConfiguration, InputId, Inputs};
+use crate::input::{
+    gamepad::JoypadGamepadKeyMap, keyboard::Keyboards, InputConfiguration, InputId, Inputs,
+};
 use core::fmt;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{cell::RefCell, collections::HashMap, hash::Hash, rc::Rc};
@@ -10,6 +12,7 @@ pub type InputConfigurationRef = Rc<RefCell<InputConfiguration>>;
 pub struct InputSettings {
     pub selected: [InputConfigurationRef; MAX_PLAYERS],
     pub configurations: HashMap<InputId, InputConfigurationRef>,
+    pub default_gamepad_mapping: JoypadGamepadKeyMap,
 }
 
 impl InputSettings {
@@ -53,6 +56,7 @@ impl Hash for InputSettings {
 struct SerializableInputSettings {
     selected: [InputId; MAX_PLAYERS],
     configurations: HashMap<InputId, InputConfiguration>,
+    pub default_gamepad_mapping: JoypadGamepadKeyMap,
 }
 
 impl SerializableInputSettings {
@@ -64,6 +68,7 @@ impl SerializableInputSettings {
                 .iter()
                 .map(|(k, v)| (k.clone(), v.borrow().clone()))
                 .collect(),
+            default_gamepad_mapping: source.default_gamepad_mapping,
         }
     }
 }
@@ -109,6 +114,7 @@ impl<'de> InputSettings {
                 ),
             ],
             configurations,
+            default_gamepad_mapping: source.default_gamepad_mapping,
         })
     }
     fn map_selected<'a>(

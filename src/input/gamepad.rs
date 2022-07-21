@@ -43,18 +43,7 @@ impl Gamepads {
             id_map: HashMap::new(),
         }
     }
-    fn create_default_mapping() -> JoypadGamepadKeyMap {
-        JoypadGamepadKeyMap {
-            up: Some(Button::DPadUp),
-            down: Some(Button::DPadDown),
-            left: Some(Button::DPadLeft),
-            right: Some(Button::DPadRight),
-            start: Some(Button::Start),
-            select: Some(Button::Select),
-            b: Some(Button::West),
-            a: Some(Button::South),
-        }
-    }
+
     fn map_id(&mut self, gamepad_id: GamepadId) -> &InputId {
         self.id_map
             .entry(gamepad_id)
@@ -89,7 +78,7 @@ impl Gamepads {
                             name: format!("Gamepad #{}", gamepad_id),
                             id: id.clone(),
                             kind: InputConfigurationKind::Gamepad(
-                                Gamepads::create_default_mapping(),
+                                input_settings.default_gamepad_mapping,
                             ),
                         },
                     );
