@@ -32,7 +32,7 @@ default_settings:
         configurations:
             00-keyboard-1:
                 id: 00-keyboard-1
-                name: "Keyboard mapping #1"
+                name: "Keyboard primary"
                 kind:
                     Keyboard:
                         up: Up
@@ -45,7 +45,7 @@ default_settings:
                         a: Key2
             00-keyboard-2:
                 id: 00-keyboard-2
-                name: "Keyboard mapping #2"
+                name: "Keyboard secondary"
                 kind:
                     Keyboard:
                         up: W

@@ -35,9 +35,10 @@ impl InputSettingsGui {
         player: usize,
     ) {
         ui.label(format!("Player {}", player + 1));
+        let selected_text = selected_configuration.borrow().name.to_string();
         egui::ComboBox::from_id_source(format!("joypad-{}", player))
             .width(160.0)
-            .selected_text(format!("{:?}", selected_configuration.borrow().name))
+            .selected_text(selected_text)
             .show_ui(ui, |ui| {
                 let mut sorted_configurations: Vec<&InputConfigurationRef> =
                     available_configurations
