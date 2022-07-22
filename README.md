@@ -1,6 +1,6 @@
 # NES Bundler
 
-**Transform your NES-game to a single executable targeting your favourite OS!**
+**Transform your NES-game into a single executable targeting your favourite OS!**
 
 Did you make a NES-game but none of your friends own a Nintendo? Don't worry.  
 Put your ROM and configuration in NES Bundler and build an executable for Mac, Windows or Linux.  
