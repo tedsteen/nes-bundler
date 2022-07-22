@@ -2,97 +2,72 @@
 
 In order to build your bundle you need two files in this directory.  
 
-* A `build_config.json` containing the build configuration
+* A `build_config.yaml` containing the build configuration
 * A `nes.rom` with your game
 
 ## Build configuration
 
-A file named `build_config.json` looking something like this (a more detailed description further below):
-```json
-{
-    "window_title": "My Awesome Game!",
-    "netplay": {
-        "matchbox_server": "matchbox.your-domain.io:3536"
-    },
-    "default_settings": {
-        "audio": {
-            "latency": 40,
-            "volume": 100
-        },
-        "input": {
-            "selected": [
-                "00-keyboard-1",
-                "00-keyboard-2"
-            ],
-            "configurations": {
-                "00-keyboard-1": {
-                    "id": "00-keyboard-1",
-                    "name": "Keyboard mapping #1",
-                    "kind": {
-                        "Keyboard": {
-                            "up": "Up",
-                            "down": "Down",
-                            "left": "Left",
-                            "right": "Right",
-                            "start": "Return",
-                            "select": "RShift",
-                            "b": "Key1",
-                            "a": "Key2"
-                        }
-                    }
-                },
-                "00-keyboard-2": {
-                    "id": "00-keyboard-2",
-                    "name": "Keyboard mapping #2",
-                    "kind": {
-                        "Keyboard": {
-                            "up": "W",
-                            "down": "S",
-                            "left": "A",
-                            "right": "D",
-                            "start": "Key9",
-                            "select": "Key0",
-                            "b": "LAlt",
-                            "a": "LControl"
-                        }
-                    }
-                }
-            },
-            "default_gamepad_mapping": {
-                "up": "DPadUp",
-                "down": "DPadDown",
-                "left": "DPadLeft",
-                "right": "DPadRight",
-                "start": "Start",
-                "select": "Select",
-                "b": "West",
-                "a": "South"
-            }
-        }
-    }
-}
+A file named `build_config.yaml` looking something like this:
+```yaml
+
+# The title of the window...
+window_title: "My Awesome Game!"
+netplay:
+    # If you have netplay enabled you need to provide a matchbox server.  
+    # You can read all about it here https://github.com/johanhelsing/matchbox,
+    # but for quick and easy setup see https://github.com/tedsteen/nes-bundler/tree/master/matchbox_server
+    matchbox_server: "matchbox.your-domain.io:3536"
+# This will be the default settings for the bundle.
+default_settings:
+    audio:
+        latency: 40 #in ms
+        volume: 100 #in %
+    input:
+        # Two ids that corresponds to the selected input mapping configuration of P1 and P2.
+        selected:
+            - 00-keyboard-1
+            - 00-keyboard-2
+        # A list of input mapping configurations. Should only be keyboard mappings as it's guaranteed to be available.
+        # For more key mappings see https://docs.rs/winit/latest/winit/event/enum.VirtualKeyCode.html
+        configurations:
+            00-keyboard-1:
+                id: 00-keyboard-1
+                name: "Keyboard mapping #1"
+                kind:
+                    Keyboard:
+                        up: Up
+                        down: Down
+                        left: Left
+                        right: Right
+                        start: Return
+                        select: RShift
+                        b: Key1
+                        a: Key2
+            00-keyboard-2:
+                id: 00-keyboard-2
+                name: "Keyboard mapping #2"
+                kind:
+                    Keyboard:
+                        up: W
+                        down: S
+                        left: A
+                        right: D
+                        start: Key9
+                        select: Key0
+                        b: LAlt
+                        a: LControl
+        # The default mapping for newly connected gamepads
+        # For more gamepad button mappings see https://docs.rs/gilrs/latest/gilrs/ev/enum.Button.html
+        default_gamepad_mapping:
+            up: DPadUp
+            down: DPadDown
+            left: DPadLeft
+            right: DPadRight
+            start: Start
+            select: Select
+            b: West
+            a: South
 ```
-### `window_title`
-
-The title of the window...
-
-### `netplay`
-
-If you have netplay enabled you need to provide a `matchbox_server`.  
-You can read all about it [here](https://github.com/johanhelsing/matchbox), but for quick and easy setup have a look [over here](../matchbox_server/).
-
-### `default_settings`
-
-This will be the default settings for the bundle.
-#### `audio`
-
- * `latency` (in ms)
- * `volume` (in %).
-#### `input`
-
- * `selected` - Two ids that corresponds to the selected input of P1 and P2.
- * `configurations` - A list of input mapping configurations.  It's pretty self explanatory, but if you want to read more about how to do the input mapping look [here for keyboard](https://docs.rs/winit/latest/winit/event/enum.VirtualKeyCode.html) and [here for gamepads](https://docs.rs/gilrs/latest/gilrs/ev/enum.Button.html).
- * `default_gamepad_mapping` - the default mapping for newly connected gamepads
 ## ROM-file
 
 A file named `rom.nes` containing your actual game.  

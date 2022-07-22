@@ -13,7 +13,7 @@ netplay = ["matchbox_socket", "tokio", "ggrs", "futures-timer", "futures"]
 [dependencies]
 anyhow = "1.0"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_yaml = "0.8"
 gilrs = { version = "0.9", features = ["serde-serialize"] }
 winit = {version = "0.26", features = ["serde"] }
 pixels = "0.9"

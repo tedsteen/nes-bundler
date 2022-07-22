@@ -58,7 +58,7 @@ pub struct BuildConfiguration {
 }
 fn main() {
     let build_config: BuildConfiguration =
-        serde_json::from_str(include_str!("../assets/build_config.json")).unwrap();
+        serde_yaml::from_str(include_str!("../assets/build_config.yaml")).unwrap();
 
     let event_loop = EventLoop::new();
 

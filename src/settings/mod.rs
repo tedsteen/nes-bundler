@@ -47,13 +47,13 @@ impl Settings {
 
 impl Settings {
     fn load() -> anyhow::Result<Settings> {
-        let file = File::open("settings.json")?;
-        let settings = serde_json::from_reader(BufReader::new(file))?;
+        let file = File::open("settings.yaml")?;
+        let settings = serde_yaml::from_reader(BufReader::new(file))?;
         Ok(settings)
     }
     pub fn save(&self) -> anyhow::Result<()> {
-        let file = File::create("settings.json")?;
-        serde_json::to_writer(BufWriter::new(file), &self)?;
+        let file = File::create("settings.yaml")?;
+        serde_yaml::to_writer(BufWriter::new(file), &self)?;
         Ok(())
     }
 
