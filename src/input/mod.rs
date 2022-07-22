@@ -129,10 +129,11 @@ pub struct Inputs {
     keyboards: Keyboards,
     gamepads: Gamepads,
     joypads: [JoypadInput; MAX_PLAYERS],
+    default_settings: InputSettings,
 }
 
 impl Inputs {
-    pub fn new() -> Self {
+    pub fn new(default_settings: InputSettings) -> Self {
         let gamepads = Gamepads::new();
         let keyboards = Keyboards::new();
 
@@ -140,6 +141,7 @@ impl Inputs {
             keyboards,
             gamepads,
             joypads: [JoypadInput(0), JoypadInput(0)],
+            default_settings,
         }
     }
 
@@ -162,6 +164,10 @@ impl Inputs {
 
     pub fn get_joypad(&self, player: usize) -> JoypadInput {
         self.joypads[player]
+    }
+
+    pub fn get_default_conf(&self, player: usize) -> &InputConfigurationRef {
+        &self.default_settings.selected[player]
     }
 
     fn get_joypad_for_input_configuration(

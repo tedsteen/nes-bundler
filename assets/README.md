@@ -86,10 +86,12 @@ You can read all about it [here](https://github.com/johanhelsing/matchbox), but 
 This will be the default settings for the bundle.
 #### `audio`
 
-Right now only audio `latency`.
+ * `latency` (in ms)
+ * `volume` (in %).
 #### `input`
+
  * `selected` - Two ids that corresponds to the selected input of P1 and P2.
- * `configurations` - A list of input mapping configurations.  It's pretty self explanatory, but if you want to read more about how to do the input mapping look [here for keyboard](https://docs.rs/winit/latest/winit/event/enum.VirtualKeyCode.html) and [here for gamepads](https://docs.rs/gilrs/latest/gilrs/ev/enum.Button.html).  
+ * `configurations` - A list of input mapping configurations.  It's pretty self explanatory, but if you want to read more about how to do the input mapping look [here for keyboard](https://docs.rs/winit/latest/winit/event/enum.VirtualKeyCode.html) and [here for gamepads](https://docs.rs/gilrs/latest/gilrs/ev/enum.Button.html).
  * `default_gamepad_mapping` - the default mapping for newly connected gamepads
 ## ROM-file
 

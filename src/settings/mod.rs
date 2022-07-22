@@ -1,6 +1,6 @@
-use crate::input::InputConfigurationKind;
+use crate::{input::InputConfigurationKind};
 
-use self::{audio::AudioSettings, input::InputSettings};
+use self::{audio::AudioSettings, input::{InputSettings}};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::hash_map::DefaultHasher,
@@ -22,22 +22,26 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new(default_settings: &Settings) -> Self {
         let mut settings = Settings::load();
+        let default_selected = &default_settings.input.selected;
         if let Ok(settings) = &mut settings {
             //Make sure no gamepads are selected after loading settings (they will be autoselected later if they are connected)
             if let InputConfigurationKind::Gamepad(_) =
                 Rc::clone(&settings.input.selected[0]).borrow().kind
             {
-                settings.input.selected[0] = Rc::clone(settings.input.get_default_config(0));
+                settings.input.selected[0] = Rc::clone(&default_selected[0]);
             }
             if let InputConfigurationKind::Gamepad(_) =
                 Rc::clone(&settings.input.selected[1]).borrow().kind
             {
-                settings.input.selected[1] = Rc::clone(settings.input.get_default_config(1));
+                settings.input.selected[1] = Rc::clone(&default_selected[1]);
             }
         }
-        settings
+        settings.unwrap_or_else(|err| {
+            eprintln!("Failed to load config ({err}), falling back to default settings");
+            default_settings.clone()
+        })
     }
 }
 

@@ -178,11 +178,8 @@ pub struct GameRunner {
 }
 impl GameRunner {
     pub fn new(pixels: Pixels, build_config: &BuildConfiguration) -> Self {
-        let inputs = Inputs::new();
-        let settings: Settings = Settings::new().unwrap_or_else(|err| {
-            eprintln!("Failed to load config ({err}), falling back to default settings");
-            build_config.default_settings.clone()
-        });
+        let inputs = Inputs::new(build_config.default_settings.input.clone());
+        let settings: Settings = Settings::new(&build_config.default_settings);
 
         let audio = Audio::new();
         let sound_stream = audio.start(&settings.audio);
