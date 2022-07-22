@@ -2,33 +2,34 @@
 
 # Inspired by https://doc.rust-lang.org/rustc/profile-guided-optimization.html
 
-export ROM_FILE=${1:-demo.nes}
-TARGET=${2:-x86_64-apple-darwin}
+export PROFILE_FILE_PATH=/tmp/pgo-data
 
-echo "Building optimized binary for target '$TARGET' using '$ROM_FILE' to profile"
+rm -rf $PROFILE_FILE_PATH
+mkdir $PROFILE_FILE_PATH
 
-rm -rf /tmp/pgo-data/
+# Build
+RUSTFLAGS="-Cprofile-generate=$PROFILE_FILE_PATH -C llvm-args=-vp-counters-per-site=7" cargo build --release
 
-# STEP 1: Build the instrumented binaries
-RUSTFLAGS="-Cprofile-generate=/tmp/pgo-data" cargo rustc -- -C link-args=-Wl,-stack_size,0x1000000 --target=$TARGET
+# Run
+./target/release/nes-bundler &
+export PID1=$!
 
-# STEP 2: Run the binary to generate profiler data
-./target/$TARGET/release/nes-bundler &
-PID=$!
-./target/$TARGET/release/nes-bundler &
-PID2=$!
+#./target/release/nes-bundler &
+#export PID2=$!
 
-# Collect profiler data for 3 mins...
+#echo "Collecting profiler data for 3 mins..."
 #sleep 180
-#kill -SIGINT $PID
+#echo "Killing $PID1"
+#kill -SIGINT $PID1
+#echo "Killing $PID2"
 #kill -SIGINT $PID2
-wait $PID
-wait $PID2
+echo "Waiting for $PID1"
+wait $PID1
+#echo "Waiting for $PID2"
+#wait $PID2
 
-# STEP 3: Merge and post-process all the `.profraw` files in /tmp/pgo-data
-xcrun llvm-profdata merge -o /tmp/pgo-data/merged.profdata /tmp/pgo-data
+echo "Merging..."
+llvm-profdata merge -o ${PROFILE_FILE_PATH}/merged.profdata $PROFILE_FILE_PATH
 
-# STEP 4: use the `.profdata` to build the optimized binary
-RUSTFLAGS="-Cprofile-use=/tmp/pgo-data/merged.profdata" cargo build --release --target=$TARGET
-
-echo "Optimized binary over here: ./target/$TARGET/release/rusticnes-test"
+echo "Making an optimized build using profiler data..."
+RUSTFLAGS="-Cprofile-use=${PROFILE_FILE_PATH}/merged.profdata" cargo build --release
