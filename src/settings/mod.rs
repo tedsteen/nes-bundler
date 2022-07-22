@@ -1,6 +1,6 @@
-use crate::{input::InputConfigurationKind};
+use crate::input::InputConfigurationKind;
 
-use self::{audio::AudioSettings, input::{InputSettings}};
+use self::{audio::AudioSettings, input::InputSettings};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::hash_map::DefaultHasher,

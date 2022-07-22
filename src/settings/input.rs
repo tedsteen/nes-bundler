@@ -1,7 +1,5 @@
 use super::MAX_PLAYERS;
-use crate::input::{
-    gamepad::JoypadGamepadKeyMap, InputConfiguration, InputId, Inputs,
-};
+use crate::input::{gamepad::JoypadGamepadKeyMap, InputConfiguration, InputId, Inputs};
 use core::fmt;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{cell::RefCell, collections::HashMap, hash::Hash, rc::Rc};

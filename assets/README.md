@@ -71,4 +71,4 @@ default_settings:
 ## ROM-file
 
 A file named `rom.nes` containing your actual game.  
-You can try it out with the `demo.nes` included.
+You can try it out with the included `demo.nes`.

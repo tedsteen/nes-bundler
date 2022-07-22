@@ -10,7 +10,6 @@ pub struct Keyboards {
 }
 
 impl Keyboards {
-
     pub fn new() -> Self {
         Keyboards {
             pressed_keys: HashSet::new(),

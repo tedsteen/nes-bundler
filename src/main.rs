@@ -202,7 +202,9 @@ impl GameRunner {
     }
     pub fn advance(&mut self) -> Fps {
         #[cfg(not(feature = "netplay"))]
-        let fps = self.state.advance([self.inputs.get_joypad(0), self.inputs.get_joypad(1)]);
+        let fps = self
+            .state
+            .advance([self.inputs.get_joypad(0), self.inputs.get_joypad(1)]);
 
         #[cfg(feature = "netplay")]
         let fps = self.netplay.advance(
