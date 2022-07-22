@@ -34,7 +34,7 @@ impl InputSettingsGui {
         selected_configuration: &mut InputConfigurationRef,
         player: usize,
     ) {
-        ui.label(format!("Joypad #{}", player + 1));
+        ui.label(format!("Player {}", player + 1));
         egui::ComboBox::from_id_source(format!("joypad-{}", player))
             .width(160.0)
             .selected_text(format!("{:?}", selected_configuration.borrow().name))
