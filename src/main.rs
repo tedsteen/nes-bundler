@@ -58,7 +58,7 @@ pub struct BuildConfiguration {
 }
 fn main() {
     let build_config: BuildConfiguration =
-        serde_yaml::from_str(include_str!("../assets/build_config.yaml")).unwrap();
+        serde_yaml::from_str(include_str!("../config/build_config.yaml")).unwrap();
 
     let event_loop = EventLoop::new();
 
@@ -133,7 +133,7 @@ impl MyGameState {
         let rom_data = match std::env::var("ROM_FILE") {
             Ok(rom_file) => std::fs::read(&rom_file)
                 .unwrap_or_else(|_| panic!("Could not read ROM {}", rom_file)),
-            Err(_e) => include_bytes!("../assets/rom.nes").to_vec(),
+            Err(_e) => include_bytes!("../config/rom.nes").to_vec(),
         };
 
         let nes = load_rom(rom_data).expect("Failed to load ROM");
