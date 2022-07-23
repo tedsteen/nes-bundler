@@ -23,12 +23,12 @@ default_settings:
         latency: 40 #in ms
         volume: 100 #in %
     input:
-        # Two ids that corresponds to the selected input mapping configuration of P1 and P2.
+        # Two ids that corresponds to the selected input mapping configuration of P1 and P2. Should only be keyboard mappings as they're guaranteed to be available.
         selected:
             - 00-keyboard-1
             - 00-keyboard-2
-        # A list of input mapping configurations. Should only be keyboard mappings as it's guaranteed to be available.
-        # For more key mappings see https://docs.rs/winit/latest/winit/event/enum.VirtualKeyCode.html
+        # A list of input mapping configurations.For more key mappings see https://docs.rs/winit/latest/winit/event/enum.VirtualKeyCode.html
+        # To add a gamepad configuration use the kind `Gamepad` and id `01-gamepad-0` for the first gamepad that connects, `01-gamepad-1` for the second and so on.
         configurations:
             00-keyboard-1:
                 id: 00-keyboard-1
