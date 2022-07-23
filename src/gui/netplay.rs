@@ -1,6 +1,6 @@
 use egui::{Button, Context, TextEdit, Window};
 
-use crate::{network::NetplayState, settings::MAX_PLAYERS, GameRunner};
+use crate::{netplay::NetplayState, settings::MAX_PLAYERS, GameRunner};
 
 use super::GuiComponent;
 pub struct NetplayGui {

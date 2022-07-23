@@ -27,7 +27,7 @@ mod audio;
 mod gui;
 mod input;
 #[cfg(feature = "netplay")]
-mod network;
+mod netplay;
 mod palette;
 mod settings;
 
@@ -53,7 +53,7 @@ pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
 pub struct BuildConfiguration {
     window_title: String,
     #[cfg(feature = "netplay")]
-    netplay: network::NetplayBuildConfiguration,
+    netplay: netplay::NetplayBuildConfiguration,
     default_settings: Settings,
 }
 fn main() {
@@ -174,7 +174,7 @@ pub struct GameRunner {
     inputs: Inputs,
 
     #[cfg(feature = "netplay")]
-    netplay: network::Netplay,
+    netplay: netplay::Netplay,
 }
 impl GameRunner {
     pub fn new(pixels: Pixels, build_config: &BuildConfiguration) -> Self {
@@ -197,7 +197,7 @@ impl GameRunner {
             inputs,
 
             #[cfg(feature = "netplay")]
-            netplay: network::Netplay::new(&build_config.netplay),
+            netplay: netplay::Netplay::new(&build_config.netplay),
         }
     }
     pub fn advance(&mut self) -> Fps {
