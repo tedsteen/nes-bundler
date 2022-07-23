@@ -66,7 +66,7 @@ impl Stream {
                 producer.push(0.0).unwrap();
             }
         }
-        let mut nes_sample = 0.0;
+        let mut last_sample = 0.0;
         let consumer = Arc::new(Mutex::<Consumer<f32>>::new(consumer));
         let stream = output_device
             .build_output_stream(
@@ -77,12 +77,12 @@ impl Stream {
                         let mut consumer = consumer.lock().unwrap();
                         for sample in data {
                             if let Some(sample) = consumer.pop() {
-                                nes_sample = sample;
+                                last_sample = sample;
                             } else {
                                 //eprintln!("Buffer underrun");
                             }
 
-                            *sample = nes_sample;
+                            *sample = last_sample;
                         }
                     }
                 },
