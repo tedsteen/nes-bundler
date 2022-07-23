@@ -1,6 +1,6 @@
 use self::{
-    gamepad::{Gamepads, JoypadGamepadKeyMap},
-    keyboard::{JoypadKeyboardKeyMap, Keyboards},
+    gamepad::{Gamepads, JoypadGamepadMapping},
+    keyboard::{JoypadKeyboardMapping, Keyboards},
 };
 use crate::settings::{
     input::{InputConfigurationRef, InputSettings},
@@ -28,7 +28,7 @@ pub enum JoypadButton {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, PartialEq)]
-pub struct JoypadKeyMap<KeyType> {
+pub struct JoypadMapping<KeyType> {
     pub up: Option<KeyType>,
     pub down: Option<KeyType>,
     pub left: Option<KeyType>,
@@ -39,11 +39,11 @@ pub struct JoypadKeyMap<KeyType> {
     pub a: Option<KeyType>,
 }
 
-impl<KeyType> JoypadKeyMap<KeyType>
+impl<KeyType> JoypadMapping<KeyType>
 where
     KeyType: PartialEq,
 {
-    pub fn lookup_mut(&mut self, button: &JoypadButton) -> &mut Option<KeyType> {
+    pub fn lookup(&mut self, button: &JoypadButton) -> &mut Option<KeyType> {
         match button {
             JoypadButton::Up => &mut self.up,
             JoypadButton::Down => &mut self.down,
@@ -53,18 +53,6 @@ where
             JoypadButton::Select => &mut self.select,
             JoypadButton::B => &mut self.b,
             JoypadButton::A => &mut self.a,
-        }
-    }
-    pub fn lookup(&self, button: &JoypadButton) -> &Option<KeyType> {
-        match button {
-            JoypadButton::Up => &self.up,
-            JoypadButton::Down => &self.down,
-            JoypadButton::Left => &self.left,
-            JoypadButton::Right => &self.right,
-            JoypadButton::Start => &self.start,
-            JoypadButton::Select => &self.select,
-            JoypadButton::B => &self.b,
-            JoypadButton::A => &self.a,
         }
     }
 
@@ -82,14 +70,14 @@ where
     }
     fn reverse_lookup(&self, key: &KeyType) -> HashSet<JoypadButton> {
         let mut buttons = HashSet::new();
-        JoypadKeyMap::insert_if_mapped(&mut buttons, &self.up, key, JoypadButton::Up);
-        JoypadKeyMap::insert_if_mapped(&mut buttons, &self.down, key, JoypadButton::Down);
-        JoypadKeyMap::insert_if_mapped(&mut buttons, &self.left, key, JoypadButton::Left);
-        JoypadKeyMap::insert_if_mapped(&mut buttons, &self.right, key, JoypadButton::Right);
-        JoypadKeyMap::insert_if_mapped(&mut buttons, &self.start, key, JoypadButton::Start);
-        JoypadKeyMap::insert_if_mapped(&mut buttons, &self.select, key, JoypadButton::Select);
-        JoypadKeyMap::insert_if_mapped(&mut buttons, &self.b, key, JoypadButton::B);
-        JoypadKeyMap::insert_if_mapped(&mut buttons, &self.a, key, JoypadButton::A);
+        JoypadMapping::insert_if_mapped(&mut buttons, &self.up, key, JoypadButton::Up);
+        JoypadMapping::insert_if_mapped(&mut buttons, &self.down, key, JoypadButton::Down);
+        JoypadMapping::insert_if_mapped(&mut buttons, &self.left, key, JoypadButton::Left);
+        JoypadMapping::insert_if_mapped(&mut buttons, &self.right, key, JoypadButton::Right);
+        JoypadMapping::insert_if_mapped(&mut buttons, &self.start, key, JoypadButton::Start);
+        JoypadMapping::insert_if_mapped(&mut buttons, &self.select, key, JoypadButton::Select);
+        JoypadMapping::insert_if_mapped(&mut buttons, &self.b, key, JoypadButton::B);
+        JoypadMapping::insert_if_mapped(&mut buttons, &self.a, key, JoypadButton::A);
         buttons
     }
 
@@ -122,8 +110,8 @@ pub struct InputConfiguration {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq)]
 pub enum InputConfigurationKind {
-    Keyboard(JoypadKeyboardKeyMap),
-    Gamepad(JoypadGamepadKeyMap),
+    Keyboard(JoypadKeyboardMapping),
+    Gamepad(JoypadGamepadMapping),
 }
 pub struct Inputs {
     keyboards: Keyboards,
@@ -204,7 +192,7 @@ impl Inputs {
             InputConfigurationKind::Keyboard(mapping) => {
                 if let Some(code) = self.keyboards.pressed_keys.iter().next() {
                     //If there's any key pressed, use the first found.
-                    let _ = mapping.lookup_mut(button).insert(*code);
+                    let _ = mapping.lookup(button).insert(*code);
                     return true;
                 }
             }
@@ -213,9 +201,9 @@ impl Inputs {
                     .gamepads
                     .get_gamepad_by_input_id(&input_configuration_id)
                 {
-                    if let Some(code) = state.pressed_keys.iter().next() {
+                    if let Some(new_button) = state.pressed_buttons.iter().next() {
                         //If there's any button pressed, use the first found.
-                        let _ = mapping.lookup_mut(button).insert(*code);
+                        let _ = mapping.lookup(button).insert(*new_button);
                         return true;
                     }
                 }

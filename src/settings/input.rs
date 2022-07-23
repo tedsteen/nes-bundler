@@ -1,5 +1,5 @@
 use super::MAX_PLAYERS;
-use crate::input::{gamepad::JoypadGamepadKeyMap, InputConfiguration, InputId, Inputs};
+use crate::input::{gamepad::JoypadGamepadMapping, InputConfiguration, InputId, Inputs};
 use core::fmt;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{cell::RefCell, collections::HashMap, hash::Hash, rc::Rc};
@@ -10,7 +10,7 @@ pub type InputConfigurationRef = Rc<RefCell<InputConfiguration>>;
 pub struct InputSettings {
     pub selected: [InputConfigurationRef; MAX_PLAYERS],
     pub configurations: HashMap<InputId, InputConfigurationRef>,
-    pub default_gamepad_mapping: JoypadGamepadKeyMap,
+    pub default_gamepad_mapping: JoypadGamepadMapping,
 }
 
 impl InputSettings {
@@ -50,7 +50,7 @@ impl Hash for InputSettings {
 struct SerializableInputSettings {
     selected: [InputId; MAX_PLAYERS],
     configurations: HashMap<InputId, InputConfiguration>,
-    pub default_gamepad_mapping: JoypadGamepadKeyMap,
+    pub default_gamepad_mapping: JoypadGamepadMapping,
 }
 
 impl SerializableInputSettings {
@@ -112,10 +112,10 @@ impl<'de> InputSettings {
         })
     }
     fn map_selected<'a>(
-        configurations: &'a HashMap<String, Rc<RefCell<InputConfiguration>>>,
+        configurations: &'a HashMap<String, InputConfigurationRef>,
         id: &'a InputId,
         player: usize,
-    ) -> Result<&'a Rc<RefCell<InputConfiguration>>, SettingsParseError> {
+    ) -> Result<&'a InputConfigurationRef, SettingsParseError> {
         #[allow(clippy::or_fun_call)]
         configurations
             .get(id)

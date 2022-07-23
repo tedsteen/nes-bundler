@@ -1,4 +1,4 @@
-use super::{InputId, JoypadInput, JoypadKeyMap};
+use super::{InputId, JoypadInput, JoypadMapping};
 use crate::{
     input::{self, InputConfigurationKind},
     settings::input::InputSettings,
@@ -9,17 +9,17 @@ use std::{
     rc::Rc,
 };
 
-pub type JoypadGamepadKeyMap = JoypadKeyMap<Button>;
+pub type JoypadGamepadMapping = JoypadMapping<Button>;
 
 pub struct GamepadState {
-    pub pressed_keys: HashSet<Button>,
+    pub pressed_buttons: HashSet<Button>,
     pub disconnected: bool,
 }
 
 impl GamepadState {
     pub fn new() -> Self {
         Self {
-            pressed_keys: HashSet::new(),
+            pressed_buttons: HashSet::new(),
             disconnected: false,
         }
     }
@@ -100,12 +100,12 @@ impl Gamepads {
 
                 EventType::ButtonPressed(button, _) => {
                     self.get_or_create_gamepad(gamepad_id)
-                        .pressed_keys
+                        .pressed_buttons
                         .insert(button);
                 }
                 EventType::ButtonReleased(button, _) => {
                     self.get_or_create_gamepad(gamepad_id)
-                        .pressed_keys
+                        .pressed_buttons
                         .remove(&button);
                 }
 
@@ -118,9 +118,9 @@ impl Gamepads {
         }
     }
 
-    pub fn get_joypad(&mut self, id: &InputId, mapping: &JoypadGamepadKeyMap) -> JoypadInput {
+    pub fn get_joypad(&mut self, id: &InputId, mapping: &JoypadGamepadMapping) -> JoypadInput {
         if let Some(state) = self.get_gamepad_by_input_id(id) {
-            mapping.calculate_state(&state.pressed_keys)
+            mapping.calculate_state(&state.pressed_buttons)
         } else {
             JoypadInput(0)
         }

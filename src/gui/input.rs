@@ -150,7 +150,7 @@ impl InputSettingsGui {
                 };
             }
             _ => {
-                let key_to_map = match input_configuration.borrow().kind {
+                let key_to_map = match &mut input_configuration.borrow_mut().kind {
                     crate::input::InputConfigurationKind::Keyboard(mapping) => {
                         mapping.lookup(&button).map(|v| format!("{:?}", v))
                     }

@@ -1,9 +1,9 @@
-use super::{JoypadInput, JoypadKeyMap};
+use super::{JoypadInput, JoypadMapping};
 use egui_winit::winit;
 use std::collections::HashSet;
 use winit::event::{KeyboardInput, VirtualKeyCode};
 
-pub type JoypadKeyboardKeyMap = JoypadKeyMap<VirtualKeyCode>;
+pub type JoypadKeyboardMapping = JoypadMapping<VirtualKeyCode>;
 
 pub struct Keyboards {
     pub pressed_keys: HashSet<VirtualKeyCode>,
@@ -24,7 +24,7 @@ impl Keyboards {
         }
     }
 
-    pub fn get_joypad(&mut self, mapping: &JoypadKeyboardKeyMap) -> JoypadInput {
+    pub fn get_joypad(&mut self, mapping: &JoypadKeyboardMapping) -> JoypadInput {
         mapping.calculate_state(&self.pressed_keys)
     }
 }

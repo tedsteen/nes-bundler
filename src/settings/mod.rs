@@ -47,13 +47,11 @@ impl Settings {
 
 impl Settings {
     fn load() -> anyhow::Result<Settings> {
-        let file = File::open("settings.yaml")?;
-        let settings = serde_yaml::from_reader(BufReader::new(file))?;
+        let settings = serde_yaml::from_reader(BufReader::new(File::open("settings.yaml")?))?;
         Ok(settings)
     }
     pub fn save(&self) -> anyhow::Result<()> {
-        let file = File::create("settings.yaml")?;
-        serde_yaml::to_writer(BufWriter::new(file), &self)?;
+        serde_yaml::to_writer(BufWriter::new(File::create("settings.yaml")?), &self)?;
         Ok(())
     }
 
