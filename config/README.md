@@ -2,8 +2,8 @@
 
 In order to build your bundle you need two files in this directory.  
 
-* A `build_config.yaml` containing the build configuration
-* A `nes.rom` with your game
+* A `build_config.yaml` containing the build configuration.
+* A `nes.rom` with your game.
 
 ## Build configuration
 
@@ -14,8 +14,7 @@ A file named `build_config.yaml` looking something like this:
 window_title: "My Awesome Game!"
 netplay:
     # If you have netplay enabled you need to provide a matchbox server.  
-    # You can read all about it here https://github.com/johanhelsing/matchbox,
-    # but for quick and easy setup see https://github.com/tedsteen/nes-bundler/tree/master/matchbox_server
+    # You can read all about it here https://github.com/johanhelsing/matchbox, but for quick and easy setup see https://github.com/tedsteen/nes-bundler/tree/master/matchbox_server.
     matchbox_server: "matchbox.your-domain.io:3536"
 # This will be the default settings for the bundle.
 default_settings:
@@ -27,7 +26,7 @@ default_settings:
         selected:
             - 00-keyboard-1
             - 00-keyboard-2
-        # A list of input mapping configurations.For more key mappings see https://docs.rs/winit/latest/winit/event/enum.VirtualKeyCode.html
+        # A list of input mapping configurations. For more key mappings see https://docs.rs/winit/latest/winit/event/enum.VirtualKeyCode.html.
         # To add a gamepad configuration use the kind `Gamepad` and id `01-gamepad-0` for the first gamepad that connects, `01-gamepad-1` for the second and so on.
         configurations:
             00-keyboard-1:
@@ -56,8 +55,7 @@ default_settings:
                         select: Key0
                         b: LAlt
                         a: LControl
-        # The default mapping for newly connected gamepads
-        # For more gamepad button mappings see https://docs.rs/gilrs/latest/gilrs/ev/enum.Button.html
+        # The default mapping for newly connected gamepads. For more gamepad button mappings see https://docs.rs/gilrs/latest/gilrs/ev/enum.Button.html.
         default_gamepad_mapping:
             up: DPadUp
             down: DPadDown
