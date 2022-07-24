@@ -1,9 +1,6 @@
 #![deny(clippy::all)]
 #![forbid(unsafe_code)]
 
-use std::fs::File;
-use std::io::{Read, Write};
-
 use crate::input::JoypadInput;
 use anyhow::Result;
 use audio::{Audio, Stream};
@@ -261,14 +258,10 @@ impl GameRunner {
                     if input.state == winit::event::ElementState::Pressed {
                         match input.virtual_keycode {
                             Some(VirtualKeyCode::F1) => {
-                                if let Err(err) = self.save_state() {
-                                    eprintln!("Could not write save file: {}", err);
-                                }
+                                self.save_state();
                             }
                             Some(VirtualKeyCode::F2) => {
-                                if let Err(err) = self.load_state() {
-                                    eprintln!("Could not read savefile: {}", err);
-                                }
+                                self.load_state();
                             }
                             _ => {}
                         }
@@ -282,20 +275,16 @@ impl GameRunner {
         true
     }
 
-    fn save_state(&self) -> Result<()> {
-        let mut file = File::create("save.bin")?;
-        let data = self.state.save();
-        file.write_all(&data)?;
-        Ok(())
+    fn save_state(&mut self) {
+        self.settings.last_save_state = Some(base64::encode(self.state.save()));
     }
 
-    fn load_state(&mut self) -> Result<()> {
-        let mut file = File::open("save.bin")?;
-        let buf = &mut Vec::new();
-        file.read_to_end(buf)?;
-
-        self.state.load(buf);
-        self.sound_stream.drain(); //make sure we don't build up a delay
-        Ok(())
+    fn load_state(&mut self) {
+        if let Some(save_state) = &mut self.settings.last_save_state {
+            if let Ok(buf) = &mut base64::decode(save_state) {
+                self.state.load(buf);
+                self.sound_stream.drain(); //make sure we don't build up a delay
+            }
+        }
     }
 }

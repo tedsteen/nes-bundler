@@ -19,6 +19,7 @@ pub const MAX_PLAYERS: usize = 2;
 pub struct Settings {
     pub audio: AudioSettings,
     pub input: InputSettings,
+    pub last_save_state: Option<String>,
 }
 
 impl Settings {

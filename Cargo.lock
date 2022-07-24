@@ -2312,6 +2312,7 @@ name = "nes-bundler"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64",
  "cpal",
  "egui",
  "egui-wgpu",
