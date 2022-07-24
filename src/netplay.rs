@@ -2,7 +2,7 @@ use crate::{audio::Stream, input::JoypadInput, settings::MAX_PLAYERS, Fps, MyGam
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, NetworkStats, P2PSession, SessionBuilder};
-use matchbox_socket::WebRtcSocket;
+use matchbox_socket::{WebRtcSocket, WebRtcSocketConfig, RtcIceServerConfig};
 use rusticnes_core::nes::NesState;
 use serde::Deserialize;
 use std::{
@@ -103,7 +103,15 @@ impl Netplay {
 
     pub fn connect(&mut self, room: &str) {
         let matchbox_server = &self.matchbox_server;
-        let (socket, loop_fut) = WebRtcSocket::new(format!("ws://{matchbox_server}/{room}"));
+        //TODO: Enable TURN servers, but can't figure out where to put credentials.
+        let (socket, loop_fut) = WebRtcSocket::new_with_config(WebRtcSocketConfig {
+            room_url: format!("ws://{matchbox_server}/{room}"),
+            ice_server: RtcIceServerConfig {
+                urls: vec![
+                    "stun:stun.l.google.com:19302".to_string(),
+                ],
+            },
+        });
 
         let loop_fut = loop_fut.fuse();
         self.rt.spawn(async move {
