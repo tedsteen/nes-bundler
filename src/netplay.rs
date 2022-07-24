@@ -1,11 +1,14 @@
 use crate::{audio::Stream, input::JoypadInput, settings::MAX_PLAYERS, Fps, MyGameState, FPS};
 use futures::{select, FutureExt};
 use futures_timer::Delay;
-use ggrs::{Config, GGRSRequest, P2PSession, SessionBuilder};
+use ggrs::{Config, GGRSRequest, NetworkStats, P2PSession, SessionBuilder};
 use matchbox_socket::WebRtcSocket;
 use rusticnes_core::nes::NesState;
 use serde::Deserialize;
-use std::time::Duration;
+use std::{
+    collections::VecDeque,
+    time::{Duration, Instant},
+};
 use tokio::runtime::Runtime;
 
 #[derive(Deserialize)]
@@ -31,12 +34,49 @@ impl Config for GGRSConfig {
     type State = MyGameState;
     type Address = String;
 }
+pub const STATS_HISTORY: usize = 100;
+
+pub struct NetplayStat {
+    pub stat: NetworkStats,
+    pub duration: Duration,
+}
+pub struct NetplayStats {
+    stats: VecDeque<NetplayStat>,
+    start_time: Instant,
+}
+
+impl NetplayStats {
+    pub fn new() -> Self {
+        Self {
+            start_time: Instant::now(),
+            stats: VecDeque::with_capacity(STATS_HISTORY),
+        }
+    }
+
+    pub fn get_ping(&self) -> &VecDeque<NetplayStat> {
+        &self.stats
+    }
+
+    fn push_stats(&mut self, stat: NetworkStats) {
+        let duration = Instant::now().duration_since(self.start_time);
+        self.stats.push_back(NetplayStat { duration, stat });
+        if self.stats.len() == STATS_HISTORY {
+            self.stats.pop_front();
+        }
+    }
+}
+
+pub struct NetplaySession {
+    p2p_session: P2PSession<GGRSConfig>,
+    frame: Frame,
+    pub stats: [NetplayStats; MAX_PLAYERS],
+}
 
 #[allow(clippy::large_enum_variant)]
 pub enum NetplayState {
     Disconnected,
     Connecting(Option<WebRtcSocket>),
-    Connected((P2PSession<GGRSConfig>, Frame)),
+    Connected(NetplaySession),
 }
 
 type Frame = i32;
@@ -121,17 +161,20 @@ impl Netplay {
                                 .expect("failed to add player");
                         }
 
-                        self.state = NetplayState::Connected((
-                            sess_build
+                        self.state = NetplayState::Connected(NetplaySession {
+                            p2p_session: sess_build
                                 .start_p2p_session(s.take().unwrap())
                                 .expect("failed to start session"),
-                            0,
-                        ));
+                            frame: 0,
+                            stats: [NetplayStats::new(), NetplayStats::new()],
+                        });
                         game_state.nes.reset();
                     }
                 }
             }
-            NetplayState::Connected((sess, frame)) => {
+            NetplayState::Connected(netplay_session) => {
+                let sess = &mut netplay_session.p2p_session;
+                let frame = &mut netplay_session.frame;
                 sess.poll_remote_clients();
                 let mut disconnected = false;
                 for event in sess.events() {
@@ -190,11 +233,12 @@ impl Netplay {
                     Err(e) => eprintln!("Ouch :( {:?}", e),
                 }
 
-                //regularily print networks stats
-                if *frame % 120 == 0 {
+                if *frame % 30 == 0 {
                     for i in 0..MAX_PLAYERS {
                         if let Ok(stats) = sess.network_stats(i as usize) {
-                            println!("NetworkStats to player {}: {:?}", i, stats);
+                            if !sess.local_player_handles().contains(&i) {
+                                netplay_session.stats[i].push_stats(stats);
+                            }
                         }
                     }
                 }

@@ -1,10 +1,70 @@
-use egui::{Button, Context, TextEdit, Window};
+use egui::{
+    plot::{Corner, Legend},
+    Button, Context, TextEdit, TextStyle, Ui, Window,
+};
 
-use crate::{netplay::NetplayState, settings::MAX_PLAYERS, GameRunner};
+use crate::{
+    netplay::{NetplayState, NetplayStats},
+    settings::MAX_PLAYERS,
+    GameRunner,
+};
 
 use super::GuiComponent;
 pub struct NetplayGui {
     is_open: bool,
+}
+impl NetplayGui {
+    fn stats_ui(ui: &mut Ui, stats: &NetplayStats, player: usize) {
+        if !stats.get_ping().is_empty() {
+            ui.label(format!("Player {player}"));
+            use egui::plot::{Line, Plot, Value, Values};
+
+            Plot::new(format!("stats_plot_{player}"))
+                .label_formatter(|name, value| {
+                    if !name.is_empty() {
+                        format!("{name}: {}", value.y)
+                    } else {
+                        "".to_string()
+                    }
+                })
+                .legend(
+                    Legend::default()
+                        .position(Corner::LeftTop)
+                        .text_style(TextStyle::Small),
+                )
+                .view_aspect(2.0)
+                .include_y(0)
+                .show_axes([false, true])
+                .show(ui, |plot_ui| {
+                    plot_ui.line(
+                        Line::new(Values::from_values_iter(stats.get_ping().iter().map(|i| {
+                            Value::new(i.duration.as_millis() as u32, i.stat.ping as f32)
+                        })))
+                        .name("Ping"),
+                    );
+
+                    plot_ui.line(
+                        Line::new(Values::from_values_iter(stats.get_ping().iter().map(|i| {
+                            Value::new(
+                                i.duration.as_millis() as u32,
+                                i.stat.local_frames_behind as f32,
+                            )
+                        })))
+                        .name("Behind (local)"),
+                    );
+
+                    plot_ui.line(
+                        Line::new(Values::from_values_iter(stats.get_ping().iter().map(|i| {
+                            Value::new(
+                                i.duration.as_millis() as u32,
+                                i.stat.remote_frames_behind as f32,
+                            )
+                        })))
+                        .name("Behind (remote)"),
+                    );
+                });
+        }
+    }
 }
 
 impl GuiComponent for NetplayGui {
@@ -70,7 +130,11 @@ impl GuiComponent for NetplayGui {
                             }
                         }
                     }
-                    NetplayState::Connected(_) => {
+                    NetplayState::Connected(netplay_session) => {
+                        ui.collapsing("Stats", |ui| {
+                            Self::stats_ui(ui, &netplay_session.stats[0], 0);
+                            Self::stats_ui(ui, &netplay_session.stats[1], 1);
+                        });
                         if ui.button("Disconnect").clicked() {
                             netplay.state = NetplayState::Disconnected;
                         }
