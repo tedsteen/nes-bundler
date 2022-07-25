@@ -4,7 +4,7 @@ use egui::{
 };
 
 use crate::{
-    netplay::{NetplayState, NetplayStats},
+    netplay::{NetplayState, NetplayStats, NetplayServerConfiguration},
     settings::MAX_PLAYERS,
     GameRunner,
 };
@@ -87,12 +87,12 @@ impl GuiComponent for NetplayGui {
                                 ui.add(
                                     TextEdit::singleline(&mut netplay.room_name)
                                         .desired_width(140.0)
-                                        .hint_text("Name of network game"),
+                                        .hint_text("Netplay room"),
                                 );
                                 if ui
                                     .add_enabled(!netplay.room_name.is_empty(), Button::new("Join"))
                                     .on_disabled_hover_text(
-                                        "Which network game do you want to join?",
+                                        "Which room do you want to join?",
                                     )
                                     .clicked()
                                 {
@@ -104,24 +104,26 @@ impl GuiComponent for NetplayGui {
                                     netplay.connect("beta-0?next=2");
                                 }
                                 ui.end_row();
+
+                                let NetplayServerConfiguration::Static(config) = &mut netplay.config.server;
                                 ui.label("Max prediction (frames)");
                                 ui.add(
-                                    egui::DragValue::new(&mut netplay.max_prediction)
+                                    egui::DragValue::new(&mut config.ggrs.max_prediction)
                                         .speed(1.0)
-                                        .clamp_range(1..=20),
+                                        .clamp_range(1..=60),
                                 );
                                 ui.end_row();
                                 ui.label("Input delay (frames)");
                                 ui.add(
-                                    egui::DragValue::new(&mut netplay.input_delay)
+                                    egui::DragValue::new(&mut config.ggrs.input_delay)
                                         .speed(1.0)
-                                        .clamp_range(1..=7),
+                                        .clamp_range(1..=10),
                                 );
                                 ui.end_row();
                             });
                     }
-                    NetplayState::Connecting(s) => {
-                        if let Some(socket) = s {
+                    NetplayState::Connecting(connecting_state) => {
+                        if let Some(socket) = &connecting_state.socket {
                             let connected_peers = socket.connected_peers().len();
                             let remaining = MAX_PLAYERS - (connected_peers + 1);
                             ui.label(format!("Waiting for {} players", remaining));

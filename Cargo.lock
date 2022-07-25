@@ -2096,7 +2096,6 @@ dependencies = [
 [[package]]
 name = "matchbox_socket"
 version = "0.3.0"
-source = "git+https://github.com/johanhelsing/matchbox#50c1e69e9f1c0f1e07e0ffd5161db0ce3f9267b5"
 dependencies = [
  "async-compat",
  "async-tungstenite",

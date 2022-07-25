@@ -49,9 +49,9 @@ pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
 #[derive(Deserialize)]
 pub struct BuildConfiguration {
     window_title: String,
+    default_settings: Settings,
     #[cfg(feature = "netplay")]
     netplay: netplay::NetplayBuildConfiguration,
-    default_settings: Settings,
 }
 fn main() {
     let build_config: BuildConfiguration =
@@ -194,7 +194,7 @@ impl GameRunner {
             inputs,
 
             #[cfg(feature = "netplay")]
-            netplay: netplay::Netplay::new(&build_config.netplay),
+            netplay: netplay::Netplay::new(build_config.netplay.clone()),
         }
     }
     pub fn advance(&mut self) -> Fps {
