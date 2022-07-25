@@ -108,11 +108,7 @@ impl Gamepads {
                         .pressed_buttons
                         .remove(&button);
                 }
-
-                EventType::ButtonRepeated(_, _) => {}
-                EventType::ButtonChanged(_, _, _) => {}
-                EventType::AxisChanged(_, _, _) => {}
-                EventType::Dropped => {}
+                _ => {}
             }
             //println!("{:?} New event from {}: {:?}", time, id, event);
         }
