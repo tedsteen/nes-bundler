@@ -66,6 +66,10 @@ default_settings:
 
 # Netplay configuration. You can remove this if the netplay feature is disabled.
 netplay:
+    # A universally unique identifier that identifies this particular build. Meant for builds targeting specifik users.
+    # If not set, it will get assigned at runtime and saved in the settings.yaml.
+    # This id will be used when querying server configurations.
+    netplay_id: "<some-uuid>"
     # The default room name when starting a new netplay game
     default_room_name: ""
     # GGRS and Matchbox server configuration

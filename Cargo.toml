@@ -8,7 +8,7 @@ resolver="2"
 
 [features]
 default = ["netplay"]
-netplay = ["matchbox_socket", "tokio", "ggrs", "futures-timer", "futures"]
+netplay = ["matchbox_socket", "tokio", "ggrs", "futures-timer", "futures", "uuid"]
 
 [dependencies]
 anyhow = "1.0"
@@ -33,3 +33,4 @@ futures-timer = { version = "3", features = ["wasm-bindgen"], optional = true }
 ggrs = { version = "0.9", optional = true }
 tokio = { version = "1", features = ["rt"], optional = true }
 futures = {version = "0.3", optional = true }
+uuid = { version = "1", features = [ "v4" ], optional = true }

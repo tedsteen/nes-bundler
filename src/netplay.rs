@@ -1,10 +1,11 @@
-use crate::{input::JoypadInput, settings::MAX_PLAYERS, Fps, MyGameState, FPS};
+use crate::{input::JoypadInput, settings::{MAX_PLAYERS, Settings}, Fps, MyGameState, FPS};
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, NetworkStats, P2PSession, SessionBuilder};
 use matchbox_socket::{WebRtcSocket, WebRtcSocketConfig, RtcIceServerConfig, RtcIceCredentials, RtcIcePasswordCredentials};
 use rusticnes_core::nes::NesState;
 use serde::Deserialize;
+use uuid::Uuid;
 use std::{
     collections::VecDeque,
     time::{Duration, Instant},
@@ -90,6 +91,7 @@ pub struct Netplay {
 #[derive(Deserialize, Clone)]
 pub struct NetplayBuildConfiguration {
     pub default_room_name: String,
+    pub netplay_id: Option<String>,
     pub server: NetplayServerConfiguration,
 }
 
@@ -132,15 +134,21 @@ pub enum NetplayServerConfiguration {
 }
 
 impl Netplay {
-    pub fn new(config: NetplayBuildConfiguration) -> Self {
+    pub fn new(config: &NetplayBuildConfiguration) -> Self {
         let room_name = config.default_room_name.clone();
         Netplay {
             rt: Runtime::new().expect("Could not create an async runtime"),
             state: NetplayState::Disconnected,
             last_real_frame: -1,
-            config,
+            config: config.clone(),
             room_name,
         }
+    }
+
+    pub fn get_netplay_id(&self, settings: &mut Settings) -> String {
+        self.config.netplay_id.as_ref().unwrap_or_else(|| {
+            settings.netplay_id.get_or_insert_with(|| Uuid::new_v4().to_string())
+        }).clone()
     }
 
     pub fn connect(&mut self, room: &str) {

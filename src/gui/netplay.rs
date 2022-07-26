@@ -76,6 +76,7 @@ impl GuiComponent for NetplayGui {
             .resizable(false)
             .show(ctx, |ui| {
                 let netplay = &mut game_runner.netplay;
+                ui.label(format!("Netplay id: {}", netplay.get_netplay_id(&mut game_runner.settings)));
                 match &mut netplay.state {
                     NetplayState::Disconnected => {
                         egui::Grid::new("netplay_grid")

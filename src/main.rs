@@ -1,6 +1,8 @@
 #![deny(clippy::all)]
 #![forbid(unsafe_code)]
 
+use std::process::exit;
+
 use crate::input::JoypadInput;
 use anyhow::Result;
 use audio::{Audio, Stream};
@@ -56,6 +58,13 @@ pub struct BuildConfiguration {
 fn main() {
     let build_config: BuildConfiguration =
         serde_yaml::from_str(include_str!("../config/build_config.yaml")).unwrap();
+
+    if std::env::args().collect::<String>().contains(&"--print-netplay-id".to_string()) {
+        if let Some(id) = build_config.netplay.netplay_id {
+            println!("{id}");
+        }
+        exit(0);
+    }
 
     let event_loop = EventLoop::new();
 
@@ -194,7 +203,7 @@ impl GameRunner {
             inputs,
 
             #[cfg(feature = "netplay")]
-            netplay: netplay::Netplay::new(build_config.netplay.clone()),
+            netplay: netplay::Netplay::new(&build_config.netplay),
         }
     }
     pub fn advance(&mut self) -> Fps {
