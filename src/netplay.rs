@@ -1,4 +1,4 @@
-use crate::{audio::Stream, input::JoypadInput, settings::MAX_PLAYERS, Fps, MyGameState, FPS};
+use crate::{input::JoypadInput, settings::MAX_PLAYERS, Fps, MyGameState, FPS};
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, NetworkStats, P2PSession, SessionBuilder};
@@ -84,6 +84,7 @@ pub struct Netplay {
     rt: Runtime,
     matchbox_server: String,
     pub state: NetplayState,
+    last_real_frame: Frame,
 
     pub room_name: String,
     pub max_prediction: usize,
@@ -95,6 +96,7 @@ impl Netplay {
             rt: Runtime::new().expect("Could not create an async runtime"),
             matchbox_server: netplay_build_config.matchbox_server.clone(),
             state: NetplayState::Disconnected,
+            last_real_frame: -1,
             room_name: "example_room".to_string(),
             max_prediction: 12,
             input_delay: 2,
@@ -139,7 +141,6 @@ impl Netplay {
     pub fn advance(
         &mut self,
         game_state: &mut MyGameState,
-        sound_stream: &mut Stream,
         inputs: [JoypadInput; MAX_PLAYERS],
     ) -> Fps {
         match &mut self.state {
@@ -209,10 +210,9 @@ impl Netplay {
                                     cell,
                                     frame: load_state_frame,
                                 } => {
-                                    println!("Loading (frame {:?})", frame);
+                                    println!("Loading (frame {:?})", load_state_frame);
                                     *game_state = cell.load().expect("No data found.");
                                     *frame = load_state_frame;
-                                    sound_stream.drain(); //make sure we don't build up a delay
                                 }
                                 GGRSRequest::SaveGameState {
                                     cell,
@@ -227,6 +227,13 @@ impl Netplay {
                                         JoypadInput(inputs[0].0),
                                         JoypadInput(inputs[1].0),
                                     ]);
+
+                                    if *frame <= self.last_real_frame {
+                                        // Discard the samples for this frame since it's a replay from ggrs. Audio has already been produced and pushed for it.
+                                        game_state.nes.apu.consume_samples();
+                                    } else {
+                                        self.last_real_frame = *frame;
+                                    }
                                     *frame += 1;
                                 }
                             }

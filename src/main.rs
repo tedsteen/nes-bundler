@@ -206,7 +206,6 @@ impl GameRunner {
         #[cfg(feature = "netplay")]
         let fps = self.netplay.advance(
             &mut self.state,
-            &mut self.sound_stream,
             [self.inputs.get_joypad(0), self.inputs.get_joypad(1)],
         );
 
