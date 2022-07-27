@@ -51,11 +51,11 @@ impl Stream {
             ringbuf::RingBuffer::<SampleFormat>::new(100_000)
                 .split();
         
-        let buf_2_len = Self::calc_buffer_length(16, stream_config) as usize;
+        let sample_count_16ms = Self::calc_buffer_length(16, stream_config) as usize;
         let (mut producer_2, mut consumer_2) =
-        ringbuf::RingBuffer::<f32>::new(buf_2_len)
+        ringbuf::RingBuffer::<f32>::new(sample_count_16ms)
             .split();
-        let zeros = vec![0.0; buf_2_len];
+        let zeros = vec![0.0; sample_count_16ms];
         producer_2.push_slice(zeros.as_slice());
 
         let stream = output_device
@@ -68,16 +68,24 @@ impl Stream {
                         let volume = *volume.lock().unwrap();
                         for sample in data {
                             if let Some(sample) = consumer.pop() {
-                                last_sample = Sample::to_f32(&sample) * volume;
+                                last_sample = Sample::to_f32(&sample);
                                 let _ = producer_2.push(last_sample);
                                 consumer_2.pop();
                             } else if let Some(sample) = consumer_2.pop() {
                                 //println!("Buffer underrun using {sample} instead");
                                 last_sample = sample;
-                                let _ = producer_2.push(sample);
+                                let _ = producer_2.push(sample * 0.93);
                             }
-
-                            *sample = last_sample;
+                            *sample = last_sample * volume;
+                        }
+                        
+                        // If we run ahead, cut some samples..
+                        // Perhaps skip this and assume we won't run ahead?
+                        if consumer.len() > (sample_count_16ms as f32 * 1.5) as usize {
+                            //println!("Cutting audio to keep up {last_sample}");
+                            for _ in 0..consumer.len() - (sample_count_16ms as f32 * 1.5) as usize {
+                                consumer.pop();
+                            }
                         }
                     }
                 },
