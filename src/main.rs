@@ -209,10 +209,7 @@ impl GameRunner {
             [self.inputs.get_joypad(0), self.inputs.get_joypad(1)],
         );
 
-        let sound_data = self.state.nes.apu.consume_samples();
-        for sample in sound_data {
-            self.sound_stream.push_sample(sample);
-        }
+        self.sound_stream.push_samples(self.state.nes.apu.consume_samples().as_slice());
         fps
     }
 

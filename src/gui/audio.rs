@@ -29,7 +29,7 @@ impl GuiComponent for AudioSettingsGui {
                         .show(ui, |ui| {
                             ui.label("Latency");
                             ui.add(
-                                Slider::new(&mut game_runner.settings.audio.latency, 1..=500)
+                                Slider::new(&mut game_runner.settings.audio.latency, 1..=70)
                                     .suffix("ms"),
                             );
                             ui.end_row();
