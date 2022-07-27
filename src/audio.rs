@@ -50,20 +50,31 @@ impl Stream {
         let (producer, mut consumer) =
             ringbuf::RingBuffer::<SampleFormat>::new(100_000)
                 .split();
+        
+        let buf_2_len = Self::calc_buffer_length(16, stream_config) as usize;
+        let (mut producer_2, mut consumer_2) =
+        ringbuf::RingBuffer::<f32>::new(buf_2_len)
+            .split();
+        let zeros = vec![0.0; buf_2_len];
+        producer_2.push_slice(zeros.as_slice());
 
-        let mut last_sample = 0.0;
         let stream = output_device
             .build_output_stream(
                 stream_config,
                 {
                     let volume = volume.clone();
                     move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                        let mut last_sample = 0.0;
                         let volume = *volume.lock().unwrap();
                         for sample in data {
                             if let Some(sample) = consumer.pop() {
                                 last_sample = Sample::to_f32(&sample) * volume;
-                            } else {
-                                //eprintln!("Buffer underrun");
+                                let _ = producer_2.push(last_sample);
+                                consumer_2.pop();
+                            } else if let Some(sample) = consumer_2.pop() {
+                                //println!("Buffer underrun using {sample} instead");
+                                last_sample = sample;
+                                let _ = producer_2.push(sample);
                             }
 
                             *sample = last_sample;
@@ -77,8 +88,8 @@ impl Stream {
     }
 
     fn calc_buffer_length(latency: u8, stream_config: &StreamConfig) -> u32 {
-        let latency_frames = (latency as f32 / 1_000.0) * stream_config.sample_rate.0 as f32;
-        latency_frames as u32 * stream_config.channels as u32
+        let latency_frames = ((latency as f32 / 1_000.0) * stream_config.sample_rate.0 as f32) as u32;
+        latency_frames * stream_config.channels as u32
     }
 
     pub fn get_latency(&self) -> u8 {
