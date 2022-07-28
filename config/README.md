@@ -19,7 +19,7 @@ netplay:
 # This will be the default settings for the bundle.
 default_settings:
     audio:
-        latency: 40 #in ms
+        latency: 1 #in ms
         volume: 100 #in %
     input:
         # Two ids that corresponds to the selected input mapping configuration of P1 and P2. Should only be keyboard mappings as they're guaranteed to be available.

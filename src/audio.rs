@@ -146,7 +146,6 @@ impl Stream {
         let avg = producer_history.iter().sum::<i32>() / producer_history.len() as i32;
 
         if avg > max_buff_size {
-            println!("Overrun: {avg}, {max_buff_size}");
             for ele in producer_history.iter_mut() {
                 *ele = std::cmp::max(0, avg - samples.len() as i32);
             }
