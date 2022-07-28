@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait};
@@ -14,6 +15,7 @@ pub struct Stream {
     volume: Arc<Mutex<f32>>,
     producer: Producer<SampleFormat>,
     output_device: cpal::Device,
+    producer_history: VecDeque<i32>,
 }
 
 impl Stream {
@@ -27,9 +29,9 @@ impl Stream {
     {
         let latency = audio_settings.latency;
         let volume = Arc::new(Mutex::new(audio_settings.volume as f32 / 100.0));
-        //stream_config.buffer_size = BufferSize::Fixed(Self::calc_buffer_length(latency, &stream_config));
-        let (producer, stream) =
+        let (producer, stream, producer_history) =
             Stream::setup_stream(&mut stream_config, &output_device, &volume);
+
         Self {
             stream_config,
             latency,
@@ -37,6 +39,7 @@ impl Stream {
             stream,
             producer,
             output_device,
+            producer_history,
         }
     }
 
@@ -44,13 +47,13 @@ impl Stream {
         stream_config: &mut StreamConfig,
         output_device: &cpal::Device,
         volume: &Arc<Mutex<f32>>,
-    ) -> (Producer<SampleFormat>, cpal::Stream) {
+    ) -> (Producer<SampleFormat>, cpal::Stream, VecDeque<i32>) {
         stream_config.channels = 1;
 
         let (producer, mut consumer) =
             ringbuf::RingBuffer::<SampleFormat>::new(100_000)
                 .split();
-        
+
         let sample_count_16ms = Self::calc_buffer_length(16, stream_config) as usize;
         let (mut producer_2, mut consumer_2) =
         ringbuf::RingBuffer::<f32>::new(sample_count_16ms)
@@ -74,25 +77,22 @@ impl Stream {
                             } else if let Some(sample) = consumer_2.pop() {
                                 //println!("Buffer underrun using {sample} instead");
                                 last_sample = sample;
-                                let _ = producer_2.push(sample * 0.93);
+                                let _ = producer_2.push(sample * 0.98);
                             }
                             *sample = last_sample * volume;
-                        }
-                        
-                        // If we run ahead, cut some samples..
-                        // Perhaps skip this and assume we won't run ahead?
-                        if consumer.len() > (sample_count_16ms as f32 * 1.5) as usize {
-                            //println!("Cutting audio to keep up {last_sample}");
-                            for _ in 0..consumer.len() - (sample_count_16ms as f32 * 1.5) as usize {
-                                consumer.pop();
-                            }
                         }
                     }
                 },
                 |err| eprintln!("an error occurred on the output audio stream: {}", err),
             )
             .expect("Could not build sound output stream");
-        (producer, stream)
+
+        let mut producer_history = VecDeque::new();
+        for _ in 0..10 {
+            producer_history.push_back(0);
+        }
+
+        (producer, stream, producer_history)
     }
 
     fn calc_buffer_length(latency: u8, stream_config: &StreamConfig) -> u32 {
@@ -106,7 +106,7 @@ impl Stream {
 
     pub fn set_latency(&mut self, latency: u8) {
         self.stream_config.buffer_size = BufferSize::Fixed(Self::calc_buffer_length(latency, &self.stream_config));
-        let (producer, stream) = Stream::setup_stream(
+        let (producer, stream, producer_history) = Stream::setup_stream(
             &mut self.stream_config,
             &self.output_device,
             &self.volume,
@@ -114,6 +114,7 @@ impl Stream {
         self.producer = producer;
         self.stream = stream;
         self.latency = latency;
+        self.producer_history = producer_history;
     }
 
     pub fn set_volume(&mut self, volume: u8) {
@@ -125,17 +126,33 @@ impl Stream {
     }
 
     pub fn drain(&mut self) {
-        let (producer, stream) = Stream::setup_stream(
+        let (producer, stream, producer_history) = Stream::setup_stream(
             &mut self.stream_config,
             &self.output_device,
             &self.volume,
         );
         self.producer = producer;
         self.stream = stream;
+        self.producer_history = producer_history;
     }
 
     pub(crate) fn push_samples(&mut self, samples: &[i16]) {
-        self.producer.push_slice(samples);
+        let max_buff_size = 2000;
+        let curr_buff_size = self.producer.len() as u32;
+        self.producer_history.push_front(curr_buff_size as i32);
+        self.producer_history.pop_back();
+
+        let producer_history = &mut self.producer_history;
+        let avg = producer_history.iter().sum::<i32>() / producer_history.len() as i32;
+
+        if avg > max_buff_size {
+            println!("Overrun: {avg}, {max_buff_size}");
+            for ele in producer_history.iter_mut() {
+                *ele = std::cmp::max(0, avg - samples.len() as i32);
+            }
+        } else {
+            self.producer.push_slice(samples);
+        }
     }
 }
 

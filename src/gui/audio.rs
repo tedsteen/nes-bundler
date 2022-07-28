@@ -8,7 +8,7 @@ pub struct AudioSettingsGui {
 
 impl AudioSettingsGui {
     pub fn new() -> Self {
-        Self { is_open: false }
+        Self { is_open: true }
     }
 }
 
