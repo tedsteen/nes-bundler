@@ -22,7 +22,7 @@ impl InputSettingsGui {
     pub fn new() -> Self {
         Self {
             mapping_request: None,
-            is_open: false,
+            is_open: true,
         }
     }
 
@@ -176,7 +176,7 @@ impl GuiComponent for InputSettingsGui {
     fn handle_event(&mut self, _event: &winit::event::WindowEvent, _game_runner: &mut GameRunner) {}
 
     fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner) {
-        Window::new("Input")
+        Window::new(self.name())
             .open(&mut self.is_open)
             .collapsible(false)
             .resizable(false)

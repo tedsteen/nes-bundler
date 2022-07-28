@@ -29,6 +29,8 @@ mod input;
 mod netplay;
 mod palette;
 mod settings;
+#[cfg(feature = "debug")]
+mod debug;
 
 type Fps = u32;
 const FPS: Fps = 60;
@@ -181,6 +183,8 @@ pub struct GameRunner {
 
     #[cfg(feature = "netplay")]
     netplay: netplay::Netplay,
+    #[cfg(feature = "debug")]
+    debug: debug::DebugSettings,
 }
 impl GameRunner {
     pub fn new(pixels: Pixels, build_config: &BuildConfiguration) -> Self {
@@ -204,6 +208,8 @@ impl GameRunner {
 
             #[cfg(feature = "netplay")]
             netplay: netplay::Netplay::new(&build_config.netplay),
+            #[cfg(feature = "debug")]
+            debug: debug::DebugSettings::new(),
         }
     }
     pub fn advance(&mut self) -> Fps {
@@ -219,6 +225,11 @@ impl GameRunner {
         );
 
         self.sound_stream.push_samples(self.state.nes.apu.consume_samples().as_slice());
+
+        #[cfg(feature = "debug")]
+        if self.debug.override_fps {
+            return self.debug.fps;
+        }
         fps
     }
 

@@ -70,7 +70,7 @@ impl NetplayGui {
 impl GuiComponent for NetplayGui {
     fn handle_event(&mut self, _event: &winit::event::WindowEvent, _: &mut GameRunner) {}
     fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner) {
-        Window::new("Netplay!")
+        Window::new(self.name())
             .open(&mut self.is_open)
             .collapsible(false)
             .resizable(false)

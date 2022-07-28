@@ -10,6 +10,8 @@ mod audio;
 mod input;
 #[cfg(feature = "netplay")]
 mod netplay;
+#[cfg(feature = "debug")]
+mod debug;
 
 /// Manages all state required for rendering egui over `Pixels`.
 pub struct Framework {
@@ -147,6 +149,8 @@ impl Gui {
             Box::new(InputSettingsGui::new()),
             #[cfg(feature = "netplay")]
             Box::new(netplay::NetplayGui::new()),
+            #[cfg(feature = "debug")]
+            Box::new(debug::DebugGui::new()),
         ];
         Self {
             visible: false,

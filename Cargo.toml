@@ -9,6 +9,7 @@ resolver="2"
 [features]
 default = ["netplay"]
 netplay = ["matchbox_socket", "tokio", "ggrs", "futures-timer", "futures", "uuid"]
+debug = []
 
 [dependencies]
 anyhow = "1.0"

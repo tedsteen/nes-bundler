@@ -2,17 +2,17 @@ use super::GuiComponent;
 use crate::GameRunner;
 use egui::{Context, Slider, Window};
 
-pub struct AudioSettingsGui {
+pub struct DebugGui {
     is_open: bool,
 }
 
-impl AudioSettingsGui {
+impl DebugGui {
     pub fn new() -> Self {
         Self { is_open: true }
     }
 }
 
-impl GuiComponent for AudioSettingsGui {
+impl GuiComponent for DebugGui {
     fn handle_event(&mut self, _event: &winit::event::WindowEvent, _game_runner: &mut GameRunner) {}
 
     fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner) {
@@ -22,22 +22,19 @@ impl GuiComponent for AudioSettingsGui {
             .resizable(false)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    egui::Grid::new("netplay_grid")
+                    egui::Grid::new("debug_grid")
                         .num_columns(2)
                         .spacing([10.0, 4.0])
                         .striped(true)
                         .show(ui, |ui| {
-                            ui.label("Latency");
-                            ui.add(
-                                Slider::new(&mut game_runner.settings.audio.latency, 1..=70)
-                                    .suffix("ms"),
-                            );
+                            ui.checkbox(&mut game_runner.debug.override_fps, "Override FPS");
+                            if game_runner.debug.override_fps {
+                                ui.add(
+                                    Slider::new(&mut game_runner.debug.fps, 1..=120)
+                                        .suffix("FPS"),
+                                );
+                            }
                             ui.end_row();
-                            ui.label("Volume");
-                            ui.add(
-                                Slider::new(&mut game_runner.settings.audio.volume, 0..=100)
-                                    .suffix("%"),
-                            );
                         });
                 });
             });
@@ -47,6 +44,6 @@ impl GuiComponent for AudioSettingsGui {
     }
 
     fn name(&self) -> String {
-        "Audio".to_string()
+        "Debug".to_string()
     }
 }
