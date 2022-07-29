@@ -131,7 +131,7 @@ impl Framework {
 
 trait GuiComponent {
     fn handle_event(&mut self, event: &winit::event::WindowEvent, game_runner: &mut GameRunner);
-    fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner);
+    fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner, ui_visible: bool);
     fn is_open(&mut self) -> &mut bool;
     fn name(&self) -> String;
 }
@@ -187,10 +187,10 @@ impl Gui {
                     })
                 });
             });
-
-            for setting in &mut self.settings {
-                setting.ui(ctx, game_runner);
-            }
         }
+
+        for setting in &mut self.settings {
+            setting.ui(ctx, game_runner, self.visible);
+        }        
     }
 }

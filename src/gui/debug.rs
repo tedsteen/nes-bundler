@@ -15,7 +15,8 @@ impl DebugGui {
 impl GuiComponent for DebugGui {
     fn handle_event(&mut self, _event: &winit::event::WindowEvent, _game_runner: &mut GameRunner) {}
 
-    fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner) {
+    fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner, ui_visible: bool) {
+        if !ui_visible { return }
         Window::new(self.name())
             .open(&mut self.is_open)
             .collapsible(false)

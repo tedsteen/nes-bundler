@@ -4,7 +4,7 @@ use egui::{
 };
 
 use crate::{
-    netplay::{NetplayState, NetplayStats, NetplayServerConfiguration},
+    netplay::{NetplayState, NetplayStats, NetplayServerConfiguration, state::{StartMethod, ConnectedState}},
     settings::MAX_PLAYERS,
     GameRunner,
 };
@@ -69,13 +69,20 @@ impl NetplayGui {
 
 impl GuiComponent for NetplayGui {
     fn handle_event(&mut self, _event: &winit::event::WindowEvent, _: &mut GameRunner) {}
-    fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner) {
+    fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner, ui_visible: bool) {
+        let netplay = &mut game_runner.netplay;
+        if let NetplayState::Connected(_netplay_session, ConnectedState::MappingInput) = &mut netplay.state {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.label("Floating text!");
+            });
+        }
+        if !ui_visible { return }
         Window::new(self.name())
             .open(&mut self.is_open)
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
-                let netplay = &mut game_runner.netplay;
+                
                 ui.label(format!("Netplay id: {}", netplay.get_netplay_id(&mut game_runner.settings)));
                 match &mut netplay.state {
                     NetplayState::Disconnected => {
@@ -97,12 +104,12 @@ impl GuiComponent for NetplayGui {
                                     )
                                     .clicked()
                                 {
-                                    netplay.connect(&netplay.room_name.clone());
+                                    netplay.start(StartMethod::Create(netplay.room_name.clone()));
                                 }
                                 ui.end_row();
                                 ui.label("or simply");
                                 if ui.button("Match with a random player").clicked() {
-                                    netplay.connect("beta-0?next=2");
+                                    netplay.start(StartMethod::Random);
                                 }
                                 ui.end_row();
 
@@ -123,8 +130,14 @@ impl GuiComponent for NetplayGui {
                                 ui.end_row();
                             });
                     }
-                    NetplayState::Connecting(connecting_state) => {
-                        if let Some(socket) = &connecting_state.socket {
+                    NetplayState::LoadingNetplayServerConfiguration(_, _) => {
+                        ui.label("Initializing");
+                        if ui.button("Cancel").clicked() {
+                            netplay.state = NetplayState::Disconnected;
+                        }
+                    }
+                    NetplayState::PeeringUp(_, socket, _) => {
+                        if let Some(socket) = socket {
                             let connected_peers = socket.connected_peers().len();
                             let remaining = MAX_PLAYERS - (connected_peers + 1);
                             ui.label(format!("Waiting for {} players", remaining));
@@ -133,7 +146,7 @@ impl GuiComponent for NetplayGui {
                             }
                         }
                     }
-                    NetplayState::Connected(netplay_session) => {
+                    NetplayState::Connected(netplay_session, _) => {
                         ui.collapsing("Stats", |ui| {
                             Self::stats_ui(ui, &netplay_session.stats[0], 0);
                             Self::stats_ui(ui, &netplay_session.stats[1], 1);
