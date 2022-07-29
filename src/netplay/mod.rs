@@ -221,8 +221,14 @@ pub struct StaticNetplayServerConfiguration {
 }
 
 #[derive(Deserialize, Clone)]
+pub struct TurnOnConfiguration {
+    server: String,
+}
+
+#[derive(Deserialize, Clone)]
 pub enum NetplayServerConfiguration {
     Static(StaticNetplayServerConfiguration),
+    TurnOn(TurnOnConfiguration)
 }
 
 impl Netplay {
@@ -249,6 +255,13 @@ impl Netplay {
                 self.rt.spawn(async move {
                     sleep(Duration::from_secs(0)).await;
                     conf
+                 })
+            }
+            NetplayServerConfiguration::TurnOn(turn_on_config) => {
+                let server = turn_on_config.server.clone();
+                self.rt.spawn(async move {
+                    sleep(Duration::from_secs(1)).await;
+                    todo!("Call the turn-on server ({})", server)
                  })
             }
         };

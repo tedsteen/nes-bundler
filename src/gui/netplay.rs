@@ -4,7 +4,7 @@ use egui::{
 };
 
 use crate::{
-    netplay::{NetplayState, NetplayStats, NetplayServerConfiguration, state::{StartMethod, ConnectedState, ConnectingState}},
+    netplay::{NetplayState, NetplayStats, state::{StartMethod, ConnectedState, ConnectingState}},
     settings::MAX_PLAYERS,
     GameRunner,
 };
@@ -111,22 +111,6 @@ impl GuiComponent for NetplayGui {
                                 if ui.button("Match with a random player").clicked() {
                                     netplay.start(StartMethod::Random);
                                 }
-                                ui.end_row();
-
-                                let NetplayServerConfiguration::Static(config) = &mut netplay.config.server;
-                                ui.label("Max prediction (frames)");
-                                ui.add(
-                                    egui::DragValue::new(&mut config.ggrs.max_prediction)
-                                        .speed(1.0)
-                                        .clamp_range(1..=60),
-                                );
-                                ui.end_row();
-                                ui.label("Input delay (frames)");
-                                ui.add(
-                                    egui::DragValue::new(&mut config.ggrs.input_delay)
-                                        .speed(1.0)
-                                        .clamp_range(1..=10),
-                                );
                                 ui.end_row();
                             });
                     }
