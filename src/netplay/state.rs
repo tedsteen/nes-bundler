@@ -9,7 +9,6 @@ pub struct InputMapping {
     pub ids: [usize; MAX_PLAYERS],
 }
 
-#[derive(Clone)]
 pub enum StartMethod {
     Create(String),
     //Resume(SavedNetplaySession),
@@ -23,13 +22,16 @@ pub enum ConnectedState {
     Playing(InputMapping),
 }
 
+pub enum ConnectingState {
+    //Load a server config (either static or through turn-on)
+    LoadingNetplayServerConfiguration(JoinHandle<StaticNetplayServerConfiguration>),
+    //Connecting all peers
+    PeeringUp(Option<WebRtcSocket>, GGRSConfiguration),
+}
+
 #[allow(clippy::large_enum_variant)]
 pub enum NetplayState {
     Disconnected,
-    //Load a server config (either static or through turn-on)
-    LoadingNetplayServerConfiguration(StartMethod, JoinHandle<StaticNetplayServerConfiguration>),
-    //Connecting all peers
-    PeeringUp(StartMethod, Option<WebRtcSocket>, GGRSConfiguration),
-    //Mapping players to inputs
+    Connecting(StartMethod, ConnectingState),
     Connected(NetplaySession, ConnectedState)
 }

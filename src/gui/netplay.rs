@@ -4,7 +4,7 @@ use egui::{
 };
 
 use crate::{
-    netplay::{NetplayState, NetplayStats, NetplayServerConfiguration, state::{StartMethod, ConnectedState}},
+    netplay::{NetplayState, NetplayStats, NetplayServerConfiguration, state::{StartMethod, ConnectedState, ConnectingState}},
     settings::MAX_PLAYERS,
     GameRunner,
 };
@@ -130,19 +130,23 @@ impl GuiComponent for NetplayGui {
                                 ui.end_row();
                             });
                     }
-                    NetplayState::LoadingNetplayServerConfiguration(_, _) => {
-                        ui.label("Initializing");
-                        if ui.button("Cancel").clicked() {
-                            netplay.state = NetplayState::Disconnected;
-                        }
-                    }
-                    NetplayState::PeeringUp(_, socket, _) => {
-                        if let Some(socket) = socket {
-                            let connected_peers = socket.connected_peers().len();
-                            let remaining = MAX_PLAYERS - (connected_peers + 1);
-                            ui.label(format!("Waiting for {} players", remaining));
-                            if ui.button("Cancel").clicked() {
-                                netplay.state = NetplayState::Disconnected;
+                    NetplayState::Connecting(_, connecting_state) => {
+                        match connecting_state {
+                            ConnectingState::LoadingNetplayServerConfiguration(_) => {
+                                ui.label("Initializing");
+                                if ui.button("Cancel").clicked() {
+                                    netplay.state = NetplayState::Disconnected;
+                                }
+                            }
+                            ConnectingState::PeeringUp(socket, _) => {
+                                if let Some(socket) = socket {
+                                    let connected_peers = socket.connected_peers().len();
+                                    let remaining = MAX_PLAYERS - (connected_peers + 1);
+                                    ui.label(format!("Waiting for {} players", remaining));
+                                    if ui.button("Cancel").clicked() {
+                                        netplay.state = NetplayState::Disconnected;
+                                    }
+                                }
                             }
                         }
                     }

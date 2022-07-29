@@ -12,7 +12,7 @@ use std::{
 };
 use tokio::{runtime::Runtime, time::sleep};
 
-use self::state::{StartMethod, ConnectedState, InputMapping};
+use self::state::{StartMethod, ConnectedState, InputMapping, ConnectingState};
 pub use self::state::NetplayState;
 pub mod state;
 
@@ -252,7 +252,7 @@ impl Netplay {
                  })
             }
         };
-        self.state = NetplayState::LoadingNetplayServerConfiguration(start_method, promise);
+        self.state = NetplayState::Connecting(start_method, ConnectingState::LoadingNetplayServerConfiguration(promise));
     }
 
     pub fn advance(
@@ -265,84 +265,87 @@ impl Netplay {
                 game_state.advance(inputs);
                 None
             }
-            NetplayState::LoadingNetplayServerConfiguration(start_method, conf) => {
-                game_state.advance(inputs);
-                let is_finished = conf.is_finished();
-                let mut new_state = None;
-                if is_finished {
-                    if let Some(Ok(conf)) = conf.now_or_never() {
-                        let matchbox_server = &conf.matchbox.server;
-                        let credentials = match &conf.matchbox.ice.credentials {
-                            IceCredentials::Password(IcePasswordCredentials { username, password }) => RtcIceCredentials::Password(RtcIcePasswordCredentials { username: username.to_string(), password: password.to_string() }),
-                            IceCredentials::None => RtcIceCredentials::None,
-                        };
-                        let room = match &start_method {
-                            state::StartMethod::Create(name) => name.clone(),
-                            state::StartMethod::Random => "beta-0?next=2".to_string(),
-                        };
+            NetplayState::Connecting(start_method, connecting_state) => {
+                match connecting_state {
+                    ConnectingState::LoadingNetplayServerConfiguration(conf) => {
+                        game_state.advance(inputs);
+                        let is_finished = conf.is_finished();
+                        if is_finished {
+                            if let Some(Ok(conf)) = conf.now_or_never() {
+                                let matchbox_server = &conf.matchbox.server;
+                                let credentials = match &conf.matchbox.ice.credentials {
+                                    IceCredentials::Password(IcePasswordCredentials { username, password }) => RtcIceCredentials::Password(RtcIcePasswordCredentials { username: username.to_string(), password: password.to_string() }),
+                                    IceCredentials::None => RtcIceCredentials::None,
+                                };
+                                let room = match &start_method {
+                                    state::StartMethod::Create(name) => name.clone(),
+                                    state::StartMethod::Random => "beta-0?next=2".to_string(),
+                                };
 
-                        let (socket, loop_fut) = WebRtcSocket::new_with_config(WebRtcSocketConfig {
-                            room_url: format!("ws://{matchbox_server}/{room}"),
-                            ice_server: RtcIceServerConfig {
-                                urls: conf.matchbox.ice.urls.clone(),
-                                credentials
-                            },
-                        });
+                                let (socket, loop_fut) = WebRtcSocket::new_with_config(WebRtcSocketConfig {
+                                    room_url: format!("ws://{matchbox_server}/{room}"),
+                                    ice_server: RtcIceServerConfig {
+                                        urls: conf.matchbox.ice.urls.clone(),
+                                        credentials
+                                    },
+                                });
 
-                        let loop_fut = loop_fut.fuse();
-                        self.rt.spawn(async move {
-                            futures::pin_mut!(loop_fut);
+                                let loop_fut = loop_fut.fuse();
+                                self.rt.spawn(async move {
+                                    futures::pin_mut!(loop_fut);
 
-                            let timeout = Delay::new(Duration::from_millis(100));
-                            futures::pin_mut!(timeout);
+                                    let timeout = Delay::new(Duration::from_millis(100));
+                                    futures::pin_mut!(timeout);
 
-                            loop {
-                                select! {
-                                    _ = (&mut timeout).fuse() => {
-                                        timeout.reset(Duration::from_millis(100));
+                                    loop {
+                                        select! {
+                                            _ = (&mut timeout).fuse() => {
+                                                timeout.reset(Duration::from_millis(100));
+                                            }
+
+                                            _ = &mut loop_fut => {
+                                                break;
+                                            }
+                                        }
                                     }
-
-                                    _ = &mut loop_fut => {
-                                        break;
-                                    }
-                                }
+                                });
+                                *connecting_state = ConnectingState::PeeringUp(Some(socket), conf.ggrs.clone());
                             }
-                        });
-                        new_state = Some(NetplayState::PeeringUp(start_method.clone(), Some(socket), conf.ggrs.clone()));
-                    }
-                }
-                new_state
-            }
-            NetplayState::PeeringUp(_start_method, maybe_socket, ggrs_config) => {
-                let mut new_state = None;
-                game_state.advance(inputs);
-
-                if let Some(socket) = maybe_socket {
-                    socket.accept_new_connections();
-                    let connected_peers = socket.connected_peers().len();
-                    let remaining = MAX_PLAYERS - (connected_peers + 1);
-                    if remaining == 0 {
-                        let players = socket.players();
-                        let ggrs_config = ggrs_config;
-                        let mut sess_build = SessionBuilder::<GGRSConfig>::new()
-                            .with_num_players(MAX_PLAYERS)
-                            .with_max_prediction_window(ggrs_config.max_prediction)
-                            .with_input_delay(ggrs_config.input_delay)
-                            .with_fps(FPS as usize)
-                            .expect("invalid fps");
-
-                        for (i, player) in players.into_iter().enumerate() {
-                            sess_build = sess_build
-                                .add_player(player, i)
-                                .expect("failed to add player");
                         }
+                        None
+                    }
+                    ConnectingState::PeeringUp(maybe_socket, ggrs_config) => {
+                        let mut new_state = None;
+                        game_state.advance(inputs);
 
-                        new_state = Some(NetplayState::Connected(
-                            NetplaySession::new(sess_build.start_p2p_session(maybe_socket.take().unwrap()).unwrap()), ConnectedState::MappingInput));
-                        game_state.nes.reset();
+                        if let Some(socket) = maybe_socket {
+                            socket.accept_new_connections();
+                            let connected_peers = socket.connected_peers().len();
+                            let remaining = MAX_PLAYERS - (connected_peers + 1);
+                            if remaining == 0 {
+                                let players = socket.players();
+                                let ggrs_config = ggrs_config;
+                                let mut sess_build = SessionBuilder::<GGRSConfig>::new()
+                                    .with_num_players(MAX_PLAYERS)
+                                    .with_max_prediction_window(ggrs_config.max_prediction)
+                                    .with_input_delay(ggrs_config.input_delay)
+                                    .with_fps(FPS as usize)
+                                    .expect("invalid fps");
+
+                                for (i, player) in players.into_iter().enumerate() {
+                                    sess_build = sess_build
+                                        .add_player(player, i)
+                                        .expect("failed to add player");
+                                }
+
+                                new_state = Some(NetplayState::Connected(
+                                    NetplaySession::new(sess_build.start_p2p_session(maybe_socket.take().unwrap()).unwrap()), ConnectedState::MappingInput));
+                                game_state.nes.reset();
+                            }
+                        }
+                        new_state
                     }
                 }
-                new_state
             }
             NetplayState::Connected(netplay_session, connected_state) => {
                 match connected_state {
