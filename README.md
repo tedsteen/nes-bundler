@@ -28,7 +28,7 @@ If you want to target other operating systems please read the Rust documentation
 * It's built on [rusticnes-core](https://github.com/zeta0134/rusticnes-core) so it's limited to what that can emulate (f.ex no PAL).
 * Save/load state and thus netplay is currently working for mappers nrom, mmc1, mmc3, uxrom, axrom, bnrom, cnrom, gxrom and ines31.  
   If you want to contribute, please implement save/load for a mapper [over here](https://github.com/tedsteen/rusticnes-core-for-nes-bundler/blob/master/src/mmc/mapper.rs#L43-L45).
-* Netplay is limited to NATs that can be pierced by [webrtc-rs](https://github.com/webrtc-rs/webrtc). Work on TURN-support is [ongoing](https://github.com/tedsteen/nes-bundler/pull/4), so it should soon be resolved soon.
+* Netplay is limited to NATs that can be pierced by [webrtc-rs](https://github.com/webrtc-rs/webrtc). Work on TURN-support is [ongoing](https://github.com/tedsteen/nes-bundler/pull/4), so it should be resolved soon.
 
 ## Future stuff/ideas/todo
 * Implement `save_state(...)`/`load_state(...)` for all the mappers.
