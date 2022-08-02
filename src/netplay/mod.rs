@@ -1,7 +1,7 @@
 use crate::{input::JoypadInput, settings::{MAX_PLAYERS, Settings}, Fps, MyGameState, FPS};
 use futures::{select, FutureExt};
 use futures_timer::Delay;
-use ggrs::{Config, GGRSRequest, NetworkStats, P2PSession, SessionBuilder};
+use ggrs::{Config, GGRSRequest, NetworkStats, P2PSession, SessionBuilder, SessionState};
 use matchbox_socket::{WebRtcSocket, WebRtcSocketConfig, RtcIceServerConfig, RtcIceCredentials, RtcIcePasswordCredentials};
 use rusticnes_core::nes::NesState;
 use serde::Deserialize;
@@ -12,7 +12,7 @@ use std::{
 };
 use tokio::{runtime::Runtime};
 
-use self::state::{StartMethod, ConnectedState, InputMapping, ConnectingState, TurnOnError, PeeringState};
+use self::state::{StartMethod, ConnectedState, InputMapping, ConnectingState, TurnOnError, PeeringState, SynchonizingState};
 pub use self::state::NetplayState;
 pub mod state;
 
@@ -356,10 +356,8 @@ impl Netplay {
                         }
                         None
                     }
-                    ConnectingState::PeeringUp(PeeringState { socket: maybe_socket, ggrs_config, .. }) => {
-                        let mut new_state = None;
+                    ConnectingState::PeeringUp(PeeringState { socket: maybe_socket, ggrs_config, unlock_url }) => {
                         game_state.advance(inputs);
-
                         if let Some(socket) = maybe_socket {
                             socket.accept_new_connections();
                             let connected_peers = socket.connected_peers().len();
@@ -379,9 +377,18 @@ impl Netplay {
                                         .add_player(player, i)
                                         .expect("failed to add player");
                                 }
-
+                                *connecting_state = ConnectingState::Synchronizing(SynchonizingState::new(Some(sess_build.start_p2p_session(maybe_socket.take().unwrap()).unwrap()), unlock_url.clone()));
+                            }
+                        }
+                        None
+                    }
+                    ConnectingState::Synchronizing(synchronizing_state) => {
+                        let mut new_state = None;
+                        if let Some(p2p_session) = &mut synchronizing_state.p2p_session {
+                            p2p_session.poll_remote_clients();
+                            if let SessionState::Running = p2p_session.current_state() {
                                 new_state = Some(NetplayState::Connected(
-                                    NetplaySession::new(sess_build.start_p2p_session(maybe_socket.take().unwrap()).unwrap()), ConnectedState::MappingInput));
+                                    NetplaySession::new(synchronizing_state.p2p_session.take().unwrap()), ConnectedState::MappingInput));
                                 game_state.nes.reset();
                             }
                         }
@@ -389,6 +396,7 @@ impl Netplay {
                     }
                 }
             }
+
             NetplayState::Connected(netplay_session, connected_state) => {
                 match connected_state {
                     state::ConnectedState::MappingInput => {
