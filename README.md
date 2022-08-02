@@ -34,12 +34,9 @@ If you want to target other operating systems please read the Rust documentation
 * Audio
   * More control over output device?
 * Netplay
-  * Support TURN servers.
   * Save and restore session - save game state every 100th or so frame (when all peers have reached that 100th frame).
   * More control on who becomes P1 and P2 etc.
   * Make it possible to wait for peers to reconnect if disconnected.
-  * Move strange settings (max prediction + input delay) from UI -> build configuration and make UI simpler or try to auto tune it.
-  * Default room name as build config.
   * Segment matchbox room URLs under f.ex a hash of the ROM to make sure they play the same version of the game
 * More customizable UI.
 * wasm?

@@ -222,11 +222,6 @@ pub struct StaticNetplayServerConfiguration {
     pub ggrs: GGRSConfiguration,
 }
 
-#[derive(Deserialize, Clone)]
-pub struct TurnOnConfiguration {
-    server: String,
-}
-
 #[derive(Deserialize, Debug)]
 pub struct BasicResponse {
     unlock_url: String,
@@ -242,7 +237,8 @@ pub enum TurnOnResponse {
 #[derive(Deserialize, Clone)]
 pub enum NetplayServerConfiguration {
     Static(StaticNetplayServerConfiguration),
-    TurnOn(TurnOnConfiguration)
+    //An external server for fetching TURN credentials
+    TurnOn(String)
 }
 
 impl Netplay {
@@ -269,8 +265,7 @@ impl Netplay {
                 //TODO: Immediatly go to ConnectingState::PeeringUp state
                 self.rt.spawn(async move { Ok(TurnOnResponse::Full(conf)) })
             }
-            NetplayServerConfiguration::TurnOn(turn_on_config) => {
-                let server = turn_on_config.server.clone();
+            NetplayServerConfiguration::TurnOn(server) => {
                 let netplay_id = &self.netplay_id;
                 let req = self.reqwest_client.get(format!("{server}/{netplay_id}")).send();
                 self.rt.spawn(async move {
