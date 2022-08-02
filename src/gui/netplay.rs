@@ -122,30 +122,35 @@ impl GuiComponent for NetplayGui {
                                     netplay.state = NetplayState::Disconnected;
                                 }
                             }
-                            ConnectingState::PeeringUp(PeeringState { socket, unlock_url, start_time, .. }) => {
+                            ConnectingState::PeeringUp(PeeringState { socket, .. }) => {
                                 if let Some(socket) = socket {
                                     let connected_peers = socket.connected_peers().len();
                                     let remaining = MAX_PLAYERS - (connected_peers + 1);
-                                    ui.label(format!("Waiting for {} players", remaining));
-                                    if let Some(unlock_url) = unlock_url {
-                                        if Instant::now().duration_since(*start_time).gt(&Duration::from_secs(5)) {
-                                            ui.horizontal_wrapped(|ui| {
-                                                ui.spacing_mut().item_spacing.x = 0.0;
-                                                ui.label("We're having troubles connecting you, click ");
-                                                ui.hyperlink_to("here", unlock_url);
-                                                ui.label(" to unlock Netplay!");
-                                            });
-                                            if ui.button("Retry").clicked() {
-                                                netplay.start(start_method.clone());
-                                            }
-                                        }
-                                    }
-
+                                    ui.label(format!("Waiting for {} players...", remaining));
                                     if ui.button("Cancel").clicked() {
                                         netplay.state = NetplayState::Disconnected;
                                     }
                                 }
                             }
+                            ConnectingState::Synchronizing(synchronizing_state) => {
+                                ui.label("Synchronizing players...");
+                                if let Some(unlock_url) = &synchronizing_state.unlock_url {
+                                    if Instant::now().duration_since(synchronizing_state.start_time).gt(&Duration::from_secs(5)) {
+                                        ui.horizontal_wrapped(|ui| {
+                                            ui.spacing_mut().item_spacing.x = 0.0;
+                                            ui.label("We're having trouble connecting you, click ");
+                                            ui.hyperlink_to("here", unlock_url);
+                                            ui.label(" to unlock Netplay!");
+                                        });
+                                        if ui.button("Retry").clicked() {
+                                            netplay.start(start_method.clone());
+                                        }
+                                    }
+                                }
+                                if ui.button("Cancel").clicked() {
+                                    netplay.state = NetplayState::Disconnected;
+                                }
+                            },
                         }
                     }
                     NetplayState::Connected(netplay_session, _) => {
