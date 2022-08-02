@@ -1,6 +1,8 @@
 #![deny(clippy::all)]
 #![forbid(unsafe_code)]
 
+use std::process::exit;
+
 use crate::input::JoypadInput;
 use anyhow::Result;
 use audio::{Audio, Stream};
@@ -51,13 +53,20 @@ pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
 #[derive(Deserialize)]
 pub struct BuildConfiguration {
     window_title: String,
+    default_settings: Settings,
     #[cfg(feature = "netplay")]
     netplay: netplay::NetplayBuildConfiguration,
-    default_settings: Settings,
 }
 fn main() {
     let build_config: BuildConfiguration =
         serde_yaml::from_str(include_str!("../config/build_config.yaml")).unwrap();
+
+    if std::env::args().collect::<String>().contains(&"--print-netplay-id".to_string()) {
+        if let Some(id) = build_config.netplay.netplay_id {
+            println!("{id}");
+        }
+        exit(0);
+    }
 
     let event_loop = EventLoop::new();
 
@@ -180,7 +189,7 @@ pub struct GameRunner {
 impl GameRunner {
     pub fn new(pixels: Pixels, build_config: &BuildConfiguration) -> Self {
         let inputs = Inputs::new(build_config.default_settings.input.clone());
-        let settings: Settings = Settings::new(&build_config.default_settings);
+        let mut settings: Settings = Settings::new(&build_config.default_settings);
 
         let audio = Audio::new();
         let sound_stream = audio.start(&settings.audio);
@@ -194,11 +203,10 @@ impl GameRunner {
             state,
             sound_stream,
             pixels,
+            #[cfg(feature = "netplay")]
+            netplay: netplay::Netplay::new(&build_config.netplay, &mut settings),
             settings,
             inputs,
-
-            #[cfg(feature = "netplay")]
-            netplay: netplay::Netplay::new(&build_config.netplay),
             #[cfg(feature = "debug")]
             debug: debug::DebugSettings::new(),
         }

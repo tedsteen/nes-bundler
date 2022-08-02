@@ -9,13 +9,11 @@ In order to build your bundle you need two files in this directory.
 
 A file named `build_config.yaml` looking something like this:
 ```yaml
+# For all the gory details see the `BuildConfiguration`-struct in the source.
 
 # The title of the window...
 window_title: "My Awesome Game!"
-netplay:
-    # If you have netplay enabled you need to provide a matchbox server.  
-    # You can read all about it here https://github.com/johanhelsing/matchbox, but for quick and easy setup see https://github.com/tedsteen/nes-bundler/tree/master/matchbox_server.
-    matchbox_server: "matchbox.your-domain.io:3536"
+
 # This will be the default settings for the bundle.
 default_settings:
     audio:
@@ -65,6 +63,35 @@ default_settings:
             select: Select
             b: West
             a: South
+
+# Netplay configuration. You can remove this if the netplay feature is disabled.
+netplay:
+    # The default room name when starting a new netplay game
+    default_room_name: ""
+    # GGRS and Matchbox server configuration. You can read more about them over here https://github.com/johanhelsing/matchbox and here https://github.com/gschup/ggrs
+    # This config can be either fetched from an external service (TurnOn) or configured statically (Static)
+    server:
+        # A hosted TurnOn server which should do the job.
+        # More information on this will come..
+        TurnOn: "http://shiny-mermaid-6dbcf2.netlify.app/turn-config"
+        # An example of a static configuration
+        #Static:
+        #    ggrs:
+        #        max_prediction: 12
+        #        input_delay: 2
+        #    matchbox:
+        #        # For quick and easy setup see https://github.com/tedsteen/nes-bundler/tree/master/matchbox_server.
+        #        server: "matchbox.your-domain.io:3536"
+        #        ice:
+        #            credentials:
+        #                # NOTE! - If you choose to put actual credentials here you should know there are risk.
+        #                None:
+        #            urls:
+        #                - "stun:stun.l.google.com:19302"
+    # An optional, universally unique identifier that identifies this particular build. Meant for builds targeting specific users.
+    # If not set, it will get assigned at runtime and saved in the settings.yaml.
+    # This id will be used when querying server configurations (TurnOn).
+    #netplay_id: "<some-uuid>"
 ```
 ## ROM-file
 
