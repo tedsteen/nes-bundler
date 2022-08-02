@@ -1,10 +1,12 @@
+use std::time::{Instant, Duration};
+
 use egui::{
     plot::{Corner, Legend},
     Button, Context, TextEdit, TextStyle, Ui, Window,
 };
 
 use crate::{
-    netplay::{NetplayState, NetplayStats, state::{StartMethod, ConnectedState, ConnectingState}},
+    netplay::{NetplayState, NetplayStats, state::{StartMethod, ConnectedState, ConnectingState, PeeringState}},
     settings::MAX_PLAYERS,
     GameRunner,
 };
@@ -82,9 +84,7 @@ impl GuiComponent for NetplayGui {
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
-                
-                ui.label(format!("Netplay id: {}", netplay.get_netplay_id(&mut game_runner.settings)));
-                match &mut netplay.state {
+                match &netplay.state {
                     NetplayState::Disconnected => {
                         egui::Grid::new("netplay_grid")
                             .num_columns(2)
@@ -114,7 +114,7 @@ impl GuiComponent for NetplayGui {
                                 ui.end_row();
                             });
                     }
-                    NetplayState::Connecting(_, connecting_state) => {
+                    NetplayState::Connecting(start_method, connecting_state) => {
                         match connecting_state {
                             ConnectingState::LoadingNetplayServerConfiguration(_) => {
                                 ui.label("Initializing");
@@ -122,11 +122,25 @@ impl GuiComponent for NetplayGui {
                                     netplay.state = NetplayState::Disconnected;
                                 }
                             }
-                            ConnectingState::PeeringUp(socket, _) => {
+                            ConnectingState::PeeringUp(PeeringState { socket, unlock_url, start_time, .. }) => {
                                 if let Some(socket) = socket {
                                     let connected_peers = socket.connected_peers().len();
                                     let remaining = MAX_PLAYERS - (connected_peers + 1);
                                     ui.label(format!("Waiting for {} players", remaining));
+                                    if let Some(unlock_url) = unlock_url {
+                                        if Instant::now().duration_since(*start_time).gt(&Duration::from_secs(5)) {
+                                            ui.horizontal_wrapped(|ui| {
+                                                ui.spacing_mut().item_spacing.x = 0.0;
+                                                ui.label("We're having troubles connecting you, click ");
+                                                ui.hyperlink_to("here", unlock_url);
+                                                ui.label(" to unlock Netplay!");
+                                            });
+                                            if ui.button("Retry").clicked() {
+                                                netplay.start(start_method.clone());
+                                            }
+                                        }
+                                    }
+
                                     if ui.button("Cancel").clicked() {
                                         netplay.state = NetplayState::Disconnected;
                                     }
@@ -158,6 +172,6 @@ impl GuiComponent for NetplayGui {
 
 impl NetplayGui {
     pub fn new() -> Self {
-        Self { is_open: false }
+        Self { is_open: true }
     }
 }

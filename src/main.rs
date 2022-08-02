@@ -189,7 +189,7 @@ pub struct GameRunner {
 impl GameRunner {
     pub fn new(pixels: Pixels, build_config: &BuildConfiguration) -> Self {
         let inputs = Inputs::new(build_config.default_settings.input.clone());
-        let settings: Settings = Settings::new(&build_config.default_settings);
+        let mut settings: Settings = Settings::new(&build_config.default_settings);
 
         let audio = Audio::new();
         let sound_stream = audio.start(&settings.audio);
@@ -203,11 +203,10 @@ impl GameRunner {
             state,
             sound_stream,
             pixels,
+            #[cfg(feature = "netplay")]
+            netplay: netplay::Netplay::new(&build_config.netplay, &mut settings),
             settings,
             inputs,
-
-            #[cfg(feature = "netplay")]
-            netplay: netplay::Netplay::new(&build_config.netplay),
             #[cfg(feature = "debug")]
             debug: debug::DebugSettings::new(),
         }

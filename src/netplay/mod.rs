@@ -10,9 +10,9 @@ use std::{
     collections::VecDeque,
     time::{Duration, Instant},
 };
-use tokio::{runtime::Runtime, time::sleep};
+use tokio::{runtime::Runtime};
 
-use self::state::{StartMethod, ConnectedState, InputMapping, ConnectingState};
+use self::state::{StartMethod, ConnectedState, InputMapping, ConnectingState, TurnOnError, PeeringState};
 pub use self::state::NetplayState;
 pub mod state;
 
@@ -178,6 +178,8 @@ pub struct Netplay {
     pub state: NetplayState,
     pub config: NetplayBuildConfiguration,
     pub room_name: String,
+    reqwest_client: reqwest::Client,
+    netplay_id: String,
 }
 
 #[derive(Deserialize, Clone)]
@@ -187,34 +189,34 @@ pub struct NetplayBuildConfiguration {
     pub server: NetplayServerConfiguration,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct IcePasswordCredentials {
     username: String,
     password: String,
 }
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub enum IceCredentials {
     None,
     Password(IcePasswordCredentials)
 }
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct IceConfiguration {
     urls: Vec<String>,
     credentials: IceCredentials,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct MatchboxConfiguration {
     server: String,
     ice: IceConfiguration,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct GGRSConfiguration {
     pub max_prediction: usize,
     pub input_delay: usize,
 }
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct StaticNetplayServerConfiguration {
     matchbox: MatchboxConfiguration,
     pub ggrs: GGRSConfiguration,
@@ -225,6 +227,18 @@ pub struct TurnOnConfiguration {
     server: String,
 }
 
+#[derive(Deserialize, Debug)]
+pub struct BasicResponse {
+    unlock_url: String,
+    conf: StaticNetplayServerConfiguration,
+}
+
+#[derive(Deserialize, Debug)]
+pub enum TurnOnResponse {
+    Basic(BasicResponse),
+    Full(StaticNetplayServerConfiguration),
+}
+
 #[derive(Deserialize, Clone)]
 pub enum NetplayServerConfiguration {
     Static(StaticNetplayServerConfiguration),
@@ -232,39 +246,41 @@ pub enum NetplayServerConfiguration {
 }
 
 impl Netplay {
-    pub fn new(config: &NetplayBuildConfiguration) -> Self {
+    pub fn new(config: &NetplayBuildConfiguration, settings: &mut Settings) -> Self {
         let room_name = config.default_room_name.clone();
+        let netplay_id = config.netplay_id.as_ref().unwrap_or_else(|| {
+            settings.netplay_id.get_or_insert_with(|| Uuid::new_v4().to_string())
+        }).clone();
+
         Netplay {
             rt: Runtime::new().expect("Could not create an async runtime"),
             state: NetplayState::Disconnected,
             config: config.clone(),
             room_name,
+            reqwest_client: reqwest::Client::new(),
+            netplay_id,
         }
-    }
-
-    pub fn get_netplay_id(&self, settings: &mut Settings) -> String {
-        self.config.netplay_id.as_ref().unwrap_or_else(|| {
-            settings.netplay_id.get_or_insert_with(|| Uuid::new_v4().to_string())
-        }).clone()
     }
 
     pub fn start(&mut self, start_method: StartMethod) {
         let promise = match &self.config.server {
             NetplayServerConfiguration::Static(conf) => {
                 let conf = conf.clone();
-                self.rt.spawn(async move {
-                    sleep(Duration::from_secs(0)).await;
-                    conf
-                 })
+                //TODO: Immediatly go to ConnectingState::PeeringUp state
+                self.rt.spawn(async move { Ok(TurnOnResponse::Full(conf)) })
             }
             NetplayServerConfiguration::TurnOn(turn_on_config) => {
                 let server = turn_on_config.server.clone();
+                let netplay_id = &self.netplay_id;
+                let req = self.reqwest_client.get(format!("{server}/{netplay_id}")).send();
                 self.rt.spawn(async move {
-                    sleep(Duration::from_secs(1)).await;
-                    todo!("Call the turn-on server ({})", server)
+                    let res = req.await.map_err(|e| TurnOnError { description: format!("Could not connect: {}", e)})?
+                        .json().await.map_err(|e| TurnOnError { description: format!("Failed to receive response: {}", e)});
+                    res
                  })
             }
         };
+
         self.state = NetplayState::Connecting(start_method, ConnectingState::LoadingNetplayServerConfiguration(promise));
     }
 
@@ -285,49 +301,67 @@ impl Netplay {
                         let is_finished = conf.is_finished();
                         if is_finished {
                             if let Some(Ok(conf)) = conf.now_or_never() {
-                                let matchbox_server = &conf.matchbox.server;
-                                let credentials = match &conf.matchbox.ice.credentials {
-                                    IceCredentials::Password(IcePasswordCredentials { username, password }) => RtcIceCredentials::Password(RtcIcePasswordCredentials { username: username.to_string(), password: password.to_string() }),
-                                    IceCredentials::None => RtcIceCredentials::None,
-                                };
-                                let room = match &start_method {
-                                    state::StartMethod::Create(name) => name.clone(),
-                                    state::StartMethod::Random => "beta-0?next=2".to_string(),
-                                };
+                                match conf {
+                                    Ok(resp) => {
+                                        let mut maybe_unlock_url = None;
+                                        let conf = match resp {
+                                            TurnOnResponse::Basic(BasicResponse { unlock_url, conf }) => {
+                                                maybe_unlock_url = Some(unlock_url);
+                                                conf
+                                            },
+                                            TurnOnResponse::Full(conf) => conf,
+                                        };
 
-                                let (socket, loop_fut) = WebRtcSocket::new_with_config(WebRtcSocketConfig {
-                                    room_url: format!("ws://{matchbox_server}/{room}"),
-                                    ice_server: RtcIceServerConfig {
-                                        urls: conf.matchbox.ice.urls.clone(),
-                                        credentials
-                                    },
-                                });
+                                        let matchbox_server = &conf.matchbox.server;
+                                        let credentials = match &conf.matchbox.ice.credentials {
+                                            IceCredentials::Password(IcePasswordCredentials { username, password }) => RtcIceCredentials::Password(RtcIcePasswordCredentials { username: username.to_string(), password: password.to_string() }),
+                                            IceCredentials::None => RtcIceCredentials::None,
+                                        };
+                                        let room = match &start_method {
+                                            state::StartMethod::Create(name) => name.clone(),
+                                            state::StartMethod::Random => "beta-0?next=2".to_string(),
+                                        };
 
-                                let loop_fut = loop_fut.fuse();
-                                self.rt.spawn(async move {
-                                    futures::pin_mut!(loop_fut);
+                                        let (socket, loop_fut) = WebRtcSocket::new_with_config(WebRtcSocketConfig {
+                                            room_url: format!("ws://{matchbox_server}/{room}"),
+                                            ice_server: RtcIceServerConfig {
+                                                urls: conf.matchbox.ice.urls.clone(),
+                                                credentials
+                                            },
+                                        });
 
-                                    let timeout = Delay::new(Duration::from_millis(100));
-                                    futures::pin_mut!(timeout);
+                                        let loop_fut = loop_fut.fuse();
+                                        self.rt.spawn(async move {
+                                            futures::pin_mut!(loop_fut);
 
-                                    loop {
-                                        select! {
-                                            _ = (&mut timeout).fuse() => {
-                                                timeout.reset(Duration::from_millis(100));
+                                            let timeout = Delay::new(Duration::from_millis(100));
+                                            futures::pin_mut!(timeout);
+
+                                            loop {
+                                                select! {
+                                                    _ = (&mut timeout).fuse() => {
+                                                        timeout.reset(Duration::from_millis(100));
+                                                    }
+
+                                                    _ = &mut loop_fut => {
+                                                        break;
+                                                    }
+                                                }
                                             }
-
-                                            _ = &mut loop_fut => {
-                                                break;
-                                            }
-                                        }
+                                        });
+                                        *connecting_state = ConnectingState::PeeringUp(PeeringState::new(Some(socket), conf.ggrs.clone(), maybe_unlock_url));
                                     }
-                                });
-                                *connecting_state = ConnectingState::PeeringUp(Some(socket), conf.ggrs.clone());
+                                    Err(err) => {
+                                        eprintln!("Could not fetch server config :( {:?}", err);
+                                        //TODO: alert about not being able to fetch server configuration
+                                        self.state = NetplayState::Disconnected
+                                    },
+                                }
                             }
                         }
                         None
                     }
-                    ConnectingState::PeeringUp(maybe_socket, ggrs_config) => {
+                    ConnectingState::PeeringUp(PeeringState { socket: maybe_socket, ggrs_config, .. }) => {
                         let mut new_state = None;
                         game_state.advance(inputs);
 
@@ -381,7 +415,7 @@ impl Netplay {
         } {
             self.state = new_state;
         }
-        
+
         if let NetplayState::Connected(netplay_session, _) = &self.state {
             netplay_session.requested_fps
         } else {
