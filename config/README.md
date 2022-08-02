@@ -72,7 +72,7 @@ netplay:
     # This config can be either fetched from an external service (TurnOn) or configured statically (Static)
     server:
         # A hosted TurnOn server which should do the job.
-        # More information on this will come..
+        # More information on this will come. It's free at the moment, but if it network traffic costs starts piling up, there might be a paywall to unlock Netplay.
         TurnOn: "http://shiny-mermaid-6dbcf2.netlify.app/turn-config"
         # An example of a static configuration
         #Static:
