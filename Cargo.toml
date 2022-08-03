@@ -11,6 +11,9 @@ default = ["netplay"]
 netplay = ["matchbox_socket", "tokio", "ggrs", "futures-timer", "futures", "uuid", "reqwest"]
 debug = []
 
+[profile.release]
+strip = true
+
 [dependencies]
 anyhow = "1.0"
 serde = { version = "1", features = ["derive"] }
