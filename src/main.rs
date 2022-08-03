@@ -34,7 +34,7 @@ type Fps = u32;
 const FPS: Fps = 60;
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
-const ZOOM: f32 = 2.0;
+const ZOOM: f32 = 3.0;
 
 pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
     match mapper_from_file(cart_data.as_slice()) {
