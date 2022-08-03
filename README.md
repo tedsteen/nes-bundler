@@ -19,7 +19,7 @@ What you get is a single executable with
 To create a bundle you need to do the following
 * [Install Rust](https://www.rust-lang.org/tools/install).
 * [Configure a bundle](config/README.md) with your ROM and a build configuration.
-* Build (`cargo build --release`) your exectutable!
+* Build `cargo build --release` your exectutable! ( use the flag `--no-default-features` to disable Netplay)
 
 If you want to target other operating systems please read the Rust documentation or find a machine with that OS and follow the steps again.
 
