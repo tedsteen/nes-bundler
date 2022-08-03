@@ -1,9 +1,9 @@
 use std::time::Instant;
 
+use futures::channel::oneshot::Receiver;
 use ggrs::P2PSession;
 use matchbox_socket::WebRtcSocket;
 use serde::Deserialize;
-use tokio::task::JoinHandle;
 
 use crate::settings::MAX_PLAYERS;
 
@@ -58,7 +58,7 @@ impl SynchonizingState {
 #[allow(clippy::large_enum_variant)]
 pub enum ConnectingState {
     //Load a server config
-    LoadingNetplayServerConfiguration(JoinHandle<Result<TurnOnResponse, TurnOnError>>),
+    LoadingNetplayServerConfiguration(Receiver<Result<TurnOnResponse, TurnOnError>>),
     //Connecting all peers
     PeeringUp(PeeringState),
     Synchronizing(SynchonizingState)
