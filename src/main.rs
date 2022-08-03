@@ -134,13 +134,14 @@ fn main() {
 pub struct MyGameState {
     nes: NesState,
 }
+pub const ROM: &[u8] = include_bytes!("../config/rom.nes");
 
 impl MyGameState {
     fn new() -> Self {
         let rom_data = match std::env::var("ROM_FILE") {
             Ok(rom_file) => std::fs::read(&rom_file)
                 .unwrap_or_else(|_| panic!("Could not read ROM {}", rom_file)),
-            Err(_e) => include_bytes!("../config/rom.nes").to_vec(),
+            Err(_e) => ROM.to_vec(),
         };
 
         let nes = load_rom(rom_data).expect("Failed to load ROM");

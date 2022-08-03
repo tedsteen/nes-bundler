@@ -38,7 +38,6 @@ If you want to target other operating systems please read the Rust documentation
   * Save and restore session - save game state every 100th or so frame (when all peers have reached that 100th frame).
   * More control on who becomes P1 and P2 etc.
   * Make it possible to wait for peers to reconnect if disconnected.
-  * Segment matchbox room URLs under f.ex a hash of the ROM to make sure they play the same version of the game
 * More customizable UI.
 * wasm?
 * ...

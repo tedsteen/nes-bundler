@@ -1,4 +1,4 @@
-use crate::{input::JoypadInput, settings::{MAX_PLAYERS, Settings}, Fps, MyGameState, FPS};
+use crate::{input::JoypadInput, settings::{MAX_PLAYERS, Settings}, Fps, MyGameState, FPS, ROM};
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, NetworkStats, P2PSession, SessionBuilder, SessionState};
@@ -7,8 +7,8 @@ use rusticnes_core::nes::NesState;
 use serde::Deserialize;
 use uuid::Uuid;
 use std::{
-    collections::VecDeque,
-    time::{Duration, Instant},
+    collections::{VecDeque, hash_map::DefaultHasher},
+    time::{Duration, Instant}, hash::{Hash, Hasher},
 };
 use tokio::{runtime::Runtime};
 
@@ -397,10 +397,17 @@ impl Netplay {
             IceCredentials::Password(IcePasswordCredentials { username, password }) => RtcIceCredentials::Password(RtcIcePasswordCredentials { username: username.to_string(), password: password.to_string() }),
             IceCredentials::None => RtcIceCredentials::None,
         };
+
+        let mut game_hash = DefaultHasher::new();
+        ROM.hash(&mut game_hash);
+        let game_hash = game_hash.finish();
+
         let room = match &start_method {
-            state::StartMethod::Create(name) => name.clone(),
-            state::StartMethod::Random => "beta-0?next=2".to_string(),
+            state::StartMethod::Create(name) => format!("join/{game_hash}/{}", name.clone()),
+            //state::StartMethod::Resume(old_session) => format!("resume/{game_hash}/{}", old_session.name.clone()),
+            state::StartMethod::Random => "random/{game_hash}/?next=2".to_string(),
         };
+
         let (socket, loop_fut) = WebRtcSocket::new_with_config(WebRtcSocketConfig {
             room_url: format!("ws://{matchbox_server}/{room}"),
             ice_server: RtcIceServerConfig {
