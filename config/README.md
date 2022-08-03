@@ -29,30 +29,40 @@ default_settings:
         configurations:
             00-keyboard-1:
                 id: 00-keyboard-1
-                name: "Keyboard primary"
-                kind:
-                    Keyboard:
-                        up: Up
-                        down: Down
-                        left: Left
-                        right: Right
-                        start: Return
-                        select: RShift
-                        b: Key1
-                        a: Key2
+                name: "⌨ Keyboard 1"
+                kind: !Keyboard
+                    up: Up
+                    down: Down
+                    left: Left
+                    right: Right
+                    start: Return
+                    select: RShift
+                    b: Key1
+                    a: Key2
             00-keyboard-2:
                 id: 00-keyboard-2
-                name: "Keyboard secondary"
-                kind:
-                    Keyboard:
-                        up: W
-                        down: S
-                        left: A
-                        right: D
-                        start: Key9
-                        select: Key0
-                        b: LAlt
-                        a: LControl
+                name: "⌨ Keyboard 2"
+                kind: !Keyboard
+                    up: W
+                    down: S
+                    left: A
+                    right: D
+                    start: Key9
+                    select: Key0
+                    b: LAlt
+                    a: LControl
+            01-gamepad-0:
+                id: 01-gamepad-0
+                name: "🎮 Gamepad"
+                kind: !Gamepad
+                    up: DPadUp
+                    down: DPadDown
+                    left: DPadLeft
+                    right: DPadRight
+                    start: Start
+                    select: Select
+                    b: West
+                    a: South
         # The default mapping for newly connected gamepads. For more gamepad button mappings see https://docs.rs/gilrs/latest/gilrs/ev/enum.Button.html.
         default_gamepad_mapping:
             up: DPadUp
@@ -73,9 +83,9 @@ netplay:
     server:
         # A hosted TurnOn server which should do the job.
         # More information on this will come. It's free at the moment, but if it network traffic costs starts piling up, there might be a paywall to unlock Netplay.
-        TurnOn: "http://netplay.tech/get-config"
+        !TurnOn "http://netplay.tech/get-config"
         # An example of a static configuration
-        #Static:
+        #!Static
         #    ggrs:
         #        max_prediction: 12
         #        input_delay: 2
@@ -85,7 +95,7 @@ netplay:
         #        ice:
         #            credentials:
         #                # NOTE! - If you choose to put actual credentials here you should know there are risk.
-        #                None:
+        #                !None
         #            urls:
         #                - "stun:stun.l.google.com:19302"
     # An optional, universally unique identifier that identifies this particular build. Meant for builds targeting specific users.
