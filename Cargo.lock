@@ -2178,6 +2178,7 @@ dependencies = [
 [[package]]
 name = "matchbox_socket"
 version = "0.3.0"
+source = "git+https://github.com/tedsteen/matchbox?branch=turn-support-credentials#82360e29aaaa9e16abc240a1528b5c1cdfdfbd90"
 dependencies = [
  "async-compat",
  "async-tungstenite",

@@ -29,7 +29,7 @@ base64 = "0.13"
 
 # Netplay deps
 # matchbox_socket = { git = "https://github.com/johanhelsing/matchbox", features = ["ggrs-socket"], optional = true }
-matchbox_socket = { path = "../matchbox-my-fork/matchbox_socket", features = ["ggrs-socket"], optional = true }
+matchbox_socket = { git = "https://github.com/tedsteen/matchbox", branch = "turn-support-credentials", features = ["ggrs-socket"], optional = true }
 futures-timer = { version = "3", features = ["wasm-bindgen"], optional = true }
 ggrs = { version = "0.9", optional = true }
 tokio = { version = "1", features = ["rt"], optional = true }
