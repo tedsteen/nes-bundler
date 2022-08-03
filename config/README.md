@@ -82,7 +82,7 @@ netplay:
     # This config can be either fetched from an external service (TurnOn) or configured statically (Static)
     server:
         # A hosted TurnOn server which should do the job.
-        # More information on this will come. It's free at the moment, but if it network traffic costs starts piling up, there might be a paywall to unlock Netplay.
+        # More information on this will come. It's free at the moment, but if network traffic costs starts piling up, there might be a paywall when unlocking Netplay (only needed if a direct p2p connection is not possible).
         !TurnOn "http://netplay.tech/get-config"
         # An example of a static configuration
         #!Static

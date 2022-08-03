@@ -31,6 +31,7 @@ If you want to target other operating systems please read the Rust documentation
 
 ## Future stuff/ideas/todo
 * Implement `save_state(...)`/`load_state(...)` for all the mappers.
+* Make it possible to bundle without using Rust compiler (somehow inject the ROM+config into the binary)
 * Audio
   * More control over output device?
 * Netplay
