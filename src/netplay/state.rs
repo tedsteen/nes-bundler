@@ -7,7 +7,7 @@ use serde::Deserialize;
 
 use crate::settings::MAX_PLAYERS;
 
-use super::{NetplaySession, GGRSConfiguration, TurnOnResponse, GGRSConfig};
+use super::{GGRSConfig, GGRSConfiguration, NetplaySession, TurnOnResponse};
 
 pub struct InputMapping {
     pub ids: [usize; MAX_PLAYERS],
@@ -38,8 +38,16 @@ pub struct PeeringState {
     pub unlock_url: Option<String>,
 }
 impl PeeringState {
-    pub fn new(socket: Option<WebRtcSocket>, ggrs_config: GGRSConfiguration, unlock_url: Option<String>) -> Self {
-        PeeringState { socket, ggrs_config, unlock_url }
+    pub fn new(
+        socket: Option<WebRtcSocket>,
+        ggrs_config: GGRSConfiguration,
+        unlock_url: Option<String>,
+    ) -> Self {
+        PeeringState {
+            socket,
+            ggrs_config,
+            unlock_url,
+        }
     }
 }
 
@@ -51,7 +59,11 @@ pub struct SynchonizingState {
 impl SynchonizingState {
     pub fn new(p2p_session: Option<P2PSession<GGRSConfig>>, unlock_url: Option<String>) -> Self {
         let start_time = Instant::now();
-        SynchonizingState { p2p_session, unlock_url, start_time }
+        SynchonizingState {
+            p2p_session,
+            unlock_url,
+            start_time,
+        }
     }
 }
 
@@ -61,12 +73,12 @@ pub enum ConnectingState {
     LoadingNetplayServerConfiguration(Receiver<Result<TurnOnResponse, TurnOnError>>),
     //Connecting all peers
     PeeringUp(PeeringState),
-    Synchronizing(SynchonizingState)
+    Synchronizing(SynchonizingState),
 }
 
 #[allow(clippy::large_enum_variant)]
 pub enum NetplayState {
     Disconnected,
     Connecting(StartMethod, ConnectingState),
-    Connected(NetplaySession, ConnectedState)
+    Connected(NetplaySession, ConnectedState),
 }

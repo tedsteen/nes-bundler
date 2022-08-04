@@ -21,14 +21,14 @@ use winit::event_loop::EventLoop;
 use winit::window::WindowBuilder;
 
 mod audio;
+#[cfg(feature = "debug")]
+mod debug;
 mod gui;
 mod input;
 #[cfg(feature = "netplay")]
 mod netplay;
 mod palette;
 mod settings;
-#[cfg(feature = "debug")]
-mod debug;
 
 type Fps = u32;
 const FPS: Fps = 60;
@@ -60,7 +60,10 @@ fn main() {
         serde_yaml::from_str(include_str!("../config/build_config.yaml")).unwrap();
 
     #[cfg(feature = "netplay")]
-    if std::env::args().collect::<String>().contains(&"--print-netplay-id".to_string()) {
+    if std::env::args()
+        .collect::<String>()
+        .contains(&"--print-netplay-id".to_string())
+    {
         if let Some(id) = build_config.netplay.netplay_id {
             println!("{id}");
         }
@@ -224,7 +227,8 @@ impl GameRunner {
             [self.inputs.get_joypad(0), self.inputs.get_joypad(1)],
         );
 
-        self.sound_stream.push_samples(self.state.nes.apu.consume_samples().as_slice());
+        self.sound_stream
+            .push_samples(self.state.nes.apu.consume_samples().as_slice());
 
         #[cfg(feature = "debug")]
         if self.debug.override_fps {

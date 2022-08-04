@@ -1,19 +1,30 @@
-use crate::{input::JoypadInput, settings::{MAX_PLAYERS, Settings}, Fps, MyGameState, FPS, ROM};
+use crate::{
+    input::JoypadInput,
+    settings::{Settings, MAX_PLAYERS},
+    Fps, MyGameState, FPS, ROM,
+};
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, NetworkStats, P2PSession, SessionBuilder, SessionState};
-use matchbox_socket::{WebRtcSocket, WebRtcSocketConfig, RtcIceServerConfig, RtcIceCredentials, RtcIcePasswordCredentials};
+use matchbox_socket::{
+    RtcIceCredentials, RtcIcePasswordCredentials, RtcIceServerConfig, WebRtcSocket,
+    WebRtcSocketConfig,
+};
 use rusticnes_core::nes::NesState;
 use serde::Deserialize;
-use uuid::Uuid;
 use std::{
-    collections::{VecDeque, hash_map::DefaultHasher},
-    time::{Duration, Instant}, hash::{Hash, Hasher},
+    collections::{hash_map::DefaultHasher, VecDeque},
+    hash::{Hash, Hasher},
+    time::{Duration, Instant},
 };
-use tokio::{runtime::Runtime};
+use tokio::runtime::Runtime;
+use uuid::Uuid;
 
-use self::state::{StartMethod, ConnectedState, InputMapping, ConnectingState, TurnOnError, PeeringState, SynchonizingState};
 pub use self::state::NetplayState;
+use self::state::{
+    ConnectedState, ConnectingState, InputMapping, PeeringState, StartMethod, SynchonizingState,
+    TurnOnError,
+};
 pub mod state;
 
 impl Clone for MyGameState {
@@ -69,7 +80,7 @@ impl NetplayStats {
 pub enum NetplaySessionState {
     //Some peers are disconnected
     DisconnectedPeers,
-    Connected
+    Connected,
 }
 pub struct NetplaySession {
     p2p_session: P2PSession<GGRSConfig>,
@@ -93,7 +104,6 @@ impl NetplaySession {
     }
 
     pub fn advance(&mut self, game_state: &mut MyGameState, inputs: [JoypadInput; MAX_PLAYERS]) {
-
         let sess = &mut self.p2p_session;
         let frame = &mut self.frame;
         sess.poll_remote_clients();
@@ -131,10 +141,8 @@ impl NetplaySession {
                             cell.save(*frame, Some(game_state.clone()), None);
                         }
                         GGRSRequest::AdvanceFrame { inputs } => {
-                            game_state.advance([
-                                JoypadInput(inputs[0].0),
-                                JoypadInput(inputs[1].0),
-                            ]);
+                            game_state
+                                .advance([JoypadInput(inputs[0].0), JoypadInput(inputs[1].0)]);
 
                             if *frame <= self.last_confirmed_frame {
                                 // Discard the samples for this frame since it's a replay from ggrs. Audio has already been produced and pushed for it.
@@ -150,8 +158,7 @@ impl NetplaySession {
             Err(ggrs::GGRSError::PredictionThreshold) => {
                 println!("Frame {} skipped: PredictionThreshold", frame);
             }
-            Err(ggrs::GGRSError::NotSynchronized) => {
-            }
+            Err(ggrs::GGRSError::NotSynchronized) => {}
             Err(e) => eprintln!("Ouch :( {:?}", e),
         }
 
@@ -197,7 +204,7 @@ pub struct IcePasswordCredentials {
 #[derive(Deserialize, Clone, Debug)]
 pub enum IceCredentials {
     None,
-    Password(IcePasswordCredentials)
+    Password(IcePasswordCredentials),
 }
 #[derive(Deserialize, Clone, Debug)]
 pub struct IceConfiguration {
@@ -238,15 +245,21 @@ pub enum TurnOnResponse {
 pub enum NetplayServerConfiguration {
     Static(StaticNetplayServerConfiguration),
     //An external server for fetching TURN credentials
-    TurnOn(String)
+    TurnOn(String),
 }
 
 impl Netplay {
     pub fn new(config: &NetplayBuildConfiguration, settings: &mut Settings) -> Self {
         let room_name = config.default_room_name.clone();
-        let netplay_id = config.netplay_id.as_ref().unwrap_or_else(|| {
-            settings.netplay_id.get_or_insert_with(|| Uuid::new_v4().to_string())
-        }).clone();
+        let netplay_id = config
+            .netplay_id
+            .as_ref()
+            .unwrap_or_else(|| {
+                settings
+                    .netplay_id
+                    .get_or_insert_with(|| Uuid::new_v4().to_string())
+            })
+            .clone();
 
         Netplay {
             rt: Runtime::new().expect("Could not create an async runtime"),
@@ -260,23 +273,37 @@ impl Netplay {
     pub fn start(&mut self, start_method: StartMethod) {
         match &self.config.server {
             NetplayServerConfiguration::Static(conf) => {
-                self.state = NetplayState::Connecting(start_method.clone(), Self::start_peering(&mut self.rt, TurnOnResponse::Full(conf.clone()), start_method));
+                self.state = NetplayState::Connecting(
+                    start_method.clone(),
+                    Self::start_peering(
+                        &mut self.rt,
+                        TurnOnResponse::Full(conf.clone()),
+                        start_method,
+                    ),
+                );
             }
             NetplayServerConfiguration::TurnOn(server) => {
                 let netplay_id = &self.netplay_id;
-                let req = self.reqwest_client.get(format!("{server}/{netplay_id}")).send();
-                let (sender, receiver) = futures::channel::oneshot::channel::<Result<TurnOnResponse, TurnOnError>>();
+                let req = self
+                    .reqwest_client
+                    .get(format!("{server}/{netplay_id}"))
+                    .send();
+                let (sender, receiver) =
+                    futures::channel::oneshot::channel::<Result<TurnOnResponse, TurnOnError>>();
                 self.rt.spawn(async move {
                     let _ = match req.await {
-                        Ok(res) => {
-                            sender.send(res.json().await.map_err(|e| TurnOnError { description: format!("Failed to receive response: {}", e)}))
-                        }
-                        Err(e) => {
-                            sender.send(Err(TurnOnError { description: format!("Could not connect: {}", e)}))
-                        }
+                        Ok(res) => sender.send(res.json().await.map_err(|e| TurnOnError {
+                            description: format!("Failed to receive response: {}", e),
+                        })),
+                        Err(e) => sender.send(Err(TurnOnError {
+                            description: format!("Could not connect: {}", e),
+                        })),
                     };
-                 });
-                 self.state = NetplayState::Connecting(start_method, ConnectingState::LoadingNetplayServerConfiguration(receiver));
+                });
+                self.state = NetplayState::Connecting(
+                    start_method,
+                    ConnectingState::LoadingNetplayServerConfiguration(receiver),
+                );
             }
         };
     }
@@ -297,7 +324,8 @@ impl Netplay {
                         game_state.advance(inputs);
                         match conf.try_recv() {
                             Ok(Some(Ok(resp))) => {
-                                *connecting_state = Self::start_peering(&mut self.rt, resp, start_method.clone());
+                                *connecting_state =
+                                    Self::start_peering(&mut self.rt, resp, start_method.clone());
                             }
                             Ok(None) => (), //No result yet
                             Ok(Some(Err(err))) => {
@@ -313,7 +341,11 @@ impl Netplay {
 
                         None
                     }
-                    ConnectingState::PeeringUp(PeeringState { socket: maybe_socket, ggrs_config, unlock_url }) => {
+                    ConnectingState::PeeringUp(PeeringState {
+                        socket: maybe_socket,
+                        ggrs_config,
+                        unlock_url,
+                    }) => {
                         game_state.advance(inputs);
                         if let Some(socket) = maybe_socket {
                             socket.accept_new_connections();
@@ -334,7 +366,15 @@ impl Netplay {
                                         .add_player(player, i)
                                         .expect("failed to add player");
                                 }
-                                *connecting_state = ConnectingState::Synchronizing(SynchonizingState::new(Some(sess_build.start_p2p_session(maybe_socket.take().unwrap()).unwrap()), unlock_url.clone()));
+                                *connecting_state =
+                                    ConnectingState::Synchronizing(SynchonizingState::new(
+                                        Some(
+                                            sess_build
+                                                .start_p2p_session(maybe_socket.take().unwrap())
+                                                .unwrap(),
+                                        ),
+                                        unlock_url.clone(),
+                                    ));
                             }
                         }
                         None
@@ -345,7 +385,11 @@ impl Netplay {
                             p2p_session.poll_remote_clients();
                             if let SessionState::Running = p2p_session.current_state() {
                                 new_state = Some(NetplayState::Connected(
-                                    NetplaySession::new(synchronizing_state.p2p_session.take().unwrap()), ConnectedState::MappingInput));
+                                    NetplaySession::new(
+                                        synchronizing_state.p2p_session.take().unwrap(),
+                                    ),
+                                    ConnectedState::MappingInput,
+                                ));
                                 game_state.nes.reset();
                             }
                         }
@@ -365,7 +409,7 @@ impl Netplay {
                         netplay_session.advance(game_state, inputs);
                     }
                 }
-                
+
                 if let NetplaySessionState::DisconnectedPeers = netplay_session.state {
                     // For now, just disconnect if we loose peers
                     self.state = NetplayState::Disconnected;
@@ -383,18 +427,27 @@ impl Netplay {
         }
     }
 
-    fn start_peering(rt: &mut Runtime, resp: TurnOnResponse, start_method: StartMethod) -> ConnectingState {
+    fn start_peering(
+        rt: &mut Runtime,
+        resp: TurnOnResponse,
+        start_method: StartMethod,
+    ) -> ConnectingState {
         let mut maybe_unlock_url = None;
         let conf = match resp {
             TurnOnResponse::Basic(BasicResponse { unlock_url, conf }) => {
                 maybe_unlock_url = Some(unlock_url);
                 conf
-            },
+            }
             TurnOnResponse::Full(conf) => conf,
         };
         let matchbox_server = &conf.matchbox.server;
         let credentials = match &conf.matchbox.ice.credentials {
-            IceCredentials::Password(IcePasswordCredentials { username, password }) => RtcIceCredentials::Password(RtcIcePasswordCredentials { username: username.to_string(), password: password.to_string() }),
+            IceCredentials::Password(IcePasswordCredentials { username, password }) => {
+                RtcIceCredentials::Password(RtcIcePasswordCredentials {
+                    username: username.to_string(),
+                    password: password.to_string(),
+                })
+            }
             IceCredentials::None => RtcIceCredentials::None,
         };
 
@@ -412,7 +465,7 @@ impl Netplay {
             room_url: format!("ws://{matchbox_server}/{room}"),
             ice_server: RtcIceServerConfig {
                 urls: conf.matchbox.ice.urls.clone(),
-                credentials
+                credentials,
             },
         });
         let loop_fut = loop_fut.fuse();
@@ -432,6 +485,10 @@ impl Netplay {
             }
         });
 
-        ConnectingState::PeeringUp(PeeringState::new(Some(socket), conf.ggrs.clone(), maybe_unlock_url))
+        ConnectingState::PeeringUp(PeeringState::new(
+            Some(socket),
+            conf.ggrs.clone(),
+            maybe_unlock_url,
+        ))
     }
 }

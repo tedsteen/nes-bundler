@@ -7,11 +7,11 @@ use pixels::{wgpu, PixelsContext};
 use winit::window::Window;
 
 mod audio;
+#[cfg(feature = "debug")]
+mod debug;
 mod input;
 #[cfg(feature = "netplay")]
 mod netplay;
-#[cfg(feature = "debug")]
-mod debug;
 
 /// Manages all state required for rendering egui over `Pixels`.
 pub struct Framework {
@@ -191,6 +191,6 @@ impl Gui {
 
         for setting in &mut self.settings {
             setting.ui(ctx, game_runner, self.visible);
-        }        
+        }
     }
 }

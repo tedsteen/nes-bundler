@@ -16,7 +16,9 @@ impl GuiComponent for DebugGui {
     fn handle_event(&mut self, _event: &winit::event::WindowEvent, _game_runner: &mut GameRunner) {}
 
     fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner, ui_visible: bool) {
-        if !ui_visible { return }
+        if !ui_visible {
+            return;
+        }
         Window::new(self.name())
             .open(&mut self.is_open)
             .collapsible(false)
@@ -31,8 +33,7 @@ impl GuiComponent for DebugGui {
                             ui.checkbox(&mut game_runner.debug.override_fps, "Override FPS");
                             if game_runner.debug.override_fps {
                                 ui.add(
-                                    Slider::new(&mut game_runner.debug.fps, 1..=120)
-                                        .suffix("FPS"),
+                                    Slider::new(&mut game_runner.debug.fps, 1..=120).suffix("FPS"),
                                 );
                             }
                             ui.end_row();

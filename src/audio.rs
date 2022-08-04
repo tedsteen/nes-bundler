@@ -2,8 +2,8 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait};
-use cpal::{StreamConfig, BufferSize, Sample};
-use ringbuf::{Producer, Consumer};
+use cpal::{BufferSize, Sample, StreamConfig};
+use ringbuf::{Consumer, Producer};
 
 use crate::settings::audio::AudioSettings;
 type SampleFormat = i16;
@@ -42,43 +42,48 @@ impl Stream {
         }
     }
 
-    fn build_internal_stream<T>(output_device: &cpal::Device, stream_config: &mut StreamConfig, volume: &Arc<Mutex<f32>>, mut consumer: Consumer<SampleFormat>) -> cpal::Stream
+    fn build_internal_stream<T>(
+        output_device: &cpal::Device,
+        stream_config: &mut StreamConfig,
+        volume: &Arc<Mutex<f32>>,
+        mut consumer: Consumer<SampleFormat>,
+    ) -> cpal::Stream
     where
-        T: cpal::Sample + Send + 'static
+        T: cpal::Sample + Send + 'static,
     {
         let sample_count_16ms = Self::calc_buffer_length(16, stream_config) as usize;
         let (mut producer_2, mut consumer_2) =
-        ringbuf::RingBuffer::<T>::new(sample_count_16ms)
-            .split();
+            ringbuf::RingBuffer::<T>::new(sample_count_16ms).split();
 
-        let zeros = vec![T::from::<i16>(&0); sample_count_16ms];
+        let zeros = vec![T::from::<SampleFormat>(&0); sample_count_16ms];
         producer_2.push_slice(zeros.as_slice());
 
         output_device
-        .build_output_stream(
-            stream_config,
-            {
-                let volume = volume.clone();
-                move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-                    let mut last_sample = T::from::<i16>(&0);
-                    let volume = *volume.lock().unwrap();
-                    for sample in data {
-                        if let Some(sample) = consumer.pop() {
-                            last_sample = Sample::from(&sample);
-                            let _ = producer_2.push(last_sample);
-                            consumer_2.pop();
-                        } else if let Some(sample) = consumer_2.pop() {
-                            //println!("Buffer underrun using {sample} instead");
-                            last_sample = sample;
-                            let _ = producer_2.push(Sample::from(&(Sample::to_f32(&sample) * 0.98)));
+            .build_output_stream(
+                stream_config,
+                {
+                    let volume = volume.clone();
+                    move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
+                        let mut last_sample = T::from::<SampleFormat>(&0);
+                        let volume = *volume.lock().unwrap();
+                        for sample in data {
+                            if let Some(sample) = consumer.pop() {
+                                last_sample = Sample::from(&sample);
+                                let _ = producer_2.push(last_sample);
+                                consumer_2.pop();
+                            } else if let Some(sample) = consumer_2.pop() {
+                                //println!("Buffer underrun using {sample} instead");
+                                last_sample = sample;
+                                let _ = producer_2
+                                    .push(Sample::from(&(Sample::to_f32(&sample) * 0.98)));
+                            }
+                            *sample = Sample::from(&(Sample::to_f32(&last_sample) * volume));
                         }
-                        *sample = Sample::from(&(Sample::to_f32(&last_sample) * volume));
                     }
-                }
-            },
-            |err| eprintln!("an error occurred on the output audio stream: {}", err),
-        )
-        .expect("Could not build sound output stream")
+                },
+                |err| eprintln!("an error occurred on the output audio stream: {}", err),
+            )
+            .expect("Could not build sound output stream")
     }
 
     fn setup_stream(
@@ -89,11 +94,9 @@ impl Stream {
     ) -> (Producer<SampleFormat>, cpal::Stream, VecDeque<i32>) {
         stream_config.channels = 1;
 
-        let (producer, consumer) =
-            ringbuf::RingBuffer::<SampleFormat>::new(100_000)
-                .split();
+        let (producer, consumer) = ringbuf::RingBuffer::<SampleFormat>::new(100_000).split();
 
-       let stream = match sample_format {
+        let stream = match sample_format {
             cpal::SampleFormat::F32 => {
                 Self::build_internal_stream::<f32>(output_device, stream_config, volume, consumer)
             }
@@ -114,7 +117,8 @@ impl Stream {
     }
 
     fn calc_buffer_length(latency: u8, stream_config: &StreamConfig) -> u32 {
-        let latency_frames = ((latency as f32 / 1_000.0) * stream_config.sample_rate.0 as f32) as u32;
+        let latency_frames =
+            ((latency as f32 / 1_000.0) * stream_config.sample_rate.0 as f32) as u32;
         latency_frames * stream_config.channels as u32
     }
 
@@ -123,7 +127,8 @@ impl Stream {
     }
 
     pub fn set_latency(&mut self, latency: u8) {
-        self.stream_config.buffer_size = BufferSize::Fixed(Self::calc_buffer_length(latency, &self.stream_config));
+        self.stream_config.buffer_size =
+            BufferSize::Fixed(Self::calc_buffer_length(latency, &self.stream_config));
         let (producer, stream, producer_history) = Stream::setup_stream(
             &self.sample_format,
             &mut self.stream_config,
@@ -156,7 +161,7 @@ impl Stream {
         self.producer_history = producer_history;
     }
 
-    pub(crate) fn push_samples(&mut self, samples: &[i16]) {
+    pub(crate) fn push_samples(&mut self, samples: &[SampleFormat]) {
         let max_buff_size = 2000;
         let curr_buff_size = self.producer.len() as u32;
         self.producer_history.push_front(curr_buff_size as i32);
@@ -202,6 +207,11 @@ impl Audio {
             .with_max_sample_rate();
 
         let stream_config = output_config.config();
-        Stream::new(output_config.sample_format(), audio_settings, stream_config, output_device)
+        Stream::new(
+            output_config.sample_format(),
+            audio_settings,
+            stream_config,
+            output_device,
+        )
     }
 }

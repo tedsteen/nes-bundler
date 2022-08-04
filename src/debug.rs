@@ -7,6 +7,9 @@ pub struct DebugSettings {
 
 impl DebugSettings {
     pub(crate) fn new() -> Self {
-        Self { override_fps: false, fps: FPS }
+        Self {
+            override_fps: false,
+            fps: FPS,
+        }
     }
 }
