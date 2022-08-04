@@ -29,9 +29,15 @@ If you want to target other operating systems please read the Rust documentation
 * Save/load state and thus netplay is currently working for mappers nrom, mmc1, mmc3, uxrom, axrom, bnrom, cnrom, gxrom and ines31.  
   If you want to contribute, please implement save/load for a mapper [over here](https://github.com/tedsteen/rusticnes-core-for-nes-bundler/blob/master/src/mmc/mapper.rs#L43-L45).
 
-## Future stuff/ideas/todo
+## Future stuff/ideas/bugs/todo
+* Move this list to the issues feature in GitHub :)
 * Implement `save_state(...)`/`load_state(...)` for all the mappers.
 * Make it possible to bundle without using Rust compiler (somehow inject the ROM+config into the binary)
+* Fullscreen mode (alt+enter is standard to toggle between full screen and windowed, on Windows)
+  * Some way to quit without closing the window will be needed for fullscreen. Probably a button in the settings menu.
+* Perhaps freeze the game while settings is open?
+* BUG (windows): You have to press a key on the gamepad before it appears as an option in settings.
+* A little toast at the start that says "Press ESC to change settings"
 * Audio
   * More control over output device?
 * Netplay
