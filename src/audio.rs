@@ -1,16 +1,19 @@
 use std::collections::VecDeque;
+use std::ops::RangeInclusive;
 use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait};
-use cpal::{BufferSize, Sample, StreamConfig};
+use cpal::{
+    BufferSize, ChannelCount, Sample, SampleRate, StreamConfig, SupportedBufferSize,
+    SupportedStreamConfig, SupportedStreamConfigRange,
+};
 use ringbuf::{Consumer, Producer};
 
 use crate::settings::audio::AudioSettings;
 type SampleFormat = i16;
 
 pub struct Stream {
-    sample_format: cpal::SampleFormat,
-    stream_config: StreamConfig,
+    output_config: cpal::SupportedStreamConfig,
     stream: cpal::Stream,
     latency: u8,
     volume: Arc<Mutex<f32>>,
@@ -21,18 +24,16 @@ pub struct Stream {
 
 impl Stream {
     fn new(
-        sample_format: cpal::SampleFormat,
+        output_config: cpal::SupportedStreamConfig,
         audio_settings: &AudioSettings,
-        mut stream_config: StreamConfig,
         output_device: cpal::Device,
     ) -> Self {
         let latency = audio_settings.latency;
         let volume = Arc::new(Mutex::new(audio_settings.volume as f32 / 100.0));
         let (producer, stream, producer_history) =
-            Stream::setup_stream(&sample_format, &mut stream_config, &output_device, &volume);
+            Stream::setup_stream(&output_config, &output_device, &volume, latency);
         Self {
-            sample_format,
-            stream_config,
+            output_config,
             latency,
             volume,
             stream,
@@ -51,33 +52,38 @@ impl Stream {
     where
         T: cpal::Sample + Send + 'static,
     {
-        let sample_count_16ms = Self::calc_buffer_length(16, stream_config) as usize;
+        let sample_count_16ms = Self::latency_to_frames(16, stream_config) as usize;
         let (mut producer_2, mut consumer_2) =
             ringbuf::RingBuffer::<T>::new(sample_count_16ms).split();
 
         let zeros = vec![T::from::<SampleFormat>(&0); sample_count_16ms];
         producer_2.push_slice(zeros.as_slice());
-
+        let mut last_sample = T::from::<SampleFormat>(&0);
+        let mut sample_count = 0;
+        let channels = stream_config.channels;
         output_device
             .build_output_stream(
                 stream_config,
                 {
                     let volume = volume.clone();
                     move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-                        let mut last_sample = T::from::<SampleFormat>(&0);
                         let volume = *volume.lock().unwrap();
                         for sample in data {
-                            if let Some(sample) = consumer.pop() {
-                                last_sample = Sample::from(&sample);
-                                let _ = producer_2.push(last_sample);
-                                consumer_2.pop();
-                            } else if let Some(sample) = consumer_2.pop() {
-                                //println!("Buffer underrun using {sample} instead");
-                                last_sample = sample;
-                                let _ = producer_2
-                                    .push(Sample::from(&(Sample::to_f32(&sample) * 0.98)));
+                            if sample_count % channels == 0 {
+                                if let Some(sample) = consumer.pop() {
+                                    last_sample = Sample::from(&sample);
+                                    let _ = producer_2.push(last_sample);
+                                    consumer_2.pop();
+                                } else if let Some(sample) = consumer_2.pop() {
+                                    //println!("Buffer underrun using {sample} instead");
+                                    last_sample = sample;
+                                    let _ = producer_2
+                                        .push(Sample::from(&(Sample::to_f32(&sample) * 0.98)));
+                                }
                             }
+
                             *sample = Sample::from(&(Sample::to_f32(&last_sample) * volume));
+                            sample_count += 1;
                         }
                     }
                 },
@@ -87,16 +93,28 @@ impl Stream {
     }
 
     fn setup_stream(
-        sample_format: &cpal::SampleFormat,
-        stream_config: &mut StreamConfig,
+        output_config: &cpal::SupportedStreamConfig,
         output_device: &cpal::Device,
         volume: &Arc<Mutex<f32>>,
+        latency: u8,
     ) -> (Producer<SampleFormat>, cpal::Stream, VecDeque<i32>) {
-        stream_config.channels = 1;
+        let stream_config = &mut output_config.config();
+        if let Some(supported_latency) = Self::_get_supported_latency(output_config) {
+            let latency = if latency < *supported_latency.start() {
+                *supported_latency.start()
+            } else if latency > *supported_latency.end() {
+                *supported_latency.end()
+            } else {
+                latency
+            };
+
+            stream_config.buffer_size =
+                BufferSize::Fixed(Self::latency_to_frames(latency, stream_config));
+        };
 
         let (producer, consumer) = ringbuf::RingBuffer::<SampleFormat>::new(100_000).split();
 
-        let stream = match sample_format {
+        let stream = match output_config.sample_format() {
             cpal::SampleFormat::F32 => {
                 Self::build_internal_stream::<f32>(output_device, stream_config, volume, consumer)
             }
@@ -116,10 +134,12 @@ impl Stream {
         (producer, stream, producer_history)
     }
 
-    fn calc_buffer_length(latency: u8, stream_config: &StreamConfig) -> u32 {
-        let latency_frames =
-            ((latency as f32 / 1_000.0) * stream_config.sample_rate.0 as f32) as u32;
-        latency_frames * stream_config.channels as u32
+    fn latency_to_frames(latency: u8, stream_config: &StreamConfig) -> u32 {
+        let latency_frames = (latency as f64 / 1_000.0) * stream_config.sample_rate.0 as f64;
+        (latency_frames * stream_config.channels as f64) as u32
+    }
+    fn frames_to_latency(frames: u32, channel_count: ChannelCount, sample_rate: &SampleRate) -> u8 {
+        ((frames as u64 * 1_000) / (channel_count as u64 * sample_rate.0 as u64)) as u8
     }
 
     pub fn get_latency(&self) -> u8 {
@@ -127,13 +147,11 @@ impl Stream {
     }
 
     pub fn set_latency(&mut self, latency: u8) {
-        self.stream_config.buffer_size =
-            BufferSize::Fixed(Self::calc_buffer_length(latency, &self.stream_config));
         let (producer, stream, producer_history) = Stream::setup_stream(
-            &self.sample_format,
-            &mut self.stream_config,
+            &self.output_config,
             &self.output_device,
             &self.volume,
+            latency,
         );
         self.producer = producer;
         self.stream = stream;
@@ -145,16 +163,32 @@ impl Stream {
         *self.volume.lock().unwrap() = volume as f32 / 100.0;
     }
 
-    pub fn get_sample_rate(&self) -> u64 {
-        self.stream_config.sample_rate.0.into()
+    pub fn get_sample_rate(&self) -> u32 {
+        self.output_config.sample_rate().0
+    }
+
+    pub fn get_supported_latency(&self) -> Option<RangeInclusive<u8>> {
+        Self::_get_supported_latency(&self.output_config)
+    }
+
+    fn _get_supported_latency(output_config: &SupportedStreamConfig) -> Option<RangeInclusive<u8>> {
+        let channel_count = output_config.channels();
+        let sample_rate = &output_config.sample_rate();
+        match output_config.buffer_size() {
+            SupportedBufferSize::Range { min, max } => Some(RangeInclusive::new(
+                std::cmp::max(1, Self::frames_to_latency(*min, channel_count, sample_rate)),
+                Self::frames_to_latency(*max, channel_count, sample_rate),
+            )),
+            SupportedBufferSize::Unknown => None,
+        }
     }
 
     pub fn drain(&mut self) {
         let (producer, stream, producer_history) = Stream::setup_stream(
-            &self.sample_format,
-            &mut self.stream_config,
+            &self.output_config,
             &self.output_device,
             &self.volume,
+            self.latency,
         );
         self.producer = producer;
         self.stream = stream;
@@ -201,17 +235,39 @@ impl Audio {
         let mut supported_configs_range = output_device
             .supported_output_configs()
             .expect("error while querying configs");
-        let output_config = supported_configs_range
-            .next()
-            .expect("no supported config?!")
-            .with_max_sample_rate();
+        let preferred_sample_rate = cpal::SampleRate(44100);
+        let preferred_channels = 1;
 
-        let stream_config = output_config.config();
-        Stream::new(
-            output_config.sample_format(),
-            audio_settings,
-            stream_config,
-            output_device,
-        )
+        let backup_config = supported_configs_range.next();
+
+        let configs_supporting_preferred_sample_rate: Vec<SupportedStreamConfigRange> =
+            supported_configs_range
+                .filter(|s| {
+                    s.min_sample_rate() <= preferred_sample_rate
+                        && s.max_sample_rate() >= preferred_sample_rate
+                })
+                .collect();
+
+        let configs_supporting_preferred_sample_rate = configs_supporting_preferred_sample_rate;
+        let output_config = if !configs_supporting_preferred_sample_rate.is_empty() {
+            if let Some(config) = configs_supporting_preferred_sample_rate
+                .iter()
+                .find(|s| s.channels() == preferred_channels)
+            {
+                config.clone() //Perfect match
+            } else {
+                configs_supporting_preferred_sample_rate
+                    .get(0)
+                    .expect("It was not supposed to be empty")
+                    .clone() //Supports the preferred sample rate
+            }
+            .with_sample_rate(preferred_sample_rate)
+        } else {
+            backup_config
+                .expect("No supported config?!")
+                .with_max_sample_rate() //Next best thing...
+        };
+
+        Stream::new(output_config, audio_settings, output_device)
     }
 }

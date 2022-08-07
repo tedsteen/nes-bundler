@@ -201,7 +201,7 @@ impl GameRunner {
         state
             .nes
             .apu
-            .set_sample_rate(sound_stream.get_sample_rate());
+            .set_sample_rate(sound_stream.get_sample_rate() as u64);
 
         Self {
             state,

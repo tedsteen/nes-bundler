@@ -30,12 +30,20 @@ impl GuiComponent for AudioSettingsGui {
                         .spacing([10.0, 4.0])
                         .striped(true)
                         .show(ui, |ui| {
-                            ui.label("Latency");
-                            ui.add(
-                                Slider::new(&mut game_runner.settings.audio.latency, 1..=70)
+                            if let Some(latency_range) =
+                                game_runner.sound_stream.get_supported_latency()
+                            {
+                                ui.label("Latency");
+                                ui.add(
+                                    Slider::new(
+                                        &mut game_runner.settings.audio.latency,
+                                        latency_range,
+                                    )
                                     .suffix("ms"),
-                            );
-                            ui.end_row();
+                                );
+                                ui.end_row();
+                            }
+
                             ui.label("Volume");
                             ui.add(
                                 Slider::new(&mut game_runner.settings.audio.volume, 0..=100)
