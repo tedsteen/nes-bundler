@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use cpal::traits::{DeviceTrait, HostTrait};
 use cpal::{
     BufferSize, ChannelCount, Sample, SampleRate, StreamConfig, SupportedBufferSize,
-    SupportedStreamConfig, SupportedStreamConfigRange,
+    SupportedStreamConfig,
 };
 use ringbuf::{Consumer, Producer};
 
@@ -28,6 +28,7 @@ impl Stream {
         audio_settings: &AudioSettings,
         output_device: cpal::Device,
     ) -> Self {
+        println!("Audio config: {output_config:?}");
         let latency = audio_settings.latency;
         let volume = Arc::new(Mutex::new(audio_settings.volume as f32 / 100.0));
         let (producer, stream, producer_history) =
@@ -215,59 +216,24 @@ impl Stream {
 }
 
 pub struct Audio {
-    host: cpal::Host,
 }
 
 impl Audio {
     pub fn new() -> Self {
-        Self {
-            host: cpal::default_host(),
-        }
+        Self {}
     }
 
-    pub fn start(&self, audio_settings: &AudioSettings) -> Stream {
-        let output_device = self
-            .host
-            .default_output_device()
-            .expect("no sound output device available");
-        println!("Sound output device: {}", output_device.name().unwrap());
+    pub fn start(&self, audio_settings: &AudioSettings) -> Result<Stream, anyhow::Error> {
+        let host = cpal::default_host();
 
-        let mut supported_configs_range = output_device
-            .supported_output_configs()
-            .expect("error while querying configs");
-        let preferred_sample_rate = cpal::SampleRate(44100);
-        let preferred_channels = 1;
+    let output_device = host
+        .default_output_device()
+        .ok_or_else(|| anyhow::Error::msg("Default output device is not available"))?;
+    println!("Output device : {}", output_device.name()?);
 
-        let backup_config = supported_configs_range.next();
+    let output_config = output_device.default_output_config()?;
+    println!("Default output config : {:?}", output_config);
 
-        let configs_supporting_preferred_sample_rate: Vec<SupportedStreamConfigRange> =
-            supported_configs_range
-                .filter(|s| {
-                    s.min_sample_rate() <= preferred_sample_rate
-                        && s.max_sample_rate() >= preferred_sample_rate
-                })
-                .collect();
-
-        let configs_supporting_preferred_sample_rate = configs_supporting_preferred_sample_rate;
-        let output_config = if !configs_supporting_preferred_sample_rate.is_empty() {
-            if let Some(config) = configs_supporting_preferred_sample_rate
-                .iter()
-                .find(|s| s.channels() == preferred_channels)
-            {
-                config.clone() //Perfect match
-            } else {
-                configs_supporting_preferred_sample_rate
-                    .get(0)
-                    .expect("It was not supposed to be empty")
-                    .clone() //Supports the preferred sample rate
-            }
-            .with_sample_rate(preferred_sample_rate)
-        } else {
-            backup_config
-                .expect("No supported config?!")
-                .with_max_sample_rate() //Next best thing...
-        };
-
-        Stream::new(output_config, audio_settings, output_device)
+        Ok(Stream::new(output_config, audio_settings, output_device))
     }
 }

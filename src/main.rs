@@ -196,7 +196,7 @@ impl GameRunner {
         let mut settings: Settings = Settings::new(&build_config.default_settings);
 
         let audio = Audio::new();
-        let sound_stream = audio.start(&settings.audio);
+        let sound_stream = audio.start(&settings.audio).expect("Could not start Audio");
         let mut state = MyGameState::new();
         state
             .nes
