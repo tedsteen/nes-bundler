@@ -40,8 +40,9 @@ impl Settings {
                 settings.input.selected[1] = Rc::clone(&default_selected[1]);
             }
         }
-        settings.unwrap_or_else(|err| {
-            eprintln!("Failed to load config ({err}), falling back to default settings");
+        settings.unwrap_or_else(|_err| {
+            //TODO: Check if the error is something else than file not found and log
+            //eprintln!("Failed to load config ({err}), falling back to default settings");
             default_settings.clone()
         })
     }
