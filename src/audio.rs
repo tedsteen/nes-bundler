@@ -28,7 +28,6 @@ impl Stream {
         audio_settings: &AudioSettings,
         output_device: cpal::Device,
     ) -> Self {
-        println!("Audio config: {output_config:?}");
         let latency = audio_settings.latency;
         let volume = Arc::new(Mutex::new(audio_settings.volume as f32 / 100.0));
         let (producer, stream, producer_history) =
@@ -226,14 +225,26 @@ impl Audio {
     pub fn start(&self, audio_settings: &AudioSettings) -> Result<Stream, anyhow::Error> {
         let host = cpal::default_host();
 
-    let output_device = host
-        .default_output_device()
-        .ok_or_else(|| anyhow::Error::msg("Default output device is not available"))?;
-    println!("Output device : {}", output_device.name()?);
+        let output_device = host
+            .default_output_device()
+            .ok_or_else(|| anyhow::Error::msg("Default output device is not available"))?;
+        println!("Output device : {}", output_device.name()?);
 
-    let output_config = output_device.default_output_config()?;
-    println!("Default output config : {:?}", output_config);
+        let preferred_sample_rate = SampleRate(44100);
+        let mut output_configs_with_preferred_sample_rate = output_device.supported_output_configs().expect("No supported audio configurations")
+        .filter(|c| c.max_sample_rate() >= preferred_sample_rate && c.min_sample_rate() <= preferred_sample_rate);
+        let nice_match = output_configs_with_preferred_sample_rate.find(|c| *c.buffer_size() != SupportedBufferSize::Unknown);
 
-        Ok(Stream::new(output_config, audio_settings, output_device))
+        // Try to use the best match
+        let output_config = nice_match
+        // or else one with the preferred sample rate
+        .or_else(|| output_configs_with_preferred_sample_rate.next())
+        .map(|c| c.with_sample_rate(preferred_sample_rate))
+        // If all else fails use the default config
+        .unwrap_or_else(|| output_device.default_output_config().unwrap());
+
+        println!("Output config : {:?}", output_config);
+
+    Ok(Stream::new(output_config, audio_settings, output_device))
     }
 }
