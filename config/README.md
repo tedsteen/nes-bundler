@@ -1,13 +1,13 @@
 # Configure your bundle
 
-In order to build your bundle you need two files in this directory.  
+In order to build your bundle you need two files.  
 
-* A `build_config.yaml` containing the build configuration.
+* A `config.yaml` containing the build configuration.
 * A `nes.rom` with your game.
 
 ## Build configuration
 
-A file named `build_config.yaml` looking something like this:
+A file named `config.yaml` looking something like this:
 ```yaml
 # For all the gory details see the `BuildConfiguration`-struct in the source.
 

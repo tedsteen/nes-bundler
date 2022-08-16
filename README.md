@@ -3,7 +3,7 @@
 **Transform your NES-game into a single executable targeting your favourite OS!**
 
 Did you make a NES-game but none of your friends own a Nintendo? Don't worry.  
-Put your ROM and configuration in NES Bundler and build an executable for Mac, Windows or Linux.  
+Put your ROM and configuration in NES Bundler and build for Mac, Windows or Linux.  
 What you get is a single executable with
 * Simple UI for settings (Show and hide with ESC).
 * Re-mappable Keyboard and Gamepad input (you bundle your default mappings).
@@ -17,11 +17,9 @@ What you get is a single executable with
 ## Bundling
 
 To create a bundle you need to do the following
-* [Install Rust](https://www.rust-lang.org/tools/install).
 * [Configure a bundle](config/README.md) with your ROM and a build configuration.
-* Build `cargo build --release` your exectutable! ( use the flag `--no-default-features` to disable Netplay)
-
-If you want to target other operating systems please read the Rust documentation or find a machine with that OS and follow the steps again.
+* Download the [binary of your choice](https://github.com/tedsteen/nes-bundler/releases/)
+* Make the bundle - `./bundle.sh <config-dir> <downloaded-binary> <name-of-output-binary>` (`config-dir` containing your configuration)
 
 ## Limitations
 
@@ -32,7 +30,6 @@ If you want to target other operating systems please read the Rust documentation
 ## Future stuff/ideas/bugs/todo
 * Move this list to the issues feature in GitHub :)
 * Implement `save_state(...)`/`load_state(...)` for all the mappers.
-* Make it possible to bundle without using Rust compiler (somehow inject the ROM+config into the binary)
 * Fullscreen mode (alt+enter is standard to toggle between full screen and windowed, on Windows)
   * Some way to quit without closing the window will be needed for fullscreen. Probably a button in the settings menu.
 * Perhaps freeze the game while settings is open?

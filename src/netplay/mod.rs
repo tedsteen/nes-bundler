@@ -1,7 +1,7 @@
 use crate::{
     input::JoypadInput,
     settings::{Settings, MAX_PLAYERS},
-    Fps, MyGameState, FPS, ROM,
+    Fps, MyGameState, FPS,
 };
 use futures::{select, FutureExt};
 use futures_timer::Delay;
@@ -13,8 +13,7 @@ use matchbox_socket::{
 use rusticnes_core::nes::NesState;
 use serde::Deserialize;
 use std::{
-    collections::{hash_map::DefaultHasher, VecDeque},
-    hash::{Hash, Hasher},
+    collections::VecDeque,
     time::{Duration, Instant},
 };
 use tokio::runtime::Runtime;
@@ -187,9 +186,10 @@ pub struct Netplay {
     pub room_name: String,
     reqwest_client: reqwest::Client,
     netplay_id: String,
+    game_hash: u64,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct NetplayBuildConfiguration {
     pub default_room_name: String,
     pub netplay_id: Option<String>,
@@ -241,7 +241,7 @@ pub enum TurnOnResponse {
     Full(StaticNetplayServerConfiguration),
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub enum NetplayServerConfiguration {
     Static(StaticNetplayServerConfiguration),
     //An external server for fetching TURN credentials
@@ -249,7 +249,11 @@ pub enum NetplayServerConfiguration {
 }
 
 impl Netplay {
-    pub fn new(config: &NetplayBuildConfiguration, settings: &mut Settings) -> Self {
+    pub fn new(
+        config: &NetplayBuildConfiguration,
+        settings: &mut Settings,
+        game_hash: u64,
+    ) -> Self {
         let room_name = config.default_room_name.clone();
         let netplay_id = config
             .netplay_id
@@ -268,6 +272,7 @@ impl Netplay {
             room_name,
             reqwest_client: reqwest::Client::new(),
             netplay_id,
+            game_hash,
         }
     }
     pub fn start(&mut self, start_method: StartMethod) {
@@ -279,6 +284,7 @@ impl Netplay {
                         &mut self.rt,
                         TurnOnResponse::Full(conf.clone()),
                         start_method,
+                        self.game_hash,
                     ),
                 );
             }
@@ -324,8 +330,12 @@ impl Netplay {
                         game_state.advance(inputs);
                         match conf.try_recv() {
                             Ok(Some(Ok(resp))) => {
-                                *connecting_state =
-                                    Self::start_peering(&mut self.rt, resp, start_method.clone());
+                                *connecting_state = Self::start_peering(
+                                    &mut self.rt,
+                                    resp,
+                                    start_method.clone(),
+                                    self.game_hash,
+                                );
                             }
                             Ok(None) => (), //No result yet
                             Ok(Some(Err(err))) => {
@@ -431,6 +441,7 @@ impl Netplay {
         rt: &mut Runtime,
         resp: TurnOnResponse,
         start_method: StartMethod,
+        game_hash: u64,
     ) -> ConnectingState {
         let mut maybe_unlock_url = None;
         let conf = match resp {
@@ -450,10 +461,6 @@ impl Netplay {
             }
             IceCredentials::None => RtcIceCredentials::None,
         };
-
-        let mut game_hash = DefaultHasher::new();
-        ROM.hash(&mut game_hash);
-        let game_hash = game_hash.finish();
 
         let room = match &start_method {
             state::StartMethod::Create(name) => format!("join/{game_hash}/{}", name.clone()),

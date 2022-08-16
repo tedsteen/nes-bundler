@@ -1,6 +1,12 @@
 #![deny(clippy::all)]
 #![forbid(unsafe_code)]
 
+use std::collections::hash_map::DefaultHasher;
+use std::env;
+use std::fs::File;
+use std::hash::Hash;
+use std::io::Read;
+
 use crate::input::JoypadInput;
 use anyhow::Result;
 use audio::{Audio, Stream};
@@ -47,24 +53,36 @@ pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
         _err => Err("ouch".to_owned()),
     }
 }
+struct Bundle {
+    config: BuildConfiguration,
+    rom: Vec<u8>,
+}
 
-#[derive(Deserialize)]
+fn extract_bundle() -> Result<Bundle> {
+    let mut zip = zip::ZipArchive::new(File::open(env::current_exe()?)?)?;
+    let config: BuildConfiguration = serde_yaml::from_reader(zip.by_name("config.yaml")?)?;
+    let mut rom = Vec::new();
+    zip.by_name("rom.nes")?.read_to_end(&mut rom)?;
+    Ok(Bundle { config, rom })
+}
+
+#[derive(Deserialize, Debug)]
 pub struct BuildConfiguration {
     window_title: String,
     default_settings: Settings,
     #[cfg(feature = "netplay")]
     netplay: netplay::NetplayBuildConfiguration,
 }
-fn main() {
-    let build_config: BuildConfiguration =
-        serde_yaml::from_str(include_str!("../config/build_config.yaml")).unwrap();
+fn main() -> Result<()> {
+    let bundle = extract_bundle()
+        .map_err(|err| anyhow::Error::msg(format!("Could not extract bundle config ({err})")))?;
 
     #[cfg(feature = "netplay")]
     if std::env::args()
         .collect::<String>()
         .contains(&"--print-netplay-id".to_string())
     {
-        if let Some(id) = build_config.netplay.netplay_id {
+        if let Some(id) = bundle.config.netplay.netplay_id {
             println!("{id}");
         }
         std::process::exit(0);
@@ -74,7 +92,7 @@ fn main() {
 
     let window = {
         WindowBuilder::new()
-            .with_title(&build_config.window_title)
+            .with_title(&bundle.config.window_title)
             .with_inner_size(LogicalSize::new(WIDTH as f32 * ZOOM, HEIGHT as f32 * ZOOM))
             .with_min_inner_size(LogicalSize::new(WIDTH, HEIGHT))
             .build(&event_loop)
@@ -92,7 +110,7 @@ fn main() {
         (pixels, framework)
     };
 
-    let game_runner = GameRunner::new(pixels, &build_config);
+    let game_runner = GameRunner::new(pixels, &bundle.config, bundle.rom);
     let mut last_settings = game_runner.settings.get_hash();
     game_loop(
         event_loop,
@@ -137,14 +155,13 @@ fn main() {
 pub struct MyGameState {
     nes: NesState,
 }
-pub const ROM: &[u8] = include_bytes!("../config/rom.nes");
 
 impl MyGameState {
-    fn new() -> Self {
+    fn new(rom: Vec<u8>) -> Self {
         let rom_data = match std::env::var("ROM_FILE") {
             Ok(rom_file) => std::fs::read(&rom_file)
                 .unwrap_or_else(|_| panic!("Could not read ROM {}", rom_file)),
-            Err(_e) => ROM.to_vec(),
+            Err(_e) => rom.to_vec(),
         };
 
         let nes = load_rom(rom_data).expect("Failed to load ROM");
@@ -189,15 +206,19 @@ pub struct GameRunner {
     #[cfg(feature = "debug")]
     debug: debug::DebugSettings,
 }
+
 impl GameRunner {
-    pub fn new(pixels: Pixels, build_config: &BuildConfiguration) -> Self {
+    pub fn new(pixels: Pixels, build_config: &BuildConfiguration, rom: Vec<u8>) -> Self {
         let inputs = Inputs::new(build_config.default_settings.input.clone());
         #[allow(unused_mut)] // needs to be mut for netplay feature
         let mut settings: Settings = Settings::new(&build_config.default_settings);
 
+        let mut game_hash = DefaultHasher::new();
+        rom.hash(&mut game_hash);
+
         let audio = Audio::new();
         let sound_stream = audio.start(&settings.audio).expect("Could not start Audio");
-        let mut state = MyGameState::new();
+        let mut state = MyGameState::new(rom);
         state
             .nes
             .apu
@@ -208,7 +229,11 @@ impl GameRunner {
             sound_stream,
             pixels,
             #[cfg(feature = "netplay")]
-            netplay: netplay::Netplay::new(&build_config.netplay, &mut settings),
+            netplay: netplay::Netplay::new(
+                &build_config.netplay,
+                &mut settings,
+                std::hash::Hasher::finish(&game_hash),
+            ),
             settings,
             inputs,
             #[cfg(feature = "debug")]
