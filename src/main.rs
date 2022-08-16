@@ -4,9 +4,8 @@
 use std::collections::hash_map::DefaultHasher;
 use std::env;
 use std::fs::File;
-use std::hash::{Hash};
+use std::hash::Hash;
 use std::io::Read;
-use std::path::PathBuf;
 
 use crate::input::JoypadInput;
 use anyhow::Result;
@@ -59,8 +58,8 @@ struct Bundle {
     rom: Vec<u8>,
 }
 
-fn extract_bundle(self_path: &PathBuf) -> Result<Bundle> {
-    let mut zip = zip::ZipArchive::new(File::open(self_path)?)?;
+fn extract_bundle() -> Result<Bundle> {
+    let mut zip = zip::ZipArchive::new(File::open(env::current_exe()?)?)?;
     let config: BuildConfiguration = serde_yaml::from_reader(zip.by_name("config.yaml")?)?;
     let mut rom = Vec::new();
     zip.by_name("rom.nes")?.read_to_end(&mut rom)?;
@@ -75,8 +74,9 @@ pub struct BuildConfiguration {
     netplay: netplay::NetplayBuildConfiguration,
 }
 fn main() -> Result<()> {
-    let bundle = extract_bundle(&env::current_exe()?)
+    let bundle = extract_bundle()
         .map_err(|err| anyhow::Error::msg(format!("Could not extract bundle config ({err})")))?;
+
     #[cfg(feature = "netplay")]
     if std::env::args()
         .collect::<String>()
@@ -229,7 +229,11 @@ impl GameRunner {
             sound_stream,
             pixels,
             #[cfg(feature = "netplay")]
-            netplay: netplay::Netplay::new(&build_config.netplay, &mut settings, std::hash::Hasher::finish(&game_hash)),
+            netplay: netplay::Netplay::new(
+                &build_config.netplay,
+                &mut settings,
+                std::hash::Hasher::finish(&game_hash),
+            ),
             settings,
             inputs,
             #[cfg(feature = "debug")]
