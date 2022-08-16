@@ -10,14 +10,17 @@ function cleanup {
 }
 
 # Pack the config
-zip -jT config.zip $CONF_DIR/config.yaml $CONF_DIR/rom.nes
+zip -jT config.zip $CONF_DIR/config.yaml $CONF_DIR/rom.nes &> /dev/null
 trap cleanup EXIT
 
 # Merge with binary
 cat $NES_BUNDLER_BINARY config.zip > $NAME
 
 # Adjust self-extracting exe
-zip -A $NAME
+zip -A $NAME &> /dev/null
 
 # Make it executable
 chmod +x $NAME
+
+echo "Finished!"
+echo "./$NAME"

@@ -19,8 +19,7 @@ What you get is a single executable with
 To create a bundle you need to do the following
 * [Configure a bundle](config/README.md) with your ROM and a build configuration.
 * Download the [binary of your choice](https://github.com/tedsteen/nes-bundler/releases/)
-* Run `./bundle.sh <config-dir> <downloaded-binary> <name-of-output-binary>` (`config-dir` should contain your configuration)
-* Now there should be an executable named `<name-of-output-binary>` with your game in it!
+* Make the bundle - `./bundle.sh <config-dir> <downloaded-binary> <name-of-output-binary>` (`config-dir` containing your configuration)
 
 ## Limitations
 
@@ -31,7 +30,6 @@ To create a bundle you need to do the following
 ## Future stuff/ideas/bugs/todo
 * Move this list to the issues feature in GitHub :)
 * Implement `save_state(...)`/`load_state(...)` for all the mappers.
-* Make it possible to bundle without using Rust compiler (somehow inject the ROM+config into the binary)
 * Fullscreen mode (alt+enter is standard to toggle between full screen and windowed, on Windows)
   * Some way to quit without closing the window will be needed for fullscreen. Probably a button in the settings menu.
 * Perhaps freeze the game while settings is open?
