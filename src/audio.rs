@@ -214,8 +214,7 @@ impl Stream {
     }
 }
 
-pub struct Audio {
-}
+pub struct Audio {}
 
 impl Audio {
     pub fn new() -> Self {
@@ -231,20 +230,26 @@ impl Audio {
         println!("Output device : {}", output_device.name()?);
 
         let preferred_sample_rate = SampleRate(44100);
-        let mut output_configs_with_preferred_sample_rate = output_device.supported_output_configs().expect("No supported audio configurations")
-        .filter(|c| c.max_sample_rate() >= preferred_sample_rate && c.min_sample_rate() <= preferred_sample_rate);
-        let nice_match = output_configs_with_preferred_sample_rate.find(|c| *c.buffer_size() != SupportedBufferSize::Unknown);
+        let mut output_configs_with_preferred_sample_rate = output_device
+            .supported_output_configs()
+            .expect("No supported audio configurations")
+            .filter(|c| {
+                c.max_sample_rate() >= preferred_sample_rate
+                    && c.min_sample_rate() <= preferred_sample_rate
+            });
+        let nice_match = output_configs_with_preferred_sample_rate
+            .find(|c| *c.buffer_size() != SupportedBufferSize::Unknown);
 
         // Try to use the best match
         let output_config = nice_match
-        // or else one with the preferred sample rate
-        .or_else(|| output_configs_with_preferred_sample_rate.next())
-        .map(|c| c.with_sample_rate(preferred_sample_rate))
-        // If all else fails use the default config
-        .unwrap_or_else(|| output_device.default_output_config().unwrap());
+            // or else one with the preferred sample rate
+            .or_else(|| output_configs_with_preferred_sample_rate.next())
+            .map(|c| c.with_sample_rate(preferred_sample_rate))
+            // If all else fails use the default config
+            .unwrap_or_else(|| output_device.default_output_config().unwrap());
 
         println!("Output config : {:?}", output_config);
 
-    Ok(Stream::new(output_config, audio_settings, output_device))
+        Ok(Stream::new(output_config, audio_settings, output_device))
     }
 }
