@@ -1,14 +1,23 @@
 #!/bin/bash
 # Where to find the config
 CONF_DIR=${1:-config}
+NES_BUNDLER_BINARY=${2:-target/release/nes-bundler}
 # What to name the final binary
-NAME=${2:-out}
+NAME=${3:-out}
+
+function cleanup {
+    rm config.zip
+}
 
 # Pack the config
-zip -jT $CONF_DIR/config.zip $CONF_DIR/config.yaml $CONF_DIR/rom.nes
+zip -jT config.zip $CONF_DIR/config.yaml $CONF_DIR/rom.nes
+trap cleanup EXIT
+
 # Merge with binary
-cat target/release/nes-bundler $CONF_DIR/config.zip > $NAME
+cat $NES_BUNDLER_BINARY config.zip > $NAME
+
 # Adjust self-extracting exe
 zip -A $NAME
+
 # Make it executable
 chmod +x $NAME

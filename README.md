@@ -19,7 +19,7 @@ What you get is a single executable with
 To create a bundle you need to do the following
 * [Configure a bundle](config/README.md) with your ROM and a build configuration.
 * Download the [binary of your choice](https://github.com/tedsteen/nes-bundler/releases/)
-* Run `./bundle.sh <config-dir> <downloaded-binary> <name-of-output-binary>` (`config-dir` is the directory containing your configuration)
+* Run `./bundle.sh <config-dir> <downloaded-binary> <name-of-output-binary>` (`config-dir` should contain your configuration)
 * Now there should be an executable named `<name-of-output-binary>` with your game in it!
 
 ## Limitations
