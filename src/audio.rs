@@ -2,9 +2,9 @@ use std::collections::VecDeque;
 use std::ops::RangeInclusive;
 use std::sync::{Arc, Mutex};
 
-use cpal::traits::{DeviceTrait, HostTrait};
+use cpal::traits::DeviceTrait;
 use cpal::{
-    BufferSize, ChannelCount, Sample, SampleRate, StreamConfig, SupportedBufferSize,
+    BufferSize, ChannelCount, Device, Sample, SampleRate, StreamConfig, SupportedBufferSize,
     SupportedStreamConfig,
 };
 use ringbuf::{Consumer, Producer};
@@ -102,8 +102,8 @@ impl Stream {
         if let Some(supported_latency) = Self::_get_supported_latency(output_config) {
             let latency = if latency < *supported_latency.start() {
                 *supported_latency.start()
-            } else if latency > *supported_latency.end() {
-                *supported_latency.end()
+            } else if latency >= *supported_latency.end() {
+                *supported_latency.end() - 1
             } else {
                 latency
             };
@@ -212,6 +212,19 @@ impl Stream {
             self.producer.push_slice(samples);
         }
     }
+
+    pub(crate) fn set_output_device(&mut self, output_device: Device) {
+        let (producer, stream, producer_history) = Stream::setup_stream(
+            &self.output_config,
+            &output_device,
+            &self.volume,
+            self.latency,
+        );
+        self.output_device = output_device;
+        self.producer = producer;
+        self.stream = stream;
+        self.producer_history = producer_history;
+    }
 }
 
 pub struct Audio {}
@@ -221,14 +234,11 @@ impl Audio {
         Self {}
     }
 
-    pub fn start(&self, audio_settings: &AudioSettings) -> Result<Stream, anyhow::Error> {
-        let host = cpal::default_host();
-
-        let output_device = host
-            .default_output_device()
-            .ok_or_else(|| anyhow::Error::msg("Default output device is not available"))?;
-        println!("Output device : {}", output_device.name()?);
-
+    pub fn start(
+        &self,
+        output_device: Device,
+        audio_settings: &AudioSettings,
+    ) -> Result<Stream, anyhow::Error> {
         let preferred_sample_rate = SampleRate(44100);
         let mut output_configs_with_preferred_sample_rate = output_device
             .supported_output_configs()

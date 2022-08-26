@@ -35,8 +35,6 @@ To create a bundle you need to do the following
 * Perhaps freeze the game while settings is open?
 * BUG (windows): You have to press a key on the gamepad before it appears as an option in settings.
 * A little toast at the start that says "Press ESC to change settings"
-* Audio
-  * More control over output device?
 * Netplay
   * Save and restore session - save game state every 100th or so frame (when all peers have reached that 100th frame).
   * More control on who becomes P1 and P2 etc.
