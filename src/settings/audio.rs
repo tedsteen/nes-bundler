@@ -4,4 +4,5 @@ use serde::{Deserialize, Serialize};
 pub struct AudioSettings {
     pub latency: u8,
     pub volume: u8,
+    pub output_device: Option<String>,
 }
