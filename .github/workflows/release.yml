@@ -45,14 +45,14 @@ jobs:
       - name: Build
         run: cargo build --release --target i686-pc-windows-msvc
       
-      - name: Rename
-        run: move target/i686-pc-windows-msvc/release/nes-bundler.exe nes-bundler-i686-pc-windows-msvc.exe
+      - name: Copy
+        run: copy target/i686-pc-windows-msvc/release/nes-bundler.exe nes-bundler-i686-pc-windows-msvc.exe
       
-      #- name: Build (no Netplay)
-      #  run: cargo build --release --no-default-features --target i686-pc-windows-msvc
-      #
-      #- name: Rename (no Netplay)
-      #  run: move target/i686-pc-windows-msvc/release/nes-bundler.exe nes-bundler-no-netplay-i686-pc-windows-msvc.exe
+      - name: Build (no Netplay)
+        run: cargo build --release --no-default-features --target i686-pc-windows-msvc
+      
+      - name: Copy (no Netplay)
+        run: copy target/i686-pc-windows-msvc/release/nes-bundler.exe nes-bundler-no-netplay-i686-pc-windows-msvc.exe
       
       - name: Release
         uses: softprops/action-gh-release@v1
@@ -60,7 +60,7 @@ jobs:
         with:
           files: |
             nes-bundler-i686-pc-windows-msvc.exe
-#            nes-bundler-no-netplay-i686-pc-windows-msvc.exe
+            nes-bundler-no-netplay-i686-pc-windows-msvc.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
