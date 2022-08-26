@@ -149,8 +149,8 @@ fn main() -> Result<()> {
                     .set_volume(game_runner.settings.audio.volume);
 
                 last_settings = curr_settings;
-                if let anyhow::private::Err(err) = game_runner.settings.save() {
-                    eprintln!("Failed to save the settings: {}", err);
+                if game_runner.settings.save().is_err() {
+                    eprintln!("Failed to save the settings");
                 }
             }
             if !game_runner.handle(event, &mut g.game.1) {
