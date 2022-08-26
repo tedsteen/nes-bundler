@@ -17,18 +17,18 @@ jobs:
         run: sudo apt install libudev-dev libasound2-dev
 
       - name: Build
-        run: cargo build --release --target x86_64-unknown-linux-gnu && mv target/x86_64-unknown-linux-gnu/release/nes-bundler target/release/nes-bundler-x86_64-unknown-linux-gnu
+        run: cargo build --release --target x86_64-unknown-linux-gnu && mv target/x86_64-unknown-linux-gnu/release/nes-bundler nes-bundler-x86_64-unknown-linux-gnu
       
       - name: Build (no Netplay)
-        run: cargo build --release --target x86_64-unknown-linux-gnu --no-default-features && mv target/x86_64-unknown-linux-gnu/release/nes-bundler target/release/nes-bundler-no-netplay-x86_64-unknown-linux-gnu
+        run: cargo build --release --target x86_64-unknown-linux-gnu --no-default-features && mv target/x86_64-unknown-linux-gnu/release/nes-bundler nes-bundler-no-netplay-x86_64-unknown-linux-gnu
 
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            target/release/nes-bundler-x86_64-unknown-linux-gnu
-            target/release/nes-bundler-no-netplay-x86_64-unknown-linux-gnu
+            nes-bundler-x86_64-unknown-linux-gnu
+            nes-bundler-no-netplay-x86_64-unknown-linux-gnu
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -46,21 +46,21 @@ jobs:
         run: cargo build --release --target i686-pc-windows-msvc
       
       - name: Rename
-        run: move target/i686-pc-windows-msvc/release/nes-bundler.exe target/release/nes-bundler-i686-pc-windows-msvc.exe
+        run: move target/i686-pc-windows-msvc/release/nes-bundler.exe nes-bundler-i686-pc-windows-msvc.exe
       
       - name: Build (no Netplay)
         run: cargo build --release --no-default-features --target i686-pc-windows-msvc
       
       - name: Rename (no Netplay)
-        run: move target/i686-pc-windows-msvc/release/nes-bundler.exe target/release/nes-bundler-no-netplay-i686-pc-windows-msvc.exe
+        run: move target/i686-pc-windows-msvc/release/nes-bundler.exe nes-bundler-no-netplay-i686-pc-windows-msvc.exe
       
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            target/release/nes-bundler-i686-pc-windows-msvc.exe
-            target/release/nes-bundler-no-netplay-i686-pc-windows-msvc.exe
+            nes-bundler-i686-pc-windows-msvc.exe
+            nes-bundler-no-netplay-i686-pc-windows-msvc.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -75,18 +75,18 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build
-        run: cargo build --release --target x86_64-apple-darwin && mv target/x86_64-apple-darwin/release/nes-bundler target/release/nes-bundler-x86_64-apple-darwin
+        run: cargo build --release --target x86_64-apple-darwin && mv target/x86_64-apple-darwin/release/nes-bundler nes-bundler-x86_64-apple-darwin
       
       - name: Build (no Netplay)
-        run: cargo build --release --no-default-features --target x86_64-apple-darwin && mv target/x86_64-apple-darwin/release/nes-bundler target/release/nes-bundler-no-netplay-x86_64-apple-darwin
+        run: cargo build --release --no-default-features --target x86_64-apple-darwin && mv target/x86_64-apple-darwin/release/nes-bundler nes-bundler-no-netplay-x86_64-apple-darwin
 
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            target/release/nes-bundler-x86_64-apple-darwin
-            target/release/nes-bundler-no-netplay-x86_64-apple-darwin
+            nes-bundler-x86_64-apple-darwin
+            nes-bundler-no-netplay-x86_64-apple-darwin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   
@@ -103,17 +103,17 @@ jobs:
           targets: aarch64-apple-darwin
 
       - name: Build
-        run: cargo build --release --target aarch64-apple-darwin && mv target/aarch64-apple-darwin/release/nes-bundler target/release/nes-bundler-aarch64-apple-darwin
+        run: cargo build --release --target aarch64-apple-darwin && mv target/aarch64-apple-darwin/release/nes-bundler nes-bundler-aarch64-apple-darwin
       
       - name: Build (no Netplay)
-        run: cargo build --release --no-default-features --target aarch64-apple-darwin && mv target/aarch64-apple-darwin/release/nes-bundler target/release/nes-bundler-no-netplay-aarch64-apple-darwin
+        run: cargo build --release --no-default-features --target aarch64-apple-darwin && mv target/aarch64-apple-darwin/release/nes-bundler nes-bundler-no-netplay-aarch64-apple-darwin
 
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            target/release/nes-bundler-aarch64-apple-darwin
-            target/release/nes-bundler-no-netplay-aarch64-apple-darwin
+            nes-bundler-aarch64-apple-darwin
+            nes-bundler-no-netplay-aarch64-apple-darwin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
