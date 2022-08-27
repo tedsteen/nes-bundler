@@ -1,119 +1,79 @@
-name: Build NES Bundler
+name: Release
 
-on: [push]
+on:
+  push:
+    tags:
+      - 'v*'
 
 jobs:
-  build-x86_64-unknown-linux-gnu:
+  create_release:
+    name: Create Release
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Install latest rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      
-      - name: Install dependencies
-        run: sudo apt install libudev-dev libasound2-dev
-
-      - name: Build
-        run: cargo build --release --target x86_64-unknown-linux-gnu && mv target/x86_64-unknown-linux-gnu/release/nes-bundler nes-bundler-x86_64-unknown-linux-gnu
-      
-      - name: Build (no Netplay)
-        run: cargo build --release --target x86_64-unknown-linux-gnu --no-default-features && mv target/x86_64-unknown-linux-gnu/release/nes-bundler nes-bundler-no-netplay-x86_64-unknown-linux-gnu
-
-      - name: Release
+      - name: Create Release
+        id: create_release
         uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: |
-            nes-bundler-x86_64-unknown-linux-gnu
-            nes-bundler-no-netplay-x86_64-unknown-linux-gnu
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-i686-pc-windows-msvc:
-    runs-on: windows-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Install latest rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build
-        run: cargo build --release --target i686-pc-windows-msvc
-      
-      - name: Copy
-        run: copy target/i686-pc-windows-msvc/release/nes-bundler.exe nes-bundler-i686-pc-windows-msvc.exe
-      
-      - name: Build (no Netplay)
-        run: cargo build --release --no-default-features --target i686-pc-windows-msvc
-      
-      - name: Copy (no Netplay)
-        run: copy target/i686-pc-windows-msvc/release/nes-bundler.exe nes-bundler-no-netplay-i686-pc-windows-msvc.exe
-      
-      - name: Release
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: |
-            nes-bundler-i686-pc-windows-msvc.exe
-            nes-bundler-no-netplay-i686-pc-windows-msvc.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-x86_64-apple-darwin:
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Install latest rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build
-        run: cargo build --release --target x86_64-apple-darwin && mv target/x86_64-apple-darwin/release/nes-bundler nes-bundler-x86_64-apple-darwin
-      
-      - name: Build (no Netplay)
-        run: cargo build --release --no-default-features --target x86_64-apple-darwin && mv target/x86_64-apple-darwin/release/nes-bundler nes-bundler-no-netplay-x86_64-apple-darwin
-
-      - name: Release
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: |
-            nes-bundler-x86_64-apple-darwin
-            nes-bundler-no-netplay-x86_64-apple-darwin
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
   
-  build-aarch64-apple-darwin:
-    runs-on: macos-latest
-
+  build_release:
+    name: Build ${{ matrix.name }} (${{ matrix.target }})
+    needs: create_release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        name: [
+          linux,
+          windows,
+          macos-x86,
+          macos-arm
+        ]
+        include:
+          - name: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - name: windows
+            os: windows-latest
+            target: i686-pc-windows-msvc
+            file-ending: ".exe"
+          - name: macos-x86
+            os: macos-latest
+            target: x86_64-apple-darwin
+          - name: macos-arm
+            os: macos-latest
+            target: aarch64-apple-darwin
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+    - name: Checkout
+      uses: actions/checkout@v3
+    
+    - name: Install latest rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+    
+    - name: Install dependencies
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      run: sudo apt install libudev-dev libasound2-dev
+    
+    - name: Build
+      run: cargo install --target ${{ matrix.target }} --path . --root ./out
 
-      - name: Install latest rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin
+    - name: Rename
+      run: cp out/bin/nes-bundler${{ matrix.file-ending }} nes-bundler-${{ matrix.name }}-${{ github.ref_name }}${{ matrix.file-ending }}
+    
+    - name: Build (no Netplay)
+      run: cargo install --target ${{ matrix.target }} --no-default-features --path . --root ./out
 
-      - name: Build
-        run: cargo build --release --target aarch64-apple-darwin && mv target/aarch64-apple-darwin/release/nes-bundler nes-bundler-aarch64-apple-darwin
-      
-      - name: Build (no Netplay)
-        run: cargo build --release --no-default-features --target aarch64-apple-darwin && mv target/aarch64-apple-darwin/release/nes-bundler nes-bundler-no-netplay-aarch64-apple-darwin
+    - name: Rename
+      run: cp out/bin/nes-bundler${{ matrix.file-ending }} nes-bundler-${{ matrix.name }}-no-netplay-${{ github.ref_name }}${{ matrix.file-ending }}
 
-      - name: Release
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: |
-            nes-bundler-aarch64-apple-darwin
-            nes-bundler-no-netplay-aarch64-apple-darwin
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ needs.create_release.outputs.tag-name }}
+        files: |
+          nes-bundler-${{ matrix.name }}-${{ github.ref_name }}${{ matrix.file-ending }}
+          nes-bundler-${{ matrix.name }}-no-netplay-${{ github.ref_name }}${{ matrix.file-ending }}

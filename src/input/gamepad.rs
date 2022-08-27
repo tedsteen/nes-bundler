@@ -5,6 +5,7 @@ use crate::{
 };
 use gilrs::{Button, Event, EventType, GamepadId, Gilrs};
 use std::{
+    cell::RefCell,
     collections::{HashMap, HashSet},
     rc::Rc,
 };
@@ -36,12 +37,24 @@ pub struct Gamepads {
 }
 
 impl Gamepads {
-    pub fn new() -> Self {
-        Gamepads {
-            gilrs: Gilrs::new().unwrap(),
+    pub fn new(input_settings: &mut InputSettings) -> Self {
+        let gilrs = Gilrs::new().unwrap();
+        let available_gamepads = gilrs
+            .gamepads()
+            .map(|(id, _)| id)
+            .collect::<HashSet<GamepadId>>();
+
+        let mut res = Gamepads {
+            gilrs,
             all: HashMap::new(),
             id_map: HashMap::new(),
+        };
+
+        //Setup configurations for already connected gamepads
+        for gamepad_id in available_gamepads {
+            res.setup_gamepad_config(gamepad_id, input_settings);
         }
+        res
     }
 
     fn map_id(&mut self, gamepad_id: GamepadId) -> &InputId {
@@ -66,24 +79,11 @@ impl Gamepads {
             ..
         }) = self.gilrs.next_event()
         {
-            let id = self.map_id(gamepad_id).clone();
-
             match event {
                 EventType::Connected => {
-                    self.get_or_create_gamepad(gamepad_id).disconnected = false;
-                    let conf = input_settings.get_or_create_config(
-                        &id,
-                        input::InputConfiguration {
-                            name: format!("Gamepad {}", gamepad_id),
-                            id: id.clone(),
-                            kind: InputConfigurationKind::Gamepad(
-                                input_settings.default_gamepad_mapping,
-                            ),
-                        },
-                    );
+                    let conf = self.setup_gamepad_config(gamepad_id, input_settings);
 
                     // Automatically select a gamepad if it's connected and keyboard is currently selected.
-                    let conf = Rc::clone(conf);
                     if let InputConfigurationKind::Keyboard(_) =
                         Rc::clone(&input_settings.selected[0]).borrow().kind
                     {
@@ -112,6 +112,24 @@ impl Gamepads {
             }
             //println!("{:?} New event from {}: {:?}", time, id, event);
         }
+    }
+
+    fn setup_gamepad_config(
+        &mut self,
+        gamepad_id: GamepadId,
+        input_settings: &mut InputSettings,
+    ) -> Rc<RefCell<input::InputConfiguration>> {
+        self.get_or_create_gamepad(gamepad_id).disconnected = false;
+        let id = self.map_id(gamepad_id);
+        let conf = input_settings.get_or_create_config(
+            &id,
+            input::InputConfiguration {
+                name: format!("Gamepad {}", gamepad_id),
+                id: id.clone(),
+                kind: InputConfigurationKind::Gamepad(input_settings.default_gamepad_mapping),
+            },
+        );
+        Rc::clone(conf)
     }
 
     pub fn get_joypad(&mut self, id: &InputId, mapping: &JoypadGamepadMapping) -> JoypadInput {

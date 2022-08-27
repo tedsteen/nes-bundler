@@ -235,9 +235,13 @@ impl GameRunner {
     }
 
     pub fn new(pixels: Pixels, build_config: &BuildConfiguration, rom: Vec<u8>) -> Self {
-        let inputs = Inputs::new(build_config.default_settings.input.clone());
         #[allow(unused_mut)] // needs to be mut for netplay feature
         let mut settings: Settings = Settings::new(&build_config.default_settings);
+
+        let inputs = Inputs::new(
+            build_config.default_settings.input.selected.clone(),
+            &mut settings.input,
+        );
 
         let mut game_hash = DefaultHasher::new();
         rom.hash(&mut game_hash);
