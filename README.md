@@ -16,10 +16,19 @@ What you get is a single executable with
 
 ## Bundling
 
-To create a bundle you need to do the following
-* [Configure a bundle](config/README.md) with your ROM and a build configuration.
+To create a bundle you first need to [configure it](config/README.md) with your ROM and a build configuration.  
+After that you can either ship your game with the configuration inside the executable or next to it.
+### Next to it (the easy way)
+
+* Put your configuration in a zip-file called `bundle.zip`
 * Download the [binary of your choice](https://github.com/tedsteen/nes-bundler/releases/)
-* Make the bundle - `./bundle.sh <config-dir> <downloaded-binary> <name-of-output-binary>` (`config-dir` containing your configuration)
+* Run the executable next to the bundle!
+
+### Inside it (the not so easy way)
+
+* [Install Rust](https://www.rust-lang.org/tools/install).
+* Make sure your bundle configuration is in the config directory.
+* Build with the `static bundle`-feature enabled `cargo build --release --features static-bundle`. Enable the `netplay`-feature for Netplay.
 
 ## Limitations
 
@@ -40,5 +49,6 @@ To create a bundle you need to do the following
   * More control on who becomes P1 and P2 etc.
   * Make it possible to wait for peers to reconnect if disconnected.
 * More customizable UI.
+* A hosted bundling service where you can drop your config and get binaries?
 * wasm?
 * ...
