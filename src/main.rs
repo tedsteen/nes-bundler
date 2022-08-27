@@ -2,7 +2,6 @@
 #![forbid(unsafe_code)]
 
 use std::collections::hash_map::DefaultHasher;
-use std::env;
 use std::fs::File;
 use std::hash::Hash;
 use std::io::Read;
@@ -60,12 +59,26 @@ struct Bundle {
     rom: Vec<u8>,
 }
 
+fn get_static_bundle() -> Option<Bundle> {
+    #[cfg(feature = "static-bundle")]
+    return Some(Bundle {
+        config: serde_yaml::from_str(include_str!("../config/config.yaml")).unwrap(),
+        rom: include_bytes!("../config/rom.nes").to_vec(),
+    });
+    #[cfg(not(feature = "static-bundle"))]
+    return None;
+}
+
 fn extract_bundle() -> Result<Bundle> {
-    let mut zip = zip::ZipArchive::new(File::open(env::current_exe()?)?)?;
-    let config: BuildConfiguration = serde_yaml::from_reader(zip.by_name("config.yaml")?)?;
-    let mut rom = Vec::new();
-    zip.by_name("rom.nes")?.read_to_end(&mut rom)?;
-    Ok(Bundle { config, rom })
+    if let Some(bundle) = get_static_bundle() {
+        Ok(bundle)
+    } else {
+        let mut zip = zip::ZipArchive::new(File::open("bundle.zip")?)?;
+        let config: BuildConfiguration = serde_yaml::from_reader(zip.by_name("config.yaml")?)?;
+        let mut rom = Vec::new();
+        zip.by_name("rom.nes")?.read_to_end(&mut rom)?;
+        Ok(Bundle { config, rom })
+    }
 }
 
 #[derive(Deserialize, Debug)]
