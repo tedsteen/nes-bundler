@@ -4,7 +4,7 @@ use egui::{ClippedPrimitive, Context, TexturesDelta};
 use egui_wgpu::renderer::{Renderer, ScreenDescriptor};
 use egui_winit::winit::event::VirtualKeyCode;
 use pixels::{wgpu, PixelsContext};
-use winit::{window::Window, event_loop::EventLoopWindowTarget};
+use winit::{event_loop::EventLoopWindowTarget, window::Window};
 
 mod audio;
 #[cfg(feature = "debug")]
@@ -30,7 +30,13 @@ pub struct Framework {
 // Render egui over pixels
 impl Framework {
     /// Create egui.
-    pub fn new<T>(event_loop: &EventLoopWindowTarget<T>, width: u32, height: u32, scale_factor: f32, pixels: &pixels::Pixels) -> Self {
+    pub fn new<T>(
+        event_loop: &EventLoopWindowTarget<T>,
+        width: u32,
+        height: u32,
+        scale_factor: f32,
+        pixels: &pixels::Pixels,
+    ) -> Self {
         let max_texture_size = pixels.device().limits().max_texture_dimension_2d as usize;
 
         let egui_ctx = Context::default();

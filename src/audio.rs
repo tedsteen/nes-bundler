@@ -2,12 +2,12 @@ use std::collections::VecDeque;
 use std::ops::RangeInclusive;
 use std::sync::{Arc, Mutex};
 
-use cpal::traits::DeviceTrait;
+use cpal::traits::{DeviceTrait, HostTrait};
 use cpal::{
     BufferSize, ChannelCount, Device, Sample, SampleRate, StreamConfig, SupportedBufferSize,
     SupportedStreamConfig,
 };
-use rtrb::{RingBuffer, Consumer, Producer};
+use rtrb::{Consumer, Producer, RingBuffer};
 
 use crate::settings::audio::AudioSettings;
 type SampleFormat = i16;
@@ -53,8 +53,7 @@ impl Stream {
         T: cpal::Sample + Send + 'static,
     {
         let sample_count_16ms = Self::latency_to_frames(16, stream_config) as usize;
-        let (mut producer_2, mut consumer_2) =
-        RingBuffer::<T>::new(sample_count_16ms);
+        let (mut producer_2, mut consumer_2) = RingBuffer::<T>::new(sample_count_16ms);
 
         let zeros = vec![T::from::<SampleFormat>(&0); sample_count_16ms];
         if let Ok(chunks) = producer_2.write_chunk_uninit(zeros.len()) {
@@ -221,32 +220,64 @@ impl Stream {
         }
     }
 
-    pub(crate) fn set_output_device(&mut self, output_device: Device) {
-        let (producer, stream, producer_history) = Stream::setup_stream(
-            &self.output_config,
-            &output_device,
-            &self.volume,
-            self.latency,
-        );
-        self.output_device = output_device;
-        self.producer = producer;
-        self.stream = stream;
-        self.producer_history = producer_history;
+    pub(crate) fn set_output_device(&mut self, output_device_name: Option<String>) {
+        if self.get_output_device_name() != output_device_name.clone().unwrap_or_default() {
+            let output_device = Audio::get_output_device(output_device_name);
+            let (producer, stream, producer_history) = Stream::setup_stream(
+                &self.output_config,
+                &output_device,
+                &self.volume,
+                self.latency,
+            );
+            self.output_device = output_device;
+            self.producer = producer;
+            self.stream = stream;
+            self.producer_history = producer_history;
+        }
+    }
+    pub(crate) fn get_output_device_name(&self) -> String {
+        self.output_device.name().unwrap()
     }
 }
 
-pub struct Audio {}
+pub struct Audio {
+    output_device: Option<String>,
+}
 
 impl Audio {
-    pub fn new() -> Self {
-        Self {}
+    pub fn get_available_output_device_names() -> Vec<String> {
+        cpal::default_host()
+            .output_devices()
+            .unwrap()
+            .map(|d| d.name().unwrap())
+            .collect()
+    }
+    pub fn get_default_device_name() -> Option<String> {
+        cpal::default_host()
+            .default_output_device()
+            .map(|d| d.name().unwrap())
+    }
+    fn get_output_device(output_device: Option<String>) -> Device {
+        output_device
+            .and_then(|device_name| {
+                let host = cpal::default_host();
+                if let Ok(mut output_devices) = host.output_devices() {
+                    output_devices
+                        .find(|output_device| output_device.name().unwrap() == device_name)
+                } else {
+                    None
+                }
+            })
+            .or_else(|| cpal::default_host().default_output_device())
+            .expect("No audio output device found :(")
     }
 
-    pub fn start(
-        &self,
-        output_device: Device,
-        audio_settings: &AudioSettings,
-    ) -> Result<Stream, anyhow::Error> {
+    pub fn new(output_device: Option<String>) -> Self {
+        Self { output_device }
+    }
+
+    pub fn start(&self, audio_settings: &AudioSettings) -> Result<Stream, anyhow::Error> {
+        let output_device = Audio::get_output_device(self.output_device.clone());
         let preferred_sample_rate = SampleRate(44100);
         let mut output_configs_with_preferred_sample_rate = output_device
             .supported_output_configs()

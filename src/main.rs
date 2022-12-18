@@ -10,8 +10,6 @@ use crate::input::JoypadInput;
 use anyhow::Result;
 use audio::{Audio, Stream};
 
-use cpal::traits::{DeviceTrait, HostTrait};
-use cpal::Device;
 use game_loop::game_loop;
 
 use gui::Framework;
@@ -119,8 +117,13 @@ fn main() -> Result<()> {
         let scale_factor = window.scale_factor() as f32;
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
         let pixels = Pixels::new(WIDTH, HEIGHT, surface_texture).expect("No pixels available");
-        let framework =
-            Framework::new(&event_loop, window_size.width, window_size.height, scale_factor, &pixels);
+        let framework = Framework::new(
+            &event_loop,
+            window_size.width,
+            window_size.height,
+            scale_factor,
+            &pixels,
+        );
 
         (pixels, framework)
     };
@@ -146,12 +149,19 @@ fn main() -> Result<()> {
             let game_runner = &mut g.game.0;
             let curr_settings = game_runner.settings.get_hash();
             if last_settings != curr_settings {
-                let device_changed = true;
-                if device_changed {
+                if game_runner.sound_stream.get_output_device_name()
+                    != game_runner
+                        .settings
+                        .audio
+                        .output_device
+                        .clone()
+                        .unwrap_or_default()
+                {
                     game_runner
                         .sound_stream
-                        .set_output_device(GameRunner::get_output_device(&game_runner.settings))
+                        .set_output_device(game_runner.settings.audio.output_device.clone())
                 }
+
                 if game_runner.sound_stream.get_latency() != game_runner.settings.audio.latency {
                     game_runner
                         .sound_stream
@@ -229,24 +239,6 @@ pub struct GameRunner {
 }
 
 impl GameRunner {
-    pub fn get_output_device(settings: &Settings) -> Device {
-        settings
-            .audio
-            .output_device
-            .clone()
-            .and_then(|device_name| {
-                let host = cpal::default_host();
-                if let Ok(mut output_devices) = host.output_devices() {
-                    output_devices
-                        .find(|output_device| output_device.name().unwrap() == device_name)
-                } else {
-                    None
-                }
-            })
-            .or_else(|| cpal::default_host().default_output_device())
-            .expect("No audio output device found :(")
-    }
-
     pub fn new(pixels: Pixels, build_config: &BuildConfiguration, rom: Vec<u8>) -> Self {
         #[allow(unused_mut)] // needs to be mut for netplay feature
         let mut settings: Settings = Settings::new(&build_config.default_settings);
@@ -259,13 +251,9 @@ impl GameRunner {
         let mut game_hash = DefaultHasher::new();
         rom.hash(&mut game_hash);
 
-        let audio = Audio::new();
-        let output_device = GameRunner::get_output_device(&settings);
-        println!("Output device : {}", output_device.name().unwrap());
+        let audio = Audio::new(settings.audio.output_device.clone());
 
-        let sound_stream = audio
-            .start(output_device, &settings.audio)
-            .expect("Could not start Audio");
+        let sound_stream = audio.start(&settings.audio).expect("Could not start Audio");
         let mut state = MyGameState::new(rom);
         state
             .nes

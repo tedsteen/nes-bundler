@@ -6,10 +6,7 @@ use crate::{
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, NetworkStats, P2PSession, SessionBuilder, SessionState};
-use matchbox_socket::{
-    RtcIceServerConfig, WebRtcSocket,
-    WebRtcSocketConfig,
-};
+use matchbox_socket::{RtcIceServerConfig, WebRtcSocket, WebRtcSocketConfig};
 use rusticnes_core::nes::NesState;
 use serde::Deserialize;
 use std::{
@@ -463,7 +460,7 @@ impl Netplay {
             IceCredentials::Password(IcePasswordCredentials { username, password }) => {
                 (Some(username.to_string()), Some(password.to_string()))
             }
-            IceCredentials::None => (None, None)
+            IceCredentials::None => (None, None),
         };
 
         let (socket, loop_fut) = WebRtcSocket::new_with_config(WebRtcSocketConfig {
@@ -471,7 +468,7 @@ impl Netplay {
             ice_server: RtcIceServerConfig {
                 urls: conf.matchbox.ice.urls.clone(),
                 username,
-                credential: password
+                credential: password,
             },
         });
         let loop_fut = loop_fut.fuse();

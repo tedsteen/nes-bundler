@@ -42,23 +42,45 @@ impl NetplayGui {
                 .show_axes([false, true])
                 .show(ui, |plot_ui| {
                     plot_ui.line(
-                        Line::new(stats.get_ping().iter().map(|i| {
-                            [i.duration.as_millis() as f64, i.stat.ping as f64]
-                        }).collect::<PlotPoints>())
+                        Line::new(
+                            stats
+                                .get_ping()
+                                .iter()
+                                .map(|i| [i.duration.as_millis() as f64, i.stat.ping as f64])
+                                .collect::<PlotPoints>(),
+                        )
                         .name("Ping"),
                     );
 
                     plot_ui.line(
-                        Line::new(stats.get_ping().iter().map(|i| {
-                            [i.duration.as_millis() as f64, i.stat.local_frames_behind as f64]
-                        }).collect::<PlotPoints>())
+                        Line::new(
+                            stats
+                                .get_ping()
+                                .iter()
+                                .map(|i| {
+                                    [
+                                        i.duration.as_millis() as f64,
+                                        i.stat.local_frames_behind as f64,
+                                    ]
+                                })
+                                .collect::<PlotPoints>(),
+                        )
                         .name("Behind (local)"),
                     );
 
                     plot_ui.line(
-                        Line::new(stats.get_ping().iter().map(|i| {
-                            [i.duration.as_millis() as f64, i.stat.remote_frames_behind as f64]
-                        }).collect::<PlotPoints>())
+                        Line::new(
+                            stats
+                                .get_ping()
+                                .iter()
+                                .map(|i| {
+                                    [
+                                        i.duration.as_millis() as f64,
+                                        i.stat.remote_frames_behind as f64,
+                                    ]
+                                })
+                                .collect::<PlotPoints>(),
+                        )
                         .name("Behind (remote)"),
                     );
                 });
