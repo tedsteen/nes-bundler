@@ -120,7 +120,7 @@ fn main() -> Result<()> {
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
         let pixels = Pixels::new(WIDTH, HEIGHT, surface_texture).expect("No pixels available");
         let framework =
-            Framework::new(window_size.width, window_size.height, scale_factor, &pixels);
+            Framework::new(&event_loop, window_size.width, window_size.height, scale_factor, &pixels);
 
         (pixels, framework)
     };
@@ -315,8 +315,7 @@ impl GameRunner {
 
         let pixels = &mut self.pixels;
 
-        let frame = pixels.get_frame();
-        self.state.render(frame);
+        self.state.render(pixels.get_frame_mut());
 
         // Render everything together
         pixels
@@ -345,7 +344,7 @@ impl GameRunner {
                     return false;
                 }
                 winit::event::WindowEvent::Resized(size) => {
-                    self.pixels.resize_surface(size.width, size.height);
+                    self.pixels.resize_surface(size.width, size.height).unwrap();
                 }
                 winit::event::WindowEvent::KeyboardInput { input, .. } => {
                     if input.state == winit::event::ElementState::Pressed {
