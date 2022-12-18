@@ -122,7 +122,7 @@ impl Gamepads {
         self.get_or_create_gamepad(gamepad_id).disconnected = false;
         let id = self.map_id(gamepad_id);
         let conf = input_settings.get_or_create_config(
-            &id,
+            id,
             input::InputConfiguration {
                 name: format!("Gamepad {}", gamepad_id),
                 id: id.clone(),

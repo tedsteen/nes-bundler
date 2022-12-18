@@ -7,7 +7,7 @@ use cpal::{
     BufferSize, ChannelCount, Device, Sample, SampleRate, StreamConfig, SupportedBufferSize,
     SupportedStreamConfig,
 };
-use ringbuf::{Consumer, Producer};
+use rtrb::{RingBuffer, Consumer, Producer};
 
 use crate::settings::audio::AudioSettings;
 type SampleFormat = i16;
@@ -54,10 +54,13 @@ impl Stream {
     {
         let sample_count_16ms = Self::latency_to_frames(16, stream_config) as usize;
         let (mut producer_2, mut consumer_2) =
-            ringbuf::RingBuffer::<T>::new(sample_count_16ms).split();
+        RingBuffer::<T>::new(sample_count_16ms);
 
         let zeros = vec![T::from::<SampleFormat>(&0); sample_count_16ms];
-        producer_2.push_slice(zeros.as_slice());
+        if let Ok(chunks) = producer_2.write_chunk_uninit(zeros.len()) {
+            chunks.fill_from_iter(zeros);
+        }
+
         let mut last_sample = T::from::<SampleFormat>(&0);
         let mut sample_count = 0;
         let channels = stream_config.channels;
@@ -70,11 +73,11 @@ impl Stream {
                         let volume = *volume.lock().unwrap();
                         for sample in data {
                             if sample_count % channels == 0 {
-                                if let Some(sample) = consumer.pop() {
+                                if let Ok(sample) = consumer.pop() {
                                     last_sample = Sample::from(&sample);
                                     let _ = producer_2.push(last_sample);
-                                    consumer_2.pop();
-                                } else if let Some(sample) = consumer_2.pop() {
+                                    consumer_2.pop().unwrap();
+                                } else if let Ok(sample) = consumer_2.pop() {
                                     //println!("Buffer underrun using {sample} instead");
                                     last_sample = sample;
                                     let _ = producer_2
@@ -112,7 +115,7 @@ impl Stream {
                 BufferSize::Fixed(Self::latency_to_frames(latency, stream_config));
         };
 
-        let (producer, consumer) = ringbuf::RingBuffer::<SampleFormat>::new(100_000).split();
+        let (producer, consumer) = RingBuffer::<SampleFormat>::new(100_000);
 
         let stream = match output_config.sample_format() {
             cpal::SampleFormat::F32 => {
@@ -197,7 +200,7 @@ impl Stream {
 
     pub(crate) fn push_samples(&mut self, samples: &[SampleFormat]) {
         let max_buff_size = 2000;
-        let curr_buff_size = self.producer.len() as u32;
+        let curr_buff_size = self.producer.slots() as u32;
         self.producer_history.push_front(curr_buff_size as i32);
         self.producer_history.pop_back();
 
@@ -209,7 +212,12 @@ impl Stream {
                 *ele = std::cmp::max(0, avg - samples.len() as i32);
             }
         } else {
-            self.producer.push_slice(samples);
+            // } else if let Ok(chunks) = self.producer.write_chunk_uninit(samples.len()) {
+            //     chunks.fill_from_iter(samples);
+            // }
+            for ele in samples {
+                self.producer.push(*ele).unwrap();
+            }
         }
     }
 

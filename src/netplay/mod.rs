@@ -7,7 +7,7 @@ use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, NetworkStats, P2PSession, SessionBuilder, SessionState};
 use matchbox_socket::{
-    RtcIceCredentials, RtcIcePasswordCredentials, RtcIceServerConfig, WebRtcSocket,
+    RtcIceServerConfig, WebRtcSocket,
     WebRtcSocketConfig,
 };
 use rusticnes_core::nes::NesState;
@@ -452,15 +452,6 @@ impl Netplay {
             TurnOnResponse::Full(conf) => conf,
         };
         let matchbox_server = &conf.matchbox.server;
-        let credentials = match &conf.matchbox.ice.credentials {
-            IceCredentials::Password(IcePasswordCredentials { username, password }) => {
-                RtcIceCredentials::Password(RtcIcePasswordCredentials {
-                    username: username.to_string(),
-                    password: password.to_string(),
-                })
-            }
-            IceCredentials::None => RtcIceCredentials::None,
-        };
 
         let room = match &start_method {
             state::StartMethod::Create(name) => format!("join/{game_hash}/{}", name.clone()),
@@ -468,11 +459,19 @@ impl Netplay {
             state::StartMethod::Random => "random/{game_hash}/?next=2".to_string(),
         };
 
+        let (username, password) = match &conf.matchbox.ice.credentials {
+            IceCredentials::Password(IcePasswordCredentials { username, password }) => {
+                (Some(username.to_string()), Some(password.to_string()))
+            }
+            IceCredentials::None => (None, None)
+        };
+
         let (socket, loop_fut) = WebRtcSocket::new_with_config(WebRtcSocketConfig {
             room_url: format!("ws://{matchbox_server}/{room}"),
             ice_server: RtcIceServerConfig {
                 urls: conf.matchbox.ice.urls.clone(),
-                credentials,
+                username,
+                credential: password
             },
         });
         let loop_fut = loop_fut.fuse();

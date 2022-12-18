@@ -27,7 +27,7 @@ pub enum JoypadButton {
     A = 0b00000001,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub struct JoypadMapping<KeyType> {
     pub up: Option<KeyType>,
     pub down: Option<KeyType>,
@@ -102,13 +102,13 @@ impl JoypadInput {
 
 pub type InputId = String;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub struct InputConfiguration {
     pub id: InputId,
     pub name: String,
     pub kind: InputConfigurationKind,
 }
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub enum InputConfigurationKind {
     Keyboard(JoypadKeyboardMapping),
     Gamepad(JoypadGamepadMapping),

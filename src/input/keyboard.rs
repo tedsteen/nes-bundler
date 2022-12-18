@@ -1,5 +1,4 @@
 use super::{JoypadInput, JoypadMapping};
-use egui_winit::winit;
 use std::collections::HashSet;
 use winit::event::{KeyboardInput, VirtualKeyCode};
 
