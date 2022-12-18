@@ -8,7 +8,7 @@ use std::io::Read;
 
 use crate::input::JoypadInput;
 use anyhow::Result;
-use audio::{Audio, Stream};
+use audio::Stream;
 
 use game_loop::game_loop;
 
@@ -18,6 +18,7 @@ use palette::NTSC_PAL;
 use pixels::{Pixels, SurfaceTexture};
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
+use sdl2::{AudioSubsystem, Sdl};
 use serde::Deserialize;
 use settings::{Settings, MAX_PLAYERS};
 use winit::dpi::LogicalSize;
@@ -128,7 +129,19 @@ fn main() -> Result<()> {
         (pixels, framework)
     };
 
-    let game_runner = GameRunner::new(pixels, &bundle.config, bundle.rom);
+    let sdl_context: Sdl = sdl2::init().unwrap();
+    let audio_subsystem: AudioSubsystem = sdl_context.audio().unwrap();
+
+    #[allow(unused_mut)] // needs to be mut for netplay feature
+    let mut settings: Settings = Settings::new(&bundle.config.default_settings);
+
+    let game_runner = GameRunner::new(
+        pixels,
+        &audio_subsystem,
+        &bundle.config,
+        settings,
+        bundle.rom,
+    );
     let mut last_settings = game_runner.settings.get_hash();
     game_loop(
         event_loop,
@@ -149,13 +162,8 @@ fn main() -> Result<()> {
             let game_runner = &mut g.game.0;
             let curr_settings = game_runner.settings.get_hash();
             if last_settings != curr_settings {
-                if game_runner.sound_stream.get_output_device_name()
-                    != game_runner
-                        .settings
-                        .audio
-                        .output_device
-                        .clone()
-                        .unwrap_or_default()
+                if *game_runner.sound_stream.get_output_device_name()
+                    != game_runner.settings.audio.output_device
                 {
                     game_runner
                         .sound_stream
@@ -166,10 +174,11 @@ fn main() -> Result<()> {
                     game_runner
                         .sound_stream
                         .set_latency(game_runner.settings.audio.latency);
+
+                    //Whatever latency we ended up getting, save that to settings
+                    game_runner.settings.audio.latency = game_runner.sound_stream.get_latency();
                 }
-                game_runner
-                    .sound_stream
-                    .set_volume(game_runner.settings.audio.volume);
+                game_runner.sound_stream.volume = game_runner.settings.audio.volume as f32 / 100.0;
 
                 last_settings = curr_settings;
                 if game_runner.settings.save().is_err() {
@@ -239,10 +248,13 @@ pub struct GameRunner {
 }
 
 impl GameRunner {
-    pub fn new(pixels: Pixels, build_config: &BuildConfiguration, rom: Vec<u8>) -> Self {
-        #[allow(unused_mut)] // needs to be mut for netplay feature
-        let mut settings: Settings = Settings::new(&build_config.default_settings);
-
+    pub fn new(
+        pixels: Pixels,
+        audio_subsystem: &AudioSubsystem,
+        build_config: &BuildConfiguration,
+        mut settings: Settings,
+        rom: Vec<u8>,
+    ) -> Self {
         let inputs = Inputs::new(
             build_config.default_settings.input.selected.clone(),
             &mut settings.input,
@@ -251,9 +263,7 @@ impl GameRunner {
         let mut game_hash = DefaultHasher::new();
         rom.hash(&mut game_hash);
 
-        let audio = Audio::new(settings.audio.output_device.clone());
-
-        let sound_stream = audio.start(&settings.audio).expect("Could not start Audio");
+        let sound_stream = Stream::new(audio_subsystem, &settings.audio);
         let mut state = MyGameState::new(rom);
         state
             .nes

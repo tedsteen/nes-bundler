@@ -4,7 +4,7 @@ use std::{
 };
 
 use super::GuiComponent;
-use crate::{audio::Audio, GameRunner};
+use crate::GameRunner;
 use egui::{Context, Slider, Window};
 
 pub struct AudioSettingsGui {
@@ -42,8 +42,9 @@ impl GuiComponent for AudioSettingsGui {
                         .show(ui, |ui| {
                             ui.label("Output");
                             let selected_device = &mut game_runner.settings.audio.output_device;
-                            if let Some(selected_text) =
-                                Audio::get_default_device_name().or_else(|| selected_device.clone())
+                            if let Some(selected_text) = selected_device
+                                .clone()
+                                .or_else(|| game_runner.sound_stream.get_default_device_name())
                             {
                                 egui::ComboBox::from_id_source("audio-output")
                                     .width(160.0)
@@ -57,7 +58,9 @@ impl GuiComponent for AudioSettingsGui {
                                         for name in self
                                             .available_device_names
                                             .get_or_insert_with(|| {
-                                                Audio::get_available_output_device_names()
+                                                game_runner
+                                                    .sound_stream
+                                                    .get_available_output_device_names()
                                             })
                                             .clone()
                                         {
