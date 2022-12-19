@@ -11,6 +11,7 @@ default = []
 netplay = ["matchbox_socket", "tokio", "ggrs", "futures-timer", "futures", "uuid", "reqwest"]
 static-bundle = []
 debug = []
+static-link = ["sdl2/static-link"]
 
 [profile.release]
 strip = true
