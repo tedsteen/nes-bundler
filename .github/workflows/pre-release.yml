@@ -2,8 +2,8 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches-ignore:
+      - master
 
 jobs:
   create_release:
@@ -16,8 +16,8 @@ jobs:
         with:
           name: ${{ github.ref_name }}
           draft: false
-          prerelease: false
-          generate_release_notes: true
+          prerelease: true
+          generate_release_notes: false
   
   build_release:
     name: Build ${{ matrix.name }} (${{ matrix.target }})
