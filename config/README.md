@@ -60,19 +60,19 @@ default_settings:
                     left: DPadLeft
                     right: DPadRight
                     start: Start
-                    select: Select
-                    b: West
-                    a: South
-        # The default mapping for newly connected gamepads. For more gamepad button mappings see https://docs.rs/gilrs/latest/gilrs/ev/enum.Button.html.
+                    select: Back
+                    b: X
+                    a: A
+        # The default mapping for newly connected gamepads. For more gamepad button mappings see https://docs.rs/sdl2/latest/sdl2/controller/enum.Button.html.
         default_gamepad_mapping:
             up: DPadUp
             down: DPadDown
             left: DPadLeft
             right: DPadRight
             start: Start
-            select: Select
-            b: West
-            a: South
+            select: Back
+            b: X
+            a: A
 
 # Netplay configuration. You can remove this if the netplay feature is disabled.
 netplay:

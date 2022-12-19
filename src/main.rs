@@ -18,7 +18,7 @@ use palette::NTSC_PAL;
 use pixels::{Pixels, SurfaceTexture};
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
-use sdl2::{AudioSubsystem, Sdl};
+use sdl2::Sdl;
 use serde::Deserialize;
 use settings::{Settings, MAX_PLAYERS};
 use winit::dpi::LogicalSize;
@@ -88,6 +88,12 @@ pub struct BuildConfiguration {
     netplay: netplay::NetplayBuildConfiguration,
 }
 fn main() -> Result<()> {
+    // This is required for certain controllers to work on Windows without the
+    // video subsystem enabled:
+    sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
+
+    let sdl_context: Sdl = sdl2::init().unwrap();
+
     let bundle = extract_bundle()
         .map_err(|err| anyhow::Error::msg(format!("Could not extract bundle config ({err})")))?;
 
@@ -129,19 +135,10 @@ fn main() -> Result<()> {
         (pixels, framework)
     };
 
-    let sdl_context: Sdl = sdl2::init().unwrap();
-    let audio_subsystem: AudioSubsystem = sdl_context.audio().unwrap();
-
     #[allow(unused_mut)] // needs to be mut for netplay feature
     let mut settings: Settings = Settings::new(&bundle.config.default_settings);
 
-    let game_runner = GameRunner::new(
-        pixels,
-        &audio_subsystem,
-        &bundle.config,
-        settings,
-        bundle.rom,
-    );
+    let game_runner = GameRunner::new(pixels, sdl_context, &bundle.config, settings, bundle.rom);
     let mut last_settings = game_runner.settings.get_hash();
     game_loop(
         event_loop,
@@ -250,12 +247,13 @@ pub struct GameRunner {
 impl GameRunner {
     pub fn new(
         pixels: Pixels,
-        audio_subsystem: &AudioSubsystem,
+        sdl_context: Sdl,
         build_config: &BuildConfiguration,
         mut settings: Settings,
         rom: Vec<u8>,
     ) -> Self {
         let inputs = Inputs::new(
+            &sdl_context,
             build_config.default_settings.input.selected.clone(),
             &mut settings.input,
         );
@@ -263,7 +261,9 @@ impl GameRunner {
         let mut game_hash = DefaultHasher::new();
         rom.hash(&mut game_hash);
 
-        let sound_stream = Stream::new(audio_subsystem, &settings.audio);
+        let audio_subsystem = sdl_context.audio().unwrap();
+
+        let sound_stream = Stream::new(&audio_subsystem, &settings.audio);
         let mut state = MyGameState::new(rom);
         state
             .nes

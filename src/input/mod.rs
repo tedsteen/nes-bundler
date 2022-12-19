@@ -122,10 +122,11 @@ pub struct Inputs {
 
 impl Inputs {
     pub fn new(
+        sdl_context: &sdl2::Sdl,
         default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
         settings: &mut InputSettings,
     ) -> Self {
-        let gamepads = Gamepads::new(settings);
+        let gamepads = Gamepads::new(sdl_context, settings);
         let keyboards = Keyboards::new();
 
         Self {

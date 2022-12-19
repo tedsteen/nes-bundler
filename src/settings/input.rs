@@ -16,11 +16,11 @@ pub struct InputSettings {
 impl InputSettings {
     pub fn get_or_create_config(
         &mut self,
-        id: &InputId,
+        id: InputId,
         default: InputConfiguration,
     ) -> &InputConfigurationRef {
         self.configurations
-            .entry(id.clone())
+            .entry(id)
             .or_insert_with(|| Rc::new(RefCell::new(default)))
     }
 
