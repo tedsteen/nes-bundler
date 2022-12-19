@@ -5,7 +5,6 @@ use std::{
 
 use super::GuiComponent;
 use crate::GameRunner;
-use cpal::traits::{DeviceTrait, HostTrait};
 use egui::{Context, Slider, Window};
 
 pub struct AudioSettingsGui {
@@ -43,13 +42,10 @@ impl GuiComponent for AudioSettingsGui {
                         .show(ui, |ui| {
                             ui.label("Output");
                             let selected_device = &mut game_runner.settings.audio.output_device;
-                            let host = cpal::default_host();
-                            if let Some(default_device) = host.default_output_device() {
-                                let selected_text = if let Some(d) = selected_device {
-                                    d.clone()
-                                } else {
-                                    default_device.name().unwrap()
-                                };
+                            if let Some(selected_text) = selected_device
+                                .clone()
+                                .or_else(|| game_runner.sound_stream.get_default_device_name())
+                            {
                                 egui::ComboBox::from_id_source("audio-output")
                                     .width(160.0)
                                     .selected_text(selected_text)
@@ -62,10 +58,9 @@ impl GuiComponent for AudioSettingsGui {
                                         for name in self
                                             .available_device_names
                                             .get_or_insert_with(|| {
-                                                host.output_devices()
-                                                    .unwrap()
-                                                    .map(|d| d.name().unwrap())
-                                                    .collect()
+                                                game_runner
+                                                    .sound_stream
+                                                    .get_available_output_device_names()
                                             })
                                             .clone()
                                         {

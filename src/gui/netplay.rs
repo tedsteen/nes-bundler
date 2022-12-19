@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use egui::{
-    plot::{Corner, Legend},
+    plot::{Corner, Legend, PlotPoints},
     Button, Context, TextEdit, TextStyle, Ui, Window,
 };
 
@@ -22,7 +22,7 @@ impl NetplayGui {
     fn stats_ui(ui: &mut Ui, stats: &NetplayStats, player: usize) {
         if !stats.get_ping().is_empty() {
             ui.label(format!("Player {player}"));
-            use egui::plot::{Line, Plot, Value, Values};
+            use egui::plot::{Line, Plot};
 
             Plot::new(format!("stats_plot_{player}"))
                 .label_formatter(|name, value| {
@@ -42,29 +42,45 @@ impl NetplayGui {
                 .show_axes([false, true])
                 .show(ui, |plot_ui| {
                     plot_ui.line(
-                        Line::new(Values::from_values_iter(stats.get_ping().iter().map(|i| {
-                            Value::new(i.duration.as_millis() as u32, i.stat.ping as f32)
-                        })))
+                        Line::new(
+                            stats
+                                .get_ping()
+                                .iter()
+                                .map(|i| [i.duration.as_millis() as f64, i.stat.ping as f64])
+                                .collect::<PlotPoints>(),
+                        )
                         .name("Ping"),
                     );
 
                     plot_ui.line(
-                        Line::new(Values::from_values_iter(stats.get_ping().iter().map(|i| {
-                            Value::new(
-                                i.duration.as_millis() as u32,
-                                i.stat.local_frames_behind as f32,
-                            )
-                        })))
+                        Line::new(
+                            stats
+                                .get_ping()
+                                .iter()
+                                .map(|i| {
+                                    [
+                                        i.duration.as_millis() as f64,
+                                        i.stat.local_frames_behind as f64,
+                                    ]
+                                })
+                                .collect::<PlotPoints>(),
+                        )
                         .name("Behind (local)"),
                     );
 
                     plot_ui.line(
-                        Line::new(Values::from_values_iter(stats.get_ping().iter().map(|i| {
-                            Value::new(
-                                i.duration.as_millis() as u32,
-                                i.stat.remote_frames_behind as f32,
-                            )
-                        })))
+                        Line::new(
+                            stats
+                                .get_ping()
+                                .iter()
+                                .map(|i| {
+                                    [
+                                        i.duration.as_millis() as f64,
+                                        i.stat.remote_frames_behind as f64,
+                                    ]
+                                })
+                                .collect::<PlotPoints>(),
+                        )
                         .name("Behind (remote)"),
                     );
                 });

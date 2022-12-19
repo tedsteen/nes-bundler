@@ -8,10 +8,8 @@ use std::io::Read;
 
 use crate::input::JoypadInput;
 use anyhow::Result;
-use audio::{Audio, Stream};
+use audio::Stream;
 
-use cpal::traits::{DeviceTrait, HostTrait};
-use cpal::Device;
 use game_loop::game_loop;
 
 use gui::Framework;
@@ -20,6 +18,7 @@ use palette::NTSC_PAL;
 use pixels::{Pixels, SurfaceTexture};
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
+use sdl2::Sdl;
 use serde::Deserialize;
 use settings::{Settings, MAX_PLAYERS};
 use winit::dpi::LogicalSize;
@@ -89,6 +88,12 @@ pub struct BuildConfiguration {
     netplay: netplay::NetplayBuildConfiguration,
 }
 fn main() -> Result<()> {
+    // This is required for certain controllers to work on Windows without the
+    // video subsystem enabled:
+    sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
+
+    let sdl_context: Sdl = sdl2::init().unwrap();
+
     let bundle = extract_bundle()
         .map_err(|err| anyhow::Error::msg(format!("Could not extract bundle config ({err})")))?;
 
@@ -119,13 +124,21 @@ fn main() -> Result<()> {
         let scale_factor = window.scale_factor() as f32;
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
         let pixels = Pixels::new(WIDTH, HEIGHT, surface_texture).expect("No pixels available");
-        let framework =
-            Framework::new(window_size.width, window_size.height, scale_factor, &pixels);
+        let framework = Framework::new(
+            &event_loop,
+            window_size.width,
+            window_size.height,
+            scale_factor,
+            &pixels,
+        );
 
         (pixels, framework)
     };
 
-    let game_runner = GameRunner::new(pixels, &bundle.config, bundle.rom);
+    #[allow(unused_mut)] // needs to be mut for netplay feature
+    let mut settings: Settings = Settings::new(&bundle.config.default_settings);
+
+    let game_runner = GameRunner::new(pixels, sdl_context, &bundle.config, settings, bundle.rom);
     let mut last_settings = game_runner.settings.get_hash();
     game_loop(
         event_loop,
@@ -146,20 +159,23 @@ fn main() -> Result<()> {
             let game_runner = &mut g.game.0;
             let curr_settings = game_runner.settings.get_hash();
             if last_settings != curr_settings {
-                let device_changed = true;
-                if device_changed {
+                if *game_runner.sound_stream.get_output_device_name()
+                    != game_runner.settings.audio.output_device
+                {
                     game_runner
                         .sound_stream
-                        .set_output_device(GameRunner::get_output_device(&game_runner.settings))
+                        .set_output_device(game_runner.settings.audio.output_device.clone())
                 }
+
                 if game_runner.sound_stream.get_latency() != game_runner.settings.audio.latency {
                     game_runner
                         .sound_stream
                         .set_latency(game_runner.settings.audio.latency);
+
+                    //Whatever latency we ended up getting, save that to settings
+                    game_runner.settings.audio.latency = game_runner.sound_stream.get_latency();
                 }
-                game_runner
-                    .sound_stream
-                    .set_volume(game_runner.settings.audio.volume);
+                game_runner.sound_stream.volume = game_runner.settings.audio.volume as f32 / 100.0;
 
                 last_settings = curr_settings;
                 if game_runner.settings.save().is_err() {
@@ -229,29 +245,15 @@ pub struct GameRunner {
 }
 
 impl GameRunner {
-    pub fn get_output_device(settings: &Settings) -> Device {
-        settings
-            .audio
-            .output_device
-            .clone()
-            .and_then(|device_name| {
-                let host = cpal::default_host();
-                if let Ok(mut output_devices) = host.output_devices() {
-                    output_devices
-                        .find(|output_device| output_device.name().unwrap() == device_name)
-                } else {
-                    None
-                }
-            })
-            .or_else(|| cpal::default_host().default_output_device())
-            .expect("No audio output device found :(")
-    }
-
-    pub fn new(pixels: Pixels, build_config: &BuildConfiguration, rom: Vec<u8>) -> Self {
-        #[allow(unused_mut)] // needs to be mut for netplay feature
-        let mut settings: Settings = Settings::new(&build_config.default_settings);
-
+    pub fn new(
+        pixels: Pixels,
+        sdl_context: Sdl,
+        build_config: &BuildConfiguration,
+        mut settings: Settings,
+        rom: Vec<u8>,
+    ) -> Self {
         let inputs = Inputs::new(
+            &sdl_context,
             build_config.default_settings.input.selected.clone(),
             &mut settings.input,
         );
@@ -259,13 +261,9 @@ impl GameRunner {
         let mut game_hash = DefaultHasher::new();
         rom.hash(&mut game_hash);
 
-        let audio = Audio::new();
-        let output_device = GameRunner::get_output_device(&settings);
-        println!("Output device : {}", output_device.name().unwrap());
+        let audio_subsystem = sdl_context.audio().unwrap();
 
-        let sound_stream = audio
-            .start(output_device, &settings.audio)
-            .expect("Could not start Audio");
+        let sound_stream = Stream::new(&audio_subsystem, &settings.audio);
         let mut state = MyGameState::new(rom);
         state
             .nes
@@ -315,8 +313,7 @@ impl GameRunner {
 
         let pixels = &mut self.pixels;
 
-        let frame = pixels.get_frame();
-        self.state.render(frame);
+        self.state.render(pixels.get_frame_mut());
 
         // Render everything together
         pixels
@@ -345,7 +342,7 @@ impl GameRunner {
                     return false;
                 }
                 winit::event::WindowEvent::Resized(size) => {
-                    self.pixels.resize_surface(size.width, size.height);
+                    self.pixels.resize_surface(size.width, size.height).unwrap();
                 }
                 winit::event::WindowEvent::KeyboardInput { input, .. } => {
                     if input.state == winit::event::ElementState::Pressed {

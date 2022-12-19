@@ -19,26 +19,25 @@ strip = true
 anyhow = "1.0"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
-gilrs = { version = "0.9", features = ["serde-serialize"] }
-winit = {version = "0.26", features = ["serde"] }
-pixels = "0.9"
-egui = "0.18"
-egui-wgpu = "0.18"
-egui-winit = "0.18"
-game-loop = { version = "0.9", features = ["window"] }
-cpal = "0.14"
-ringbuf = "0.2"
+
+winit = {version = "0.27", features = ["serde"] }
+pixels = "0.11"
+egui = "0.20"
+egui-winit = "0.20"
+egui-wgpu = "0.20"
+
+sdl2 = { version = "0.35", features = ["bundled"] }
+
+game-loop = { version = "0.10", features = ["winit"] }
 rusticnes-core = { git = "https://github.com/tedsteen/rusticnes-core-for-nes-bundler" }
-base64 = "0.13"
+base64 = "0.20"
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
 
 # Netplay deps
-# matchbox_socket = { git = "https://github.com/johanhelsing/matchbox", features = ["ggrs-socket"], optional = true }
-matchbox_socket = { git = "https://github.com/tedsteen/matchbox", branch = "turn-support-credentials", features = ["ggrs-socket"], optional = true }
+matchbox_socket = { git = "https://github.com/johanhelsing/matchbox", features = ["ggrs-socket"], optional = true }
 futures-timer = { version = "3", features = ["wasm-bindgen"], optional = true }
 ggrs = { version = "0.9", optional = true }
 tokio = { version = "1", features = ["rt"], optional = true }
 futures = {version = "0.3", optional = true }
 uuid = { version = "1", features = [ "v4" ], optional = true }
 reqwest = { version = "0.11", features = ["json"], optional = true }
-
