@@ -2351,6 +2351,7 @@ dependencies = [
  "reqwest",
  "rusticnes-core",
  "sdl2",
+ "sdl2-sys",
  "serde",
  "serde_yaml",
  "tokio",
@@ -3173,9 +3174,9 @@ dependencies = [
 
 [[package]]
 name = "sdl2"
-version = "0.35.2"
+version = "0.35.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7959277b623f1fb9e04aea73686c3ca52f01b2145f8ea16f4ff30d8b7623b1a"
+checksum = "f035f8e87735fa3a8437292be49fe6056450f7cbb13c230b4bcd1bdd7279421f"
 dependencies = [
  "bitflags",
  "lazy_static",
@@ -3185,9 +3186,9 @@ dependencies = [
 
 [[package]]
 name = "sdl2-sys"
-version = "0.35.2"
+version = "0.35.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3586be2cf6c0a8099a79a12b4084357aa9b3e0b0d7980e3b67aaf7a9d55f9f0"
+checksum = "94cb479353c0603785c834e2307440d83d196bf255f204f7f6741358de8d6a2f"
 dependencies = [
  "cfg-if",
  "cmake",
