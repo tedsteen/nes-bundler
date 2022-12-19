@@ -54,10 +54,6 @@ jobs:
       with:
         targets: ${{ matrix.target }}
     
-    - name: Install dependencies
-      if: ${{ matrix.os == 'macos-latest' }}
-      run: brew install sdl2
-
     - name: Build (with Netplay)
       run: cargo install --target ${{ matrix.target }} --features netplay,static-link --path . --root ./out
 
