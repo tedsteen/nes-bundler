@@ -89,9 +89,7 @@ impl Stream {
     }
 
     pub fn get_supported_latency(&self) -> Option<RangeInclusive<u8>> {
-        //TODO
-        None
-        //Some(1..=100)
+        Some(1..=50)
     }
 
     pub fn drain(&mut self) {
