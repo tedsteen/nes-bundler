@@ -28,6 +28,7 @@ impl Clone for MyGameState {
         let data = &mut self.save();
         let mut clone = Self {
             nes: NesState::new(self.nes.mapper.clone()),
+            frame: 0,
         };
         clone.load(data);
         clone
@@ -80,8 +81,7 @@ pub enum NetplaySessionState {
 }
 pub struct NetplaySession {
     p2p_session: P2PSession<GGRSConfig>,
-    frame: Frame,
-    last_confirmed_frame: Frame,
+    last_confirmed_frame: i32,
     pub stats: [NetplayStats; MAX_PLAYERS],
     state: NetplaySessionState,
     requested_fps: Fps,
@@ -91,7 +91,6 @@ impl NetplaySession {
     pub fn new(p2p_session: P2PSession<GGRSConfig>) -> Self {
         Self {
             p2p_session,
-            frame: 0,
             last_confirmed_frame: -1,
             stats: [NetplayStats::new(), NetplayStats::new()],
             state: NetplaySessionState::Connected,
@@ -101,7 +100,6 @@ impl NetplaySession {
 
     pub fn advance(&mut self, game_state: &mut MyGameState, inputs: [JoypadInput; MAX_PLAYERS]) {
         let sess = &mut self.p2p_session;
-        let frame = &mut self.frame;
         sess.poll_remote_clients();
 
         for event in sess.events() {
@@ -123,42 +121,40 @@ impl NetplaySession {
                     match request {
                         GGRSRequest::LoadGameState {
                             cell,
-                            frame: load_state_frame,
+                            frame,
                         } => {
-                            println!("Loading (frame {:?})", load_state_frame);
+                            println!("Loading (frame {:?})", frame);
                             *game_state = cell.load().expect("No data found.");
-                            *frame = load_state_frame;
                         }
                         GGRSRequest::SaveGameState {
                             cell,
-                            frame: save_state_frame,
+                            frame,
                         } => {
-                            assert_eq!(*frame, save_state_frame);
-                            cell.save(*frame, Some(game_state.clone()), None);
+                            assert_eq!(game_state.frame, frame);
+                            cell.save(frame, Some(game_state.clone()), None);
                         }
                         GGRSRequest::AdvanceFrame { inputs } => {
                             game_state
                                 .advance([JoypadInput(inputs[0].0), JoypadInput(inputs[1].0)]);
 
-                            if *frame <= self.last_confirmed_frame {
+                            if game_state.frame <= self.last_confirmed_frame {
                                 // Discard the samples for this frame since it's a replay from ggrs. Audio has already been produced and pushed for it.
                                 game_state.nes.apu.consume_samples();
                             } else {
-                                self.last_confirmed_frame = *frame;
+                                self.last_confirmed_frame = game_state.frame;
                             }
-                            *frame += 1;
                         }
                     }
                 }
             }
             Err(ggrs::GGRSError::PredictionThreshold) => {
-                println!("Frame {} skipped: PredictionThreshold", frame);
+                println!("Frame {} skipped: PredictionThreshold", game_state.frame);
             }
             Err(ggrs::GGRSError::NotSynchronized) => {}
             Err(e) => eprintln!("Ouch :( {:?}", e),
         }
 
-        if *frame % 30 == 0 {
+        if game_state.frame % 30 == 0 {
             for i in 0..MAX_PLAYERS {
                 if let Ok(stats) = sess.network_stats(i as usize) {
                     if !sess.local_player_handles().contains(&i) {
@@ -175,7 +171,6 @@ impl NetplaySession {
     }
 }
 
-type Frame = i32;
 pub struct Netplay {
     rt: Runtime,
     pub state: NetplayState,
@@ -397,7 +392,7 @@ impl Netplay {
                                     ),
                                     ConnectedState::MappingInput,
                                 ));
-                                game_state.nes.reset();
+                                game_state.reset();
                             }
                         }
                         new_state

@@ -192,6 +192,7 @@ fn main() -> Result<()> {
 
 pub struct MyGameState {
     nes: NesState,
+    frame: i32,
 }
 
 impl MyGameState {
@@ -204,7 +205,7 @@ impl MyGameState {
 
         let nes = load_rom(rom_data).expect("Failed to load ROM");
 
-        Self { nes }
+        Self { nes, frame: 0 }
     }
 
     pub fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps {
@@ -212,6 +213,7 @@ impl MyGameState {
         self.nes.p1_input = inputs[0].0;
         self.nes.p2_input = inputs[1].0;
         self.nes.run_until_vblank();
+        self.frame += 1;
         FPS
     }
 
@@ -225,10 +227,19 @@ impl MyGameState {
     }
 
     fn save(&self) -> Vec<u8> {
-        self.nes.save_state()
+        let mut data = self.nes.save_state();
+        data.extend(self.frame.to_le_bytes());
+        //println!("SAVED {:?}", self.frame);
+        data
     }
     fn load(&mut self, data: &mut Vec<u8>) {
+        self.frame = i32::from_le_bytes(data.split_off(data.len() - std::mem::size_of::<i32>()).try_into().unwrap());
         self.nes.load_state(data);
+        //println!("LOADED {:?}", self.frame);
+    }
+    fn reset(&mut self) {
+        self.nes.reset();
+        self.frame = 0;
     }
 }
 
@@ -288,15 +299,17 @@ impl GameRunner {
         }
     }
     pub fn advance(&mut self) -> Fps {
+        let inputs = [self.inputs.get_joypad(0), self.inputs.get_joypad(1)];
+
         #[cfg(not(feature = "netplay"))]
         let fps = self
             .state
-            .advance([self.inputs.get_joypad(0), self.inputs.get_joypad(1)]);
+            .advance(inputs);
 
         #[cfg(feature = "netplay")]
         let fps = self.netplay.advance(
             &mut self.state,
-            [self.inputs.get_joypad(0), self.inputs.get_joypad(1)],
+            inputs,
         );
 
         self.sound_stream
