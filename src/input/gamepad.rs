@@ -12,8 +12,7 @@ use std::{
 };
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
-//#[serde(remote = "sdl2::controller::Button")]
-pub enum ButtonInt {
+pub enum ButtonLocal {
     A,
     B,
     X,
@@ -37,41 +36,40 @@ pub enum ButtonInt {
     Touchpad,
 }
 
-impl ButtonInt {
-    fn map(button: sdl2::controller::Button) -> ButtonInt {
+//Since sdl2 does not implement Serialize and Deserialize we need to make our own version and map
+impl ButtonLocal {
+    fn from_sdl2(button: sdl2::controller::Button) -> Self {
         use sdl2::controller::Button::*;
         match button {
-            A => ButtonInt::A,
-            B => ButtonInt::B,
-            X => ButtonInt::X,
-            Y => ButtonInt::Y,
-            Back => ButtonInt::Back,
-            Guide => ButtonInt::Guide,
-            Start => ButtonInt::Start,
-            LeftStick => ButtonInt::LeftStick,
-            RightStick => ButtonInt::RightStick,
-            LeftShoulder => ButtonInt::LeftShoulder,
-            RightShoulder => ButtonInt::RightShoulder,
-            DPadUp => ButtonInt::DPadUp,
-            DPadDown => ButtonInt::DPadDown,
-            DPadLeft => ButtonInt::DPadLeft,
-            DPadRight => ButtonInt::DPadRight,
-            Misc1 => ButtonInt::Misc1,
-            Paddle1 => ButtonInt::Paddle1,
-            Paddle2 => ButtonInt::Paddle2,
-            Paddle3 => ButtonInt::Paddle3,
-            Paddle4 => ButtonInt::Paddle4,
-            Touchpad => ButtonInt::Touchpad,
+            A => Self::A,
+            B => Self::B,
+            X => Self::X,
+            Y => Self::Y,
+            Back => Self::Back,
+            Guide => Self::Guide,
+            Start => Self::Start,
+            LeftStick => Self::LeftStick,
+            RightStick => Self::RightStick,
+            LeftShoulder => Self::LeftShoulder,
+            RightShoulder => Self::RightShoulder,
+            DPadUp => Self::DPadUp,
+            DPadDown => Self::DPadDown,
+            DPadLeft => Self::DPadLeft,
+            DPadRight => Self::DPadRight,
+            Misc1 => Self::Misc1,
+            Paddle1 => Self::Paddle1,
+            Paddle2 => Self::Paddle2,
+            Paddle3 => Self::Paddle3,
+            Paddle4 => Self::Paddle4,
+            Touchpad => Self::Touchpad,
         }
     }
 }
 
-type Button = ButtonInt;
-
-pub type JoypadGamepadMapping = JoypadMapping<Button>;
+pub type JoypadGamepadMapping = JoypadMapping<ButtonLocal>;
 
 pub struct GamepadState {
-    pub pressed_buttons: HashSet<Button>,
+    pub pressed_buttons: HashSet<ButtonLocal>,
     game_controller: GameController,
 }
 
@@ -161,7 +159,7 @@ impl Gamepads {
                 // }
                 Event::ControllerButtonDown { which, button, .. } => {
                     if let Some(gamepad_state) = self.get_gamepad(which) {
-                        gamepad_state.pressed_buttons.insert(ButtonInt::map(button));
+                        gamepad_state.pressed_buttons.insert(ButtonLocal::from_sdl2(button));
                     } else {
                         eprintln!("Button down on unmapped gamepad {:?}", which);
                     }
@@ -170,7 +168,7 @@ impl Gamepads {
                     if let Some(gamepad_state) = self.get_gamepad(which) {
                         gamepad_state
                             .pressed_buttons
-                            .remove(&ButtonInt::map(button));
+                            .remove(&ButtonLocal::from_sdl2(button));
                     } else {
                         eprintln!("Button up on unmapped gamepad {:?}", which);
                     }

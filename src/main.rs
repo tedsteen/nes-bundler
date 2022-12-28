@@ -167,7 +167,8 @@ fn main() -> Result<()> {
                         .set_output_device(game_runner.settings.audio.output_device.clone())
                 }
 
-                if game_runner.sound_stream.get_latency() != game_runner.settings.audio.latency {
+                // Note: We might not get the exact latency in ms since there will be rounding errors. Be ok with 1-off
+                if i16::abs(game_runner.sound_stream.get_latency() as i16 - game_runner.settings.audio.latency as i16) > 1 {
                     game_runner
                         .sound_stream
                         .set_latency(game_runner.settings.audio.latency);

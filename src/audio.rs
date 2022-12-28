@@ -1,6 +1,6 @@
 use std::ops::RangeInclusive;
 
-use sdl2::audio::{AudioQueue, AudioSpecDesired};
+use sdl2::audio::{AudioQueue, AudioSpecDesired, AudioSpec};
 use sdl2::AudioSubsystem;
 
 use crate::settings::audio::AudioSettings;
@@ -68,13 +68,12 @@ impl Stream {
         let latency_frames = (latency as f64 / 1_000.0) * sample_rate as f64;
         (latency_frames * channels as f64) as u16
     }
-    fn frames_to_latency(frames: u32, channel_count: u8, sample_rate: u32) -> u8 {
-        ((frames as u64 * 1_000) / (channel_count as u64 * sample_rate as u64)) as u8
+    fn frames_to_latency(audio_spec: &AudioSpec) -> u8 {
+        ((audio_spec.samples as u64 * 1_000) / (audio_spec.channels as u64 * audio_spec.freq as u64)) as u8
     }
 
     pub fn get_latency(&self) -> u8 {
-        let spec = self.output_device.spec();
-        Stream::frames_to_latency(spec.samples as u32, spec.channels, spec.freq as u32)
+        Stream::frames_to_latency(self.output_device.spec())
     }
 
     pub fn set_latency(&mut self, latency: u8) {
@@ -90,9 +89,7 @@ impl Stream {
     }
 
     pub fn get_supported_latency(&self) -> Option<RangeInclusive<u8>> {
-        //TODO
-        None
-        //Some(1..=100)
+        Some(1..=50)
     }
 
     pub fn drain(&mut self) {
@@ -112,15 +109,10 @@ impl Stream {
     pub(crate) fn set_output_device(&mut self, output_device_name: Option<String>) {
         if self.output_device_name != output_device_name {
             self.output_device_name = output_device_name;
-            let spec = self.output_device.spec();
             self.output_device = Stream::start_output_device(
                 self.output_device.subsystem(),
                 &self.output_device_name,
-                Stream::frames_to_latency(
-                    spec.samples as u32,
-                    spec.channels as u8,
-                    spec.freq as u32,
-                ),
+                Stream::frames_to_latency(self.output_device.spec()),
             );
         }
     }
