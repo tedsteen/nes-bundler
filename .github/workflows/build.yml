@@ -39,7 +39,11 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
       with:
         targets: ${{ matrix.target }}
-    
+
+    - name: Install dependencies for {{ matrix.os }}
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      run: apt-get -y install atk-dev
+
     - name: Build (with Netplay)
       run: cargo install --target ${{ matrix.target }} --features netplay --path . --root ./out
 
