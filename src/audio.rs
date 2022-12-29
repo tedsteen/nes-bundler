@@ -1,6 +1,6 @@
 use std::ops::RangeInclusive;
 
-use sdl2::audio::{AudioQueue, AudioSpecDesired, AudioSpec};
+use sdl2::audio::{AudioQueue, AudioSpec, AudioSpecDesired};
 use sdl2::AudioSubsystem;
 
 use crate::settings::audio::AudioSettings;
@@ -69,7 +69,8 @@ impl Stream {
         (latency_frames * channels as f64) as u16
     }
     fn frames_to_latency(audio_spec: &AudioSpec) -> u8 {
-        ((audio_spec.samples as u64 * 1_000) / (audio_spec.channels as u64 * audio_spec.freq as u64)) as u8
+        ((audio_spec.samples as u64 * 1_000)
+            / (audio_spec.channels as u64 * audio_spec.freq as u64)) as u8
     }
 
     pub fn get_latency(&self) -> u8 {
@@ -97,13 +98,12 @@ impl Stream {
     }
 
     pub(crate) fn push_samples(&mut self, samples: &[SampleFormat]) {
-        self.output_device
-            .queue(
-                &samples
-                    .iter()
-                    .map(|s| (*s as f32 * self.volume) as i16)
-                    .collect::<Vec<i16>>(),
-            );
+        self.output_device.queue(
+            &samples
+                .iter()
+                .map(|s| (*s as f32 * self.volume) as i16)
+                .collect::<Vec<i16>>(),
+        );
     }
 
     pub(crate) fn set_output_device(&mut self, output_device_name: Option<String>) {

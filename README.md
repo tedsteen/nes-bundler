@@ -20,15 +20,16 @@ To create a bundle you first need to [configure it](config/README.md) with your 
 After that you can either ship your game with the configuration inside the executable or next to it.
 ### Next to it (the easy way)
 
-* Put your configuration in a zip-file called `bundle.zip`
 * Download the [binary of your choice](https://github.com/tedsteen/nes-bundler/releases/)
-* Run the executable next to the bundle!
+* Run it and select the directory with your bundle (`config.yaml` and `rom.nes`)
+* This will result in `bundle.zip` being placed next to the executable which will load automatically on startup.
 
 ### Inside it (the not so easy way)
 
 * [Install Rust](https://www.rust-lang.org/tools/install).
 * Make sure your bundle configuration is in the config directory.
-* Build with the `static bundle`-feature enabled `cargo build --release --features static-bundle`. Enable the `netplay`-feature for Netplay.
+* Build with the `static-bundle`-feature enabled `cargo build --release --features static-bundle`. Enable the `netplay`-feature for Netplay.
+* This will result in an executable with the bundle embedded inside of it.
 
 ## Limitations
 

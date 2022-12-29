@@ -12,15 +12,15 @@ jobs:
     strategy:
       matrix:
         name: [
-          linux,
+#          linux,
           windows,
           macos-x86,
           macos-arm
         ]
         include:
-          - name: linux
-            os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
+#          - name: linux
+#            os: ubuntu-latest
+#            target: x86_64-unknown-linux-gnu
           - name: windows
             os: windows-latest
             target: i686-pc-windows-msvc
@@ -39,15 +39,19 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
       with:
         targets: ${{ matrix.target }}
-    
+
+    - name: Install dependencies
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      run: sudo apt-get -y install libatk1.0-dev libgtk-3-dev libsdl2-dev
+
     - name: Build (with Netplay)
-      run: cargo install --target ${{ matrix.target }} --features netplay,static-link --path . --root ./out
+      run: cargo install --target ${{ matrix.target }} --features netplay --path . --root ./out
 
     - name: Rename
       run: cp out/bin/nes-bundler${{ matrix.file-ending }} nes-bundler-${{ matrix.name }}-${{ github.ref_name }}${{ matrix.file-ending }}
     
     - name: Build (without Netplay)
-      run: cargo install --target ${{ matrix.target }} --features static-link --path . --root ./out
+      run: cargo install --target ${{ matrix.target }} --path . --root ./out
 
     - name: Rename
       run: cp out/bin/nes-bundler${{ matrix.file-ending }} nes-bundler-${{ matrix.name }}-no-netplay-${{ github.ref_name }}${{ matrix.file-ending }}

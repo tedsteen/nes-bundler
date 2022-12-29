@@ -4,14 +4,12 @@ version = "0.1.3"
 authors = ["Ted Steen <ted.steen@gmail.com>"]
 edition = "2021"
 publish = false
-resolver="2"
 
 [features]
 default = []
 netplay = ["matchbox_socket", "tokio", "ggrs", "futures-timer", "futures", "uuid", "reqwest"]
 static-bundle = []
 debug = []
-static-link = ["sdl2/static-link"]
 
 [profile.release]
 strip = true
@@ -22,12 +20,14 @@ serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 
 winit = {version = "0.27", features = ["serde"] }
+rfd = "0.10.0"
+tinyfiledialogs = "3.0"
 pixels = "0.11"
 egui = "0.20"
 egui-winit = "0.20"
 egui-wgpu = "0.20"
 
-sdl2 = { version = "=0.35.1", features = ["bundled"] }
+sdl2 = { version = "=0.35.1", features = ["bundled", "static-link"] }
 sdl2-sys = "=0.35.1"
 
 game-loop = { version = "0.10", features = ["winit"] }

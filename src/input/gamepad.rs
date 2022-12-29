@@ -159,7 +159,9 @@ impl Gamepads {
                 // }
                 Event::ControllerButtonDown { which, button, .. } => {
                     if let Some(gamepad_state) = self.get_gamepad(which) {
-                        gamepad_state.pressed_buttons.insert(ButtonLocal::from_sdl2(button));
+                        gamepad_state
+                            .pressed_buttons
+                            .insert(ButtonLocal::from_sdl2(button));
                     } else {
                         eprintln!("Button down on unmapped gamepad {:?}", which);
                     }
