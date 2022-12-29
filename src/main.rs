@@ -4,10 +4,9 @@
 use std::collections::hash_map::DefaultHasher;
 use std::fs::File;
 use std::hash::Hash;
-use std::io::Read;
 
 use crate::input::JoypadInput;
-use anyhow::Result;
+use anyhow::{Result, Context};
 use audio::Stream;
 
 use game_loop::game_loop;
@@ -16,11 +15,13 @@ use gui::Framework;
 use input::Inputs;
 use palette::NTSC_PAL;
 use pixels::{Pixels, SurfaceTexture};
+use rfd::{FileDialog};
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
 use sdl2::Sdl;
 use serde::Deserialize;
 use settings::{Settings, MAX_PLAYERS};
+use tinyfiledialogs::{MessageBoxIcon};
 use winit::dpi::LogicalSize;
 use winit::event::{Event, VirtualKeyCode};
 use winit::event_loop::EventLoop;
@@ -68,18 +69,43 @@ fn get_static_bundle() -> Option<Bundle> {
     return None;
 }
 
-fn extract_bundle() -> Result<Bundle> {
+fn load_bundle() -> Result<Bundle> {
     if let Some(bundle) = get_static_bundle() {
         Ok(bundle)
-    } else {
-        let mut zip = zip::ZipArchive::new(File::open("bundle.zip")?)?;
-        let config: BuildConfiguration = serde_yaml::from_reader(zip.by_name("config.yaml")?)?;
+    } else if let Ok(zip_file) = File::open("bundle.zip") {
+        let mut zip = zip::ZipArchive::new(zip_file)?;
+        let config: BuildConfiguration = serde_yaml::from_reader(zip.by_name("config.yaml").context("config.yaml not found in bundle.zip")?)?;
+        
         let mut rom = Vec::new();
-        zip.by_name("rom.nes")?.read_to_end(&mut rom)?;
+        std::io::copy(&mut zip.by_name("rom.nes").context("rom.nes not found in bundle.zip")?, &mut rom)?;
         Ok(Bundle { config, rom })
+    } else {
+        let folder = FileDialog::new()
+        .set_title("Files to bundle")
+        .set_directory(".")
+        .pick_folder().context("No bundle to load")?;
+        
+        let mut config_path = folder.clone();
+        config_path.push("config.yaml");
+        let mut config_file = std::fs::File::open(config_path).context(format!("config.yaml not found in {:?}", folder))?;
+        
+        let mut rom_path = folder.clone();
+        rom_path.push("rom.nes");
+        let mut rom_file = std::fs::File::open(rom_path).context(format!("rom.nes not found in {:?}", folder))?;
+
+        let mut zip = zip::ZipWriter::new(std::fs::File::create("bundle.zip").unwrap());
+        zip.start_file("config.yaml", Default::default())?;
+        std::io::copy(&mut config_file, &mut zip)?;
+        
+        zip.start_file("rom.nes", Default::default())?;
+        std::io::copy(&mut rom_file, &mut zip)?;
+        
+        zip.finish()?;
+        
+        // Try again with newly created bundle.zip
+        load_bundle()
     }
 }
-
 #[derive(Deserialize, Debug)]
 pub struct BuildConfiguration {
     window_title: String,
@@ -87,26 +113,34 @@ pub struct BuildConfiguration {
     #[cfg(feature = "netplay")]
     netplay: netplay::NetplayBuildConfiguration,
 }
-fn main() -> Result<()> {
+fn main() {
+    match load_bundle() {
+        Ok(bundle) => {
+            #[cfg(feature = "netplay")]
+        if std::env::args()
+            .collect::<String>()
+            .contains(&"--print-netplay-id".to_string())
+        {
+            if let Some(id) = bundle.config.netplay.netplay_id {
+                println!("{id}");
+            }
+            std::process::exit(0);
+        }
+        run(bundle);
+        }
+        Err(e) => {
+            tinyfiledialogs::message_box_ok("Could not load the bundle", &format!("{:}", e).replace("'", "´").replace("\"", "``"),
+                                                     MessageBoxIcon::Error);
+        }
+    }
+}
+
+fn run(bundle: Bundle) -> ! {
     // This is required for certain controllers to work on Windows without the
     // video subsystem enabled:
     sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
 
     let sdl_context: Sdl = sdl2::init().unwrap();
-
-    let bundle = extract_bundle()
-        .map_err(|err| anyhow::Error::msg(format!("Could not extract bundle config ({err})")))?;
-
-    #[cfg(feature = "netplay")]
-    if std::env::args()
-        .collect::<String>()
-        .contains(&"--print-netplay-id".to_string())
-    {
-        if let Some(id) = bundle.config.netplay.netplay_id {
-            println!("{id}");
-        }
-        std::process::exit(0);
-    }
 
     let event_loop = EventLoop::new();
 
@@ -189,7 +223,6 @@ fn main() -> Result<()> {
         },
     );
 }
-
 pub struct MyGameState {
     nes: NesState,
     frame: i32,
