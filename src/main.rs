@@ -6,7 +6,7 @@ use std::fs::File;
 use std::hash::Hash;
 
 use crate::input::JoypadInput;
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use audio::Stream;
 
 use game_loop::game_loop;
@@ -15,13 +15,13 @@ use gui::Framework;
 use input::Inputs;
 use palette::NTSC_PAL;
 use pixels::{Pixels, SurfaceTexture};
-use rfd::{FileDialog};
+use rfd::FileDialog;
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
 use sdl2::Sdl;
 use serde::Deserialize;
 use settings::{Settings, MAX_PLAYERS};
-use tinyfiledialogs::{MessageBoxIcon};
+use tinyfiledialogs::MessageBoxIcon;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, VirtualKeyCode};
 use winit::event_loop::EventLoop;
@@ -74,34 +74,45 @@ fn load_bundle() -> Result<Bundle> {
         Ok(bundle)
     } else if let Ok(zip_file) = File::open("bundle.zip") {
         let mut zip = zip::ZipArchive::new(zip_file)?;
-        let config: BuildConfiguration = serde_yaml::from_reader(zip.by_name("config.yaml").context("config.yaml not found in bundle.zip")?)?;
-        
+        let config: BuildConfiguration = serde_yaml::from_reader(
+            zip.by_name("config.yaml")
+                .context("config.yaml not found in bundle.zip")?,
+        )?;
+
         let mut rom = Vec::new();
-        std::io::copy(&mut zip.by_name("rom.nes").context("rom.nes not found in bundle.zip")?, &mut rom)?;
+        std::io::copy(
+            &mut zip
+                .by_name("rom.nes")
+                .context("rom.nes not found in bundle.zip")?,
+            &mut rom,
+        )?;
         Ok(Bundle { config, rom })
     } else {
         let folder = FileDialog::new()
-        .set_title("Files to bundle")
-        .set_directory(".")
-        .pick_folder().context("No bundle to load")?;
-        
+            .set_title("Files to bundle")
+            .set_directory(".")
+            .pick_folder()
+            .context("No bundle to load")?;
+
         let mut config_path = folder.clone();
         config_path.push("config.yaml");
-        let mut config_file = std::fs::File::open(config_path).context(format!("config.yaml not found in {:?}", folder))?;
-        
+        let mut config_file = std::fs::File::open(config_path)
+            .context(format!("config.yaml not found in {:?}", folder))?;
+
         let mut rom_path = folder.clone();
         rom_path.push("rom.nes");
-        let mut rom_file = std::fs::File::open(rom_path).context(format!("rom.nes not found in {:?}", folder))?;
+        let mut rom_file =
+            std::fs::File::open(rom_path).context(format!("rom.nes not found in {:?}", folder))?;
 
         let mut zip = zip::ZipWriter::new(std::fs::File::create("bundle.zip").unwrap());
         zip.start_file("config.yaml", Default::default())?;
         std::io::copy(&mut config_file, &mut zip)?;
-        
+
         zip.start_file("rom.nes", Default::default())?;
         std::io::copy(&mut rom_file, &mut zip)?;
-        
+
         zip.finish()?;
-        
+
         // Try again with newly created bundle.zip
         load_bundle()
     }
@@ -117,20 +128,23 @@ fn main() {
     match load_bundle() {
         Ok(bundle) => {
             #[cfg(feature = "netplay")]
-        if std::env::args()
-            .collect::<String>()
-            .contains(&"--print-netplay-id".to_string())
-        {
-            if let Some(id) = bundle.config.netplay.netplay_id {
-                println!("{id}");
+            if std::env::args()
+                .collect::<String>()
+                .contains(&"--print-netplay-id".to_string())
+            {
+                if let Some(id) = bundle.config.netplay.netplay_id {
+                    println!("{id}");
+                }
+                std::process::exit(0);
             }
-            std::process::exit(0);
-        }
-        run(bundle);
+            run(bundle);
         }
         Err(e) => {
-            tinyfiledialogs::message_box_ok("Could not load the bundle", &format!("{:}", e).replace("'", "´").replace("\"", "``"),
-                                                     MessageBoxIcon::Error);
+            tinyfiledialogs::message_box_ok(
+                "Could not load the bundle",
+                &format!("{:}", e).replace("'", "´").replace("\"", "``"),
+                MessageBoxIcon::Error,
+            );
         }
     }
 }
@@ -202,7 +216,11 @@ fn run(bundle: Bundle) -> ! {
                 }
 
                 // Note: We might not get the exact latency in ms since there will be rounding errors. Be ok with 1-off
-                if i16::abs(game_runner.sound_stream.get_latency() as i16 - game_runner.settings.audio.latency as i16) > 1 {
+                if i16::abs(
+                    game_runner.sound_stream.get_latency() as i16
+                        - game_runner.settings.audio.latency as i16,
+                ) > 1
+                {
                     game_runner
                         .sound_stream
                         .set_latency(game_runner.settings.audio.latency);
@@ -266,7 +284,11 @@ impl MyGameState {
         data
     }
     fn load(&mut self, data: &mut Vec<u8>) {
-        self.frame = i32::from_le_bytes(data.split_off(data.len() - std::mem::size_of::<i32>()).try_into().unwrap());
+        self.frame = i32::from_le_bytes(
+            data.split_off(data.len() - std::mem::size_of::<i32>())
+                .try_into()
+                .unwrap(),
+        );
         self.nes.load_state(data);
         //println!("LOADED {:?}", self.frame);
     }
@@ -335,15 +357,10 @@ impl GameRunner {
         let inputs = [self.inputs.get_joypad(0), self.inputs.get_joypad(1)];
 
         #[cfg(not(feature = "netplay"))]
-        let fps = self
-            .state
-            .advance(inputs);
+        let fps = self.state.advance(inputs);
 
         #[cfg(feature = "netplay")]
-        let fps = self.netplay.advance(
-            &mut self.state,
-            inputs,
-        );
+        let fps = self.netplay.advance(&mut self.state, inputs);
 
         self.sound_stream
             .push_samples(self.state.nes.apu.consume_samples().as_slice());

@@ -119,17 +119,11 @@ impl NetplaySession {
             Ok(requests) => {
                 for request in requests {
                     match request {
-                        GGRSRequest::LoadGameState {
-                            cell,
-                            frame,
-                        } => {
+                        GGRSRequest::LoadGameState { cell, frame } => {
                             println!("Loading (frame {:?})", frame);
                             *game_state = cell.load().expect("No data found.");
                         }
-                        GGRSRequest::SaveGameState {
-                            cell,
-                            frame,
-                        } => {
+                        GGRSRequest::SaveGameState { cell, frame } => {
                             assert_eq!(game_state.frame, frame);
                             cell.save(frame, Some(game_state.clone()), None);
                         }
