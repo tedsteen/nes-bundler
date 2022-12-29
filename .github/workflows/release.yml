@@ -26,7 +26,7 @@ jobs:
     strategy:
       matrix:
         name: [
-          linux,
+#          linux,
           windows,
           macos-x86,
           macos-arm
