@@ -40,9 +40,9 @@ jobs:
       with:
         targets: ${{ matrix.target }}
 
-    - name: Install dependencies for {{ matrix.os }}
+    - name: Install dependencies for ${{ matrix.os }}
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      run: sudo apt-get -y install atk-dev
+      run: sudo apt-get -y install atk
 
     - name: Build (with Netplay)
       run: cargo install --target ${{ matrix.target }} --features netplay --path . --root ./out
