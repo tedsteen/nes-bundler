@@ -55,13 +55,13 @@ jobs:
         targets: ${{ matrix.target }}
     
     - name: Build (with Netplay)
-      run: cargo install --target ${{ matrix.target }} --features netplay,static-link --path . --root ./out
+      run: cargo install --target ${{ matrix.target }} --features netplay --path . --root ./out
 
     - name: Rename
       run: cp out/bin/nes-bundler${{ matrix.file-ending }} nes-bundler-${{ matrix.name }}-${{ github.ref_name }}${{ matrix.file-ending }}
     
     - name: Build (without Netplay)
-      run: cargo install --target ${{ matrix.target }} --features static-link --path . --root ./out
+      run: cargo install --target ${{ matrix.target }} --path . --root ./out
 
     - name: Rename
       run: cp out/bin/nes-bundler${{ matrix.file-ending }} nes-bundler-${{ matrix.name }}-no-netplay-${{ github.ref_name }}${{ matrix.file-ending }}
