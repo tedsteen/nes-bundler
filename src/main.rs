@@ -44,33 +44,29 @@ const HEIGHT: u32 = 240;
 const ZOOM: f32 = 3.0;
 
 pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
-    match mapper_from_file(cart_data.as_slice()) {
-        Ok(mapper) => {
-            mapper.print_debug_status();
-            let mut nes = NesState::new(mapper);
-            nes.power_on();
-            Ok(nes)
-        }
-        _err => Err("ouch".to_owned()),
-    }
+    let mapper = mapper_from_file(cart_data.as_slice())?;
+    mapper.print_debug_status();
+    let mut nes = NesState::new(mapper);
+    nes.power_on();
+    Ok(nes)
 }
 struct Bundle {
     config: BuildConfiguration,
     rom: Vec<u8>,
 }
 
-fn get_static_bundle() -> Option<Bundle> {
+fn get_static_bundle() -> Result<Option<Bundle>> {
     #[cfg(feature = "static-bundle")]
-    return Some(Bundle {
-        config: serde_yaml::from_str(include_str!("../config/config.yaml")).unwrap(),
+    return Ok(Some(Bundle {
+        config: serde_yaml::from_str(include_str!("../config/config.yaml"))?,
         rom: include_bytes!("../config/rom.nes").to_vec(),
-    });
+    }));
     #[cfg(not(feature = "static-bundle"))]
-    return None;
+    return Ok(None);
 }
 
 fn load_bundle() -> Result<Bundle> {
-    if let Some(bundle) = get_static_bundle() {
+    if let Some(bundle) = get_static_bundle()? {
         Ok(bundle)
     } else if let Ok(zip_file) = File::open("bundle.zip") {
         let mut zip = zip::ZipArchive::new(zip_file)?;
@@ -104,7 +100,9 @@ fn load_bundle() -> Result<Bundle> {
         let mut rom_file =
             std::fs::File::open(rom_path).context(format!("rom.nes not found in {:?}", folder))?;
 
-        let mut zip = zip::ZipWriter::new(std::fs::File::create("bundle.zip").unwrap());
+        let mut zip = zip::ZipWriter::new(
+            std::fs::File::create("bundle.zip").context("Could not create bundle.zip")?,
+        );
         zip.start_file("config.yaml", Default::default())?;
         std::io::copy(&mut config_file, &mut zip)?;
 
@@ -142,7 +140,7 @@ fn main() {
         Err(e) => {
             tinyfiledialogs::message_box_ok(
                 "Could not load the bundle",
-                &format!("{:}", e).replace("'", "´").replace("\"", "``"),
+                &format!("{:?}", e).replace("'", "´").replace("\"", "``"),
                 MessageBoxIcon::Error,
             );
         }
@@ -150,28 +148,96 @@ fn main() {
 }
 
 fn run(bundle: Bundle) -> ! {
+    let window_title = bundle.config.window_title.clone();
+    match initialise(bundle) {
+        Ok((event_loop, window, framework, game_runner)) => {
+            let mut last_settings = game_runner.settings.get_hash();
+            game_loop(
+                event_loop,
+                window,
+                (game_runner, framework),
+                FPS,
+                0.08,
+                move |g| {
+                    let game_runner = &mut g.game.0;
+                    let fps = game_runner.advance();
+                    g.set_updates_per_second(fps);
+                },
+                move |g| {
+                    let game_runner = &mut g.game.0;
+                    game_runner.render(&g.window, &mut g.game.1);
+                },
+                move |g, event| {
+                    let game_runner = &mut g.game.0;
+                    let curr_settings = game_runner.settings.get_hash();
+                    if last_settings != curr_settings {
+                        if *game_runner.sound_stream.get_output_device_name()
+                            != game_runner.settings.audio.output_device
+                        {
+                            game_runner
+                                .sound_stream
+                                .set_output_device(game_runner.settings.audio.output_device.clone())
+                        }
+
+                        // Note: We might not get the exact latency in ms since there will be rounding errors. Be ok with 1-off
+                        if i16::abs(
+                            game_runner.sound_stream.get_latency() as i16
+                                - game_runner.settings.audio.latency as i16,
+                        ) > 1
+                        {
+                            game_runner
+                                .sound_stream
+                                .set_latency(game_runner.settings.audio.latency);
+
+                            //Whatever latency we ended up getting, save that to settings
+                            game_runner.settings.audio.latency =
+                                game_runner.sound_stream.get_latency();
+                        }
+                        game_runner.sound_stream.volume =
+                            game_runner.settings.audio.volume as f32 / 100.0;
+
+                        last_settings = curr_settings;
+                        if game_runner.settings.save().is_err() {
+                            eprintln!("Failed to save the settings");
+                        }
+                    }
+                    if !game_runner.handle(event, &mut g.game.1) {
+                        g.exit();
+                    }
+                },
+            );
+        }
+        Err(e) => {
+            tinyfiledialogs::message_box_ok(
+                &format!("Could not start {}", window_title),
+                &format!("{:?}", e).replace("'", "´").replace("\"", "``"),
+                MessageBoxIcon::Error,
+            );
+            std::process::exit(0)
+        }
+    }
+}
+
+fn initialise(
+    bundle: Bundle,
+) -> Result<(EventLoop<()>, winit::window::Window, Framework, GameRunner)> {
     // This is required for certain controllers to work on Windows without the
     // video subsystem enabled:
     sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
-
-    let sdl_context: Sdl = sdl2::init().unwrap();
-
+    let sdl_context: Sdl = sdl2::init().map_err(anyhow::Error::msg)?;
     let event_loop = EventLoop::new();
-
     let window = {
         WindowBuilder::new()
             .with_title(&bundle.config.window_title)
             .with_inner_size(LogicalSize::new(WIDTH as f32 * ZOOM, HEIGHT as f32 * ZOOM))
             .with_min_inner_size(LogicalSize::new(WIDTH, HEIGHT))
-            .build(&event_loop)
-            .unwrap()
+            .build(&event_loop)?
     };
-
     let (pixels, framework) = {
         let window_size = window.inner_size();
         let scale_factor = window.scale_factor() as f32;
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
-        let pixels = Pixels::new(WIDTH, HEIGHT, surface_texture).expect("No pixels available");
+        let pixels = Pixels::new(WIDTH, HEIGHT, surface_texture).context("No pixels available")?;
         let framework = Framework::new(
             &event_loop,
             window_size.width,
@@ -182,64 +248,10 @@ fn run(bundle: Bundle) -> ! {
 
         (pixels, framework)
     };
-
     #[allow(unused_mut)] // needs to be mut for netplay feature
     let mut settings: Settings = Settings::new(&bundle.config.default_settings);
-
-    let game_runner = GameRunner::new(pixels, sdl_context, &bundle.config, settings, bundle.rom);
-    let mut last_settings = game_runner.settings.get_hash();
-    game_loop(
-        event_loop,
-        window,
-        (game_runner, framework),
-        FPS,
-        0.08,
-        move |g| {
-            let game_runner = &mut g.game.0;
-            let fps = game_runner.advance();
-            g.set_updates_per_second(fps);
-        },
-        move |g| {
-            let game_runner = &mut g.game.0;
-            game_runner.render(&g.window, &mut g.game.1);
-        },
-        move |g, event| {
-            let game_runner = &mut g.game.0;
-            let curr_settings = game_runner.settings.get_hash();
-            if last_settings != curr_settings {
-                if *game_runner.sound_stream.get_output_device_name()
-                    != game_runner.settings.audio.output_device
-                {
-                    game_runner
-                        .sound_stream
-                        .set_output_device(game_runner.settings.audio.output_device.clone())
-                }
-
-                // Note: We might not get the exact latency in ms since there will be rounding errors. Be ok with 1-off
-                if i16::abs(
-                    game_runner.sound_stream.get_latency() as i16
-                        - game_runner.settings.audio.latency as i16,
-                ) > 1
-                {
-                    game_runner
-                        .sound_stream
-                        .set_latency(game_runner.settings.audio.latency);
-
-                    //Whatever latency we ended up getting, save that to settings
-                    game_runner.settings.audio.latency = game_runner.sound_stream.get_latency();
-                }
-                game_runner.sound_stream.volume = game_runner.settings.audio.volume as f32 / 100.0;
-
-                last_settings = curr_settings;
-                if game_runner.settings.save().is_err() {
-                    eprintln!("Failed to save the settings");
-                }
-            }
-            if !game_runner.handle(event, &mut g.game.1) {
-                g.exit();
-            }
-        },
-    );
+    let game_runner = GameRunner::new(pixels, sdl_context, &bundle.config, settings, bundle.rom)?;
+    Ok((event_loop, window, framework, game_runner))
 }
 pub struct MyGameState {
     nes: NesState,
@@ -247,16 +259,19 @@ pub struct MyGameState {
 }
 
 impl MyGameState {
-    fn new(rom: Vec<u8>) -> Self {
+    fn new(rom: Vec<u8>) -> Result<Self> {
         let rom_data = match std::env::var("ROM_FILE") {
-            Ok(rom_file) => std::fs::read(&rom_file)
-                .unwrap_or_else(|_| panic!("Could not read ROM {}", rom_file)),
+            Ok(rom_file) => {
+                std::fs::read(&rom_file).context(format!("Could not read ROM {}", rom_file))?
+            }
             Err(_e) => rom.to_vec(),
         };
 
-        let nes = load_rom(rom_data).expect("Failed to load ROM");
+        let nes = load_rom(rom_data)
+            .map_err(anyhow::Error::msg)
+            .context("Failed to load ROM")?;
 
-        Self { nes, frame: 0 }
+        Ok(Self { nes, frame: 0 })
     }
 
     pub fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps {
@@ -318,7 +333,7 @@ impl GameRunner {
         build_config: &BuildConfiguration,
         mut settings: Settings,
         rom: Vec<u8>,
-    ) -> Self {
+    ) -> Result<Self> {
         let inputs = Inputs::new(
             &sdl_context,
             build_config.default_settings.input.selected.clone(),
@@ -328,16 +343,16 @@ impl GameRunner {
         let mut game_hash = DefaultHasher::new();
         rom.hash(&mut game_hash);
 
-        let audio_subsystem = sdl_context.audio().unwrap();
+        let audio_subsystem = sdl_context.audio().map_err(anyhow::Error::msg)?;
 
         let sound_stream = Stream::new(&audio_subsystem, &settings.audio);
-        let mut state = MyGameState::new(rom);
+        let mut state = MyGameState::new(rom)?;
         state
             .nes
             .apu
             .set_sample_rate(sound_stream.get_sample_rate() as u64);
 
-        Self {
+        Ok(Self {
             state,
             sound_stream,
             pixels,
@@ -351,7 +366,7 @@ impl GameRunner {
             inputs,
             #[cfg(feature = "debug")]
             debug: debug::DebugSettings::new(),
-        }
+        })
     }
     pub fn advance(&mut self) -> Fps {
         let inputs = [self.inputs.get_joypad(0), self.inputs.get_joypad(1)];
