@@ -2,7 +2,7 @@ FROM alpine/git as cloner
 WORKDIR /
 RUN git clone https://github.com/johanhelsing/matchbox.git
 
-FROM rust:1.61 as builder
+FROM rust:1.66 as builder
 WORKDIR /usr/matchbox_server
 RUN ls -hal
 COPY --from=cloner matchbox/matchbox_server/Cargo.toml .
