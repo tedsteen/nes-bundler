@@ -21,7 +21,7 @@ serde_yaml = "0.9"
 
 winit = {version = "0.27", features = ["serde"] }
 rfd = "0.10.0"
-tinyfiledialogs = "3.0"
+tinyfiledialogs = "3.9"
 pixels = "0.11"
 egui = "0.20"
 egui-winit = "0.20"
