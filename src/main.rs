@@ -142,7 +142,7 @@ fn main() {
         Err(e) => {
             tinyfiledialogs::message_box_ok(
                 "Could not load the bundle",
-                &format!("{:?}", e).replace("'", "´").replace("\"", "``"),
+                &format!("{:?}", e).replace('\'', "´").replace('\"', "``"),
                 MessageBoxIcon::Error,
             );
         }
@@ -212,7 +212,7 @@ fn run(bundle: Bundle) -> ! {
         Err(e) => {
             tinyfiledialogs::message_box_ok(
                 &format!("Could not start {}", window_title),
-                &format!("{:?}", e).replace("'", "´").replace("\"", "``"),
+                &format!("{:?}", e).replace('\'', "´").replace('\"', "``"),
                 MessageBoxIcon::Error,
             );
             std::process::exit(0)
