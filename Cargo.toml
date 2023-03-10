@@ -20,7 +20,7 @@ serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 
 winit = {version = "0.27", features = ["serde"] }
-rfd = "0.10.0"
+rfd = "0.11.0"
 tinyfiledialogs = "3.9"
 pixels = "0.11"
 egui = "0.20"
