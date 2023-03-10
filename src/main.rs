@@ -9,6 +9,8 @@ use crate::input::JoypadInput;
 use anyhow::{Context, Result};
 use audio::Stream;
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
 use game_loop::game_loop;
 
 use gui::Framework;
@@ -445,12 +447,12 @@ impl GameRunner {
     }
 
     fn save_state(&mut self) {
-        self.settings.last_save_state = Some(base64::encode(self.state.save()));
+        self.settings.last_save_state = Some(b64.encode(self.state.save()));
     }
 
     fn load_state(&mut self) {
         if let Some(save_state) = &mut self.settings.last_save_state {
-            if let Ok(buf) = &mut base64::decode(save_state) {
+            if let Ok(buf) = &mut b64.decode(save_state) {
                 self.state.load(buf);
                 self.sound_stream.drain(); //make sure we don't build up a delay
             }
