@@ -6,7 +6,7 @@ edition = "2021"
 publish = false
 
 [features]
-default = ["netplay"]
+default = []
 netplay = ["matchbox_socket", "tokio", "ggrs", "futures-timer", "futures", "uuid", "reqwest"]
 static-bundle = []
 debug = []
