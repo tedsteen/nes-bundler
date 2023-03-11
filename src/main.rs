@@ -9,7 +9,9 @@ use crate::input::JoypadInput;
 use anyhow::{Context, Result};
 use audio::Stream;
 
-use game_loop::game_loop;
+use crate::gameloop::game_loop;
+use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+use base64::Engine;
 
 use gui::Framework;
 use input::Inputs;
@@ -30,6 +32,7 @@ use winit::window::WindowBuilder;
 mod audio;
 #[cfg(feature = "debug")]
 mod debug;
+mod gameloop;
 mod gui;
 mod input;
 #[cfg(feature = "netplay")]
@@ -140,7 +143,7 @@ fn main() {
         Err(e) => {
             tinyfiledialogs::message_box_ok(
                 "Could not load the bundle",
-                &format!("{:?}", e).replace("'", "´").replace("\"", "``"),
+                &format!("{:?}", e).replace('\'', "´").replace('\"', "``"),
                 MessageBoxIcon::Error,
             );
         }
@@ -210,7 +213,7 @@ fn run(bundle: Bundle) -> ! {
         Err(e) => {
             tinyfiledialogs::message_box_ok(
                 &format!("Could not start {}", window_title),
-                &format!("{:?}", e).replace("'", "´").replace("\"", "``"),
+                &format!("{:?}", e).replace('\'', "´").replace('\"', "``"),
                 MessageBoxIcon::Error,
             );
             std::process::exit(0)
@@ -307,6 +310,7 @@ impl MyGameState {
         self.nes.load_state(data);
         //println!("LOADED {:?}", self.frame);
     }
+    #[cfg(feature = "netplay")]
     fn reset(&mut self) {
         self.nes.reset();
         self.frame = 0;
@@ -445,12 +449,12 @@ impl GameRunner {
     }
 
     fn save_state(&mut self) {
-        self.settings.last_save_state = Some(base64::encode(self.state.save()));
+        self.settings.last_save_state = Some(b64.encode(self.state.save()));
     }
 
     fn load_state(&mut self) {
         if let Some(save_state) = &mut self.settings.last_save_state {
-            if let Ok(buf) = &mut base64::decode(save_state) {
+            if let Ok(buf) = &mut b64.decode(save_state) {
                 self.state.load(buf);
                 self.sound_stream.drain(); //make sure we don't build up a delay
             }

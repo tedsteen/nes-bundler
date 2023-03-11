@@ -6,7 +6,7 @@ use crate::{
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, NetworkStats, P2PSession, SessionBuilder, SessionState};
-use matchbox_socket::{RtcIceServerConfig, WebRtcSocket, WebRtcSocketConfig};
+use matchbox_socket::{ChannelConfig, RtcIceServerConfig, WebRtcSocket, WebRtcSocketConfig};
 use rusticnes_core::nes::NesState;
 use serde::Deserialize;
 use std::{
@@ -150,7 +150,7 @@ impl NetplaySession {
 
         if game_state.frame % 30 == 0 {
             for i in 0..MAX_PLAYERS {
-                if let Ok(stats) = sess.network_stats(i as usize) {
+                if let Ok(stats) = sess.network_stats(i) {
                     if !sess.local_player_handles().contains(&i) {
                         self.stats[i].push_stats(stats);
                     }
@@ -344,8 +344,7 @@ impl Netplay {
                     }) => {
                         game_state.advance(inputs);
                         if let Some(socket) = maybe_socket {
-                            socket.accept_new_connections();
-                            let connected_peers = socket.connected_peers().len();
+                            let connected_peers = socket.connected_peers().count();
                             let remaining = MAX_PLAYERS - (connected_peers + 1);
                             if remaining == 0 {
                                 let players = socket.players();
@@ -357,7 +356,7 @@ impl Netplay {
                                     .with_fps(FPS as usize)
                                     .expect("invalid fps");
 
-                                for (i, player) in players.into_iter().enumerate() {
+                                for (i, player) in players.unwrap().into_iter().enumerate() {
                                     sess_build = sess_build
                                         .add_player(player, i)
                                         .expect("failed to add player");
@@ -459,8 +458,11 @@ impl Netplay {
                 username,
                 credential: password,
             },
+            channels: vec![ChannelConfig::unreliable()],
+            attempts: Some(3),
         });
         let loop_fut = loop_fut.fuse();
+
         rt.spawn(async move {
             let timeout = Delay::new(Duration::from_millis(100));
             futures::pin_mut!(loop_fut, timeout);

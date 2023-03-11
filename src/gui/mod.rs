@@ -2,9 +2,8 @@ use self::{audio::AudioSettingsGui, input::InputSettingsGui};
 use crate::GameRunner;
 use egui::{ClippedPrimitive, Context, TexturesDelta};
 use egui_wgpu::renderer::{Renderer, ScreenDescriptor};
-use egui_winit::winit::event::VirtualKeyCode;
 use pixels::{wgpu, PixelsContext};
-use winit::{event_loop::EventLoopWindowTarget, window::Window};
+use winit::{event_loop::EventLoopWindowTarget, window::Window, event::VirtualKeyCode};
 
 mod audio;
 #[cfg(feature = "debug")]

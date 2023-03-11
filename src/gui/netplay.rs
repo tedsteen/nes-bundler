@@ -144,7 +144,7 @@ impl GuiComponent for NetplayGui {
                         }
                         ConnectingState::PeeringUp(PeeringState { socket, .. }) => {
                             if let Some(socket) = socket {
-                                let connected_peers = socket.connected_peers().len();
+                                let connected_peers = socket.connected_peers().count();
                                 let remaining = MAX_PLAYERS - (connected_peers + 1);
                                 ui.label(format!("Waiting for {} players...", remaining));
                                 if ui.button("Cancel").clicked() {
