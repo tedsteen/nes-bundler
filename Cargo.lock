@@ -1672,17 +1672,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "game-loop"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fdd62d243b7fde7998a255fd44b7435829f28b0e3b636ab1050fea5c7db92ce5"
-dependencies = [
- "wasm-bindgen",
- "web-sys",
- "winit",
-]
-
-[[package]]
 name = "gdk-pixbuf-sys"
 version = "0.16.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2483,7 +2472,6 @@ dependencies = [
  "egui-winit",
  "futures",
  "futures-timer",
- "game-loop",
  "ggrs",
  "matchbox_socket",
  "pixels",

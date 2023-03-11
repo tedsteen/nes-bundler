@@ -11,7 +11,7 @@ use audio::Stream;
 
 use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
 use base64::Engine;
-use game_loop::game_loop;
+use crate::gameloop::game_loop;
 
 use gui::Framework;
 use input::Inputs;
@@ -38,6 +38,7 @@ mod input;
 mod netplay;
 mod palette;
 mod settings;
+mod gameloop;
 
 type Fps = u32;
 const FPS: Fps = 60;
