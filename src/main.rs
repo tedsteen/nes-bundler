@@ -9,8 +9,8 @@ use crate::input::JoypadInput;
 use anyhow::{Context, Result};
 use audio::Stream;
 
-use base64::Engine;
 use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+use base64::Engine;
 use game_loop::game_loop;
 
 use gui::Framework;

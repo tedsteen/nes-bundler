@@ -6,7 +6,7 @@ use crate::{
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, NetworkStats, P2PSession, SessionBuilder, SessionState};
-use matchbox_socket::{RtcIceServerConfig, WebRtcSocket, WebRtcSocketConfig, ChannelConfig};
+use matchbox_socket::{ChannelConfig, RtcIceServerConfig, WebRtcSocket, WebRtcSocketConfig};
 use rusticnes_core::nes::NesState;
 use serde::Deserialize;
 use std::{
