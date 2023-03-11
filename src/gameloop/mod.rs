@@ -1,4 +1,3 @@
-
 use time::TimeTrait;
 
 mod time;
@@ -42,8 +41,9 @@ impl<G, T: TimeTrait, W> GameLoop<G, T, W> {
     }
 
     pub fn next_frame<U, R>(&mut self, mut update: U, mut render: R) -> bool
-        where U: FnMut(&mut GameLoop<G, T, W>),
-              R: FnMut(&mut GameLoop<G, T, W>),
+    where
+        U: FnMut(&mut GameLoop<G, T, W>),
+        R: FnMut(&mut GameLoop<G, T, W>),
     {
         let mut g = self;
 
@@ -99,12 +99,22 @@ pub use winit;
 use self::time::Time;
 
 #[allow(clippy::too_many_arguments)]
-pub fn game_loop<G, U, R, H, T>(event_loop: EventLoop<T>, window: Window, game: G, updates_per_second: u32, max_frame_time: f64, mut update: U, mut render: R, mut handler: H) -> !
-    where G: 'static,
-            U: FnMut(&mut GameLoop<G, Time, Window>) + 'static,
-            R: FnMut(&mut GameLoop<G, Time, Window>) + 'static,
-            H: FnMut(&mut GameLoop<G, Time, Window>, &Event<'_, T>) + 'static,
-            T: 'static,
+pub fn game_loop<G, U, R, H, T>(
+    event_loop: EventLoop<T>,
+    window: Window,
+    game: G,
+    updates_per_second: u32,
+    max_frame_time: f64,
+    mut update: U,
+    mut render: R,
+    mut handler: H,
+) -> !
+where
+    G: 'static,
+    U: FnMut(&mut GameLoop<G, Time, Window>) + 'static,
+    R: FnMut(&mut GameLoop<G, Time, Window>) + 'static,
+    H: FnMut(&mut GameLoop<G, Time, Window>, &Event<'_, T>) + 'static,
+    T: 'static,
 {
     let mut game_loop = GameLoop::new(game, updates_per_second, max_frame_time, window);
 
@@ -119,11 +129,11 @@ pub fn game_loop<G, U, R, H, T>(event_loop: EventLoop<T>, window: Window, game: 
                 if !game_loop.next_frame(&mut update, &mut render) {
                     *control_flow = ControlFlow::Exit;
                 }
-            },
+            }
             Event::MainEventsCleared => {
                 game_loop.window.request_redraw();
-            },
-            _ => {},
+            }
+            _ => {}
         }
     })
 }

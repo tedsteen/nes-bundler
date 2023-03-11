@@ -1,4 +1,4 @@
-pub trait TimeTrait : Copy {
+pub trait TimeTrait: Copy {
     fn now() -> Self;
     fn sub(&self, other: &Self) -> f64;
 }
