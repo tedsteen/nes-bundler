@@ -310,6 +310,7 @@ impl MyGameState {
         self.nes.load_state(data);
         //println!("LOADED {:?}", self.frame);
     }
+    #[cfg(feature = "netplay")]
     fn reset(&mut self) {
         self.nes.reset();
         self.frame = 0;
