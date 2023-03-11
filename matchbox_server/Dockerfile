@@ -1,11 +1,14 @@
 FROM alpine/git as cloner
 WORKDIR /
+ARG CACHEBUST=$(git rev-parse https://github.com/johanhelsing/matchbox.git)
+RUN echo ${CACHEBUST}
 RUN git clone https://github.com/johanhelsing/matchbox.git
 
 FROM rust:1.66 as builder
 WORKDIR /usr/matchbox_server
 RUN ls -hal
 COPY --from=cloner matchbox/matchbox_server/Cargo.toml .
+COPY --from=cloner matchbox/matchbox_protocol/ /usr/matchbox_protocol
 RUN mkdir src \
     && echo "fn main() {}" > src/main.rs \
     && cargo build --release

@@ -6,7 +6,7 @@ use crate::{
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, NetworkStats, P2PSession, SessionBuilder, SessionState};
-use matchbox_socket::{ChannelConfig, RtcIceServerConfig, WebRtcSocket, WebRtcSocketConfig};
+use matchbox_socket::{ChannelConfig, RtcIceServerConfig, WebRtcSocket, WebRtcSocketConfig, PeerState};
 use rusticnes_core::nes::NesState;
 use serde::Deserialize;
 use std::{
@@ -344,6 +344,8 @@ impl Netplay {
                     }) => {
                         game_state.advance(inputs);
                         if let Some(socket) = maybe_socket {
+                            socket.update_peers();
+                    
                             let connected_peers = socket.connected_peers().count();
                             let remaining = MAX_PLAYERS - (connected_peers + 1);
                             if remaining == 0 {
@@ -439,9 +441,9 @@ impl Netplay {
         let matchbox_server = &conf.matchbox.server;
 
         let room = match &start_method {
-            state::StartMethod::Create(name) => format!("join/{game_hash}/{}", name.clone()),
-            //state::StartMethod::Resume(old_session) => format!("resume/{game_hash}/{}", old_session.name.clone()),
-            state::StartMethod::Random => "random/{game_hash}/?next=2".to_string(),
+            state::StartMethod::Create(name) => format!("join_{game_hash}_{}", name.clone()),
+            //state::StartMethod::Resume(old_session) => format!("resume_{game_hash}_{}", old_session.name.clone()),
+            state::StartMethod::Random => "random_{game_hash}?next=2".to_string(),
         };
 
         let (username, password) = match &conf.matchbox.ice.credentials {
