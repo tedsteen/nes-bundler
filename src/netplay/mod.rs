@@ -6,7 +6,8 @@ use crate::{
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, NetworkStats, P2PSession, SessionBuilder, SessionState};
-use matchbox_socket::{ChannelConfig, RtcIceServerConfig, WebRtcSocket, WebRtcSocketConfig, PeerState};
+use matchbox_socket::{ChannelConfig, RtcIceServerConfig, WebRtcSocket, WebRtcSocketConfig};
+use md5::Digest;
 use rusticnes_core::nes::NesState;
 use serde::Deserialize;
 use std::{
@@ -172,7 +173,7 @@ pub struct Netplay {
     pub room_name: String,
     reqwest_client: reqwest::Client,
     netplay_id: String,
-    game_hash: u64,
+    game_hash: Digest,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -238,7 +239,7 @@ impl Netplay {
     pub fn new(
         config: &NetplayBuildConfiguration,
         settings: &mut Settings,
-        game_hash: u64,
+        game_hash: Digest,
     ) -> Self {
         let room_name = config.default_room_name.clone();
         let netplay_id = config
@@ -345,7 +346,7 @@ impl Netplay {
                         game_state.advance(inputs);
                         if let Some(socket) = maybe_socket {
                             socket.update_peers();
-                    
+
                             let connected_peers = socket.connected_peers().count();
                             let remaining = MAX_PLAYERS - (connected_peers + 1);
                             if remaining == 0 {
@@ -428,7 +429,7 @@ impl Netplay {
         rt: &mut Runtime,
         resp: TurnOnResponse,
         start_method: StartMethod,
-        game_hash: u64,
+        game_hash: Digest,
     ) -> ConnectingState {
         let mut maybe_unlock_url = None;
         let conf = match resp {
@@ -441,9 +442,9 @@ impl Netplay {
         let matchbox_server = &conf.matchbox.server;
 
         let room = match &start_method {
-            state::StartMethod::Create(name) => format!("join_{game_hash}_{}", name.clone()),
+            state::StartMethod::Create(name) => format!("join_{:x}_{}", game_hash, name.clone()),
             //state::StartMethod::Resume(old_session) => format!("resume_{game_hash}_{}", old_session.name.clone()),
-            state::StartMethod::Random => "random_{game_hash}?next=2".to_string(),
+            state::StartMethod::Random => format!("random_{:x}?next=2", game_hash),
         };
 
         let (username, password) = match &conf.matchbox.ice.credentials {

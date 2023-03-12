@@ -3,7 +3,7 @@ use crate::GameRunner;
 use egui::{ClippedPrimitive, Context, TexturesDelta};
 use egui_wgpu::renderer::{Renderer, ScreenDescriptor};
 use pixels::{wgpu, PixelsContext};
-use winit::{event_loop::EventLoopWindowTarget, window::Window, event::VirtualKeyCode};
+use winit::{event::VirtualKeyCode, event_loop::EventLoopWindowTarget, window::Window};
 
 mod audio;
 #[cfg(feature = "debug")]
