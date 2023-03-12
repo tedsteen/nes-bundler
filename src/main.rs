@@ -310,7 +310,8 @@ impl MyGameState {
     }
     #[cfg(feature = "netplay")]
     fn reset(&mut self) {
-        self.nes.reset();
+        self.nes = NesState::new(self.nes.mapper.clone());
+        self.nes.power_on();
         self.frame = 0;
     }
 }
