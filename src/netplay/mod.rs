@@ -382,13 +382,13 @@ impl Netplay {
                         if let Some(p2p_session) = &mut synchronizing_state.p2p_session {
                             p2p_session.poll_remote_clients();
                             if let SessionState::Running = p2p_session.current_state() {
+                                game_state.reset();
                                 new_state = Some(NetplayState::Connected(
                                     NetplaySession::new(
                                         synchronizing_state.p2p_session.take().unwrap(),
                                     ),
                                     ConnectedState::MappingInput,
                                 ));
-                                game_state.reset();
                             }
                         }
                         new_state
