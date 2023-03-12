@@ -1,9 +1,7 @@
 #![deny(clippy::all)]
 #![forbid(unsafe_code)]
 
-use std::collections::hash_map::DefaultHasher;
 use std::fs::File;
-use std::hash::Hash;
 
 use crate::input::JoypadInput;
 use anyhow::{Context, Result};
@@ -344,13 +342,10 @@ impl GameRunner {
             &mut settings.input,
         );
 
-        let mut game_hash = DefaultHasher::new();
-        rom.hash(&mut game_hash);
-
         let audio_subsystem = sdl_context.audio().map_err(anyhow::Error::msg)?;
 
         let sound_stream = Stream::new(&audio_subsystem, &settings.audio);
-        let mut state = MyGameState::new(rom)?;
+        let mut state = MyGameState::new(rom.clone())?;
         state
             .nes
             .apu
@@ -361,11 +356,7 @@ impl GameRunner {
             sound_stream,
             pixels,
             #[cfg(feature = "netplay")]
-            netplay: netplay::Netplay::new(
-                &build_config.netplay,
-                &mut settings,
-                std::hash::Hasher::finish(&game_hash),
-            ),
+            netplay: netplay::Netplay::new(&build_config.netplay, &mut settings, md5::compute(&rom)),
             settings,
             inputs,
             #[cfg(feature = "debug")]

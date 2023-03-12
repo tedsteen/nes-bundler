@@ -7,7 +7,7 @@ publish = false
 
 [features]
 default = []
-netplay = ["matchbox_socket", "tokio", "ggrs", "futures-timer", "futures", "uuid", "reqwest"]
+netplay = ["matchbox_socket", "tokio", "ggrs", "futures-timer", "futures", "uuid", "reqwest", "md5"]
 static-bundle = []
 debug = []
 
@@ -42,3 +42,4 @@ tokio = { version = "1", features = ["rt"], optional = true }
 futures = {version = "0.3", optional = true }
 uuid = { version = "1", features = [ "v4" ], optional = true }
 reqwest = { version = "0.11", features = ["json"], optional = true }
+md5 = { version = "0.7", optional = true }
