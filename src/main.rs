@@ -308,11 +308,17 @@ impl MyGameState {
         self.nes.load_state(data);
         //println!("LOADED {:?}", self.frame);
     }
-    #[cfg(feature = "netplay")]
-    fn reset(&mut self) {
-        self.nes = NesState::new(self.nes.mapper.clone());
-        self.nes.power_on();
-        self.frame = 0;
+}
+
+impl Clone for MyGameState {
+    fn clone(&self) -> Self {
+        let data = &mut self.save();
+        let mut clone = Self {
+            nes: NesState::new(self.nes.mapper.clone()),
+            frame: 0,
+        };
+        clone.load(data);
+        clone
     }
 }
 
@@ -347,17 +353,18 @@ impl GameRunner {
 
         let sound_stream = Stream::new(&audio_subsystem, &settings.audio);
         let mut state = MyGameState::new(rom.clone())?;
+
         state
             .nes
             .apu
             .set_sample_rate(sound_stream.get_sample_rate() as u64);
 
         Ok(Self {
-            state,
+            state: state.clone(),
             sound_stream,
             pixels,
             #[cfg(feature = "netplay")]
-            netplay: netplay::Netplay::new(&build_config.netplay, &mut settings, md5::compute(&rom)),
+            netplay: netplay::Netplay::new(&build_config.netplay, &mut settings, state, md5::compute(&rom)),
             settings,
             inputs,
             #[cfg(feature = "debug")]
