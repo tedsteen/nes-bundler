@@ -43,7 +43,6 @@ After that you can either ship your game with the configuration inside the execu
 * Fullscreen mode (alt+enter is standard to toggle between full screen and windowed, on Windows)
   * Some way to quit without closing the window will be needed for fullscreen. Probably a button in the settings menu.
 * Perhaps freeze the game while settings is open?
-* BUG (windows): You have to press a key on the gamepad before it appears as an option in settings.
 * A little toast at the start that says "Press ESC to change settings"
 * Netplay
   * Save and restore session - save game state every 100th or so frame (when all peers have reached that 100th frame).
