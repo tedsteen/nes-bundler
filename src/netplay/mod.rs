@@ -8,7 +8,6 @@ use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, NetworkStats, P2PSession, SessionBuilder, SessionState};
 use matchbox_socket::{ChannelConfig, RtcIceServerConfig, WebRtcSocket, WebRtcSocketConfig};
 use md5::Digest;
-use rusticnes_core::nes::NesState;
 use serde::Deserialize;
 use std::{
     collections::VecDeque,
@@ -23,19 +22,6 @@ use self::state::{
     TurnOnError,
 };
 pub mod state;
-
-impl Clone for MyGameState {
-    fn clone(&self) -> Self {
-        let data = &mut self.save();
-        let mut clone = Self {
-            nes: NesState::new(self.nes.mapper.clone()),
-            frame: 0,
-        };
-        clone.load(data);
-        clone
-    }
-}
-
 #[derive(Debug)]
 pub struct GGRSConfig;
 impl Config for GGRSConfig {
@@ -173,7 +159,8 @@ pub struct Netplay {
     pub room_name: String,
     reqwest_client: reqwest::Client,
     netplay_id: String,
-    game_hash: Digest,
+    initial_game_state: MyGameState,
+    rom_hash: Digest
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -239,7 +226,8 @@ impl Netplay {
     pub fn new(
         config: &NetplayBuildConfiguration,
         settings: &mut Settings,
-        game_hash: Digest,
+        initial_game_state: MyGameState,
+        rom_hash: Digest
     ) -> Self {
         let room_name = config.default_room_name.clone();
         let netplay_id = config
@@ -259,7 +247,8 @@ impl Netplay {
             room_name,
             reqwest_client: reqwest::Client::new(),
             netplay_id,
-            game_hash,
+            initial_game_state,
+            rom_hash
         }
     }
     pub fn start(&mut self, start_method: StartMethod) {
@@ -271,7 +260,7 @@ impl Netplay {
                         &mut self.rt,
                         TurnOnResponse::Full(conf.clone()),
                         start_method,
-                        self.game_hash,
+                        self.rom_hash
                     ),
                 );
             }
@@ -321,7 +310,7 @@ impl Netplay {
                                     &mut self.rt,
                                     resp,
                                     start_method.clone(),
-                                    self.game_hash,
+                                    self.rom_hash
                                 );
                             }
                             Ok(None) => (), //No result yet
@@ -382,7 +371,8 @@ impl Netplay {
                         if let Some(p2p_session) = &mut synchronizing_state.p2p_session {
                             p2p_session.poll_remote_clients();
                             if let SessionState::Running = p2p_session.current_state() {
-                                game_state.reset();
+                                *game_state = self.initial_game_state.clone();
+
                                 new_state = Some(NetplayState::Connected(
                                     NetplaySession::new(
                                         synchronizing_state.p2p_session.take().unwrap(),
@@ -429,7 +419,7 @@ impl Netplay {
         rt: &mut Runtime,
         resp: TurnOnResponse,
         start_method: StartMethod,
-        game_hash: Digest,
+        rom_hash: Digest
     ) -> ConnectingState {
         let mut maybe_unlock_url = None;
         let conf = match resp {
@@ -442,9 +432,9 @@ impl Netplay {
         let matchbox_server = &conf.matchbox.server;
 
         let room = match &start_method {
-            state::StartMethod::Create(name) => format!("join_{:x}_{}", game_hash, name.clone()),
+            state::StartMethod::Create(name) => format!("join_{:x}_{}", rom_hash, name.clone()),
             //state::StartMethod::Resume(old_session) => format!("resume_{game_hash}_{}", old_session.name.clone()),
-            state::StartMethod::Random => format!("random_{:x}?next=2", game_hash),
+            state::StartMethod::Random => format!("random_{:x}?next=2", rom_hash),
         };
 
         let (username, password) = match &conf.matchbox.ice.credentials {
