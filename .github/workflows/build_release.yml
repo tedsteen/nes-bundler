@@ -2,26 +2,10 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
 
-jobs:
-  create_release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v1
-        with:
-          name: ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-  
-  build_release:
+jobs:  
+  build:
     name: Build ${{ matrix.name }} (${{ matrix.target }})
-    needs: create_release
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -70,10 +54,43 @@ jobs:
     - name: Rename
       run: cp out/bin/nes-bundler${{ matrix.file-ending }} nes-bundler-${{ matrix.name }}-no-netplay-${{ github.ref_name }}${{ matrix.file-ending }}
 
-    - name: Release
-      uses: softprops/action-gh-release@v1
+    # - name: Codesign executable
+    #   if: ${{ startsWith(matrix.os, 'macos') }}
+    #   env: 
+    #     MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+    #     MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+    #   run: |
+    #     echo $MACOS_CERTIFICATE | base64 --decode > certificate.p12
+    #     security create-keychain -p password build.keychain
+    #     security default-keychain -s build.keychain
+    #     security unlock-keychain -p password build.keychain
+    #     security import certificate.p12 -k build.keychain -P $MACOS_CERTIFICATE_PWD -T /usr/bin/codesign
+    #     security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k password build.keychain
+    #     /usr/bin/codesign --force -s BF7E84BDA9B9A580B3CA909530AC85693BBA287E out/bin/nes-bundler${{ matrix.file-ending }} -v
+
+    - name: Upload binaries
+      uses: actions/upload-artifact@v3
       with:
-        tag_name: ${{ needs.create_release.outputs.tag-name }}
-        files: |
-          nes-bundler-${{ matrix.name }}-${{ github.ref_name }}${{ matrix.file-ending }}
-          nes-bundler-${{ matrix.name }}-no-netplay-${{ github.ref_name }}${{ matrix.file-ending }}
+        name: binaries
+        path: nes-bundler-${{ matrix.name }}*
+  
+  release:
+    name: Release
+    needs: build
+    if: startsWith(github.event.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download binaries
+        uses: actions/download-artifact@v3
+        with:
+          name: binaries
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: nes-bundler*
+          
