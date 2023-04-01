@@ -855,6 +855,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "520fbf3c07483f94e3e3ca9d0cfd913d7718ef2483d2cfd91c0d9e91474ab913"
 
 [[package]]
+name = "convert_case"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
+
+[[package]]
 name = "core-foundation"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -938,6 +944,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b540bd8bc810d3885c6ea91e2018302f68baba2129ab3e88f32389ee9370880d"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "crossbeam-channel"
+version = "0.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf2b3e8478797446514c91ef04bafcb59faba183e621ad488df88983cc14128c"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
 ]
 
 [[package]]
@@ -1205,6 +1221,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f0314b72bed045f3a68671b3c86328386762c93f82d98c65c3cb5e5f573dd68"
 dependencies = [
  "derive_builder_core",
+ "syn",
+]
+
+[[package]]
+name = "derive_more"
+version = "0.99.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4fb810d30a7c1953f91334de7244731fc3f3c10d7fe163338a35b9f640960321"
+dependencies = [
+ "convert_case",
+ "proc-macro2",
+ "quote",
+ "rustc_version",
  "syn",
 ]
 
@@ -1779,10 +1808,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c05aeb6a22b8f62540c194aac980f2115af067bfe15a0734d7277a768d396b31"
 dependencies = [
  "cfg-if",
- "js-sys",
  "libc",
  "wasi 0.11.0+wasi-snapshot-preview1",
- "wasm-bindgen",
 ]
 
 [[package]]
@@ -2303,17 +2330,21 @@ dependencies = [
 
 [[package]]
 name = "matchbox_protocol"
-version = "0.1.0"
-source = "git+https://github.com/johanhelsing/matchbox#94d28cf79b1a7b40a350709ca21f9e6ceba818b4"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "748f4cf2140e5d5727207b75a829deb8e4e29067fc7133fed46da1cefa5bd637"
 dependencies = [
  "cfg-if",
+ "derive_more",
  "serde",
+ "uuid",
 ]
 
 [[package]]
 name = "matchbox_socket"
-version = "0.5.0"
-source = "git+https://github.com/johanhelsing/matchbox#94d28cf79b1a7b40a350709ca21f9e6ceba818b4"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4ac8e584f2b0b8ebb3f54a71c5c4af41cecd5f28fdbb0dc0617884570710570"
 dependencies = [
  "async-compat",
  "async-trait",
@@ -2321,6 +2352,7 @@ dependencies = [
  "bincode",
  "bytes",
  "cfg-if",
+ "crossbeam-channel",
  "futures",
  "futures-channel",
  "futures-timer",
@@ -2329,11 +2361,11 @@ dependencies = [
  "js-sys",
  "log",
  "matchbox_protocol",
+ "once_cell",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
  "thiserror",
- "uuid",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -3546,9 +3578,9 @@ dependencies = [
 
 [[package]]
 name = "serde-wasm-bindgen"
-version = "0.4.5"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3b4c031cd0d9014307d82b8abf653c0290fbdaeb4c02d00c63cf52f728628bf"
+checksum = "f3b143e2833c57ab9ad3ea280d21fd34e285a42837aeb0ee301f4f41890fa00e"
 dependencies = [
  "js-sys",
  "serde",
@@ -4243,7 +4275,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1674845326ee10d37ca60470760d4288a6f80f304007d92e5c53bab78c9cfd79"
 dependencies = [
  "getrandom 0.2.8",
- "wasm-bindgen",
+ "serde",
 ]
 
 [[package]]
