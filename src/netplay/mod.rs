@@ -6,7 +6,7 @@ use crate::{
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, NetworkStats, P2PSession, SessionBuilder, SessionState};
-use matchbox_socket::{ChannelConfig, RtcIceServerConfig, WebRtcSocket, WebRtcSocketConfig};
+use matchbox_socket::{ChannelConfig, RtcIceServerConfig, WebRtcSocketBuilder, PeerId};
 use md5::Digest;
 use serde::Deserialize;
 use std::{
@@ -27,7 +27,7 @@ pub struct GGRSConfig;
 impl Config for GGRSConfig {
     type Input = u8;
     type State = MyGameState;
-    type Address = String;
+    type Address = PeerId;
 }
 pub const STATS_HISTORY: usize = 100;
 
@@ -91,7 +91,7 @@ impl NetplaySession {
 
         for event in sess.events() {
             if let ggrs::GGRSEvent::Disconnected { addr } = event {
-                eprintln!("Lost peer {}, disconnecting...", addr);
+                eprintln!("Lost peer {:?}, disconnecting...", addr);
                 self.state = NetplaySessionState::DisconnectedPeers;
                 return;
             }
@@ -348,7 +348,7 @@ impl Netplay {
                                     .with_fps(FPS as usize)
                                     .expect("invalid fps");
 
-                                for (i, player) in players.unwrap().into_iter().enumerate() {
+                                for (i, player) in players.into_iter().enumerate() {
                                     sess_build = sess_build
                                         .add_player(player, i)
                                         .expect("failed to add player");
@@ -444,16 +444,12 @@ impl Netplay {
             IceCredentials::None => (None, None),
         };
 
-        let (socket, loop_fut) = WebRtcSocket::new_with_config(WebRtcSocketConfig {
-            room_url: format!("ws://{matchbox_server}/{room}"),
-            ice_server: RtcIceServerConfig {
-                urls: conf.matchbox.ice.urls.clone(),
-                username,
-                credential: password,
-            },
-            channels: vec![ChannelConfig::unreliable()],
-            attempts: Some(3),
-        });
+        let (socket, loop_fut) = WebRtcSocketBuilder::new(format!("ws://{matchbox_server}/{room}")).ice_server(RtcIceServerConfig {
+            urls: conf.matchbox.ice.urls.clone(),
+            username,
+            credential: password,
+        }).add_channel(ChannelConfig::unreliable()).build();
+
         let loop_fut = loop_fut.fuse();
 
         rt.spawn(async move {
