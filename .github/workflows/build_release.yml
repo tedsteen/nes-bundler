@@ -54,19 +54,19 @@ jobs:
     - name: Rename
       run: cp out/bin/nes-bundler${{ matrix.file-ending }} nes-bundler-${{ matrix.name }}-no-netplay-${{ github.ref_name }}${{ matrix.file-ending }}
 
-    # - name: Codesign executable
-    #   if: ${{ startsWith(matrix.os, 'macos') }}
-    #   env: 
-    #     MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-    #     MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
-    #   run: |
-    #     echo $MACOS_CERTIFICATE | base64 --decode > certificate.p12
-    #     security create-keychain -p password build.keychain
-    #     security default-keychain -s build.keychain
-    #     security unlock-keychain -p password build.keychain
-    #     security import certificate.p12 -k build.keychain -P $MACOS_CERTIFICATE_PWD -T /usr/bin/codesign
-    #     security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k password build.keychain
-    #     /usr/bin/codesign --force -s BF7E84BDA9B9A580B3CA909530AC85693BBA287E out/bin/nes-bundler${{ matrix.file-ending }} -v
+    - name: Codesign executable
+      if: ${{ startsWith(matrix.os, 'macos') }}
+      env: 
+        MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+        MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+      run: |
+        echo $MACOS_CERTIFICATE | base64 --decode > certificate.p12
+        security create-keychain -p password build.keychain
+        security default-keychain -s build.keychain
+        security unlock-keychain -p password build.keychain
+        security import certificate.p12 -k build.keychain -P $MACOS_CERTIFICATE_PWD -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k password build.keychain
+        /usr/bin/codesign --force -s BF7E84BDA9B9A580B3CA909530AC85693BBA287E nes-bundler-${{ matrix.name }}* -v
 
     - name: Upload binaries
       uses: actions/upload-artifact@v3
