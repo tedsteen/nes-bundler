@@ -10,15 +10,15 @@ jobs:
     strategy:
       matrix:
         name: [
-#          linux,
+          linux,
           windows,
           macos-x86,
           macos-arm
         ]
         include:
-#          - name: linux
-#            os: ubuntu-latest
-#            target: x86_64-unknown-linux-gnu
+          - name: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
           - name: windows
             os: windows-latest
             target: i686-pc-windows-msvc
