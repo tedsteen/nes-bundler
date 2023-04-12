@@ -1,0 +1,7 @@
+# https://github.com/Rust-SDL2/rust-sdl2/issues/1241
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-args=-weak_framework CoreHaptics"]
+
+# https://github.com/Rust-SDL2/rust-sdl2/issues/1241
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-args=-weak_framework CoreHaptics"]
