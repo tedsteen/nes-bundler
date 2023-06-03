@@ -400,7 +400,7 @@ impl GameRunner {
 
         let pixels = &mut self.pixels;
 
-        self.state.render(pixels.get_frame_mut());
+        self.state.render(pixels.frame_mut());
 
         // Render everything together
         pixels
