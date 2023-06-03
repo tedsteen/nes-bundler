@@ -98,12 +98,14 @@ impl Stream {
     }
 
     pub(crate) fn push_samples(&mut self, samples: &[SampleFormat]) {
-        self.output_device.queue_audio(
-            &samples
-                .iter()
-                .map(|s| (*s as f32 * self.volume) as i16)
-                .collect::<Vec<i16>>(),
-        ).unwrap();
+        self.output_device
+            .queue_audio(
+                &samples
+                    .iter()
+                    .map(|s| (*s as f32 * self.volume) as i16)
+                    .collect::<Vec<i16>>(),
+            )
+            .unwrap();
     }
 
     pub(crate) fn set_output_device(&mut self, output_device_name: Option<String>) {

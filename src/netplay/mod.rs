@@ -6,7 +6,7 @@ use crate::{
 use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{Config, GGRSRequest, NetworkStats, P2PSession, SessionBuilder, SessionState};
-use matchbox_socket::{ChannelConfig, RtcIceServerConfig, WebRtcSocketBuilder, PeerId};
+use matchbox_socket::{ChannelConfig, PeerId, RtcIceServerConfig, WebRtcSocketBuilder};
 use md5::Digest;
 use serde::Deserialize;
 use std::{
@@ -160,7 +160,7 @@ pub struct Netplay {
     reqwest_client: reqwest::Client,
     netplay_id: String,
     initial_game_state: MyGameState,
-    rom_hash: Digest
+    rom_hash: Digest,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -227,7 +227,7 @@ impl Netplay {
         config: &NetplayBuildConfiguration,
         settings: &mut Settings,
         initial_game_state: MyGameState,
-        rom_hash: Digest
+        rom_hash: Digest,
     ) -> Self {
         let room_name = config.default_room_name.clone();
         let netplay_id = config
@@ -248,7 +248,7 @@ impl Netplay {
             reqwest_client: reqwest::Client::new(),
             netplay_id,
             initial_game_state,
-            rom_hash
+            rom_hash,
         }
     }
     pub fn start(&mut self, start_method: StartMethod) {
@@ -260,7 +260,7 @@ impl Netplay {
                         &mut self.rt,
                         TurnOnResponse::Full(conf.clone()),
                         start_method,
-                        self.rom_hash
+                        self.rom_hash,
                     ),
                 );
             }
@@ -310,7 +310,7 @@ impl Netplay {
                                     &mut self.rt,
                                     resp,
                                     start_method.clone(),
-                                    self.rom_hash
+                                    self.rom_hash,
                                 );
                             }
                             Ok(None) => (), //No result yet
@@ -419,7 +419,7 @@ impl Netplay {
         rt: &mut Runtime,
         resp: TurnOnResponse,
         start_method: StartMethod,
-        rom_hash: Digest
+        rom_hash: Digest,
     ) -> ConnectingState {
         let mut maybe_unlock_url = None;
         let conf = match resp {
@@ -444,11 +444,14 @@ impl Netplay {
             IceCredentials::None => (None, None),
         };
 
-        let (socket, loop_fut) = WebRtcSocketBuilder::new(format!("ws://{matchbox_server}/{room}")).ice_server(RtcIceServerConfig {
-            urls: conf.matchbox.ice.urls.clone(),
-            username,
-            credential: password,
-        }).add_channel(ChannelConfig::unreliable()).build();
+        let (socket, loop_fut) = WebRtcSocketBuilder::new(format!("ws://{matchbox_server}/{room}"))
+            .ice_server(RtcIceServerConfig {
+                urls: conf.matchbox.ice.urls.clone(),
+                username,
+                credential: password,
+            })
+            .add_channel(ChannelConfig::unreliable())
+            .build();
 
         let loop_fut = loop_fut.fuse();
 

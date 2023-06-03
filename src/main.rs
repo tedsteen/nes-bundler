@@ -364,7 +364,12 @@ impl GameRunner {
             sound_stream,
             pixels,
             #[cfg(feature = "netplay")]
-            netplay: netplay::Netplay::new(&build_config.netplay, &mut settings, state, md5::compute(&rom)),
+            netplay: netplay::Netplay::new(
+                &build_config.netplay,
+                &mut settings,
+                state,
+                md5::compute(&rom),
+            ),
             settings,
             inputs,
             #[cfg(feature = "debug")]
