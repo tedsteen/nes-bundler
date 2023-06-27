@@ -254,12 +254,12 @@ fn initialise(
     let game_runner = GameRunner::new(pixels, sdl_context, &bundle.config, settings, bundle.rom)?;
     Ok((event_loop, window, framework, game_runner))
 }
-pub struct MyGameState {
+pub struct LocalGameState {
     nes: NesState,
     frame: i32,
 }
 
-impl MyGameState {
+impl LocalGameState {
     fn new(rom: Vec<u8>) -> Result<Self> {
         let rom_data = match std::env::var("ROM_FILE") {
             Ok(rom_file) => {
@@ -310,7 +310,7 @@ impl MyGameState {
     }
 }
 
-impl Clone for MyGameState {
+impl Clone for LocalGameState {
     fn clone(&self) -> Self {
         let data = &mut self.save();
         let mut clone = Self {
@@ -323,7 +323,7 @@ impl Clone for MyGameState {
 }
 
 pub struct GameRunner {
-    state: MyGameState,
+    state: LocalGameState,
     sound_stream: Stream,
     pixels: Pixels,
     settings: Settings,
@@ -352,7 +352,7 @@ impl GameRunner {
         let audio_subsystem = sdl_context.audio().map_err(anyhow::Error::msg)?;
 
         let sound_stream = Stream::new(&audio_subsystem, &settings.audio);
-        let mut state = MyGameState::new(rom.clone())?;
+        let mut state = LocalGameState::new(rom.clone())?;
 
         state
             .nes

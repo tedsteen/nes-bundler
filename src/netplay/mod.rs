@@ -1,7 +1,7 @@
 use crate::{
     input::JoypadInput,
     settings::{Settings, MAX_PLAYERS},
-    Fps, MyGameState, FPS,
+    Fps, LocalGameState, FPS,
 };
 use futures::{select, FutureExt};
 use futures_timer::Delay;
@@ -26,7 +26,7 @@ pub mod state;
 pub struct GGRSConfig;
 impl Config for GGRSConfig {
     type Input = u8;
-    type State = MyGameState;
+    type State = LocalGameState;
     type Address = PeerId;
 }
 pub const STATS_HISTORY: usize = 100;
@@ -85,7 +85,7 @@ impl NetplaySession {
         }
     }
 
-    pub fn advance(&mut self, game_state: &mut MyGameState, inputs: [JoypadInput; MAX_PLAYERS]) {
+    pub fn advance(&mut self, game_state: &mut LocalGameState, inputs: [JoypadInput; MAX_PLAYERS]) {
         let sess = &mut self.p2p_session;
         sess.poll_remote_clients();
 
@@ -159,7 +159,7 @@ pub struct Netplay {
     pub room_name: String,
     reqwest_client: reqwest::Client,
     netplay_id: String,
-    initial_game_state: MyGameState,
+    initial_game_state: LocalGameState,
     rom_hash: Digest,
 }
 
@@ -226,7 +226,7 @@ impl Netplay {
     pub fn new(
         config: &NetplayBuildConfiguration,
         settings: &mut Settings,
-        initial_game_state: MyGameState,
+        initial_game_state: LocalGameState,
         rom_hash: Digest,
     ) -> Self {
         let room_name = config.default_room_name.clone();
@@ -292,7 +292,7 @@ impl Netplay {
 
     pub fn advance(
         &mut self,
-        game_state: &mut MyGameState,
+        game_state: &mut LocalGameState,
         inputs: [JoypadInput; MAX_PLAYERS],
     ) -> Fps {
         if let Some(new_state) = match &mut self.state {
