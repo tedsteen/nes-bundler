@@ -3,8 +3,10 @@ use std::ops::RangeInclusive;
 use sdl2::audio::{AudioQueue, AudioSpec, AudioSpecDesired};
 use sdl2::AudioSubsystem;
 
-use crate::settings::audio::AudioSettings;
+use self::settings::AudioSettings;
+
 pub mod gui;
+pub mod settings;
 
 type SampleFormat = i16;
 

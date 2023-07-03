@@ -1,6 +1,8 @@
-use crate::input::InputConfigurationKind;
+use crate::{
+    audio::settings::AudioSettings,
+    input::{settings::InputSettings, InputConfigurationKind},
+};
 
-use self::{audio::AudioSettings, input::InputSettings};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::hash_map::DefaultHasher,
@@ -9,9 +11,6 @@ use std::{
     io::{BufReader, BufWriter},
     rc::Rc,
 };
-
-pub mod audio;
-pub mod input;
 
 pub const MAX_PLAYERS: usize = 2;
 

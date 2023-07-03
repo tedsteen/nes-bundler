@@ -1,11 +1,9 @@
 use self::{
     gamepad::{Gamepads, JoypadGamepadMapping},
     keyboard::{JoypadKeyboardMapping, Keyboards},
+    settings::{InputConfigurationRef, InputSettings},
 };
-use crate::settings::{
-    input::{InputConfigurationRef, InputSettings},
-    MAX_PLAYERS,
-};
+use crate::settings::MAX_PLAYERS;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use winit::event::Event;
@@ -13,6 +11,7 @@ use winit::event::Event;
 pub mod gamepad;
 pub mod gui;
 pub mod keyboard;
+pub mod settings;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JoypadButton {

@@ -1,8 +1,5 @@
-use super::{InputId, JoypadInput, JoypadMapping};
-use crate::{
-    input::{self, InputConfigurationKind},
-    settings::input::InputSettings,
-};
+use super::{settings::InputSettings, InputId, JoypadInput, JoypadMapping};
+use crate::input::{self, InputConfigurationKind};
 use sdl2::{controller::GameController, GameControllerSubsystem, Sdl};
 use serde::{Deserialize, Serialize};
 use std::{

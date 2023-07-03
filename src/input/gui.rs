@@ -1,11 +1,12 @@
 use crate::{
     gui::GuiComponent,
     input::{InputId, Inputs, JoypadButton, JoypadInput},
-    settings::input::InputConfigurationRef,
     GameRunner,
 };
 use egui::{Button, Color32, Context, Grid, Label, RichText, Ui, Window};
 use std::{collections::HashMap, fmt::Debug, rc::Rc};
+
+use super::settings::InputConfigurationRef;
 
 #[derive(Debug)]
 struct MapRequest {
