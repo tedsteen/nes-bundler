@@ -10,9 +10,8 @@ use egui::{
 };
 
 use crate::{
-    gui::GuiComponent,
     netplay::{NetplayState, NetplayStats},
-    settings::MAX_PLAYERS,
+    settings::{gui::GuiComponent, MAX_PLAYERS},
     GameRunner,
 };
 

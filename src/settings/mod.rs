@@ -11,6 +11,7 @@ use std::{
     io::{BufReader, BufWriter},
     rc::Rc,
 };
+pub mod gui;
 
 pub const MAX_PLAYERS: usize = 2;
 

@@ -1,6 +1,6 @@
 use crate::{
-    gui::GuiComponent,
     input::{InputId, Inputs, JoypadButton, JoypadInput},
+    settings::gui::GuiComponent,
     GameRunner,
 };
 use egui::{Button, Color32, Context, Grid, Label, RichText, Ui, Window};
