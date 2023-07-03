@@ -172,8 +172,6 @@ impl InputSettingsGui {
 }
 
 impl GuiComponent for InputSettingsGui {
-    fn handle_event(&mut self, _event: &winit::event::WindowEvent, _game_runner: &mut GameRunner) {}
-
     fn ui(
         &mut self,
         ctx: &Context,

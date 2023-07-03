@@ -503,7 +503,7 @@ impl GameRunner {
                 _ => {}
             }
             // Update egui inputs
-            gui_framework.handle_event(event, self);
+            gui_framework.handle_event(event);
         }
         true
     }

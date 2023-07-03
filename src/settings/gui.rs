@@ -4,7 +4,6 @@ use winit::event::VirtualKeyCode;
 use crate::GameRunner;
 
 pub trait GuiComponent {
-    fn handle_event(&mut self, event: &winit::event::WindowEvent, game_runner: &mut GameRunner);
     fn ui(
         &mut self,
         ctx: &Context,
@@ -31,7 +30,6 @@ impl SettingsContainer {
 
 #[derive(Default)]
 pub struct Gui {
-    // State for the demo app.
     visible: bool,
     settings: Vec<SettingsContainer>,
 }
@@ -41,11 +39,7 @@ impl Gui {
         self.settings.push(SettingsContainer::new(component));
     }
 
-    pub fn handle_event(
-        &mut self,
-        event: &winit::event::WindowEvent,
-        game_runner: &mut GameRunner,
-    ) {
+    pub fn handle_event(&mut self, event: &winit::event::WindowEvent) {
         if let winit::event::WindowEvent::KeyboardInput { input, .. } = event {
             if let Some(code) = input.virtual_keycode {
                 if input.state == winit::event::ElementState::Pressed
@@ -54,9 +48,6 @@ impl Gui {
                     self.visible = !self.visible;
                 }
             }
-        }
-        for g in &mut self.settings {
-            g.component.handle_event(event, game_runner);
         }
     }
 

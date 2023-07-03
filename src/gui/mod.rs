@@ -52,11 +52,7 @@ impl Framework {
     }
 
     /// Handle input events from the window manager.
-    pub fn handle_event(
-        &mut self,
-        event: &winit::event::WindowEvent,
-        game_runner: &mut GameRunner,
-    ) {
+    pub fn handle_event(&mut self, event: &winit::event::WindowEvent) {
         match event {
             winit::event::WindowEvent::ScaleFactorChanged {
                 scale_factor,
@@ -73,7 +69,7 @@ impl Framework {
         }
 
         let _ = self.egui_state.on_event(&self.egui_ctx, event);
-        self.gui.handle_event(event, game_runner);
+        self.gui.handle_event(event);
     }
 
     /// Prepare egui.

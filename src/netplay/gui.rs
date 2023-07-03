@@ -98,7 +98,6 @@ impl NetplayGui {
 }
 
 impl GuiComponent for NetplayGui {
-    fn handle_event(&mut self, _event: &winit::event::WindowEvent, _: &mut GameRunner) {}
     fn ui(
         &mut self,
         ctx: &Context,
