@@ -7,8 +7,8 @@ use super::GuiComponent;
 use crate::GameRunner;
 use egui::{Context, Slider, Window};
 
+#[derive(Hash, PartialEq, Eq)]
 pub struct AudioSettingsGui {
-    is_open: bool,
     available_device_names: Option<Vec<String>>,
     next_device_names_clear: Instant,
 }
@@ -16,7 +16,6 @@ pub struct AudioSettingsGui {
 impl AudioSettingsGui {
     pub fn new() -> Self {
         Self {
-            is_open: true,
             available_device_names: None,
             next_device_names_clear: Instant::now(),
         }
@@ -25,12 +24,18 @@ impl AudioSettingsGui {
 
 impl GuiComponent for AudioSettingsGui {
     fn handle_event(&mut self, _event: &winit::event::WindowEvent, _game_runner: &mut GameRunner) {}
-    fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner, ui_visible: bool) {
+    fn ui(
+        &mut self,
+        ctx: &Context,
+        game_runner: &mut GameRunner,
+        ui_visible: bool,
+        is_open: &mut bool,
+    ) {
         if !ui_visible {
             return;
         }
         Window::new(self.name())
-            .open(&mut self.is_open)
+            .open(is_open)
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
@@ -96,9 +101,6 @@ impl GuiComponent for AudioSettingsGui {
                         });
                 });
             });
-    }
-    fn is_open(&mut self) -> &mut bool {
-        &mut self.is_open
     }
 
     fn name(&self) -> String {

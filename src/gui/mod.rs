@@ -9,8 +9,6 @@ mod audio;
 #[cfg(feature = "debug")]
 mod debug;
 mod input;
-#[cfg(feature = "netplay")]
-mod netplay;
 
 /// Manages all state required for rendering egui over `Pixels`.
 pub struct Framework {
@@ -23,7 +21,7 @@ pub struct Framework {
     textures: TexturesDelta,
 
     // State for the GUI
-    gui: Gui,
+    pub gui: Gui,
 }
 
 // Render egui over pixels
@@ -147,17 +145,23 @@ impl Framework {
     }
 }
 
-trait GuiComponent {
+pub trait GuiComponent {
     fn handle_event(&mut self, event: &winit::event::WindowEvent, game_runner: &mut GameRunner);
-    fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner, ui_visible: bool);
-    fn is_open(&mut self) -> &mut bool;
+    fn ui(
+        &mut self,
+        ctx: &Context,
+        game_runner: &mut GameRunner,
+        ui_visible: bool,
+        is_open: &mut bool,
+    );
     fn name(&self) -> String;
 }
 
 pub struct Gui {
     // State for the demo app.
     visible: bool,
-    settings: Vec<Box<dyn GuiComponent>>,
+    pub settings: Vec<Box<dyn GuiComponent>>,
+    pub open_settings: Vec<bool>,
 }
 
 impl Gui {
@@ -165,13 +169,12 @@ impl Gui {
         let settings: Vec<Box<dyn GuiComponent>> = vec![
             Box::new(AudioSettingsGui::new()),
             Box::new(InputSettingsGui::new()),
-            #[cfg(feature = "netplay")]
-            Box::new(netplay::NetplayGui::new()),
             #[cfg(feature = "debug")]
             Box::new(debug::DebugGui::new()),
         ];
         Self {
             visible: false,
+            open_settings: vec![true; settings.len() + 100],
             settings,
         }
     }
@@ -196,9 +199,9 @@ impl Gui {
             egui::TopBottomPanel::top("menubar_container").show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
                     ui.menu_button("Settings", |ui| {
-                        for setting in &mut self.settings {
+                        for (idx, setting) in &mut self.settings.iter_mut().enumerate() {
                             if ui.button(setting.name()).clicked() {
-                                *setting.is_open() = !*setting.is_open();
+                                self.open_settings[idx] = !self.open_settings[idx];
                                 ui.close_menu();
                             }
                         }
@@ -207,8 +210,8 @@ impl Gui {
             });
         }
 
-        for setting in &mut self.settings {
-            setting.ui(ctx, game_runner, self.visible);
+        for (idx, setting) in &mut self.settings.iter_mut().enumerate() {
+            setting.ui(ctx, game_runner, self.visible, &mut self.open_settings[idx]);
         }
     }
 }

@@ -15,14 +15,12 @@ struct MapRequest {
 
 pub struct InputSettingsGui {
     mapping_request: Option<MapRequest>,
-    is_open: bool,
 }
 
 impl InputSettingsGui {
     pub fn new() -> Self {
         Self {
             mapping_request: None,
-            is_open: true,
         }
     }
 
@@ -175,12 +173,18 @@ impl InputSettingsGui {
 impl GuiComponent for InputSettingsGui {
     fn handle_event(&mut self, _event: &winit::event::WindowEvent, _game_runner: &mut GameRunner) {}
 
-    fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner, ui_visible: bool) {
+    fn ui(
+        &mut self,
+        ctx: &Context,
+        game_runner: &mut GameRunner,
+        ui_visible: bool,
+        is_open: &mut bool,
+    ) {
         if !ui_visible {
             return;
         }
         Window::new(self.name())
-            .open(&mut self.is_open)
+            .open(is_open)
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
@@ -216,10 +220,6 @@ impl GuiComponent for InputSettingsGui {
                 self.mapping_request = None;
             }
         }
-    }
-
-    fn is_open(&mut self) -> &mut bool {
-        &mut self.is_open
     }
 
     fn name(&self) -> String {
