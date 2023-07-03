@@ -4,6 +4,8 @@ use sdl2::audio::{AudioQueue, AudioSpec, AudioSpecDesired};
 use sdl2::AudioSubsystem;
 
 use crate::settings::audio::AudioSettings;
+pub mod gui;
+
 type SampleFormat = i16;
 
 pub struct Stream {

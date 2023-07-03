@@ -5,7 +5,9 @@ use std::fs::File;
 
 use crate::input::JoypadInput;
 use anyhow::{Context, Result};
+use audio::gui::AudioSettingsGui;
 use audio::Stream;
+use input::gui::InputSettingsGui;
 
 use crate::gameloop::game_loop;
 use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
@@ -262,6 +264,13 @@ fn initialise(
 
         (pixels, framework)
     };
+
+    framework
+        .gui
+        .add_settings(Box::new(AudioSettingsGui::new()));
+    framework
+        .gui
+        .add_settings(Box::new(InputSettingsGui::new()));
 
     #[allow(unused_mut)] //Only netplay needs to mutate the settings
     let mut settings = Settings::new(&bundle.config.default_settings);

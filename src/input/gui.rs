@@ -1,5 +1,5 @@
-use super::GuiComponent;
 use crate::{
+    gui::GuiComponent,
     input::{InputId, Inputs, JoypadButton, JoypadInput},
     settings::input::InputConfigurationRef,
     GameRunner,

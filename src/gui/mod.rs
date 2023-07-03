@@ -1,12 +1,8 @@
-use self::{audio::AudioSettingsGui, input::InputSettingsGui};
 use crate::GameRunner;
 use egui::{ClippedPrimitive, Context, TexturesDelta};
 use egui_wgpu::renderer::{Renderer, ScreenDescriptor};
 use pixels::{wgpu, PixelsContext};
 use winit::{event::VirtualKeyCode, event_loop::EventLoopWindowTarget, window::Window};
-
-mod audio;
-mod input;
 
 /// Manages all state required for rendering egui over `Pixels`.
 pub struct Framework {
@@ -43,8 +39,6 @@ impl Framework {
             pixels_per_point: scale_factor,
         };
         let renderer = Renderer::new(pixels.device(), pixels.render_texture_format(), None, 1);
-        let textures = TexturesDelta::default();
-        let gui = Gui::new();
 
         Self {
             egui_ctx,
@@ -52,8 +46,8 @@ impl Framework {
             screen_descriptor,
             renderer,
             paint_jobs: Vec::new(),
-            textures,
-            gui,
+            textures: TexturesDelta::default(),
+            gui: Gui::new(),
         }
     }
 
@@ -177,13 +171,10 @@ pub struct Gui {
 
 impl Gui {
     fn new() -> Self {
-        let mut instance = Self {
+        Self {
             visible: false,
             settings: vec![],
-        };
-        instance.add_settings(Box::new(AudioSettingsGui::new()));
-        instance.add_settings(Box::new(InputSettingsGui::new()));
-        instance
+        }
     }
 
     pub fn add_settings(&mut self, component: Box<dyn GuiComponent>) {

@@ -11,6 +11,7 @@ use std::collections::HashSet;
 use winit::event::Event;
 
 pub mod gamepad;
+pub mod gui;
 pub mod keyboard;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

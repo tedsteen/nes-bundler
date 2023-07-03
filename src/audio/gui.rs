@@ -3,8 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use super::GuiComponent;
-use crate::GameRunner;
+use crate::{gui::GuiComponent, GameRunner};
 use egui::{Context, Slider, Window};
 
 #[derive(Hash, PartialEq, Eq)]
