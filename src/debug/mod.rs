@@ -1,4 +1,5 @@
 use crate::{Fps, FPS};
+pub mod gui;
 
 pub struct DebugSettings {
     pub override_fps: bool,

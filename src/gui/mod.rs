@@ -6,8 +6,6 @@ use pixels::{wgpu, PixelsContext};
 use winit::{event::VirtualKeyCode, event_loop::EventLoopWindowTarget, window::Window};
 
 mod audio;
-#[cfg(feature = "debug")]
-mod debug;
 mod input;
 
 /// Manages all state required for rendering egui over `Pixels`.
@@ -157,26 +155,39 @@ pub trait GuiComponent {
     fn name(&self) -> String;
 }
 
+pub struct SettingsContainer {
+    open: bool,
+    component: Box<dyn GuiComponent>,
+}
+
+impl SettingsContainer {
+    pub fn new(component: Box<dyn GuiComponent>) -> Self {
+        Self {
+            open: false,
+            component,
+        }
+    }
+}
+
 pub struct Gui {
     // State for the demo app.
     visible: bool,
-    pub settings: Vec<Box<dyn GuiComponent>>,
-    pub open_settings: Vec<bool>,
+    settings: Vec<SettingsContainer>,
 }
 
 impl Gui {
     fn new() -> Self {
-        let settings: Vec<Box<dyn GuiComponent>> = vec![
-            Box::new(AudioSettingsGui::new()),
-            Box::new(InputSettingsGui::new()),
-            #[cfg(feature = "debug")]
-            Box::new(debug::DebugGui::new()),
-        ];
-        Self {
+        let mut instance = Self {
             visible: false,
-            open_settings: vec![true; settings.len() + 100],
-            settings,
-        }
+            settings: vec![],
+        };
+        instance.add_settings(Box::new(AudioSettingsGui::new()));
+        instance.add_settings(Box::new(InputSettingsGui::new()));
+        instance
+    }
+
+    pub fn add_settings(&mut self, component: Box<dyn GuiComponent>) {
+        self.settings.push(SettingsContainer::new(component));
     }
 
     fn handle_event(&mut self, event: &winit::event::WindowEvent, game_runner: &mut GameRunner) {
@@ -190,7 +201,7 @@ impl Gui {
             }
         }
         for g in &mut self.settings {
-            g.handle_event(event, game_runner);
+            g.component.handle_event(event, game_runner);
         }
     }
 
@@ -199,9 +210,9 @@ impl Gui {
             egui::TopBottomPanel::top("menubar_container").show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
                     ui.menu_button("Settings", |ui| {
-                        for (idx, setting) in &mut self.settings.iter_mut().enumerate() {
-                            if ui.button(setting.name()).clicked() {
-                                self.open_settings[idx] = !self.open_settings[idx];
+                        for setting in &mut self.settings {
+                            if ui.button(setting.component.name()).clicked() {
+                                setting.open = !setting.open;
                                 ui.close_menu();
                             }
                         }
@@ -210,8 +221,10 @@ impl Gui {
             });
         }
 
-        for (idx, setting) in &mut self.settings.iter_mut().enumerate() {
-            setting.ui(ctx, game_runner, self.visible, &mut self.open_settings[idx]);
+        for setting in &mut self.settings {
+            setting
+                .component
+                .ui(ctx, game_runner, self.visible, &mut setting.open);
         }
     }
 }

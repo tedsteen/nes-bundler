@@ -278,13 +278,17 @@ fn initialise(
 
         framework
             .gui
-            .settings
-            .push(Box::new(netplay::gui::NetplayGui::new(
+            .add_settings(Box::new(netplay::gui::NetplayGui::new(
                 netplay_state_handler.netplay.clone(),
                 bundle.config.netplay.default_room_name.clone(),
             )));
         Box::new(netplay_state_handler)
     };
+
+    #[cfg(feature = "debug")]
+    framework
+        .gui
+        .add_settings(Box::new(debug::gui::DebugGui::new()));
 
     #[cfg(not(feature = "netplay"))]
     let state_handler = Box::new(LocalStateHandler { state });
