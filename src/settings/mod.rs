@@ -49,7 +49,7 @@ impl Settings {
 }
 
 impl Settings {
-    fn load() -> anyhow::Result<Settings> {
+    pub fn load() -> anyhow::Result<Settings> {
         let settings = serde_yaml::from_reader(BufReader::new(File::open("settings.yaml")?))?;
         Ok(settings)
     }

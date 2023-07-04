@@ -14,3 +14,8 @@ impl DebugSettings {
         }
     }
 }
+
+pub struct Debug {
+    pub settings: DebugSettings,
+    pub gui: gui::DebugGui,
+}

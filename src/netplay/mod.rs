@@ -1,8 +1,4 @@
-use crate::{
-    input::JoypadInput,
-    settings::{Settings, MAX_PLAYERS},
-    Fps, LocalGameState, FPS,
-};
+use crate::{input::JoypadInput, settings::MAX_PLAYERS, Fps, LocalGameState, FPS};
 use futures::channel::oneshot::Receiver;
 use futures::{select, FutureExt};
 use futures_timer::Delay;
@@ -205,26 +201,18 @@ pub struct Netplay {
 
 impl Netplay {
     pub fn new(
-        config: &NetplayBuildConfiguration,
-        settings: &mut Settings,
+        config: NetplayBuildConfiguration,
+        netplay_id: &mut Option<String>,
         rom_hash: Digest,
     ) -> Self {
-        let netplay_id = config
-            .netplay_id
-            .as_ref()
-            .unwrap_or_else(|| {
-                settings
-                    .netplay_id
-                    .get_or_insert_with(|| Uuid::new_v4().to_string())
-            })
-            .clone();
-
         Self {
-            rt: Runtime::new().expect("Could not create an async runtime"),
+            rt: Runtime::new().expect("Could not create an async runtime for Netplay"),
             state: NetplayState::Disconnected,
-            config: config.clone(),
+            config,
             reqwest_client: reqwest::Client::new(),
-            netplay_id,
+            netplay_id: netplay_id
+                .get_or_insert_with(|| Uuid::new_v4().to_string())
+                .to_string(),
             rom_hash,
         }
     }

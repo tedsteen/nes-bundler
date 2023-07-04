@@ -1,8 +1,13 @@
+use std::cell::RefCell;
 use std::ops::RangeInclusive;
+use std::rc::Rc;
 
 use sdl2::audio::{AudioQueue, AudioSpec, AudioSpecDesired};
-use sdl2::AudioSubsystem;
+use sdl2::{AudioSubsystem, Sdl};
 
+use crate::settings::Settings;
+
+use self::gui::AudioSettingsGui;
 use self::settings::AudioSettings;
 
 pub mod gui;
@@ -122,7 +127,22 @@ impl Stream {
             );
         }
     }
-    pub(crate) fn get_output_device_name(&self) -> &Option<String> {
-        &self.output_device_name
+}
+
+pub struct Audio {
+    settings: Rc<RefCell<Settings>>,
+    gui: AudioSettingsGui,
+    pub stream: Stream,
+}
+
+impl Audio {
+    pub fn new(sdl_context: &Sdl, settings: Rc<RefCell<Settings>>) -> anyhow::Result<Self> {
+        let audio_subsystem = sdl_context.audio().map_err(anyhow::Error::msg)?;
+
+        Ok(Audio {
+            stream: Stream::new(&audio_subsystem, &settings.clone().borrow().audio),
+            settings,
+            gui: Default::default(),
+        })
     }
 }

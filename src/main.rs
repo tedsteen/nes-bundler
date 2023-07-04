@@ -1,20 +1,21 @@
 #![deny(clippy::all)]
 #![forbid(unsafe_code)]
 
+use std::cell::RefCell;
 use std::fs::File;
+use std::rc::Rc;
 
 use crate::input::JoypadInput;
 use anyhow::{Context, Result};
-use audio::gui::AudioSettingsGui;
-use audio::Stream;
-use input::gui::InputSettingsGui;
+use audio::Audio;
+use settings::gui::GuiComponent;
 
 use crate::gameloop::game_loop;
 use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
 use base64::Engine;
 
 use gui::Framework;
-use input::Inputs;
+use input::{Input, Inputs};
 use palette::NTSC_PAL;
 use pixels::{Pixels, SurfaceTexture};
 use rfd::FileDialog;
@@ -25,7 +26,7 @@ use serde::Deserialize;
 use settings::{Settings, MAX_PLAYERS};
 use tinyfiledialogs::MessageBoxIcon;
 use winit::dpi::LogicalSize;
-use winit::event::{Event, VirtualKeyCode};
+use winit::event::{Event, VirtualKeyCode, WindowEvent};
 use winit::event_loop::EventLoop;
 use winit::window::WindowBuilder;
 
@@ -166,7 +167,6 @@ fn run(bundle: Bundle) -> ! {
     let window_title = bundle.config.window_title.clone();
     match initialise(bundle) {
         Ok((event_loop, window, framework, game_runner)) => {
-            let mut last_settings = game_runner.settings.get_hash();
             game_loop(
                 event_loop,
                 window,
@@ -184,38 +184,6 @@ fn run(bundle: Bundle) -> ! {
                 },
                 move |g, event| {
                     let game_runner = &mut g.game.0;
-                    let curr_settings = game_runner.settings.get_hash();
-                    if last_settings != curr_settings {
-                        if *game_runner.sound_stream.get_output_device_name()
-                            != game_runner.settings.audio.output_device
-                        {
-                            game_runner
-                                .sound_stream
-                                .set_output_device(game_runner.settings.audio.output_device.clone())
-                        }
-
-                        // Note: We might not get the exact latency in ms since there will be rounding errors. Be ok with 1-off
-                        if i16::abs(
-                            game_runner.sound_stream.get_latency() as i16
-                                - game_runner.settings.audio.latency as i16,
-                        ) > 1
-                        {
-                            game_runner
-                                .sound_stream
-                                .set_latency(game_runner.settings.audio.latency);
-
-                            //Whatever latency we ended up getting, save that to settings
-                            game_runner.settings.audio.latency =
-                                game_runner.sound_stream.get_latency();
-                        }
-                        game_runner.sound_stream.volume =
-                            game_runner.settings.audio.volume as f32 / 100.0;
-
-                        last_settings = curr_settings;
-                        if game_runner.settings.save().is_err() {
-                            eprintln!("Failed to save the settings");
-                        }
-                    }
                     if !game_runner.handle(event, &mut g.game.1) {
                         g.exit();
                     }
@@ -248,7 +216,7 @@ fn initialise(
             .with_min_inner_size(LogicalSize::new(WIDTH, HEIGHT))
             .build(&event_loop)?
     };
-    let (pixels, mut framework) = {
+    let (pixels, framework) = {
         let window_size = window.inner_size();
         let scale_factor = window.scale_factor() as f32;
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
@@ -265,51 +233,33 @@ fn initialise(
         (pixels, framework)
     };
 
-    framework
-        .gui
-        .add_settings(Box::new(AudioSettingsGui::new()));
-    framework
-        .gui
-        .add_settings(Box::new(InputSettingsGui::new()));
+    let settings = Rc::new(RefCell::new(Settings::new(&bundle.config.default_settings)));
 
-    #[allow(unused_mut)] //Only netplay needs to mutate the settings
-    let mut settings = Settings::new(&bundle.config.default_settings);
-
-    let audio_subsystem = sdl_context.audio().map_err(anyhow::Error::msg)?;
-    let sound_stream = Stream::new(&audio_subsystem, &settings.audio);
-    let nes = start_nes(bundle.rom.clone(), sound_stream.get_sample_rate() as u64)?;
+    let audio = Audio::new(&sdl_context, settings.clone())?;
+    let nes = start_nes(bundle.rom.clone(), audio.stream.get_sample_rate() as u64)?;
     let state = LocalGameState::new(nes)?;
 
     #[cfg(feature = "netplay")]
-    let state_handler = {
-        let netplay_state_handler =
-            netplay::state_handler::NetplayStateHandler::new(state, &bundle, &mut settings);
-
-        framework
-            .gui
-            .add_settings(Box::new(netplay::gui::NetplayGui::new(
-                netplay_state_handler.netplay.clone(),
-                bundle.config.netplay.default_room_name.clone(),
-            )));
-        Box::new(netplay_state_handler)
-    };
-
-    #[cfg(feature = "debug")]
-    framework
-        .gui
-        .add_settings(Box::new(debug::gui::DebugGui::new()));
+    let state_handler = netplay::state_handler::NetplayStateHandler::new(
+        state,
+        &bundle,
+        &mut settings.borrow_mut().netplay_id,
+    );
 
     #[cfg(not(feature = "netplay"))]
-    let state_handler = Box::new(LocalStateHandler { state });
+    let state_handler = LocalStateHandler {
+        state,
+        gui: EmptyGuiComponent { is_open: false },
+    };
 
-    let game_runner = GameRunner::new(
-        pixels,
-        sdl_context,
-        sound_stream,
-        &bundle.config,
-        settings,
-        state_handler,
-    )?;
+    let inputs = Inputs::new(
+        &sdl_context,
+        bundle.config.default_settings.input.selected,
+        settings.clone(),
+    );
+    let input = Input::new(inputs, settings.clone());
+
+    let game_runner = GameRunner::new(pixels, audio, input, settings, Box::new(state_handler))?;
     Ok((event_loop, window, framework, game_runner))
 }
 pub struct LocalGameState {
@@ -367,16 +317,35 @@ impl Clone for LocalGameState {
         clone
     }
 }
+
 pub trait StateHandler {
     fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps;
     fn consume_samples(&mut self) -> Vec<i16>;
     fn get_frame(&self) -> &Vec<u16>;
     fn save(&self) -> Vec<u8>;
     fn load(&mut self, data: &mut Vec<u8>);
+    fn get_gui(&mut self) -> &mut dyn GuiComponent;
 }
 
 struct LocalStateHandler {
     state: LocalGameState,
+    gui: EmptyGuiComponent,
+}
+
+struct EmptyGuiComponent {
+    is_open: bool,
+}
+
+impl GuiComponent for EmptyGuiComponent {
+    fn ui(&mut self, _ctx: &egui::Context, _ui_visible: bool, _name: String) {}
+    fn name(&self) -> Option<String> {
+        None
+    }
+    fn open(&mut self) -> &mut bool {
+        &mut self.is_open
+    }
+
+    fn event(&mut self, _event: &winit::event::Event<()>) {}
 }
 
 impl StateHandler for LocalStateHandler {
@@ -395,59 +364,79 @@ impl StateHandler for LocalStateHandler {
     fn load(&mut self, data: &mut Vec<u8>) {
         self.state.load(data)
     }
+
+    fn get_gui(&mut self) -> &mut dyn GuiComponent {
+        &mut self.gui
+    }
 }
 
 pub struct GameRunner {
     state_handler: Box<dyn StateHandler>,
-    sound_stream: Stream,
+    audio: Audio,
     pixels: Pixels,
-    settings: Settings,
-    inputs: Inputs,
-
+    settings: Rc<RefCell<Settings>>,
+    input: Input,
     #[cfg(feature = "debug")]
-    debug: debug::DebugSettings,
+    debug: debug::Debug,
 }
 
 impl GameRunner {
     pub fn new(
         pixels: Pixels,
-        sdl_context: Sdl,
-        sound_stream: Stream,
-        build_config: &BuildConfiguration,
-        mut settings: Settings,
+        audio: Audio,
+        input: Input,
+        settings: Rc<RefCell<Settings>>,
         state_handler: Box<dyn StateHandler>,
     ) -> Result<Self> {
         Ok(Self {
             state_handler,
-            sound_stream,
+            audio,
             pixels,
-            inputs: Inputs::new(
-                &sdl_context,
-                build_config.default_settings.input.selected.clone(),
-                &mut settings.input,
-            ),
+            input,
             settings,
             #[cfg(feature = "debug")]
-            debug: debug::DebugSettings::new(),
+            debug: debug::Debug {
+                settings: debug::DebugSettings::new(),
+                gui: debug::gui::DebugGui::new(),
+            },
         })
     }
     pub fn advance(&mut self) -> Fps {
-        let inputs = [self.inputs.get_joypad(0), self.inputs.get_joypad(1)];
+        let inputs = [
+            self.input.inputs.get_joypad(0),
+            self.input.inputs.get_joypad(1),
+        ];
 
         let fps = self.state_handler.advance(inputs);
 
-        self.sound_stream
+        self.audio
+            .stream
             .push_samples(self.state_handler.consume_samples().as_slice());
 
         #[cfg(feature = "debug")]
-        if self.debug.override_fps {
-            return self.debug.fps;
+        if self.debug.settings.override_fps {
+            return self.debug.settings.fps;
         }
         fps
     }
 
     pub fn render(&mut self, window: &winit::window::Window, gui_framework: &mut Framework) {
-        gui_framework.prepare(window, self);
+        let settings_hash_before = self.settings.borrow().get_hash();
+
+        gui_framework.prepare(
+            window,
+            &mut vec![
+                #[cfg(feature = "debug")]
+                &mut self.debug,
+                &mut self.audio,
+                &mut self.input,
+                self.state_handler.get_gui(),
+            ],
+        );
+
+        if settings_hash_before != self.settings.borrow().get_hash() {
+            self.settings.borrow().save().unwrap();
+        }
 
         let pixels = &mut self.pixels;
 
@@ -477,17 +466,16 @@ impl GameRunner {
         event: &winit::event::Event<()>,
         gui_framework: &mut Framework,
     ) -> bool {
-        self.inputs.advance(event, &mut self.settings.input);
         // Handle input events
         if let Event::WindowEvent { event, .. } = event {
             match event {
-                winit::event::WindowEvent::CloseRequested => {
+                WindowEvent::CloseRequested => {
                     return false;
                 }
-                winit::event::WindowEvent::Resized(size) => {
+                WindowEvent::Resized(size) => {
                     self.pixels.resize_surface(size.width, size.height).unwrap();
                 }
-                winit::event::WindowEvent::KeyboardInput { input, .. } => {
+                WindowEvent::KeyboardInput { input, .. } => {
                     if input.state == winit::event::ElementState::Pressed {
                         match input.virtual_keycode {
                             Some(VirtualKeyCode::F1) => {
@@ -502,21 +490,32 @@ impl GameRunner {
                 }
                 _ => {}
             }
-            // Update egui inputs
-            gui_framework.handle_event(event);
         }
+
+        // Update egui inputs
+        gui_framework.handle_event(
+            event,
+            vec![
+                #[cfg(feature = "debug")]
+                &mut self.debug,
+                &mut self.audio,
+                &mut self.input,
+                self.state_handler.get_gui(),
+            ],
+        );
+
         true
     }
 
     fn save_state(&mut self) {
-        self.settings.last_save_state = Some(b64.encode(self.state_handler.save()));
+        self.settings.borrow_mut().last_save_state = Some(b64.encode(self.state_handler.save()));
     }
 
     fn load_state(&mut self) {
-        if let Some(save_state) = &mut self.settings.last_save_state {
+        if let Some(save_state) = &mut self.settings.borrow_mut().last_save_state {
             if let Ok(buf) = &mut b64.decode(save_state) {
                 self.state_handler.load(buf);
-                self.sound_stream.drain(); //make sure we don't build up a delay
+                self.audio.stream.drain(); //make sure we don't build up a delay
             }
         }
     }

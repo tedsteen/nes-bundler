@@ -1,28 +1,24 @@
-use std::{cell::RefCell, rc::Rc};
-
 use ggrs::{SessionBuilder, SessionState};
 
 use crate::{
-    input::JoypadInput,
-    settings::{Settings, MAX_PLAYERS},
-    Bundle, Fps, LocalGameState, StateHandler, FPS,
+    input::JoypadInput, settings::MAX_PLAYERS, Bundle, Fps, LocalGameState, StateHandler, FPS,
 };
 
 use super::{
-    ConnectedState, ConnectingState, GGRSConfig, InputMapping, Netplay, NetplaySession,
-    NetplaySessionState, NetplayState, PeeringState, SynchonizingState,
+    gui::NetplayGui, ConnectedState, ConnectingState, GGRSConfig, InputMapping, Netplay,
+    NetplaySession, NetplaySessionState, NetplayState, PeeringState, SynchonizingState,
 };
 
 pub struct NetplayStateHandler {
-    pub netplay: Rc<RefCell<Netplay>>,
+    pub netplay: Netplay,
     game_state: LocalGameState,
     initial_game_state: LocalGameState,
+    pub gui: NetplayGui,
 }
 
 impl StateHandler for NetplayStateHandler {
     fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps {
-        let netplay = &mut self.netplay.borrow_mut();
-        if let Some(new_state) = match &mut netplay.state {
+        if let Some(new_state) = match &mut self.netplay.state {
             NetplayState::Disconnected => {
                 self.game_state.advance(inputs);
                 None
@@ -33,20 +29,19 @@ impl StateHandler for NetplayStateHandler {
                         self.game_state.advance(inputs);
                         match conf.try_recv() {
                             Ok(Some(Ok(resp))) => {
-                                *connecting_state = self
-                                    .netplay
-                                    .borrow_mut()
-                                    .start_peering(resp, start_method.clone());
+                                //TODO: FIX THIS: Perhaps move start_peering to ConnectingState?
+                                // *connecting_state =
+                                //     self.netplay.start_peering(resp, start_method.clone());
                             }
                             Ok(None) => (), //No result yet
                             Ok(Some(Err(err))) => {
                                 eprintln!("Could not fetch server config :( {:?}", err);
                                 //TODO: alert about not being able to fetch server configuration
-                                netplay.state = NetplayState::Disconnected;
+                                self.netplay.state = NetplayState::Disconnected;
                             }
                             Err(_) => {
                                 //Lost the sender, not much to do but go back to disconnected
-                                netplay.state = NetplayState::Disconnected;
+                                self.netplay.state = NetplayState::Disconnected;
                             }
                         }
 
@@ -125,15 +120,15 @@ impl StateHandler for NetplayStateHandler {
 
                 if let NetplaySessionState::DisconnectedPeers = netplay_session.state {
                     // For now, just disconnect if we loose peers
-                    netplay.state = NetplayState::Disconnected;
+                    self.netplay.state = NetplayState::Disconnected;
                 }
                 None
             }
         } {
-            netplay.state = new_state;
+            self.netplay.state = new_state;
         }
 
-        if let NetplayState::Connected(netplay_session, _) = &netplay.state {
+        if let NetplayState::Connected(netplay_session, _) = &self.netplay.state {
             netplay_session.requested_fps
         } else {
             FPS
@@ -152,20 +147,33 @@ impl StateHandler for NetplayStateHandler {
     fn load(&mut self, data: &mut Vec<u8>) {
         self.game_state.load(data)
     }
+
+    fn get_gui(&mut self) -> &mut dyn crate::settings::gui::GuiComponent {
+        //TODO: Would rather extend StateHandler with GuiComponent and do
+        //      state_handler.as_mut() on the Box but couldn't due to
+        //      https://github.com/rust-lang/rust/issues/65991
+        self
+    }
 }
 
 impl NetplayStateHandler {
-    pub fn new(game_state: LocalGameState, bundle: &Bundle, settings: &mut Settings) -> Self {
-        let netplay = std::rc::Rc::new(std::cell::RefCell::new(Netplay::new(
-            &bundle.config.netplay,
-            settings,
+    pub fn new(
+        initial_game_state: LocalGameState,
+        bundle: &Bundle,
+        netplay_id: &mut Option<String>,
+    ) -> Self {
+        let netplay_build_config = &bundle.config.netplay;
+        let netplay = Netplay::new(
+            netplay_build_config.clone(),
+            netplay_id,
             md5::compute(&bundle.rom),
-        )));
+        );
 
         NetplayStateHandler {
             netplay,
-            game_state: game_state.clone(),
-            initial_game_state: game_state,
+            game_state: initial_game_state.clone(),
+            initial_game_state,
+            gui: NetplayGui::new(netplay_build_config.default_room_name.clone()),
         }
     }
 }

@@ -1,12 +1,11 @@
 use crate::{
     input::{InputId, Inputs, JoypadButton, JoypadInput},
     settings::gui::GuiComponent,
-    GameRunner,
 };
 use egui::{Button, Color32, Context, Grid, Label, RichText, Ui, Window};
-use std::{collections::HashMap, fmt::Debug, rc::Rc};
+use std::{collections::BTreeMap, fmt::Debug, rc::Rc};
 
-use super::settings::InputConfigurationRef;
+use super::{settings::InputConfigurationRef, Input};
 
 #[derive(Debug)]
 struct MapRequest {
@@ -16,19 +15,23 @@ struct MapRequest {
 
 pub struct InputSettingsGui {
     mapping_request: Option<MapRequest>,
+    is_open: bool,
+}
+
+impl Default for InputSettingsGui {
+    fn default() -> Self {
+        Self {
+            mapping_request: None,
+            is_open: true,
+        }
+    }
 }
 
 impl InputSettingsGui {
-    pub fn new() -> Self {
-        Self {
-            mapping_request: None,
-        }
-    }
-
     fn key_map_ui(
         map_request: &mut Option<MapRequest>,
         ui: &mut Ui,
-        available_configurations: &HashMap<InputId, InputConfigurationRef>,
+        available_configurations: &BTreeMap<InputId, InputConfigurationRef>,
         inputs: &Inputs,
         selected_configuration: &mut InputConfigurationRef,
         player: usize,
@@ -171,57 +174,60 @@ impl InputSettingsGui {
     }
 }
 
-impl GuiComponent for InputSettingsGui {
-    fn ui(
-        &mut self,
-        ctx: &Context,
-        game_runner: &mut GameRunner,
-        ui_visible: bool,
-        is_open: &mut bool,
-    ) {
+impl GuiComponent for Input {
+    fn event(&mut self, event: &winit::event::Event<()>) {
+        self.inputs.advance(event, self.settings.clone());
+    }
+
+    fn ui(&mut self, ctx: &Context, ui_visible: bool, name: String) {
         if !ui_visible {
             return;
         }
-        Window::new(self.name())
-            .open(is_open)
+        Window::new(name)
+            .open(&mut self.gui.is_open)
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
+                let input_settings = &mut self.settings.borrow_mut().input;
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         InputSettingsGui::key_map_ui(
-                            &mut self.mapping_request,
+                            &mut self.gui.mapping_request,
                             ui,
-                            &game_runner.settings.input.configurations,
-                            &game_runner.inputs,
-                            &mut game_runner.settings.input.selected[0],
+                            &input_settings.configurations,
+                            &self.inputs,
+                            &mut input_settings.selected[0],
                             0,
                         );
                     });
                     ui.vertical(|ui| {
                         InputSettingsGui::key_map_ui(
-                            &mut self.mapping_request,
+                            &mut self.gui.mapping_request,
                             ui,
-                            &game_runner.settings.input.configurations,
-                            &game_runner.inputs,
-                            &mut game_runner.settings.input.selected[1],
+                            &input_settings.configurations,
+                            &self.inputs,
+                            &mut input_settings.selected[1],
                             1,
                         );
                     });
                 });
             });
 
-        if let Some(map_request) = &self.mapping_request {
-            if game_runner
+        if let Some(map_request) = &self.gui.mapping_request {
+            if self
                 .inputs
                 .remap_configuration(&map_request.input_configuration, &map_request.button)
             {
-                self.mapping_request = None;
+                self.gui.mapping_request = None;
             }
         }
     }
 
-    fn name(&self) -> String {
-        "Input".to_string()
+    fn name(&self) -> Option<String> {
+        Some("Input".to_string())
+    }
+
+    fn open(&mut self) -> &mut bool {
+        &mut self.gui.is_open
     }
 }

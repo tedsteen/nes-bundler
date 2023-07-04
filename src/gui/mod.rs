@@ -1,8 +1,12 @@
-use crate::{settings::gui::Gui, GameRunner};
+use crate::settings::gui::{Gui, GuiComponent};
 use egui::{ClippedPrimitive, Context, TexturesDelta};
 use egui_wgpu::renderer::{Renderer, ScreenDescriptor};
 use pixels::{wgpu, PixelsContext};
-use winit::{event_loop::EventLoopWindowTarget, window::Window};
+use winit::{
+    event::{Event, WindowEvent},
+    event_loop::EventLoopWindowTarget,
+    window::Window,
+};
 
 /// Manages all state required for rendering egui over `Pixels`.
 pub struct Framework {
@@ -52,32 +56,38 @@ impl Framework {
     }
 
     /// Handle input events from the window manager.
-    pub fn handle_event(&mut self, event: &winit::event::WindowEvent) {
-        match event {
-            winit::event::WindowEvent::ScaleFactorChanged {
-                scale_factor,
-                new_inner_size: _,
-            } => {
-                self.screen_descriptor.pixels_per_point = *scale_factor as f32;
-            }
-            winit::event::WindowEvent::Resized(size) => {
-                if size.width > 0 && size.height > 0 {
-                    self.screen_descriptor.size_in_pixels = [size.width, size.height];
+    pub fn handle_event(
+        &mut self,
+        event: &winit::event::Event<()>,
+        guis: Vec<&mut dyn GuiComponent>,
+    ) {
+        if let Event::WindowEvent { event, .. } = event {
+            match event {
+                WindowEvent::ScaleFactorChanged {
+                    scale_factor,
+                    new_inner_size: _,
+                } => {
+                    self.screen_descriptor.pixels_per_point = *scale_factor as f32;
                 }
+                WindowEvent::Resized(size) => {
+                    if size.width > 0 && size.height > 0 {
+                        self.screen_descriptor.size_in_pixels = [size.width, size.height];
+                    }
+                }
+                _ => {}
             }
-            _ => {}
+            let _ = self.egui_state.on_event(&self.egui_ctx, event);
         }
 
-        let _ = self.egui_state.on_event(&self.egui_ctx, event);
-        self.gui.handle_event(event);
+        self.gui.handle_event(event, guis);
     }
 
     /// Prepare egui.
-    pub fn prepare(&mut self, window: &Window, game_runner: &mut GameRunner) {
+    pub fn prepare(&mut self, window: &Window, guis: &mut Vec<&mut dyn GuiComponent>) {
         // Run the egui frame and create all paint jobs to prepare for rendering.
         let raw_input = self.egui_state.take_egui_input(window);
         let output = self.egui_ctx.run(raw_input, |egui_ctx| {
-            self.gui.ui(egui_ctx, game_runner);
+            self.gui.ui(egui_ctx, guis);
         });
 
         self.textures.append(output.textures_delta);

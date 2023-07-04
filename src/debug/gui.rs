@@ -1,28 +1,26 @@
-use crate::{settings::gui::GuiComponent, GameRunner};
+use crate::settings::gui::GuiComponent;
 use egui::{Context, Slider, Window};
 
-#[derive(Hash, PartialEq, Eq)]
-pub struct DebugGui {}
+use super::Debug;
+
+#[derive(Hash, PartialEq, Eq, Default)]
+pub struct DebugGui {
+    is_open: bool,
+}
 
 impl DebugGui {
     pub fn new() -> Self {
-        Self {}
+        Self { is_open: false }
     }
 }
 
-impl GuiComponent for DebugGui {
-    fn ui(
-        &mut self,
-        ctx: &Context,
-        game_runner: &mut GameRunner,
-        ui_visible: bool,
-        is_open: &mut bool,
-    ) {
+impl GuiComponent for Debug {
+    fn ui(&mut self, ctx: &Context, ui_visible: bool, name: String) {
         if !ui_visible {
             return;
         }
-        Window::new(self.name())
-            .open(is_open)
+        Window::new(name)
+            .open(&mut self.gui.is_open)
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
@@ -32,11 +30,9 @@ impl GuiComponent for DebugGui {
                         .spacing([10.0, 4.0])
                         .striped(true)
                         .show(ui, |ui| {
-                            ui.checkbox(&mut game_runner.debug.override_fps, "Override FPS");
-                            if game_runner.debug.override_fps {
-                                ui.add(
-                                    Slider::new(&mut game_runner.debug.fps, 1..=120).suffix("FPS"),
-                                );
+                            ui.checkbox(&mut self.settings.override_fps, "Override FPS");
+                            if self.settings.override_fps {
+                                ui.add(Slider::new(&mut self.settings.fps, 1..=120).suffix("FPS"));
                             }
                             ui.end_row();
                         });
@@ -44,7 +40,13 @@ impl GuiComponent for DebugGui {
             });
     }
 
-    fn name(&self) -> String {
-        "Debug".to_string()
+    fn name(&self) -> Option<String> {
+        Some("Debug".to_string())
     }
+
+    fn open(&mut self) -> &mut bool {
+        &mut self.gui.is_open
+    }
+
+    fn event(&mut self, _event: &winit::event::Event<()>) {}
 }
