@@ -2,7 +2,7 @@ use crate::{input::JoypadInput, settings::MAX_PLAYERS, Fps, LocalGameState, FPS}
 use futures::channel::oneshot::Receiver;
 use futures::{select, FutureExt};
 use futures_timer::Delay;
-use ggrs::{Config, GGRSRequest, P2PSession};
+use ggrs::{Config, GGRSRequest, P2PSession, SessionBuilder, SessionState};
 use matchbox_socket::{
     ChannelConfig, PeerId, RtcIceServerConfig, WebRtcSocket, WebRtcSocketBuilder,
 };
@@ -309,6 +309,103 @@ impl Netplay {
             conf.ggrs.clone(),
             maybe_unlock_url,
         ))
+    }
+
+    fn advance(&mut self, _inputs: [JoypadInput; MAX_PLAYERS]) -> Option<NetplayState> {
+        return match &mut self.state {
+            NetplayState::Disconnected => None,
+            NetplayState::Connecting(start_method, connecting_state) => {
+                match connecting_state {
+                    ConnectingState::LoadingNetplayServerConfiguration(conf) => {
+                        let mut new_state = None;
+                        match conf.try_recv() {
+                            Ok(Some(Ok(resp))) => {
+                                //TODO: FIX THIS: Perhaps move start_peering to ConnectingState?
+                                //*connecting_state = self.start_peering(resp, start_method.clone());
+                            }
+                            Ok(None) => (), //No result yet
+                            Ok(Some(Err(err))) => {
+                                eprintln!("Could not fetch server config :( {:?}", err);
+                                //TODO: alert about not being able to fetch server configuration
+                                new_state = Some(NetplayState::Disconnected);
+                            }
+                            Err(_) => {
+                                //Lost the sender, not much to do but go back to disconnected
+                                new_state = Some(NetplayState::Disconnected);
+                            }
+                        }
+                        new_state
+                    }
+                    ConnectingState::PeeringUp(PeeringState {
+                        socket: maybe_socket,
+                        ggrs_config,
+                        unlock_url,
+                    }) => {
+                        if let Some(socket) = maybe_socket {
+                            socket.update_peers();
+
+                            let connected_peers = socket.connected_peers().count();
+                            let remaining = MAX_PLAYERS - (connected_peers + 1);
+                            if remaining == 0 {
+                                let players = socket.players();
+                                let ggrs_config = ggrs_config;
+                                let mut sess_build = SessionBuilder::<GGRSConfig>::new()
+                                    .with_num_players(MAX_PLAYERS)
+                                    .with_max_prediction_window(ggrs_config.max_prediction)
+                                    .with_input_delay(ggrs_config.input_delay)
+                                    .with_fps(FPS as usize)
+                                    .expect("invalid fps");
+
+                                for (i, player) in players.into_iter().enumerate() {
+                                    sess_build = sess_build
+                                        .add_player(player, i)
+                                        .expect("failed to add player");
+                                }
+                                *connecting_state =
+                                    ConnectingState::Synchronizing(SynchonizingState::new(
+                                        Some(
+                                            sess_build
+                                                .start_p2p_session(maybe_socket.take().unwrap())
+                                                .unwrap(),
+                                        ),
+                                        unlock_url.clone(),
+                                    ));
+                            }
+                        }
+                        None
+                    }
+                    ConnectingState::Synchronizing(synchronizing_state) => {
+                        let mut new_state = None;
+                        if let Some(p2p_session) = &mut synchronizing_state.p2p_session {
+                            p2p_session.poll_remote_clients();
+                            if let SessionState::Running = p2p_session.current_state() {
+                                new_state = Some(NetplayState::Connected(
+                                    NetplaySession::new(
+                                        synchronizing_state.p2p_session.take().unwrap(),
+                                    ),
+                                    ConnectedState::MappingInput,
+                                ));
+                            }
+                        }
+                        new_state
+                    }
+                }
+            }
+
+            NetplayState::Connected(netplay_session, connected_state) => {
+                let mut new_state = None;
+                if let ConnectedState::MappingInput = connected_state {
+                    //TODO: Actual input mapping..
+                    *connected_state = ConnectedState::Playing(InputMapping { ids: [0, 1] });
+                }
+
+                if let NetplaySessionState::DisconnectedPeers = netplay_session.state {
+                    // For now, just disconnect if we loose peers
+                    new_state = Some(NetplayState::Disconnected);
+                }
+                new_state
+            }
+        };
     }
 }
 
