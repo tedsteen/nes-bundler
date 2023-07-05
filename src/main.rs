@@ -26,9 +26,9 @@ use serde::Deserialize;
 use settings::{Settings, MAX_PLAYERS};
 use tinyfiledialogs::MessageBoxIcon;
 use winit::dpi::LogicalSize;
-use winit::event::{Event, VirtualKeyCode, WindowEvent};
+use winit::event::{Event, ModifiersState, VirtualKeyCode, WindowEvent};
 use winit::event_loop::EventLoop;
-use winit::window::WindowBuilder;
+use winit::window::{Window, WindowBuilder};
 
 mod audio;
 #[cfg(feature = "debug")]
@@ -185,7 +185,7 @@ fn run(bundle: Bundle) -> ! {
                 },
                 move |g, event| {
                     let game_runner = &mut g.game.0;
-                    if !game_runner.handle(event, &mut g.game.1) {
+                    if !game_runner.handle(&g.window, event, &mut g.game.1) {
                         g.exit();
                     }
                 },
@@ -364,6 +364,7 @@ pub struct GameRunner {
     input: Input,
     #[cfg(feature = "debug")]
     debug: debug::Debug,
+    modifiers: ModifiersState,
 }
 
 impl GameRunner {
@@ -380,6 +381,7 @@ impl GameRunner {
             pixels,
             input,
             settings,
+            modifiers: Default::default(),
             #[cfg(feature = "debug")]
             debug: debug::Debug {
                 settings: debug::DebugSettings::new(),
@@ -449,6 +451,7 @@ impl GameRunner {
 
     pub fn handle(
         &mut self,
+        window: &Window,
         event: &winit::event::Event<()>,
         gui_framework: &mut Framework,
     ) -> bool {
@@ -461,14 +464,22 @@ impl GameRunner {
                 WindowEvent::Resized(size) => {
                     self.pixels.resize_surface(size.width, size.height).unwrap();
                 }
+                WindowEvent::ModifiersChanged(modifiers) => {
+                    self.modifiers = *modifiers;
+                }
                 WindowEvent::KeyboardInput { input, .. } => {
                     if input.state == winit::event::ElementState::Pressed {
+                        if self.check_fullscreen(window, input.virtual_keycode) {
+                            return true; // Consider this event consumed by nes-bundler
+                        }
                         match input.virtual_keycode {
                             Some(VirtualKeyCode::F1) => {
                                 self.save_state();
+                                return true; // Consider this event consumed by nes-bundler
                             }
                             Some(VirtualKeyCode::F2) => {
                                 self.load_state();
+                                return true; // Consider this event consumed by nes-bundler
                             }
                             _ => {}
                         }
@@ -506,5 +517,24 @@ impl GameRunner {
                 self.audio.stream.drain(); //make sure we don't build up a delay
             }
         }
+    }
+
+    fn check_fullscreen(&self, window: &Window, virtual_keycode: Option<VirtualKeyCode>) -> bool {
+        #[cfg(target_os = "macos")]
+        if self.modifiers.logo() && virtual_keycode == Some(VirtualKeyCode::F) {
+            use winit::platform::macos::WindowExtMacOS;
+            window.set_simple_fullscreen(!window.simple_fullscreen());
+            return true;
+        }
+        #[cfg(not(target_os = "macos"))]
+        if window.fullscreen().is_some()
+            && self.modifiers.alt()
+            && virtual_keycode == Some(VirtualKeyCode::Return)
+        {
+            window.set_fullscreen(None);
+            return true;
+        }
+
+        false
     }
 }
