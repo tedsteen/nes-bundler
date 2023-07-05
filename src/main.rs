@@ -508,7 +508,9 @@ impl GameRunner {
     }
 
     fn save_state(&mut self) {
-        self.settings.borrow_mut().last_save_state = Some(b64.encode(self.state_handler.save()));
+        let settings = &mut self.settings.borrow_mut();
+        settings.last_save_state = Some(b64.encode(self.state_handler.save()));
+        settings.save().unwrap();
     }
 
     fn load_state(&mut self) {
