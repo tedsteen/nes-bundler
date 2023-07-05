@@ -222,9 +222,15 @@ impl Netplay {
             NetplayServerConfiguration::Static(conf) => {
                 self.state = NetplayState::Connecting(
                     start_method.clone(),
-                    self.start_peering(TurnOnResponse::Full(conf.clone()), start_method),
+                    Self::start_peering(
+                        &mut self.rt,
+                        TurnOnResponse::Full(conf.clone()),
+                        start_method,
+                        self.rom_hash,
+                    ),
                 );
             }
+
             NetplayServerConfiguration::TurnOn(server) => {
                 let netplay_id = &self.netplay_id;
                 let req = self
@@ -251,7 +257,12 @@ impl Netplay {
         };
     }
 
-    fn start_peering(&self, resp: TurnOnResponse, start_method: StartMethod) -> ConnectingState {
+    fn start_peering(
+        rt: &mut Runtime,
+        resp: TurnOnResponse,
+        start_method: StartMethod,
+        rom_hash: Digest,
+    ) -> ConnectingState {
         let mut maybe_unlock_url = None;
         let conf = match resp {
             TurnOnResponse::Basic(BasicResponse { unlock_url, conf }) => {
@@ -264,10 +275,10 @@ impl Netplay {
 
         let room = match &start_method {
             StartMethod::Create(name) => {
-                format!("join_{:x}_{}", self.rom_hash, name.clone())
+                format!("join_{:x}_{}", rom_hash, name.clone())
             }
             //state::StartMethod::Resume(old_session) => format!("resume_{game_hash}_{}", old_session.name.clone()),
-            StartMethod::Random => format!("random_{:x}?next=2", self.rom_hash),
+            StartMethod::Random => format!("random_{:x}?next=2", rom_hash),
         };
 
         let (username, password) = match &conf.matchbox.ice.credentials {
@@ -288,7 +299,7 @@ impl Netplay {
 
         let loop_fut = loop_fut.fuse();
 
-        self.rt.spawn(async move {
+        rt.spawn(async move {
             let timeout = Delay::new(Duration::from_millis(100));
             futures::pin_mut!(loop_fut, timeout);
             loop {
@@ -320,8 +331,12 @@ impl Netplay {
                         let mut new_state = None;
                         match conf.try_recv() {
                             Ok(Some(Ok(resp))) => {
-                                //TODO: FIX THIS: Perhaps move start_peering to ConnectingState?
-                                //*connecting_state = self.start_peering(resp, start_method.clone());
+                                *connecting_state = Self::start_peering(
+                                    &mut self.rt,
+                                    resp,
+                                    start_method.clone(),
+                                    self.rom_hash,
+                                );
                             }
                             Ok(None) => (), //No result yet
                             Ok(Some(Err(err))) => {
@@ -421,11 +436,13 @@ pub struct IcePasswordCredentials {
     username: String,
     password: String,
 }
+
 #[derive(Deserialize, Clone, Debug)]
 pub enum IceCredentials {
     None,
     Password(IcePasswordCredentials),
 }
+
 #[derive(Deserialize, Clone, Debug)]
 pub struct IceConfiguration {
     urls: Vec<String>,
@@ -443,6 +460,7 @@ pub struct GGRSConfiguration {
     pub max_prediction: usize,
     pub input_delay: usize,
 }
+
 #[derive(Deserialize, Clone, Debug)]
 pub struct StaticNetplayServerConfiguration {
     matchbox: MatchboxConfiguration,
