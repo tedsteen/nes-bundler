@@ -12,6 +12,13 @@ pub struct EmptyGuiComponent {
     is_open: bool,
 }
 
+impl EmptyGuiComponent {
+    #[allow(dead_code)] //Only used when not using netplay
+    pub fn new() -> Self {
+        Self { is_open: false }
+    }
+}
+
 impl GuiComponent for EmptyGuiComponent {
     fn ui(&mut self, _ctx: &egui::Context, _ui_visible: bool, _name: String) {}
     fn name(&self) -> Option<String> {

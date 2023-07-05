@@ -250,7 +250,7 @@ fn initialise(
     #[cfg(not(feature = "netplay"))]
     let state_handler = LocalStateHandler {
         state,
-        gui: EmptyGuiComponent { is_open: false },
+        gui: EmptyGuiComponent::new(),
     };
 
     let inputs = Inputs::new(
