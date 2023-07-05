@@ -8,6 +8,22 @@ pub trait GuiComponent {
     fn open(&mut self) -> &mut bool;
 }
 
+pub struct EmptyGuiComponent {
+    is_open: bool,
+}
+
+impl GuiComponent for EmptyGuiComponent {
+    fn ui(&mut self, _ctx: &egui::Context, _ui_visible: bool, _name: String) {}
+    fn name(&self) -> Option<String> {
+        None
+    }
+    fn open(&mut self) -> &mut bool {
+        &mut self.is_open
+    }
+
+    fn event(&mut self, _event: &winit::event::Event<()>) {}
+}
+
 #[derive(Default)]
 pub struct Gui {
     visible: bool,

@@ -8,7 +8,7 @@ use std::rc::Rc;
 use crate::input::JoypadInput;
 use anyhow::{Context, Result};
 use audio::Audio;
-use settings::gui::GuiComponent;
+use settings::gui::{EmptyGuiComponent, GuiComponent};
 
 use crate::gameloop::game_loop;
 use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
@@ -138,6 +138,7 @@ pub struct BuildConfiguration {
     #[cfg(feature = "netplay")]
     netplay: netplay::NetplayBuildConfiguration,
 }
+
 fn main() {
     match load_bundle() {
         Ok(bundle) => {
@@ -262,6 +263,7 @@ fn initialise(
     let game_runner = GameRunner::new(pixels, audio, input, settings, Box::new(state_handler))?;
     Ok((event_loop, window, framework, game_runner))
 }
+
 pub struct LocalGameState {
     nes: NesState,
     frame: i32,
@@ -330,22 +332,6 @@ pub trait StateHandler {
 struct LocalStateHandler {
     state: LocalGameState,
     gui: EmptyGuiComponent,
-}
-
-struct EmptyGuiComponent {
-    is_open: bool,
-}
-
-impl GuiComponent for EmptyGuiComponent {
-    fn ui(&mut self, _ctx: &egui::Context, _ui_visible: bool, _name: String) {}
-    fn name(&self) -> Option<String> {
-        None
-    }
-    fn open(&mut self) -> &mut bool {
-        &mut self.is_open
-    }
-
-    fn event(&mut self, _event: &winit::event::Event<()>) {}
 }
 
 impl StateHandler for LocalStateHandler {
