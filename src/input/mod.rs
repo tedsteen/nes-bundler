@@ -1,17 +1,18 @@
 use self::{
     gamepad::{Gamepads, JoypadGamepadMapping},
+    gui::InputSettingsGui,
     keyboard::{JoypadKeyboardMapping, Keyboards},
+    settings::InputConfigurationRef,
 };
-use crate::settings::{
-    input::{InputConfigurationRef, InputSettings},
-    MAX_PLAYERS,
-};
+use crate::settings::{Settings, MAX_PLAYERS};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::{cell::RefCell, collections::HashSet, rc::Rc};
 use winit::event::Event;
 
 pub mod gamepad;
+pub mod gui;
 pub mod keyboard;
+pub mod settings;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JoypadButton {
@@ -124,9 +125,9 @@ impl Inputs {
     pub fn new(
         sdl_context: &sdl2::Sdl,
         default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
-        settings: &mut InputSettings,
+        settings: Rc<RefCell<Settings>>,
     ) -> Self {
-        let gamepads = Gamepads::new(sdl_context, settings);
+        let gamepads = Gamepads::new(sdl_context, &mut settings.borrow_mut().input);
         let keyboards = Keyboards::new();
 
         Self {
@@ -137,8 +138,8 @@ impl Inputs {
         }
     }
 
-    pub fn advance(&mut self, event: &winit::event::Event<()>, input_settings: &mut InputSettings) {
-        self.gamepads.advance(input_settings);
+    pub fn advance(&mut self, event: &winit::event::Event<()>, settings: Rc<RefCell<Settings>>) {
+        self.gamepads.advance(&mut settings.borrow_mut().input);
         if let Event::WindowEvent {
             event: winit::event::WindowEvent::KeyboardInput { input, .. },
             ..
@@ -146,6 +147,7 @@ impl Inputs {
         {
             self.keyboards.advance(input);
         }
+        let input_settings = &mut settings.borrow_mut().input;
         input_settings.reset_selected_disconnected_inputs(self);
 
         self.joypads[0] =
@@ -214,5 +216,20 @@ impl Inputs {
             }
         }
         false
+    }
+}
+
+pub struct Input {
+    settings: Rc<RefCell<Settings>>,
+    pub inputs: Inputs,
+    gui: InputSettingsGui,
+}
+impl Input {
+    pub fn new(inputs: Inputs, settings: Rc<RefCell<Settings>>) -> Self {
+        Input {
+            settings,
+            inputs,
+            gui: Default::default(),
+        }
     }
 }

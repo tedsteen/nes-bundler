@@ -2,14 +2,14 @@ use super::MAX_PLAYERS;
 use crate::input::{gamepad::JoypadGamepadMapping, InputConfiguration, InputId, Inputs};
 use core::fmt;
 use serde::{Deserialize, Deserializer, Serialize};
-use std::{cell::RefCell, collections::HashMap, hash::Hash, rc::Rc};
+use std::{cell::RefCell, collections::BTreeMap, hash::Hash, rc::Rc};
 
 pub type InputConfigurationRef = Rc<RefCell<InputConfiguration>>;
 
 #[derive(Debug, Clone)]
 pub struct InputSettings {
     pub selected: [InputConfigurationRef; MAX_PLAYERS],
-    pub configurations: HashMap<InputId, InputConfigurationRef>,
+    pub configurations: BTreeMap<InputId, InputConfigurationRef>,
     pub default_gamepad_mapping: JoypadGamepadMapping,
 }
 
@@ -49,7 +49,7 @@ impl Hash for InputSettings {
 #[derive(Serialize, Deserialize)]
 struct SerializableInputSettings {
     selected: [InputId; MAX_PLAYERS],
-    configurations: HashMap<InputId, InputConfiguration>,
+    configurations: BTreeMap<InputId, InputConfiguration>,
     pub default_gamepad_mapping: JoypadGamepadMapping,
 }
 
@@ -91,7 +91,7 @@ impl<'de> InputSettings {
     where
         D: Deserializer<'de>,
     {
-        let configurations: HashMap<InputId, InputConfigurationRef> = source
+        let configurations: BTreeMap<InputId, InputConfigurationRef> = source
             .configurations
             .iter()
             .map(|(k, v)| (k.clone(), Rc::new(RefCell::new(v.clone()))))
@@ -112,7 +112,7 @@ impl<'de> InputSettings {
         })
     }
     fn map_selected<'a>(
-        configurations: &'a HashMap<String, InputConfigurationRef>,
+        configurations: &'a BTreeMap<String, InputConfigurationRef>,
         id: &'a InputId,
         player: usize,
     ) -> Result<&'a InputConfigurationRef, SettingsParseError> {

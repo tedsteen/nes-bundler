@@ -1,18 +1,21 @@
 #![deny(clippy::all)]
 #![forbid(unsafe_code)]
 
+use std::cell::RefCell;
 use std::fs::File;
+use std::rc::Rc;
 
 use crate::input::JoypadInput;
 use anyhow::{Context, Result};
-use audio::Stream;
+use audio::Audio;
+use settings::gui::{EmptyGuiComponent, GuiComponent};
 
 use crate::gameloop::game_loop;
 use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
 use base64::Engine;
 
 use gui::Framework;
-use input::Inputs;
+use input::{Input, Inputs};
 use palette::NTSC_PAL;
 use pixels::{Pixels, SurfaceTexture};
 use rfd::FileDialog;
@@ -23,7 +26,7 @@ use serde::Deserialize;
 use settings::{Settings, MAX_PLAYERS};
 use tinyfiledialogs::MessageBoxIcon;
 use winit::dpi::LogicalSize;
-use winit::event::{Event, VirtualKeyCode};
+use winit::event::{Event, VirtualKeyCode, WindowEvent};
 use winit::event_loop::EventLoop;
 use winit::window::WindowBuilder;
 
@@ -44,14 +47,26 @@ const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
 const ZOOM: f32 = 3.0;
 
-pub fn load_rom(cart_data: Vec<u8>) -> Result<NesState, String> {
-    let mapper = mapper_from_file(cart_data.as_slice())?;
+pub fn start_nes(cart_data: Vec<u8>, sample_rate: u64) -> Result<NesState> {
+    let rom_data = match std::env::var("ROM_FILE") {
+        Ok(rom_file) => {
+            std::fs::read(&rom_file).context(format!("Could not read ROM {}", rom_file))?
+        }
+        Err(_e) => cart_data.to_vec(),
+    };
+
+    let mapper = mapper_from_file(rom_data.as_slice())
+        .map_err(anyhow::Error::msg)
+        .context("Failed to load ROM")?;
     mapper.print_debug_status();
     let mut nes = NesState::new(mapper);
     nes.power_on();
+    nes.apu.set_sample_rate(sample_rate);
+
     Ok(nes)
 }
-struct Bundle {
+
+pub struct Bundle {
     config: BuildConfiguration,
     rom: Vec<u8>,
 }
@@ -123,6 +138,7 @@ pub struct BuildConfiguration {
     #[cfg(feature = "netplay")]
     netplay: netplay::NetplayBuildConfiguration,
 }
+
 fn main() {
     match load_bundle() {
         Ok(bundle) => {
@@ -152,7 +168,6 @@ fn run(bundle: Bundle) -> ! {
     let window_title = bundle.config.window_title.clone();
     match initialise(bundle) {
         Ok((event_loop, window, framework, game_runner)) => {
-            let mut last_settings = game_runner.settings.get_hash();
             game_loop(
                 event_loop,
                 window,
@@ -170,38 +185,6 @@ fn run(bundle: Bundle) -> ! {
                 },
                 move |g, event| {
                     let game_runner = &mut g.game.0;
-                    let curr_settings = game_runner.settings.get_hash();
-                    if last_settings != curr_settings {
-                        if *game_runner.sound_stream.get_output_device_name()
-                            != game_runner.settings.audio.output_device
-                        {
-                            game_runner
-                                .sound_stream
-                                .set_output_device(game_runner.settings.audio.output_device.clone())
-                        }
-
-                        // Note: We might not get the exact latency in ms since there will be rounding errors. Be ok with 1-off
-                        if i16::abs(
-                            game_runner.sound_stream.get_latency() as i16
-                                - game_runner.settings.audio.latency as i16,
-                        ) > 1
-                        {
-                            game_runner
-                                .sound_stream
-                                .set_latency(game_runner.settings.audio.latency);
-
-                            //Whatever latency we ended up getting, save that to settings
-                            game_runner.settings.audio.latency =
-                                game_runner.sound_stream.get_latency();
-                        }
-                        game_runner.sound_stream.volume =
-                            game_runner.settings.audio.volume as f32 / 100.0;
-
-                        last_settings = curr_settings;
-                        if game_runner.settings.save().is_err() {
-                            eprintln!("Failed to save the settings");
-                        }
-                    }
                     if !game_runner.handle(event, &mut g.game.1) {
                         g.exit();
                     }
@@ -239,6 +222,7 @@ fn initialise(
         let scale_factor = window.scale_factor() as f32;
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
         let pixels = Pixels::new(WIDTH, HEIGHT, surface_texture).context("No pixels available")?;
+
         let framework = Framework::new(
             &event_loop,
             window_size.width,
@@ -249,29 +233,44 @@ fn initialise(
 
         (pixels, framework)
     };
-    #[allow(unused_mut)] // needs to be mut for netplay feature
-    let mut settings: Settings = Settings::new(&bundle.config.default_settings);
-    let game_runner = GameRunner::new(pixels, sdl_context, &bundle.config, settings, bundle.rom)?;
+
+    let settings = Rc::new(RefCell::new(Settings::new(&bundle.config.default_settings)));
+
+    let audio = Audio::new(&sdl_context, settings.clone())?;
+    let nes = start_nes(bundle.rom.clone(), audio.stream.get_sample_rate() as u64)?;
+    let state = LocalGameState::new(nes)?;
+
+    #[cfg(feature = "netplay")]
+    let state_handler = netplay::state_handler::NetplayStateHandler::new(
+        state,
+        &bundle,
+        &mut settings.borrow_mut().netplay_id,
+    );
+
+    #[cfg(not(feature = "netplay"))]
+    let state_handler = LocalStateHandler {
+        state,
+        gui: EmptyGuiComponent::new(),
+    };
+
+    let inputs = Inputs::new(
+        &sdl_context,
+        bundle.config.default_settings.input.selected,
+        settings.clone(),
+    );
+    let input = Input::new(inputs, settings.clone());
+
+    let game_runner = GameRunner::new(pixels, audio, input, settings, Box::new(state_handler))?;
     Ok((event_loop, window, framework, game_runner))
 }
-pub struct MyGameState {
+
+pub struct LocalGameState {
     nes: NesState,
     frame: i32,
 }
 
-impl MyGameState {
-    fn new(rom: Vec<u8>) -> Result<Self> {
-        let rom_data = match std::env::var("ROM_FILE") {
-            Ok(rom_file) => {
-                std::fs::read(&rom_file).context(format!("Could not read ROM {}", rom_file))?
-            }
-            Err(_e) => rom.to_vec(),
-        };
-
-        let nes = load_rom(rom_data)
-            .map_err(anyhow::Error::msg)
-            .context("Failed to load ROM")?;
-
+impl LocalGameState {
+    fn new(nes: NesState) -> Result<Self> {
         Ok(Self { nes, frame: 0 })
     }
 
@@ -282,15 +281,6 @@ impl MyGameState {
         self.nes.run_until_vblank();
         self.frame += 1;
         FPS
-    }
-
-    fn render(&self, frame: &mut [u8]) {
-        let screen = &self.nes.ppu.screen;
-
-        for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-            let palette_index = screen[i] as usize * 4;
-            pixel.copy_from_slice(&NTSC_PAL[palette_index..palette_index + 4]);
-        }
     }
 
     fn save(&self) -> Vec<u8> {
@@ -308,9 +298,17 @@ impl MyGameState {
         self.nes.load_state(data);
         //println!("LOADED {:?}", self.frame);
     }
+
+    fn consume_samples(&mut self) -> Vec<i16> {
+        self.nes.apu.consume_samples()
+    }
+
+    fn get_frame(&self) -> &Vec<u16> {
+        &self.nes.ppu.screen
+    }
 }
 
-impl Clone for MyGameState {
+impl Clone for LocalGameState {
     fn clone(&self) -> Self {
         let data = &mut self.save();
         let mut clone = Self {
@@ -322,85 +320,118 @@ impl Clone for MyGameState {
     }
 }
 
-pub struct GameRunner {
-    state: MyGameState,
-    sound_stream: Stream,
-    pixels: Pixels,
-    settings: Settings,
-    inputs: Inputs,
+pub trait StateHandler {
+    fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps;
+    fn consume_samples(&mut self) -> Vec<i16>;
+    fn get_frame(&self) -> &Vec<u16>;
+    fn save(&self) -> Vec<u8>;
+    fn load(&mut self, data: &mut Vec<u8>);
+    fn get_gui(&mut self) -> &mut dyn GuiComponent;
+}
 
-    #[cfg(feature = "netplay")]
-    netplay: netplay::Netplay,
+struct LocalStateHandler {
+    state: LocalGameState,
+    gui: EmptyGuiComponent,
+}
+
+impl StateHandler for LocalStateHandler {
+    fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps {
+        self.state.advance(inputs)
+    }
+    fn consume_samples(&mut self) -> Vec<i16> {
+        self.state.consume_samples()
+    }
+    fn get_frame(&self) -> &Vec<u16> {
+        self.state.get_frame()
+    }
+    fn save(&self) -> Vec<u8> {
+        self.state.save()
+    }
+    fn load(&mut self, data: &mut Vec<u8>) {
+        self.state.load(data)
+    }
+
+    fn get_gui(&mut self) -> &mut dyn GuiComponent {
+        &mut self.gui
+    }
+}
+
+pub struct GameRunner {
+    state_handler: Box<dyn StateHandler>,
+    audio: Audio,
+    pixels: Pixels,
+    settings: Rc<RefCell<Settings>>,
+    input: Input,
     #[cfg(feature = "debug")]
-    debug: debug::DebugSettings,
+    debug: debug::Debug,
 }
 
 impl GameRunner {
     pub fn new(
         pixels: Pixels,
-        sdl_context: Sdl,
-        build_config: &BuildConfiguration,
-        mut settings: Settings,
-        rom: Vec<u8>,
+        audio: Audio,
+        input: Input,
+        settings: Rc<RefCell<Settings>>,
+        state_handler: Box<dyn StateHandler>,
     ) -> Result<Self> {
-        let inputs = Inputs::new(
-            &sdl_context,
-            build_config.default_settings.input.selected.clone(),
-            &mut settings.input,
-        );
-
-        let audio_subsystem = sdl_context.audio().map_err(anyhow::Error::msg)?;
-
-        let sound_stream = Stream::new(&audio_subsystem, &settings.audio);
-        let mut state = MyGameState::new(rom.clone())?;
-
-        state
-            .nes
-            .apu
-            .set_sample_rate(sound_stream.get_sample_rate() as u64);
-
         Ok(Self {
-            state: state.clone(),
-            sound_stream,
+            state_handler,
+            audio,
             pixels,
-            #[cfg(feature = "netplay")]
-            netplay: netplay::Netplay::new(
-                &build_config.netplay,
-                &mut settings,
-                state,
-                md5::compute(&rom),
-            ),
+            input,
             settings,
-            inputs,
             #[cfg(feature = "debug")]
-            debug: debug::DebugSettings::new(),
+            debug: debug::Debug {
+                settings: debug::DebugSettings::new(),
+                gui: debug::gui::DebugGui::new(),
+            },
         })
     }
     pub fn advance(&mut self) -> Fps {
-        let inputs = [self.inputs.get_joypad(0), self.inputs.get_joypad(1)];
+        let inputs = [
+            self.input.inputs.get_joypad(0),
+            self.input.inputs.get_joypad(1),
+        ];
 
-        #[cfg(not(feature = "netplay"))]
-        let fps = self.state.advance(inputs);
+        let fps = self.state_handler.advance(inputs);
 
-        #[cfg(feature = "netplay")]
-        let fps = self.netplay.advance(&mut self.state, inputs);
-
-        self.sound_stream
-            .push_samples(self.state.nes.apu.consume_samples().as_slice());
+        self.audio
+            .stream
+            .push_samples(self.state_handler.consume_samples().as_slice());
 
         #[cfg(feature = "debug")]
-        if self.debug.override_fps {
-            return self.debug.fps;
+        if self.debug.settings.override_fps {
+            return self.debug.settings.fps;
         }
         fps
     }
 
     pub fn render(&mut self, window: &winit::window::Window, gui_framework: &mut Framework) {
-        gui_framework.prepare(window, self);
+        let settings_hash_before = self.settings.borrow().get_hash();
+
+        gui_framework.prepare(
+            window,
+            &mut vec![
+                #[cfg(feature = "debug")]
+                &mut self.debug,
+                &mut self.audio,
+                &mut self.input,
+                self.state_handler.get_gui(),
+            ],
+        );
+
+        if settings_hash_before != self.settings.borrow().get_hash() {
+            self.settings.borrow().save().unwrap();
+        }
 
         let pixels = &mut self.pixels;
 
-        self.state.render(pixels.frame_mut());
+        let frame = self.state_handler.get_frame();
+
+        for (i, pixel) in pixels.frame_mut().chunks_exact_mut(4).enumerate() {
+            let palette_index = frame[i] as usize * 4;
+            pixel.copy_from_slice(&NTSC_PAL[palette_index..palette_index + 4]);
+        }
 
         // Render everything together
         pixels
@@ -421,17 +452,16 @@ impl GameRunner {
         event: &winit::event::Event<()>,
         gui_framework: &mut Framework,
     ) -> bool {
-        self.inputs.advance(event, &mut self.settings.input);
         // Handle input events
         if let Event::WindowEvent { event, .. } = event {
             match event {
-                winit::event::WindowEvent::CloseRequested => {
+                WindowEvent::CloseRequested => {
                     return false;
                 }
-                winit::event::WindowEvent::Resized(size) => {
+                WindowEvent::Resized(size) => {
                     self.pixels.resize_surface(size.width, size.height).unwrap();
                 }
-                winit::event::WindowEvent::KeyboardInput { input, .. } => {
+                WindowEvent::KeyboardInput { input, .. } => {
                     if input.state == winit::event::ElementState::Pressed {
                         match input.virtual_keycode {
                             Some(VirtualKeyCode::F1) => {
@@ -446,21 +476,34 @@ impl GameRunner {
                 }
                 _ => {}
             }
-            // Update egui inputs
-            gui_framework.handle_event(event, self);
         }
+
+        // Update egui inputs
+        gui_framework.handle_event(
+            event,
+            vec![
+                #[cfg(feature = "debug")]
+                &mut self.debug,
+                &mut self.audio,
+                &mut self.input,
+                self.state_handler.get_gui(),
+            ],
+        );
+
         true
     }
 
     fn save_state(&mut self) {
-        self.settings.last_save_state = Some(b64.encode(self.state.save()));
+        let settings = &mut self.settings.borrow_mut();
+        settings.last_save_state = Some(b64.encode(self.state_handler.save()));
+        settings.save().unwrap();
     }
 
     fn load_state(&mut self) {
-        if let Some(save_state) = &mut self.settings.last_save_state {
+        if let Some(save_state) = &mut self.settings.borrow_mut().last_save_state {
             if let Ok(buf) = &mut b64.decode(save_state) {
-                self.state.load(buf);
-                self.sound_stream.drain(); //make sure we don't build up a delay
+                self.state_handler.load(buf);
+                self.audio.stream.drain(); //make sure we don't build up a delay
             }
         }
     }

@@ -6,18 +6,14 @@ use egui::{
 };
 
 use crate::{
-    netplay::{
-        state::{ConnectedState, ConnectingState, PeeringState, StartMethod},
-        NetplayState, NetplayStats,
-    },
-    settings::MAX_PLAYERS,
-    GameRunner,
+    netplay::{NetplayState, NetplayStats},
+    settings::{gui::GuiComponent, MAX_PLAYERS},
 };
 
-use super::GuiComponent;
-pub struct NetplayGui {
-    is_open: bool,
-}
+use super::{
+    state_handler::NetplayStateHandler, ConnectedState, ConnectingState, PeeringState, StartMethod,
+};
+
 impl NetplayGui {
     fn stats_ui(ui: &mut Ui, stats: &NetplayStats, player: usize) {
         if !stats.get_ping().is_empty() {
@@ -87,13 +83,24 @@ impl NetplayGui {
         }
     }
 }
+pub struct NetplayGui {
+    room_name: String,
+    is_open: bool,
+}
 
-impl GuiComponent for NetplayGui {
-    fn handle_event(&mut self, _event: &winit::event::WindowEvent, _: &mut GameRunner) {}
-    fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner, ui_visible: bool) {
-        let netplay = &mut game_runner.netplay;
+impl NetplayGui {
+    pub fn new(room_name: String) -> Self {
+        Self {
+            room_name,
+            is_open: false,
+        }
+    }
+}
+
+impl GuiComponent for NetplayStateHandler {
+    fn ui(&mut self, ctx: &Context, ui_visible: bool, name: String) {
         if let NetplayState::Connected(_netplay_session, ConnectedState::MappingInput) =
-            &mut netplay.state
+            &mut self.netplay.state
         {
             egui::CentralPanel::default().show(ctx, |ui| {
                 ui.label("Floating text!");
@@ -102,11 +109,12 @@ impl GuiComponent for NetplayGui {
         if !ui_visible {
             return;
         }
-        Window::new(self.name())
-            .open(&mut self.is_open)
+
+        Window::new(name)
+            .open(&mut self.gui.is_open)
             .collapsible(false)
             .resizable(false)
-            .show(ctx, |ui| match &netplay.state {
+            .show(ctx, |ui| match &self.netplay.state {
                 NetplayState::Disconnected => {
                     egui::Grid::new("netplay_grid")
                         .num_columns(2)
@@ -115,21 +123,22 @@ impl GuiComponent for NetplayGui {
                         .show(ui, |ui| {
                             ui.label("Join a game by name");
                             ui.add(
-                                TextEdit::singleline(&mut netplay.room_name)
+                                TextEdit::singleline(&mut self.gui.room_name)
                                     .desired_width(140.0)
                                     .hint_text("Netplay room"),
                             );
                             if ui
-                                .add_enabled(!netplay.room_name.is_empty(), Button::new("Join"))
+                                .add_enabled(!self.gui.room_name.is_empty(), Button::new("Join"))
                                 .on_disabled_hover_text("Which room do you want to join?")
                                 .clicked()
                             {
-                                netplay.start(StartMethod::Create(netplay.room_name.clone()));
+                                self.netplay
+                                    .start(StartMethod::Create(self.gui.room_name.clone()));
                             }
                             ui.end_row();
                             ui.label("or simply");
                             if ui.button("Match with a random player").clicked() {
-                                netplay.start(StartMethod::Random);
+                                self.netplay.start(StartMethod::Random);
                             }
                             ui.end_row();
                         });
@@ -139,7 +148,7 @@ impl GuiComponent for NetplayGui {
                         ConnectingState::LoadingNetplayServerConfiguration(_) => {
                             ui.label("Initializing");
                             if ui.button("Cancel").clicked() {
-                                netplay.state = NetplayState::Disconnected;
+                                self.netplay.state = NetplayState::Disconnected;
                             }
                         }
                         ConnectingState::PeeringUp(PeeringState { socket, .. }) => {
@@ -148,7 +157,7 @@ impl GuiComponent for NetplayGui {
                                 let remaining = MAX_PLAYERS - (connected_peers + 1);
                                 ui.label(format!("Waiting for {} players...", remaining));
                                 if ui.button("Cancel").clicked() {
-                                    netplay.state = NetplayState::Disconnected;
+                                    self.netplay.state = NetplayState::Disconnected;
                                 }
                             }
                         }
@@ -166,39 +175,35 @@ impl GuiComponent for NetplayGui {
                                         ui.label(" to unlock Netplay!");
                                     });
                                     if ui.button("Retry").clicked() {
-                                        netplay.start(start_method.clone());
+                                        self.netplay.start(start_method.clone());
                                     }
                                 }
                             }
                             if ui.button("Cancel").clicked() {
-                                netplay.state = NetplayState::Disconnected;
+                                self.netplay.state = NetplayState::Disconnected;
                             }
                         }
                     }
                 }
                 NetplayState::Connected(netplay_session, _) => {
                     ui.collapsing("Stats", |ui| {
-                        Self::stats_ui(ui, &netplay_session.stats[0], 0);
-                        Self::stats_ui(ui, &netplay_session.stats[1], 1);
+                        NetplayGui::stats_ui(ui, &netplay_session.stats[0], 0);
+                        NetplayGui::stats_ui(ui, &netplay_session.stats[1], 1);
                     });
                     if ui.button("Disconnect").clicked() {
-                        netplay.state = NetplayState::Disconnected;
+                        self.netplay.state = NetplayState::Disconnected;
                     }
                 }
             });
     }
 
-    fn is_open(&mut self) -> &mut bool {
-        &mut self.is_open
+    fn name(&self) -> Option<String> {
+        Some("Netplay!".to_string())
     }
 
-    fn name(&self) -> String {
-        "Netplay!".to_string()
+    fn open(&mut self) -> &mut bool {
+        &mut self.gui.is_open
     }
-}
 
-impl NetplayGui {
-    pub fn new() -> Self {
-        Self { is_open: true }
-    }
+    fn event(&mut self, _event: &winit::event::Event<()>) {}
 }

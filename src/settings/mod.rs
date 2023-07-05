@@ -1,6 +1,8 @@
-use crate::input::InputConfigurationKind;
+use crate::{
+    audio::settings::AudioSettings,
+    input::{settings::InputSettings, InputConfigurationKind},
+};
 
-use self::{audio::AudioSettings, input::InputSettings};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::hash_map::DefaultHasher,
@@ -9,9 +11,7 @@ use std::{
     io::{BufReader, BufWriter},
     rc::Rc,
 };
-
-pub mod audio;
-pub mod input;
+pub mod gui;
 
 pub const MAX_PLAYERS: usize = 2;
 
@@ -49,7 +49,7 @@ impl Settings {
 }
 
 impl Settings {
-    fn load() -> anyhow::Result<Settings> {
+    pub fn load() -> anyhow::Result<Settings> {
         let settings = serde_yaml::from_reader(BufReader::new(File::open("settings.yaml")?))?;
         Ok(settings)
     }

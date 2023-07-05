@@ -1,16 +1,12 @@
-use self::{audio::AudioSettingsGui, input::InputSettingsGui};
-use crate::GameRunner;
+use crate::settings::gui::{Gui, GuiComponent};
 use egui::{ClippedPrimitive, Context, TexturesDelta};
 use egui_wgpu::renderer::{Renderer, ScreenDescriptor};
 use pixels::{wgpu, PixelsContext};
-use winit::{event::VirtualKeyCode, event_loop::EventLoopWindowTarget, window::Window};
-
-mod audio;
-#[cfg(feature = "debug")]
-mod debug;
-mod input;
-#[cfg(feature = "netplay")]
-mod netplay;
+use winit::{
+    event::{Event, WindowEvent},
+    event_loop::EventLoopWindowTarget,
+    window::Window,
+};
 
 /// Manages all state required for rendering egui over `Pixels`.
 pub struct Framework {
@@ -23,7 +19,7 @@ pub struct Framework {
     textures: TexturesDelta,
 
     // State for the GUI
-    gui: Gui,
+    pub gui: Gui,
 }
 
 // Render egui over pixels
@@ -47,8 +43,6 @@ impl Framework {
             pixels_per_point: scale_factor,
         };
         let renderer = Renderer::new(pixels.device(), pixels.render_texture_format(), None, 1);
-        let textures = TexturesDelta::default();
-        let gui = Gui::new();
 
         Self {
             egui_ctx,
@@ -56,42 +50,44 @@ impl Framework {
             screen_descriptor,
             renderer,
             paint_jobs: Vec::new(),
-            textures,
-            gui,
+            textures: TexturesDelta::default(),
+            gui: Default::default(),
         }
     }
 
     /// Handle input events from the window manager.
     pub fn handle_event(
         &mut self,
-        event: &winit::event::WindowEvent,
-        game_runner: &mut GameRunner,
+        event: &winit::event::Event<()>,
+        guis: Vec<&mut dyn GuiComponent>,
     ) {
-        match event {
-            winit::event::WindowEvent::ScaleFactorChanged {
-                scale_factor,
-                new_inner_size: _,
-            } => {
-                self.screen_descriptor.pixels_per_point = *scale_factor as f32;
-            }
-            winit::event::WindowEvent::Resized(size) => {
-                if size.width > 0 && size.height > 0 {
-                    self.screen_descriptor.size_in_pixels = [size.width, size.height];
+        if let Event::WindowEvent { event, .. } = event {
+            match event {
+                WindowEvent::ScaleFactorChanged {
+                    scale_factor,
+                    new_inner_size: _,
+                } => {
+                    self.screen_descriptor.pixels_per_point = *scale_factor as f32;
                 }
+                WindowEvent::Resized(size) => {
+                    if size.width > 0 && size.height > 0 {
+                        self.screen_descriptor.size_in_pixels = [size.width, size.height];
+                    }
+                }
+                _ => {}
             }
-            _ => {}
+            let _ = self.egui_state.on_event(&self.egui_ctx, event);
         }
 
-        let _ = self.egui_state.on_event(&self.egui_ctx, event);
-        self.gui.handle_event(event, game_runner);
+        self.gui.handle_event(event, guis);
     }
 
     /// Prepare egui.
-    pub fn prepare(&mut self, window: &Window, game_runner: &mut GameRunner) {
+    pub fn prepare(&mut self, window: &Window, guis: &mut Vec<&mut dyn GuiComponent>) {
         // Run the egui frame and create all paint jobs to prepare for rendering.
         let raw_input = self.egui_state.take_egui_input(window);
         let output = self.egui_ctx.run(raw_input, |egui_ctx| {
-            self.gui.ui(egui_ctx, game_runner);
+            self.gui.ui(egui_ctx, guis);
         });
 
         self.textures.append(output.textures_delta);
@@ -143,72 +139,6 @@ impl Framework {
         let textures = std::mem::take(&mut self.textures);
         for id in &textures.free {
             self.renderer.free_texture(id);
-        }
-    }
-}
-
-trait GuiComponent {
-    fn handle_event(&mut self, event: &winit::event::WindowEvent, game_runner: &mut GameRunner);
-    fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner, ui_visible: bool);
-    fn is_open(&mut self) -> &mut bool;
-    fn name(&self) -> String;
-}
-
-pub struct Gui {
-    // State for the demo app.
-    visible: bool,
-    settings: Vec<Box<dyn GuiComponent>>,
-}
-
-impl Gui {
-    fn new() -> Self {
-        let settings: Vec<Box<dyn GuiComponent>> = vec![
-            Box::new(AudioSettingsGui::new()),
-            Box::new(InputSettingsGui::new()),
-            #[cfg(feature = "netplay")]
-            Box::new(netplay::NetplayGui::new()),
-            #[cfg(feature = "debug")]
-            Box::new(debug::DebugGui::new()),
-        ];
-        Self {
-            visible: false,
-            settings,
-        }
-    }
-
-    fn handle_event(&mut self, event: &winit::event::WindowEvent, game_runner: &mut GameRunner) {
-        if let winit::event::WindowEvent::KeyboardInput { input, .. } = event {
-            if let Some(code) = input.virtual_keycode {
-                if input.state == winit::event::ElementState::Pressed
-                    && code == VirtualKeyCode::Escape
-                {
-                    self.visible = !self.visible;
-                }
-            }
-        }
-        for g in &mut self.settings {
-            g.handle_event(event, game_runner);
-        }
-    }
-
-    fn ui(&mut self, ctx: &Context, game_runner: &mut GameRunner) {
-        if self.visible {
-            egui::TopBottomPanel::top("menubar_container").show(ctx, |ui| {
-                egui::menu::bar(ui, |ui| {
-                    ui.menu_button("Settings", |ui| {
-                        for setting in &mut self.settings {
-                            if ui.button(setting.name()).clicked() {
-                                *setting.is_open() = !*setting.is_open();
-                                ui.close_menu();
-                            }
-                        }
-                    })
-                });
-            });
-        }
-
-        for setting in &mut self.settings {
-            setting.ui(ctx, game_runner, self.visible);
         }
     }
 }
