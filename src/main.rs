@@ -527,11 +527,13 @@ impl GameRunner {
             return true;
         }
         #[cfg(not(target_os = "macos"))]
-        if window.fullscreen().is_some()
-            && self.modifiers.alt()
-            && virtual_keycode == Some(VirtualKeyCode::Return)
-        {
-            window.set_fullscreen(None);
+        if self.modifiers.alt() && virtual_keycode == Some(VirtualKeyCode::Return) {
+            if window.fullscreen().is_some() {
+                window.set_fullscreen(None);
+            } else {
+                window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+            }
+
             return true;
         }
 
