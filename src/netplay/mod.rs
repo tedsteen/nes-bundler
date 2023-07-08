@@ -107,6 +107,7 @@ pub enum NetplaySessionState {
 }
 pub struct NetplaySession {
     p2p_session: P2PSession<GGRSConfig>,
+    game_state: LocalGameState,
     last_confirmed_frame: i32,
     pub stats: [NetplayStats; MAX_PLAYERS],
     state: NetplaySessionState,
@@ -114,9 +115,10 @@ pub struct NetplaySession {
 }
 
 impl NetplaySession {
-    pub fn new(p2p_session: P2PSession<GGRSConfig>) -> Self {
+    pub fn new(p2p_session: P2PSession<GGRSConfig>, game_state: LocalGameState) -> Self {
         Self {
             p2p_session,
+            game_state,
             last_confirmed_frame: -1,
             stats: [NetplayStats::new(), NetplayStats::new()],
             state: NetplaySessionState::Connected,
@@ -124,7 +126,7 @@ impl NetplaySession {
         }
     }
 
-    pub fn advance(&mut self, game_state: &mut LocalGameState, inputs: [JoypadInput; MAX_PLAYERS]) {
+    pub fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) {
         let sess = &mut self.p2p_session;
         sess.poll_remote_clients();
 
@@ -147,34 +149,37 @@ impl NetplaySession {
                     match request {
                         GGRSRequest::LoadGameState { cell, frame } => {
                             println!("Loading (frame {:?})", frame);
-                            *game_state = cell.load().expect("No data found.");
+                            self.game_state = cell.load().expect("No data found.");
                         }
                         GGRSRequest::SaveGameState { cell, frame } => {
-                            assert_eq!(game_state.frame, frame);
-                            cell.save(frame, Some(game_state.clone()), None);
+                            assert_eq!(self.game_state.frame, frame);
+                            cell.save(frame, Some(self.game_state.clone()), None);
                         }
                         GGRSRequest::AdvanceFrame { inputs } => {
-                            game_state
+                            self.game_state
                                 .advance([JoypadInput(inputs[0].0), JoypadInput(inputs[1].0)]);
 
-                            if game_state.frame <= self.last_confirmed_frame {
+                            if self.game_state.frame <= self.last_confirmed_frame {
                                 // Discard the samples for this frame since it's a replay from ggrs. Audio has already been produced and pushed for it.
-                                game_state.nes.apu.consume_samples();
+                                self.game_state.nes.apu.consume_samples();
                             } else {
-                                self.last_confirmed_frame = game_state.frame;
+                                self.last_confirmed_frame = self.game_state.frame;
                             }
                         }
                     }
                 }
             }
             Err(ggrs::GGRSError::PredictionThreshold) => {
-                println!("Frame {} skipped: PredictionThreshold", game_state.frame);
+                println!(
+                    "Frame {} skipped: PredictionThreshold",
+                    self.game_state.frame
+                );
             }
             Err(ggrs::GGRSError::NotSynchronized) => {}
             Err(e) => eprintln!("Ouch :( {:?}", e),
         }
 
-        if game_state.frame % 30 == 0 {
+        if self.game_state.frame % 30 == 0 {
             for i in 0..MAX_PLAYERS {
                 if let Ok(stats) = sess.network_stats(i) {
                     if !sess.local_player_handles().contains(&i) {
@@ -192,11 +197,12 @@ impl NetplaySession {
 }
 pub struct Netplay {
     rt: Runtime,
-    pub state: NetplayState,
-    pub config: NetplayBuildConfiguration,
+    state: NetplayState,
+    config: NetplayBuildConfiguration,
     reqwest_client: reqwest::Client,
     netplay_id: String,
     rom_hash: Digest,
+    initial_game_state: LocalGameState,
 }
 
 impl Netplay {
@@ -204,6 +210,7 @@ impl Netplay {
         config: NetplayBuildConfiguration,
         netplay_id: &mut Option<String>,
         rom_hash: Digest,
+        initial_game_state: LocalGameState,
     ) -> Self {
         Self {
             rt: Runtime::new().expect("Could not create an async runtime for Netplay"),
@@ -214,6 +221,7 @@ impl Netplay {
                 .get_or_insert_with(|| Uuid::new_v4().to_string())
                 .to_string(),
             rom_hash,
+            initial_game_state,
         }
     }
 
@@ -322,8 +330,9 @@ impl Netplay {
         ))
     }
 
-    fn advance(&mut self, _inputs: [JoypadInput; MAX_PLAYERS]) -> Option<NetplayState> {
-        return match &mut self.state {
+    fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Option<LocalGameState> {
+        let mut result = None;
+        if let Some(new_state) = match &mut self.state {
             NetplayState::Disconnected => None,
             NetplayState::Connecting(start_method, connecting_state) => {
                 match connecting_state {
@@ -397,6 +406,7 @@ impl Netplay {
                                 new_state = Some(NetplayState::Connected(
                                     NetplaySession::new(
                                         synchronizing_state.p2p_session.take().unwrap(),
+                                        self.initial_game_state.clone(),
                                     ),
                                     ConnectedState::MappingInput,
                                 ));
@@ -408,19 +418,30 @@ impl Netplay {
             }
 
             NetplayState::Connected(netplay_session, connected_state) => {
-                let mut new_state = None;
-                if let ConnectedState::MappingInput = connected_state {
-                    //TODO: Actual input mapping..
-                    *connected_state = ConnectedState::Playing(InputMapping { ids: [0, 1] });
-                }
-
                 if let NetplaySessionState::DisconnectedPeers = netplay_session.state {
                     // For now, just disconnect if we loose peers
-                    new_state = Some(NetplayState::Disconnected);
+                    Some(NetplayState::Disconnected)
+                } else {
+                    if let ConnectedState::MappingInput = connected_state {
+                        //TODO: Actual input mapping..
+                        *connected_state = ConnectedState::Playing(InputMapping { ids: [0, 1] });
+                    } else {
+                        netplay_session.advance(inputs);
+                    }
+                    None
                 }
-                new_state
             }
-        };
+        } {
+            // If we go from connected to disconnected then return the current state of the
+            // game so that we can smoothly continue locally with the state
+            if let (NetplayState::Connected(netplay_session, _), NetplayState::Disconnected) =
+                (&self.state, &new_state)
+            {
+                result = Some(netplay_session.game_state.clone());
+            }
+            self.state = new_state;
+        }
+        result
     }
 }
 
