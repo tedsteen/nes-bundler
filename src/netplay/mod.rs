@@ -497,35 +497,33 @@ impl Netplay {
         )));
     }
 
+    fn try_attempt(
+        attempt: &mut Option<ConnectingFlow>,
+        rt: &mut Runtime,
+        rom_hash: &Digest,
+    ) -> Option<NetplayState> {
+        if let Some(connecting_flow) = attempt {
+            connecting_flow.advance(rt, rom_hash);
+            if let ConnectingFlow {
+                state: ConnectingState::Connected(_),
+                ..
+            } = connecting_flow
+            {
+                Some(NetplayState::Connecting(attempt.take()))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
     fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) {
         if let Some(new_state) = match &mut self.state {
             NetplayState::Disconnected => None,
             NetplayState::Resuming(attempt1, attempt2) => {
-                if let Some(attempt) = attempt1 {
-                    attempt.advance(&mut self.rt, &self.rom_hash);
-                    if let ConnectingFlow {
-                        state: ConnectingState::Connected(_),
-                        ..
-                    } = attempt
-                    {
-                        Some(NetplayState::Connecting(attempt1.take()))
-                    } else {
-                        None
-                    }
-                } else if let Some(attempt) = attempt2 {
-                    attempt.advance(&mut self.rt, &self.rom_hash);
-                    if let ConnectingFlow {
-                        state: ConnectingState::Connected(_),
-                        ..
-                    } = attempt
-                    {
-                        Some(NetplayState::Connecting(attempt2.take()))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
+                Self::try_attempt(attempt1, &mut self.rt, &self.rom_hash)
+                    .or_else(|| Self::try_attempt(attempt2, &mut self.rt, &self.rom_hash))
             }
             NetplayState::Connecting(connecting_flow1) => {
                 if let Some(mut connecting_flow) = connecting_flow1.take() {
@@ -550,6 +548,14 @@ impl Netplay {
             NetplayState::Connected(netplay_session) => {
                 if let Some(input_mapping) = netplay_session.input_mapping.clone() {
                     if netplay_session.advance(inputs, &input_mapping).is_err() {
+                        #[cfg(feature = "debug")]
+                        println!(
+                            "Could not advance the Netplay session. Resuming to one of the frames ({:?})",
+                            netplay_session
+                                .last_confirmed_game_states
+                                .clone()
+                                .map(|s| s.frame)
+                        );
                         self.state = NetplayState::Resuming(
                             Some(ConnectingFlow::new(
                                 &self.config.server,

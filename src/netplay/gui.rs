@@ -162,7 +162,6 @@ impl GuiComponent for NetplayStateHandler {
                         }
                     }
 
-                    //#[allow(clippy::collapsible_match)]
                     NetplayState::Connecting(connecting_flow) => {
                         if let Some(connecting_flow) = connecting_flow {
                             #[allow(clippy::collapsible_match)]
@@ -229,7 +228,13 @@ impl GuiComponent for NetplayStateHandler {
                 #[cfg(feature = "debug")]
                 if let NetplayState::Connected(netplay_session) = &mut self.netplay.state {
                     if ui.button("Fake connection lost").clicked() {
-                        println!("Faked a lost connection...");
+                        println!(
+                            "Faking a lost connection. Resume frames available {:?}",
+                            netplay_session
+                                .last_confirmed_game_states
+                                .clone()
+                                .map(|s| s.frame)
+                        );
                         self.netplay.state = crate::netplay::NetplayState::Resuming(
                             Some(ConnectingFlow::new(
                                 &self.netplay.config.server,
