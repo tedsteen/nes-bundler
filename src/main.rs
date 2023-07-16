@@ -58,6 +58,7 @@ pub fn start_nes(cart_data: Vec<u8>, sample_rate: u64) -> Result<NesState> {
     let mapper = mapper_from_file(rom_data.as_slice())
         .map_err(anyhow::Error::msg)
         .context("Failed to load ROM")?;
+    #[cfg(feature = "debug")]
     mapper.print_debug_status();
     let mut nes = NesState::new(mapper);
     nes.power_on();
@@ -234,7 +235,9 @@ fn initialise(
         (pixels, framework)
     };
 
-    let settings = Rc::new(RefCell::new(Settings::new(&bundle.config.default_settings)));
+    let settings = Rc::new(RefCell::new(Settings::new(
+        bundle.config.default_settings.clone(),
+    )));
 
     let audio = Audio::new(&sdl_context, settings.clone())?;
     let nes = start_nes(bundle.rom.clone(), audio.stream.get_sample_rate() as u64)?;
@@ -323,7 +326,7 @@ impl Clone for LocalGameState {
 pub trait StateHandler {
     fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps;
     fn consume_samples(&mut self) -> Vec<i16>;
-    fn get_frame(&self) -> &Vec<u16>;
+    fn get_frame(&self) -> Option<&Vec<u16>>;
     fn save(&self) -> Vec<u8>;
     fn load(&mut self, data: &mut Vec<u8>);
     fn get_gui(&mut self) -> &mut dyn GuiComponent;
@@ -341,8 +344,8 @@ impl StateHandler for LocalStateHandler {
     fn consume_samples(&mut self) -> Vec<i16> {
         self.state.consume_samples()
     }
-    fn get_frame(&self) -> &Vec<u16> {
-        self.state.get_frame()
+    fn get_frame(&self) -> Option<&Vec<u16>> {
+        Some(self.state.get_frame())
     }
     fn save(&self) -> Vec<u8> {
         self.state.save()
@@ -428,11 +431,11 @@ impl GameRunner {
 
         let pixels = &mut self.pixels;
 
-        let frame = self.state_handler.get_frame();
-
-        for (i, pixel) in pixels.frame_mut().chunks_exact_mut(4).enumerate() {
-            let palette_index = frame[i] as usize * 4;
-            pixel.copy_from_slice(&NTSC_PAL[palette_index..palette_index + 4]);
+        if let Some(frame) = self.state_handler.get_frame() {
+            for (i, pixel) in pixels.frame_mut().chunks_exact_mut(4).enumerate() {
+                let palette_index = frame[i] as usize * 4;
+                pixel.copy_from_slice(&NTSC_PAL[palette_index..palette_index + 4]);
+            }
         }
 
         // Render everything together

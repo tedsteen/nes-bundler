@@ -10,36 +10,36 @@ pub struct NetplayStateHandler {
 
 impl StateHandler for NetplayStateHandler {
     fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps {
-        if let Some(game_state) = self.netplay.advance(inputs) {
-            // Continue the local game where the network game left of
-            self.local_game_state = game_state;
-        }
-
-        if let NetplayState::Connected(netplay_session, _) = &self.netplay.state {
-            netplay_session.requested_fps
-        } else {
-            self.local_game_state.advance(inputs)
+        self.netplay.advance(inputs);
+        match &self.netplay.state {
+            NetplayState::Connected(netplay_session) => netplay_session.requested_fps,
+            NetplayState::Disconnected => self.local_game_state.advance(inputs),
+            _ => crate::FPS,
         }
     }
 
     fn consume_samples(&mut self) -> Vec<i16> {
-        if let NetplayState::Connected(netplay_session, _) = &mut self.netplay.state {
-            netplay_session.game_state.consume_samples()
-        } else {
-            self.local_game_state.consume_samples()
+        match &mut self.netplay.state {
+            NetplayState::Connected(netplay_session) => {
+                netplay_session.game_state.consume_samples()
+            }
+            NetplayState::Disconnected => self.local_game_state.consume_samples(),
+            _ => vec![],
         }
     }
 
-    fn get_frame(&self) -> &Vec<u16> {
-        if let NetplayState::Connected(netplay_session, _) = &self.netplay.state {
-            netplay_session.game_state.get_frame()
-        } else {
-            self.local_game_state.get_frame()
+    fn get_frame(&self) -> Option<&Vec<u16>> {
+        match &self.netplay.state {
+            NetplayState::Connected(netplay_session) => {
+                Some(netplay_session.game_state.get_frame())
+            }
+            NetplayState::Disconnected => Some(self.local_game_state.get_frame()),
+            _ => None,
         }
     }
 
     fn save(&self) -> Vec<u8> {
-        if let NetplayState::Connected(netplay_session, _) = &self.netplay.state {
+        if let NetplayState::Connected(netplay_session) = &self.netplay.state {
             //TODO: what to do when saving during netplay?
             netplay_session.game_state.save()
         } else {
@@ -48,7 +48,7 @@ impl StateHandler for NetplayStateHandler {
     }
 
     fn load(&mut self, data: &mut Vec<u8>) {
-        if let NetplayState::Connected(netplay_session, _) = &mut self.netplay.state {
+        if let NetplayState::Connected(netplay_session) = &mut self.netplay.state {
             //TODO: what to do when loading during netplay?
             netplay_session.game_state.load(data);
         } else {
