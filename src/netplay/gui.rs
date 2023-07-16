@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use egui::{Button, Context, TextEdit, Window};
 
 use crate::{
-    netplay::{NetplayState, ResumableNetplaySession},
+    netplay::NetplayState,
     settings::{gui::GuiComponent, MAX_PLAYERS},
 };
 
@@ -235,29 +235,14 @@ impl GuiComponent for NetplayStateHandler {
                                 .clone()
                                 .map(|s| s.frame)
                         );
-                        self.netplay.state = crate::netplay::NetplayState::Resuming(
-                            Some(ConnectingFlow::new(
-                                &self.netplay.config.server,
-                                &mut self.netplay.rt,
-                                &self.netplay.rom_hash,
-                                &self.netplay.netplay_id,
-                                StartMethod::Resume(ResumableNetplaySession::new(
-                                    netplay_session.input_mapping.clone(),
-                                    netplay_session.last_confirmed_game_states[1].clone(),
-                                )),
-                                self.netplay.initial_game_state.clone(),
-                            )),
-                            Some(ConnectingFlow::new(
-                                &self.netplay.config.server,
-                                &mut self.netplay.rt,
-                                &self.netplay.rom_hash,
-                                &self.netplay.netplay_id,
-                                StartMethod::Resume(ResumableNetplaySession::new(
-                                    netplay_session.input_mapping.clone(),
-                                    netplay_session.last_confirmed_game_states[0].clone(),
-                                )),
-                                self.netplay.initial_game_state.clone(),
-                            )),
+                        self.netplay.state = ConnectingFlow::new_resuming(
+                            &self.netplay.config.server,
+                            &mut self.netplay.rt,
+                            &self.netplay.rom_hash,
+                            &self.netplay.netplay_id,
+                            &netplay_session.last_confirmed_game_states,
+                            self.netplay.initial_game_state.clone(),
+                            netplay_session.input_mapping.clone(),
                         );
                     }
                 }

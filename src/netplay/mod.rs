@@ -344,6 +344,41 @@ impl ConnectingFlow {
             self.state = new_state;
         }
     }
+
+    fn new_resuming(
+        server_config: &NetplayServerConfiguration,
+        rt: &mut Runtime,
+        rom_hash: &Digest,
+        netplay_id: &str,
+        last_confirmed_game_states: &[LocalGameState; 2],
+        initial_game_state: LocalGameState,
+        input_mapping: Option<InputMapping>,
+    ) -> NetplayState {
+        crate::netplay::NetplayState::Resuming(
+            Some(ConnectingFlow::new(
+                server_config,
+                rt,
+                rom_hash,
+                netplay_id,
+                StartMethod::Resume(ResumableNetplaySession::new(
+                    input_mapping.clone(),
+                    last_confirmed_game_states[1].clone(),
+                )),
+                initial_game_state.clone(),
+            )),
+            Some(ConnectingFlow::new(
+                server_config,
+                rt,
+                rom_hash,
+                netplay_id,
+                StartMethod::Resume(ResumableNetplaySession::new(
+                    input_mapping,
+                    last_confirmed_game_states[0].clone(),
+                )),
+                initial_game_state,
+            )),
+        )
+    }
 }
 
 pub struct NetplaySession {
@@ -556,29 +591,14 @@ impl Netplay {
                                 .clone()
                                 .map(|s| s.frame)
                         );
-                        self.state = NetplayState::Resuming(
-                            Some(ConnectingFlow::new(
-                                &self.config.server,
-                                &mut self.rt,
-                                &self.rom_hash,
-                                &self.netplay_id,
-                                StartMethod::Resume(ResumableNetplaySession::new(
-                                    netplay_session.input_mapping.clone(),
-                                    netplay_session.last_confirmed_game_states[1].clone(),
-                                )),
-                                self.initial_game_state.clone(),
-                            )),
-                            Some(ConnectingFlow::new(
-                                &self.config.server,
-                                &mut self.rt,
-                                &self.rom_hash,
-                                &self.netplay_id,
-                                StartMethod::Resume(ResumableNetplaySession::new(
-                                    netplay_session.input_mapping.clone(),
-                                    netplay_session.last_confirmed_game_states[0].clone(),
-                                )),
-                                self.initial_game_state.clone(),
-                            )),
+                        self.state = ConnectingFlow::new_resuming(
+                            &self.config.server,
+                            &mut self.rt,
+                            &self.rom_hash,
+                            &self.netplay_id,
+                            &netplay_session.last_confirmed_game_states,
+                            self.initial_game_state.clone(),
+                            netplay_session.input_mapping.clone(),
                         );
                     }
                 } else {
