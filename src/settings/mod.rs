@@ -24,9 +24,9 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn new(default_settings: &Settings) -> Self {
+    pub fn new(default_settings: Settings) -> Self {
         let mut settings = Settings::load();
-        let default_selected = &default_settings.input.selected;
+        let default_selected = default_settings.clone().input.selected;
         if let Ok(settings) = &mut settings {
             //Make sure no gamepads are selected after loading settings (they will be autoselected later if they are connected)
             if let InputConfigurationKind::Gamepad(_) =
@@ -40,19 +40,16 @@ impl Settings {
                 settings.input.selected[1] = Rc::clone(&default_selected[1]);
             }
         }
-        settings.unwrap_or_else(|_err| {
-            //TODO: Check if the error is something else than file not found and log
-            //eprintln!("Failed to load config ({err}), falling back to default settings");
-            default_settings.clone()
-        })
+        //TODO: Check if the error is something else than file not found and log
+        //eprintln!("Failed to load config ({err}), falling back to default settings");
+        settings.unwrap_or(default_settings)
     }
-}
 
-impl Settings {
     pub fn load() -> anyhow::Result<Settings> {
         let settings = serde_yaml::from_reader(BufReader::new(File::open("settings.yaml")?))?;
         Ok(settings)
     }
+
     pub fn save(&self) -> anyhow::Result<()> {
         serde_yaml::to_writer(BufWriter::new(File::create("settings.yaml")?), &self)?;
         Ok(())

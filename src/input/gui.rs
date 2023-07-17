@@ -66,62 +66,17 @@ impl InputSettingsGui {
             .striped(true)
             .show(ui, |ui| {
                 use JoypadButton::*;
-                InputSettingsGui::button_map_ui(
-                    map_request,
-                    ui,
-                    input_configuration,
-                    joypad_input,
-                    Up,
-                );
-                InputSettingsGui::button_map_ui(
-                    map_request,
-                    ui,
-                    input_configuration,
-                    joypad_input,
-                    Down,
-                );
-                InputSettingsGui::button_map_ui(
-                    map_request,
-                    ui,
-                    input_configuration,
-                    joypad_input,
-                    Left,
-                );
-                InputSettingsGui::button_map_ui(
-                    map_request,
-                    ui,
-                    input_configuration,
-                    joypad_input,
-                    Right,
-                );
-                InputSettingsGui::button_map_ui(
-                    map_request,
-                    ui,
-                    input_configuration,
-                    joypad_input,
-                    Start,
-                );
-                InputSettingsGui::button_map_ui(
-                    map_request,
-                    ui,
-                    input_configuration,
-                    joypad_input,
-                    Select,
-                );
-                InputSettingsGui::button_map_ui(
-                    map_request,
-                    ui,
-                    input_configuration,
-                    joypad_input,
-                    B,
-                );
-                InputSettingsGui::button_map_ui(
-                    map_request,
-                    ui,
-                    input_configuration,
-                    joypad_input,
-                    A,
-                );
+                vec![Up, Down, Left, Right, Start, Select, B, A]
+                    .iter()
+                    .for_each(|&button| {
+                        InputSettingsGui::button_map_ui(
+                            map_request,
+                            ui,
+                            input_configuration,
+                            joypad_input,
+                            button,
+                        );
+                    });
             });
     }
 
