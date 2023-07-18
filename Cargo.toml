@@ -7,12 +7,19 @@ publish = false
 
 [features]
 default = []
+#default = ["netplay", "debug"]
+
 netplay = ["matchbox_socket", "tokio", "ggrs", "futures-timer", "futures", "uuid", "reqwest", "md5"]
 static-bundle = []
 debug = []
 
 [profile.release]
 strip = true
+# TODO: Look deeper into https://github.com/johnthagen/min-sized-rust
+# opt-level = "z"
+lto = true
+codegen-units = 1
+# panic = "abort"
 
 [dependencies]
 anyhow = "1.0"
