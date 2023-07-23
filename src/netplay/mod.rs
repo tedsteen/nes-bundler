@@ -9,7 +9,7 @@ use matchbox_socket::{
 use md5::Digest;
 use serde::Deserialize;
 use std::time::{Duration, Instant};
-use tokio::runtime::Runtime;
+use tokio::runtime::{Builder, Runtime};
 use uuid::Uuid;
 
 pub mod gui;
@@ -302,8 +302,12 @@ impl ConnectingFlow {
                             start_method.clone(),
                             Some(
                                 sess_build
-                                    .start_p2p_session(maybe_socket.take().unwrap())
-                                    .unwrap(),
+                                    .start_p2p_session(
+                                        maybe_socket
+                                            .take()
+                                            .expect("there should be a socket when peering up"),
+                                    )
+                                    .expect("p2p session should be able to start"),
                             ),
                             unlock_url.clone(),
                         ));
@@ -323,7 +327,10 @@ impl ConnectingFlow {
                                 }
                                 _ => None,
                             },
-                            synchronizing_state.p2p_session.take().unwrap(),
+                            synchronizing_state
+                                .p2p_session
+                                .take()
+                                .expect("there should be a socket when synchronizing"),
                             match &synchronizing_state.start_method {
                                 StartMethod::Resume(resumable_session) => {
                                     let mut game_state = resumable_session.game_state.clone();
@@ -510,7 +517,11 @@ impl Netplay {
         initial_game_state: LocalGameState,
     ) -> Self {
         Self {
-            rt: Runtime::new().expect("Could not create an async runtime for Netplay"),
+            rt: Builder::new_multi_thread()
+                .enable_all()
+                .thread_name("netplay-pool")
+                .build()
+                .expect("Could not create an async runtime for Netplay"),
             state: NetplayState::Disconnected,
             config,
             netplay_id: netplay_id

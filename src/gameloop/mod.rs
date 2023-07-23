@@ -45,7 +45,7 @@ impl<G, T: TimeTrait, W> GameLoop<G, T, W> {
         U: FnMut(&mut GameLoop<G, T, W>),
         R: FnMut(&mut GameLoop<G, T, W>),
     {
-        let mut g = self;
+        let g = self;
 
         if g.exit_next_iteration {
             return false;
