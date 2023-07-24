@@ -5,10 +5,7 @@ use uuid::Uuid;
 use crate::{input::JoypadInput, settings::MAX_PLAYERS, LocalGameState};
 
 use super::{
-    connecting::{
-        Connecting, LoadingNetplayServerConfiguration, PeeringState, TurnOnError, TurnOnResponse,
-    },
-    ConnectingState, InputMapping, NetplayBuildConfiguration, NetplayServerConfiguration,
+    connecting::Connecting, ConnectingState, InputMapping, NetplayBuildConfiguration,
     NetplaySession, ResumableNetplaySession, StartMethod,
 };
 
@@ -73,48 +70,22 @@ impl Netplay<Disconnected> {
     }
 
     pub fn start(mut self, start_method: StartMethod) -> Netplay<ConnectingState> {
-        let reqwest_client = reqwest::Client::new();
-        let netplay_id = self.netplay_id.clone();
-
-        let state = match self.config.clone().server {
-            NetplayServerConfiguration::Static(conf) => ConnectingState::PeeringUp(Connecting {
-                initial_game_state: self.initial_game_state.clone(),
-                start_method: start_method.clone(),
-                state: PeeringState::new(
-                    &mut self.rt,
-                    TurnOnResponse::Full(conf.clone()),
-                    start_method.clone(),
-                    &self.rom_hash,
-                ),
-            }),
-
-            NetplayServerConfiguration::TurnOn(server) => {
-                let req = reqwest_client.get(format!("{server}/{netplay_id}")).send();
-                let (sender, result) =
-                    futures::channel::oneshot::channel::<Result<TurnOnResponse, TurnOnError>>();
-                self.rt.spawn(async move {
-                    let _ = match req.await {
-                        Ok(res) => sender.send(res.json().await.map_err(|e| TurnOnError {
-                            description: format!("Failed to receive response: {}", e),
-                        })),
-                        Err(e) => sender.send(Err(TurnOnError {
-                            description: format!("Could not connect: {}", e),
-                        })),
-                    };
-                });
-                ConnectingState::LoadingNetplayServerConfiguration(Connecting {
-                    initial_game_state: self.initial_game_state.clone(),
-                    start_method: start_method.clone(),
-                    state: LoadingNetplayServerConfiguration { result },
-                })
-            }
-        };
-        Netplay::from(self, state)
+        Netplay::from(
+            Connecting::create(
+                &self.config.clone().server,
+                &mut self.rt,
+                &self.rom_hash,
+                &self.netplay_id,
+                start_method,
+                self.initial_game_state.clone(),
+            ),
+            self,
+        )
     }
 }
 
-impl Netplay<ConnectingState> {
-    fn from<S>(other: Netplay<S>, state: ConnectingState) -> Self {
+impl<T> Netplay<T> {
+    fn from<S>(state: T, other: Netplay<S>) -> Netplay<T> {
         Self {
             rt: other.rt,
             config: other.config,
@@ -124,7 +95,9 @@ impl Netplay<ConnectingState> {
             state,
         }
     }
+}
 
+impl Netplay<ConnectingState> {
     pub fn cancel(self) -> Netplay<Disconnected> {
         Netplay::new(
             self.config,
@@ -168,12 +141,10 @@ impl Netplay<ConnectingState> {
 
 impl Netplay<Connected> {
     pub fn resume(mut self: Netplay<Connected>) -> Netplay<Resuming> {
-        let server_config = &self.config.server;
-        Netplay {
-            state: Resuming {
-                //TODO: Use From here?
+        Netplay::from(
+            Resuming {
                 attempt1: Connecting::create(
-                    server_config,
+                    &self.config.server,
                     &mut self.rt,
                     &self.rom_hash,
                     &self.netplay_id,
@@ -184,7 +155,7 @@ impl Netplay<Connected> {
                     self.initial_game_state.clone(),
                 ),
                 attempt2: Connecting::create(
-                    server_config,
+                    &self.config.server,
                     &mut self.rt,
                     &self.rom_hash,
                     &self.netplay_id,
@@ -195,12 +166,8 @@ impl Netplay<Connected> {
                     self.initial_game_state.clone(),
                 ),
             },
-            rt: self.rt,
-            config: self.config,
-            netplay_id: self.netplay_id,
-            rom_hash: self.rom_hash,
-            initial_game_state: self.initial_game_state,
-        }
+            self,
+        )
     }
 
     fn advance(mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> NetplayState {
