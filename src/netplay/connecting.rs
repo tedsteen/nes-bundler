@@ -10,6 +10,7 @@ use tokio::runtime::Runtime;
 
 use crate::{settings::MAX_PLAYERS, LocalGameState, FPS};
 
+use super::netplay_state_machine::Netplay;
 use super::{
     GGRSConfig, InputMapping, NetplayServerConfiguration, NetplaySession,
     StaticNetplayServerConfiguration,
@@ -158,25 +159,19 @@ impl ResumableNetplaySession {
     }
 }
 impl Connecting<LoadingNetplayServerConfiguration> {
-    pub fn create(
-        server_config: &NetplayServerConfiguration,
-        rt: &mut Runtime,
-        rom_hash: &Digest,
-        netplay_id: &str,
-        start_method: StartMethod,
-        initial_game_state: LocalGameState,
-    ) -> ConnectingState {
+    pub fn create<T>(netplay: &mut Netplay<T>, start_method: StartMethod) -> ConnectingState {
         let reqwest_client = reqwest::Client::new();
+        let netplay_id = netplay.netplay_id.clone();
 
-        match server_config {
+        match &netplay.config.server {
             NetplayServerConfiguration::Static(conf) => ConnectingState::PeeringUp(Connecting {
-                initial_game_state,
+                initial_game_state: netplay.initial_game_state.clone(),
                 start_method: start_method.clone(),
                 state: PeeringState::new(
-                    rt,
+                    &mut netplay.rt,
                     TurnOnResponse::Full(conf.clone()),
                     start_method,
-                    rom_hash,
+                    &netplay.rom_hash,
                 ),
             }),
 
@@ -184,7 +179,7 @@ impl Connecting<LoadingNetplayServerConfiguration> {
                 let req = reqwest_client.get(format!("{server}/{netplay_id}")).send();
                 let (sender, result) =
                     futures::channel::oneshot::channel::<Result<TurnOnResponse, TurnOnError>>();
-                rt.spawn(async move {
+                netplay.rt.spawn(async move {
                     let _ = match req.await {
                         Ok(res) => sender.send(res.json().await.map_err(|e| TurnOnError {
                             description: format!("Failed to receive response: {}", e),
@@ -195,7 +190,7 @@ impl Connecting<LoadingNetplayServerConfiguration> {
                     };
                 });
                 ConnectingState::LoadingNetplayServerConfiguration(Connecting {
-                    initial_game_state,
+                    initial_game_state: netplay.initial_game_state.clone(),
                     start_method,
                     state: LoadingNetplayServerConfiguration { result },
                 })

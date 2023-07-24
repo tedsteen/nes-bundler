@@ -27,11 +27,11 @@ impl NetplayState {
 }
 
 pub struct Netplay<S> {
-    rt: Runtime,
-    config: NetplayBuildConfiguration,
-    netplay_id: String,
-    rom_hash: Digest,
-    initial_game_state: LocalGameState,
+    pub rt: Runtime,
+    pub config: NetplayBuildConfiguration,
+    pub netplay_id: String,
+    pub rom_hash: Digest,
+    pub initial_game_state: LocalGameState,
     pub state: S,
 }
 
@@ -70,17 +70,7 @@ impl Netplay<Disconnected> {
     }
 
     pub fn start(mut self, start_method: StartMethod) -> Netplay<ConnectingState> {
-        Netplay::from(
-            Connecting::create(
-                &self.config.clone().server,
-                &mut self.rt,
-                &self.rom_hash,
-                &self.netplay_id,
-                start_method,
-                self.initial_game_state.clone(),
-            ),
-            self,
-        )
+        Netplay::from(Connecting::create(&mut self, start_method), self)
     }
 }
 
@@ -141,29 +131,21 @@ impl Netplay<ConnectingState> {
 
 impl Netplay<Connected> {
     pub fn resume(mut self: Netplay<Connected>) -> Netplay<Resuming> {
+        let input_mapping = self.state.netplay_session.input_mapping.clone();
+        let game_state_1 = self.state.netplay_session.last_confirmed_game_states[1].clone();
+        let game_state_0 = self.state.netplay_session.last_confirmed_game_states[0].clone();
         Netplay::from(
             Resuming {
                 attempt1: Connecting::create(
-                    &self.config.server,
-                    &mut self.rt,
-                    &self.rom_hash,
-                    &self.netplay_id,
+                    &mut self,
                     StartMethod::Resume(ResumableNetplaySession::new(
-                        self.state.netplay_session.input_mapping.clone(),
-                        self.state.netplay_session.last_confirmed_game_states[1].clone(),
+                        input_mapping.clone(),
+                        game_state_1,
                     )),
-                    self.initial_game_state.clone(),
                 ),
                 attempt2: Connecting::create(
-                    &self.config.server,
-                    &mut self.rt,
-                    &self.rom_hash,
-                    &self.netplay_id,
-                    StartMethod::Resume(ResumableNetplaySession::new(
-                        self.state.netplay_session.input_mapping.clone(),
-                        self.state.netplay_session.last_confirmed_game_states[0].clone(),
-                    )),
-                    self.initial_game_state.clone(),
+                    &mut self,
+                    StartMethod::Resume(ResumableNetplaySession::new(input_mapping, game_state_0)),
                 ),
             },
             self,
@@ -198,14 +180,7 @@ impl Netplay<Connected> {
         }
     }
     pub(crate) fn disconnect(self) -> Netplay<Disconnected> {
-        Netplay {
-            rt: self.rt,
-            config: self.config,
-            netplay_id: self.netplay_id,
-            rom_hash: self.rom_hash,
-            initial_game_state: self.initial_game_state,
-            state: Disconnected {},
-        }
+        Netplay::from(Disconnected {}, self)
     }
 }
 
@@ -215,7 +190,6 @@ impl Netplay<Resuming> {
         self.state.attempt2 = self.state.attempt2.advance(&mut self.rt, &self.rom_hash);
 
         if let ConnectingState::Connected(_) = &self.state.attempt1 {
-            //TODO: Use From here?
             NetplayState::Connecting(Netplay {
                 rt: self.rt,
                 config: self.config,
@@ -225,7 +199,6 @@ impl Netplay<Resuming> {
                 state: self.state.attempt1,
             })
         } else if let ConnectingState::Connected(_) = &self.state.attempt2 {
-            //TODO: Use From here?
             return NetplayState::Connecting(Netplay {
                 rt: self.rt,
                 config: self.config,
