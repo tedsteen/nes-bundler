@@ -18,7 +18,6 @@ use super::{
 #[allow(clippy::large_enum_variant)]
 pub enum ConnectingState {
     LoadingNetplayServerConfiguration(Connecting<LoadingNetplayServerConfiguration>),
-    //Connecting all peers
     PeeringUp(Connecting<PeeringState>),
     Synchronizing(Connecting<SynchonizingState>),
     Connected(Connecting<NetplaySession>),
@@ -225,7 +224,7 @@ impl Connecting<LoadingNetplayServerConfiguration> {
 }
 impl Connecting<PeeringState> {
     fn advance(mut self) -> ConnectingState {
-        if let Some(mut socket) = self.state.socket.take() {
+        if let Some(socket) = &mut self.state.socket {
             socket.update_peers();
 
             let connected_peers = socket.connected_peers().count();
@@ -256,14 +255,18 @@ impl Connecting<PeeringState> {
                     state: SynchonizingState::new(
                         Some(
                             sess_build
-                                .start_p2p_session(socket)
+                                .start_p2p_session(
+                                    self.state
+                                        .socket
+                                        .take()
+                                        .expect("there should be a socket when synchronizing"),
+                                )
                                 .expect("p2p session should be able to start"),
                         ),
                         unlock_url.clone(),
                     ),
                 })
             } else {
-                self.state.socket = Some(socket); //put it back
                 ConnectingState::PeeringUp(self)
             }
         } else {
@@ -271,6 +274,7 @@ impl Connecting<PeeringState> {
         }
     }
 }
+
 impl Connecting<SynchonizingState> {
     fn advance(mut self) -> ConnectingState {
         if let Some(p2p_session) = &mut self.state.p2p_session {

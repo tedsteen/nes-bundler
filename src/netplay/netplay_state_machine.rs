@@ -109,19 +109,22 @@ impl Netplay<Disconnected> {
                 })
             }
         };
-        //TODO: Use From here?
-        Netplay {
-            state,
-            rt: self.rt,
-            config: self.config.clone(),
-            netplay_id: self.netplay_id,
-            rom_hash: self.rom_hash,
-            initial_game_state: self.initial_game_state,
-        }
+        Netplay::from(self, state)
     }
 }
 
 impl Netplay<ConnectingState> {
+    fn from<S>(other: Netplay<S>, state: ConnectingState) -> Self {
+        Self {
+            rt: other.rt,
+            config: other.config,
+            netplay_id: other.netplay_id,
+            rom_hash: other.rom_hash,
+            initial_game_state: other.initial_game_state,
+            state,
+        }
+    }
+
     pub fn cancel(self) -> Netplay<Disconnected> {
         Netplay::new(
             self.config,
