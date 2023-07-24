@@ -89,12 +89,7 @@ impl<T> Netplay<T> {
 
 impl Netplay<ConnectingState> {
     pub fn cancel(self) -> Netplay<Disconnected> {
-        Netplay::new(
-            self.config,
-            &mut None,
-            self.rom_hash,
-            self.initial_game_state,
-        )
+        Netplay::from(Disconnected {}, self)
     }
 
     fn advance(mut self) -> NetplayState {
@@ -202,11 +197,6 @@ impl Netplay<Resuming> {
     }
 
     pub fn cancel(self) -> Netplay<Disconnected> {
-        Netplay::new(
-            self.config,
-            &mut None,
-            self.rom_hash,
-            self.initial_game_state,
-        )
+        Netplay::from(Disconnected {}, self)
     }
 }
