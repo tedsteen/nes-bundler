@@ -1,56 +1,78 @@
-use crate::{input::JoypadInput, settings::MAX_PLAYERS, Bundle, Fps, LocalGameState, StateHandler};
+use crate::{
+    input::JoypadInput, settings::MAX_PLAYERS, Bundle, Fps, LocalGameState, StateHandler, FPS,
+};
 
-use super::{gui::NetplayGui, Netplay, NetplayState};
+use super::{
+    gui::NetplayGui,
+    netplay_state_machine::{Disconnected, Netplay, NetplayState},
+};
 
 pub struct NetplayStateHandler {
-    pub netplay: Netplay,
+    pub netplay: Option<NetplayState>,
     local_game_state: LocalGameState,
     pub gui: NetplayGui,
 }
 
 impl StateHandler for NetplayStateHandler {
     fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps {
-        self.netplay.advance(inputs);
-        match &self.netplay.state {
-            NetplayState::Connected(netplay_session) => netplay_session.requested_fps,
-            NetplayState::Disconnected => self.local_game_state.advance(inputs),
-            _ => crate::FPS,
+        self.netplay = self.netplay.take().map(|netplay| netplay.advance(inputs));
+
+        if let Some(netplay) = &self.netplay {
+            match &netplay {
+                NetplayState::Connected(netplay_connected) => {
+                    netplay_connected.state.netplay_session.requested_fps
+                }
+                NetplayState::Disconnected(_) => self.local_game_state.advance(inputs),
+                _ => FPS,
+            }
+        } else {
+            FPS
         }
     }
 
     fn consume_samples(&mut self) -> Vec<i16> {
-        match &mut self.netplay.state {
-            NetplayState::Connected(netplay_session) => {
-                netplay_session.game_state.consume_samples()
-            }
-            NetplayState::Disconnected => self.local_game_state.consume_samples(),
+        match &mut self.netplay.as_mut().unwrap() {
+            NetplayState::Connected(netplay_connected) => netplay_connected
+                .state
+                .netplay_session
+                .game_state
+                .consume_samples(),
+            NetplayState::Disconnected(_) => self.local_game_state.consume_samples(),
             _ => vec![],
         }
     }
 
     fn get_frame(&self) -> Option<&Vec<u16>> {
-        match &self.netplay.state {
-            NetplayState::Connected(netplay_session) => {
-                Some(netplay_session.game_state.get_frame())
-            }
-            NetplayState::Disconnected => Some(self.local_game_state.get_frame()),
+        match &self.netplay.as_ref().unwrap() {
+            NetplayState::Connected(netplay_connected) => Some(
+                netplay_connected
+                    .state
+                    .netplay_session
+                    .game_state
+                    .get_frame(),
+            ),
+            NetplayState::Disconnected(_) => Some(self.local_game_state.get_frame()),
             _ => None,
         }
     }
 
     fn save(&self) -> Vec<u8> {
-        if let NetplayState::Connected(netplay_session) = &self.netplay.state {
+        if let NetplayState::Connected(netplay_connected) = &self.netplay.as_ref().unwrap() {
             //TODO: what to do when saving during netplay?
-            netplay_session.game_state.save()
+            netplay_connected.state.netplay_session.game_state.save()
         } else {
             self.local_game_state.save()
         }
     }
 
     fn load(&mut self, data: &mut Vec<u8>) {
-        if let NetplayState::Connected(netplay_session) = &mut self.netplay.state {
+        if let NetplayState::Connected(netplay_connected) = &mut self.netplay.as_mut().unwrap() {
             //TODO: what to do when loading during netplay?
-            netplay_session.game_state.load(data);
+            netplay_connected
+                .state
+                .netplay_session
+                .game_state
+                .load(data);
         } else {
             self.local_game_state.load(data);
         }
@@ -75,12 +97,12 @@ impl NetplayStateHandler {
         NetplayStateHandler {
             local_game_state: initial_game_state.clone(),
             gui: NetplayGui::new(netplay_build_config.default_room_name.clone()),
-            netplay: Netplay::new(
+            netplay: Some(NetplayState::Disconnected(Netplay::<Disconnected>::new(
                 netplay_build_config.clone(),
                 netplay_id,
                 md5::compute(&bundle.rom),
                 initial_game_state,
-            ),
+            ))),
         }
     }
 }
