@@ -98,7 +98,8 @@ impl Netplay<ConnectingState> {
     }
 
     fn advance(mut self) -> NetplayState {
-        match self.state.advance(&mut self.rt, &self.rom_hash) {
+        self.state = self.state.advance(&mut self.rt, &self.rom_hash);
+        match self.state {
             ConnectingState::Connected(connected) => NetplayState::Connected(Netplay {
                 rt: self.rt,
                 config: self.config,
@@ -109,22 +110,10 @@ impl Netplay<ConnectingState> {
                     netplay_session: connected.state,
                 },
             }),
-            ConnectingState::Failed(_) => NetplayState::Disconnected(Netplay {
-                rt: self.rt,
-                config: self.config,
-                netplay_id: self.netplay_id,
-                rom_hash: self.rom_hash,
-                initial_game_state: self.initial_game_state,
-                state: Disconnected {},
-            }),
-            state => NetplayState::Connecting(Netplay {
-                rt: self.rt,
-                config: self.config,
-                netplay_id: self.netplay_id,
-                rom_hash: self.rom_hash,
-                initial_game_state: self.initial_game_state,
-                state,
-            }),
+            ConnectingState::Failed(_) => {
+                NetplayState::Disconnected(Netplay::from(Disconnected {}, self))
+            }
+            _ => NetplayState::Connecting(self),
         }
     }
 }
