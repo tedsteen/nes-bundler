@@ -243,15 +243,6 @@ impl GuiComponent for NetplayStateHandler {
                         if ui.button("Disconnect").clicked() {
                             NetplayState::Disconnected(netplay_connected.disconnect())
                         } else if fake_lost_connection_clicked {
-                            println!(
-                                "Faking a lost connection. Resume frames available {:?}",
-                                netplay_connected
-                                    .state
-                                    .netplay_session
-                                    .last_confirmed_game_states
-                                    .clone()
-                                    .map(|s| s.frame)
-                            );
                             NetplayState::Resuming(netplay_connected.resume())
                         } else {
                             NetplayState::Connected(netplay_connected)

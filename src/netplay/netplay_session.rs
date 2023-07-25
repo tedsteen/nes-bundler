@@ -15,8 +15,9 @@ impl Config for GGRSConfig {
 
 pub struct NetplaySession {
     pub input_mapping: Option<InputMapping>,
-    p2p_session: P2PSession<GGRSConfig>,
+    pub p2p_session: P2PSession<GGRSConfig>,
     pub game_state: LocalGameState,
+    pub last_handled_frame: i32,
     pub last_confirmed_game_states: [LocalGameState; 2],
     #[cfg(feature = "debug")]
     pub stats: [super::stats::NetplayStats; MAX_PLAYERS],
@@ -33,7 +34,8 @@ impl NetplaySession {
             input_mapping,
             p2p_session,
             game_state: game_state.clone(),
-            last_confirmed_game_states: [game_state.clone(), game_state],
+            last_confirmed_game_states: [game_state.clone(), game_state.clone()],
+            last_handled_frame: -1,
             #[cfg(feature = "debug")]
             stats: [
                 super::stats::NetplayStats::new(),
@@ -75,24 +77,20 @@ impl NetplaySession {
                             cell.save(frame, Some(self.game_state.clone()), None);
                         }
                         GGRSRequest::AdvanceFrame { inputs } => {
-                            let last_saved_frame = self.last_confirmed_game_states[1].frame;
-                            if sess.confirmed_frame() >= self.game_state.frame
-                                && self.game_state.frame % 10 == 0
-                                && self.game_state.frame > last_saved_frame
-                            {
-                                //We have a confirmed and rendered frame.
-                                self.last_confirmed_game_states = [
-                                    self.last_confirmed_game_states[1].clone(),
-                                    self.game_state.clone(),
-                                ];
-                            }
-
                             self.game_state
                                 .advance([JoypadInput(inputs[0].0), JoypadInput(inputs[1].0)]);
 
-                            if self.game_state.frame < sess.confirmed_frame() {
+                            if self.last_handled_frame >= self.game_state.frame {
                                 // Discard the samples for this frame since it's a replay from ggrs. Audio has already been produced and pushed for it.
                                 self.game_state.nes.apu.consume_samples();
+                            } else {
+                                self.last_handled_frame = self.game_state.frame;
+                                if self.game_state.frame % (sess.max_prediction() * 2) as i32 == 0 {
+                                    self.last_confirmed_game_states = [
+                                        self.last_confirmed_game_states[1].clone(),
+                                        self.game_state.clone(),
+                                    ];
+                                }
                             }
                         }
                     }

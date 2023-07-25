@@ -115,21 +115,33 @@ impl Netplay<ConnectingState> {
 
 impl Netplay<Connected> {
     pub fn resume(mut self: Netplay<Connected>) -> Netplay<Resuming> {
+        #[cfg(feature = "debug")]
+        println!(
+            "Resuming netplay to one of the frames ({:?})",
+            self.state
+                .netplay_session
+                .last_confirmed_game_states
+                .clone()
+                .map(|s| s.frame)
+        );
+
         let input_mapping = self.state.netplay_session.input_mapping.clone();
-        let game_state_1 = self.state.netplay_session.last_confirmed_game_states[1].clone();
+
         let game_state_0 = self.state.netplay_session.last_confirmed_game_states[0].clone();
+        let game_state_1 = self.state.netplay_session.last_confirmed_game_states[1].clone();
+
         Netplay::from(
             Resuming {
                 attempt1: Connecting::create(
                     &mut self,
                     StartMethod::Resume(ResumableNetplaySession::new(
                         input_mapping.clone(),
-                        game_state_1,
+                        game_state_0,
                     )),
                 ),
                 attempt2: Connecting::create(
                     &mut self,
-                    StartMethod::Resume(ResumableNetplaySession::new(input_mapping, game_state_0)),
+                    StartMethod::Resume(ResumableNetplaySession::new(input_mapping, game_state_1)),
                 ),
             },
             self,
@@ -144,15 +156,6 @@ impl Netplay<Connected> {
                 .advance(inputs, &input_mapping)
                 .is_err()
             {
-                #[cfg(feature = "debug")]
-                println!(
-                    "Could not advance the Netplay session. Resuming to one of the frames ({:?})",
-                    self.state
-                        .netplay_session
-                        .last_confirmed_game_states
-                        .clone()
-                        .map(|s| s.frame)
-                );
                 NetplayState::Resuming(self.resume())
             } else {
                 NetplayState::Connected(self)
