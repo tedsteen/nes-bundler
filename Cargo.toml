@@ -29,10 +29,10 @@ serde_yaml = "0.9"
 winit = {version = "0.28", features = ["serde"] }
 rfd = "0.11.0"
 tinyfiledialogs = "3.9"
-pixels = "0.12"
-egui = "0.21"
-egui-winit = "0.21"
-egui-wgpu = "0.21"
+pixels = "0.13"
+egui = "0.22"
+egui-winit = "0.22"
+egui-wgpu = "0.22"
 
 sdl2 = { git="https://github.com/Rust-SDL2/rust-sdl2.git", features = ["bundled", "static-link"] }
 
