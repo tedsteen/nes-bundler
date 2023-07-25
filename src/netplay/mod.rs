@@ -14,11 +14,11 @@ use self::{
 };
 
 mod connecting_state;
-pub mod gui;
-pub mod netplay_session;
-pub mod netplay_state;
+mod gui;
+mod netplay_session;
+mod netplay_state;
 #[cfg(feature = "debug")]
-pub mod stats;
+mod stats;
 
 #[derive(Clone, Debug)]
 pub struct InputMapping {
