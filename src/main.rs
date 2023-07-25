@@ -244,11 +244,8 @@ fn initialise(
     let state = LocalGameState::new(nes)?;
 
     #[cfg(feature = "netplay")]
-    let state_handler = netplay::state_handler::NetplayStateHandler::new(
-        state,
-        &bundle,
-        &mut settings.borrow_mut().netplay_id,
-    );
+    let state_handler =
+        netplay::NetplayStateHandler::new(state, &bundle, &mut settings.borrow_mut().netplay_id);
 
     #[cfg(not(feature = "netplay"))]
     let state_handler = LocalStateHandler {
