@@ -3,7 +3,7 @@ use matchbox_socket::PeerId;
 
 use crate::{input::JoypadInput, settings::MAX_PLAYERS, Fps, LocalGameState, FPS};
 
-use super::{stats::NetplayStats, InputMapping};
+use super::InputMapping;
 
 #[derive(Debug)]
 pub struct GGRSConfig;
@@ -19,7 +19,7 @@ pub struct NetplaySession {
     pub game_state: LocalGameState,
     pub last_confirmed_game_states: [LocalGameState; 2],
     #[cfg(feature = "debug")]
-    pub stats: [NetplayStats; MAX_PLAYERS],
+    pub stats: [super::stats::NetplayStats; MAX_PLAYERS],
     pub requested_fps: Fps,
 }
 
@@ -35,7 +35,10 @@ impl NetplaySession {
             game_state: game_state.clone(),
             last_confirmed_game_states: [game_state.clone(), game_state],
             #[cfg(feature = "debug")]
-            stats: [NetplayStats::new(), NetplayStats::new()],
+            stats: [
+                super::stats::NetplayStats::new(),
+                super::stats::NetplayStats::new(),
+            ],
             requested_fps: FPS,
         }
     }

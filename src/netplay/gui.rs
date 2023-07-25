@@ -221,6 +221,8 @@ impl GuiComponent for NetplayStateHandler {
                         }
                     }
                     NetplayState::Connected(netplay_connected) => {
+                        #[cfg(not(feature = "debug"))]
+                        let fake_lost_connection_clicked = false;
                         #[cfg(feature = "debug")]
                         let fake_lost_connection_clicked = {
                             ui.collapsing("Stats", |ui| {
