@@ -5,8 +5,8 @@ use uuid::Uuid;
 use crate::{input::JoypadInput, settings::MAX_PLAYERS, LocalGameState};
 
 use super::{
-    connecting::Connecting, ConnectingState, InputMapping, NetplayBuildConfiguration,
-    NetplaySession, ResumableNetplaySession, StartMethod,
+    connecting_state::Connecting, netplay_session::NetplaySession, ConnectingState, InputMapping,
+    NetplayBuildConfiguration, ResumableNetplaySession, StartMethod,
 };
 
 pub enum NetplayState {

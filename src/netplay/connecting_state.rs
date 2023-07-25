@@ -10,11 +10,22 @@ use tokio::runtime::Runtime;
 
 use crate::{settings::MAX_PLAYERS, LocalGameState, FPS};
 
-use super::netplay_state_machine::Netplay;
-use super::{
-    GGRSConfig, InputMapping, NetplayServerConfiguration, NetplaySession,
-    StaticNetplayServerConfiguration,
-};
+use super::netplay_session::{GGRSConfig, NetplaySession};
+use super::netplay_state::Netplay;
+use super::InputMapping;
+
+#[derive(Deserialize, Clone, Debug)]
+pub enum NetplayServerConfiguration {
+    Static(StaticNetplayServerConfiguration),
+    //An external server for fetching TURN credentials
+    TurnOn(String),
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct StaticNetplayServerConfiguration {
+    matchbox: MatchboxConfiguration,
+    pub ggrs: GGRSConfiguration,
+}
 
 #[allow(clippy::large_enum_variant)]
 pub enum ConnectingState {

@@ -5,10 +5,9 @@ use egui::{Button, Context, TextEdit, Window};
 use crate::settings::{gui::GuiComponent, MAX_PLAYERS};
 
 use super::{
-    connecting::{Connecting, PeeringState},
-    netplay_state_machine::NetplayState,
-    state_handler::NetplayStateHandler,
-    ConnectingState, StartMethod,
+    connecting_state::{Connecting, PeeringState},
+    netplay_state::NetplayState,
+    ConnectingState, NetplayStateHandler, StartMethod,
 };
 
 #[cfg(feature = "debug")]

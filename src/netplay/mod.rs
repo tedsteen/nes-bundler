@@ -1,26 +1,24 @@
-use crate::{input::JoypadInput, settings::MAX_PLAYERS, Fps, LocalGameState, FPS};
-use ggrs::{Config, GGRSRequest, P2PSession};
-use matchbox_socket::PeerId;
+use crate::{
+    input::JoypadInput,
+    settings::{gui::GuiComponent, MAX_PLAYERS},
+    Bundle, Fps, LocalGameState, StateHandler, FPS,
+};
 use serde::Deserialize;
 
-use self::connecting::{
-    ConnectingState, GGRSConfiguration, MatchboxConfiguration, ResumableNetplaySession, StartMethod,
+use self::{
+    connecting_state::{
+        ConnectingState, NetplayServerConfiguration, ResumableNetplaySession, StartMethod,
+    },
+    gui::NetplayGui,
+    netplay_state::{Disconnected, Netplay, NetplayState},
 };
 
-mod connecting;
+mod connecting_state;
 pub mod gui;
-pub mod netplay_state_machine;
-pub mod state_handler;
+pub mod netplay_session;
+pub mod netplay_state;
 #[cfg(feature = "debug")]
-mod stats;
-
-#[derive(Debug)]
-pub struct GGRSConfig;
-impl Config for GGRSConfig {
-    type Input = u8;
-    type State = LocalGameState;
-    type Address = PeerId;
-}
+pub mod stats;
 
 #[derive(Clone, Debug)]
 pub struct InputMapping {
@@ -32,118 +30,6 @@ impl InputMapping {
     }
 }
 
-pub struct NetplaySession {
-    input_mapping: Option<InputMapping>,
-    p2p_session: P2PSession<GGRSConfig>,
-    game_state: LocalGameState,
-    last_confirmed_game_states: [LocalGameState; 2],
-    #[cfg(feature = "debug")]
-    pub stats: [stats::NetplayStats; MAX_PLAYERS],
-    requested_fps: Fps,
-}
-
-impl NetplaySession {
-    pub fn new(
-        input_mapping: Option<InputMapping>,
-        p2p_session: P2PSession<GGRSConfig>,
-        game_state: LocalGameState,
-    ) -> Self {
-        Self {
-            input_mapping,
-            p2p_session,
-            game_state: game_state.clone(),
-            last_confirmed_game_states: [game_state.clone(), game_state],
-            #[cfg(feature = "debug")]
-            stats: [stats::NetplayStats::new(), stats::NetplayStats::new()],
-            requested_fps: FPS,
-        }
-    }
-
-    pub fn advance(
-        &mut self,
-        inputs: [JoypadInput; MAX_PLAYERS],
-        input_mapping: &InputMapping,
-    ) -> anyhow::Result<()> {
-        let sess = &mut self.p2p_session;
-        sess.poll_remote_clients();
-
-        for event in sess.events() {
-            if let ggrs::GGRSEvent::Disconnected { addr } = event {
-                return Err(anyhow::anyhow!("Lost peer {:?}", addr));
-            }
-        }
-
-        for handle in sess.local_player_handles() {
-            let local_input = 0;
-            sess.add_local_input(handle, inputs[input_mapping.map(local_input)].0)?;
-        }
-
-        match sess.advance_frame() {
-            Ok(requests) => {
-                for request in requests {
-                    match request {
-                        GGRSRequest::LoadGameState { cell, frame } => {
-                            println!("Loading (frame {:?})", frame);
-                            self.game_state = cell.load().expect("No data found.");
-                        }
-                        GGRSRequest::SaveGameState { cell, frame } => {
-                            assert_eq!(self.game_state.frame, frame);
-                            cell.save(frame, Some(self.game_state.clone()), None);
-                        }
-                        GGRSRequest::AdvanceFrame { inputs } => {
-                            let last_saved_frame = self.last_confirmed_game_states[1].frame;
-                            if sess.confirmed_frame() >= self.game_state.frame
-                                && self.game_state.frame % 10 == 0
-                                && self.game_state.frame > last_saved_frame
-                            {
-                                //We have a confirmed and rendered frame.
-                                self.last_confirmed_game_states = [
-                                    self.last_confirmed_game_states[1].clone(),
-                                    self.game_state.clone(),
-                                ];
-                            }
-
-                            self.game_state
-                                .advance([JoypadInput(inputs[0].0), JoypadInput(inputs[1].0)]);
-
-                            if self.game_state.frame < sess.confirmed_frame() {
-                                // Discard the samples for this frame since it's a replay from ggrs. Audio has already been produced and pushed for it.
-                                self.game_state.nes.apu.consume_samples();
-                            }
-                        }
-                    }
-                }
-            }
-            Err(ggrs::GGRSError::PredictionThreshold) => {
-                //println!(
-                //    "Frame {} skipped: PredictionThreshold",
-                //    self.game_state.frame
-                //);
-            }
-            Err(ggrs::GGRSError::NotSynchronized) => {}
-            Err(e) => eprintln!("Ouch :( {:?}", e),
-        }
-
-        #[cfg(feature = "debug")]
-        if self.game_state.frame % 30 == 0 {
-            for i in 0..MAX_PLAYERS {
-                if let Ok(stats) = sess.network_stats(i) {
-                    if !sess.local_player_handles().contains(&i) {
-                        self.stats[i].push_stats(stats);
-                    }
-                }
-            }
-        }
-
-        if sess.frames_ahead() > 0 {
-            self.requested_fps = (FPS as f32 * 0.9) as u32;
-        } else {
-            self.requested_fps = FPS
-        }
-        Ok(())
-    }
-}
-
 #[derive(Deserialize, Clone, Debug)]
 pub struct NetplayBuildConfiguration {
     pub default_room_name: String,
@@ -151,15 +37,102 @@ pub struct NetplayBuildConfiguration {
     pub server: NetplayServerConfiguration,
 }
 
-#[derive(Deserialize, Clone, Debug)]
-pub enum NetplayServerConfiguration {
-    Static(StaticNetplayServerConfiguration),
-    //An external server for fetching TURN credentials
-    TurnOn(String),
+pub struct NetplayStateHandler {
+    pub netplay: Option<NetplayState>,
+    local_game_state: LocalGameState,
+    pub gui: NetplayGui,
 }
 
-#[derive(Deserialize, Clone, Debug)]
-pub struct StaticNetplayServerConfiguration {
-    matchbox: MatchboxConfiguration,
-    pub ggrs: GGRSConfiguration,
+impl StateHandler for NetplayStateHandler {
+    fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps {
+        self.netplay = self.netplay.take().map(|netplay| netplay.advance(inputs));
+
+        if let Some(netplay) = &self.netplay {
+            match &netplay {
+                NetplayState::Connected(netplay_connected) => {
+                    netplay_connected.state.netplay_session.requested_fps
+                }
+                NetplayState::Disconnected(_) => self.local_game_state.advance(inputs),
+                _ => FPS,
+            }
+        } else {
+            FPS
+        }
+    }
+
+    fn consume_samples(&mut self) -> Vec<i16> {
+        match &mut self.netplay.as_mut().unwrap() {
+            NetplayState::Connected(netplay_connected) => netplay_connected
+                .state
+                .netplay_session
+                .game_state
+                .consume_samples(),
+            NetplayState::Disconnected(_) => self.local_game_state.consume_samples(),
+            _ => vec![],
+        }
+    }
+
+    fn get_frame(&self) -> Option<&Vec<u16>> {
+        match &self.netplay.as_ref().unwrap() {
+            NetplayState::Connected(netplay_connected) => Some(
+                netplay_connected
+                    .state
+                    .netplay_session
+                    .game_state
+                    .get_frame(),
+            ),
+            NetplayState::Disconnected(_) => Some(self.local_game_state.get_frame()),
+            _ => None,
+        }
+    }
+
+    fn save(&self) -> Vec<u8> {
+        if let NetplayState::Connected(netplay_connected) = &self.netplay.as_ref().unwrap() {
+            //TODO: what to do when saving during netplay?
+            netplay_connected.state.netplay_session.game_state.save()
+        } else {
+            self.local_game_state.save()
+        }
+    }
+
+    fn load(&mut self, data: &mut Vec<u8>) {
+        if let NetplayState::Connected(netplay_connected) = &mut self.netplay.as_mut().unwrap() {
+            //TODO: what to do when loading during netplay?
+            netplay_connected
+                .state
+                .netplay_session
+                .game_state
+                .load(data);
+        } else {
+            self.local_game_state.load(data);
+        }
+    }
+
+    fn get_gui(&mut self) -> &mut dyn GuiComponent {
+        //TODO: Would rather extend StateHandler with GuiComponent and do
+        //      state_handler.as_mut() on the Box but couldn't due to
+        //      https://github.com/rust-lang/rust/issues/65991
+        self
+    }
+}
+
+impl NetplayStateHandler {
+    pub fn new(
+        initial_game_state: LocalGameState,
+        bundle: &Bundle,
+        netplay_id: &mut Option<String>,
+    ) -> Self {
+        let netplay_build_config = &bundle.config.netplay;
+
+        NetplayStateHandler {
+            local_game_state: initial_game_state.clone(),
+            gui: NetplayGui::new(netplay_build_config.default_room_name.clone()),
+            netplay: Some(NetplayState::Disconnected(Netplay::<Disconnected>::new(
+                netplay_build_config.clone(),
+                netplay_id,
+                md5::compute(&bundle.rom),
+                initial_game_state,
+            ))),
+        }
+    }
 }
