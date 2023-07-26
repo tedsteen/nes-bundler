@@ -45,6 +45,29 @@ pub struct Resuming {
     attempt1: ConnectingState,
     attempt2: ConnectingState,
 }
+impl Resuming {
+    fn new(netplay: &mut Netplay<Connected>) -> Self {
+        let netplay_session = &netplay.state.netplay_session;
+        let input_mapping = netplay_session.input_mapping.clone();
+
+        let game_state_0 = netplay_session.last_confirmed_game_states[0].clone();
+        let game_state_1 = netplay_session.last_confirmed_game_states[1].clone();
+
+        Self {
+            attempt1: Connecting::create(
+                netplay,
+                StartMethod::Resume(ResumableNetplaySession::new(
+                    input_mapping.clone(),
+                    game_state_0,
+                )),
+            ),
+            attempt2: Connecting::create(
+                netplay,
+                StartMethod::Resume(ResumableNetplaySession::new(input_mapping, game_state_1)),
+            ),
+        }
+    }
+}
 
 impl Netplay<Disconnected> {
     pub fn new(
@@ -114,7 +137,7 @@ impl Netplay<ConnectingState> {
 }
 
 impl Netplay<Connected> {
-    pub fn resume(mut self: Netplay<Connected>) -> Netplay<Resuming> {
+    pub fn resume(mut self) -> Netplay<Resuming> {
         #[cfg(feature = "debug")]
         println!(
             "Resuming netplay to one of the frames ({:?})",
@@ -125,27 +148,7 @@ impl Netplay<Connected> {
                 .map(|s| s.frame)
         );
 
-        let input_mapping = self.state.netplay_session.input_mapping.clone();
-
-        let game_state_0 = self.state.netplay_session.last_confirmed_game_states[0].clone();
-        let game_state_1 = self.state.netplay_session.last_confirmed_game_states[1].clone();
-
-        Netplay::from(
-            Resuming {
-                attempt1: Connecting::create(
-                    &mut self,
-                    StartMethod::Resume(ResumableNetplaySession::new(
-                        input_mapping.clone(),
-                        game_state_0,
-                    )),
-                ),
-                attempt2: Connecting::create(
-                    &mut self,
-                    StartMethod::Resume(ResumableNetplaySession::new(input_mapping, game_state_1)),
-                ),
-            },
-            self,
-        )
+        Netplay::from(Resuming::new(&mut self), self)
     }
 
     fn advance(mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> NetplayState {
@@ -156,6 +159,7 @@ impl Netplay<Connected> {
                 .advance(inputs, &input_mapping)
                 .is_err()
             {
+                //TODO: Popup/info about the error? Or perhaps put the reason for the resume in the resume state below?
                 NetplayState::Resuming(self.resume())
             } else {
                 NetplayState::Connected(self)
