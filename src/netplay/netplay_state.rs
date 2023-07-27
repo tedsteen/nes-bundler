@@ -58,12 +58,12 @@ impl Resuming {
                 netplay,
                 StartMethod::Resume(ResumableNetplaySession::new(
                     input_mapping.clone(),
-                    game_state_0,
+                    game_state_1,
                 )),
             ),
             attempt2: Connecting::create(
                 netplay,
-                StartMethod::Resume(ResumableNetplaySession::new(input_mapping, game_state_1)),
+                StartMethod::Resume(ResumableNetplaySession::new(input_mapping, game_state_0)),
             ),
         }
     }
