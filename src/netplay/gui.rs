@@ -182,11 +182,9 @@ impl GuiComponent for NetplayStateHandler {
                                 ..
                             }) => {
                                 ui.label("Peering up...");
-                                if let Some(socket) = socket {
-                                    let connected_peers = socket.connected_peers().count();
-                                    let remaining = MAX_PLAYERS - (connected_peers + 1);
-                                    ui.label(format!("Waiting for {} players...", remaining));
-                                }
+                                let connected_peers = socket.connected_peers().count();
+                                let remaining = MAX_PLAYERS - (connected_peers + 1);
+                                ui.label(format!("Waiting for {} players...", remaining));
                             }
                             ConnectingState::Synchronizing(synchronizing_state) => {
                                 let start_method = synchronizing_state.start_method.clone();

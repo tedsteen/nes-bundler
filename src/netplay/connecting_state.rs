@@ -70,7 +70,7 @@ pub struct LoadingNetplayServerConfiguration {
 }
 
 pub struct PeeringState {
-    pub socket: Option<WebRtcSocket>,
+    pub socket: WebRtcSocket,
     ggrs_config: GGRSConfiguration,
     unlock_url: Option<String>,
 }
@@ -135,7 +135,7 @@ impl PeeringState {
         });
 
         Self {
-            socket: Some(socket),
+            socket,
             ggrs_config: conf.ggrs.clone(),
             unlock_url: maybe_unlock_url,
         }
@@ -143,12 +143,12 @@ impl PeeringState {
 }
 
 pub struct SynchonizingState {
-    p2p_session: Option<P2PSession<GGRSConfig>>,
+    p2p_session: P2PSession<GGRSConfig>,
     pub unlock_url: Option<String>,
     pub start_time: Instant,
 }
 impl SynchonizingState {
-    pub fn new(p2p_session: Option<P2PSession<GGRSConfig>>, unlock_url: Option<String>) -> Self {
+    pub fn new(p2p_session: P2PSession<GGRSConfig>, unlock_url: Option<String>) -> Self {
         let start_time = Instant::now();
         SynchonizingState {
             p2p_session,
@@ -240,46 +240,37 @@ impl Connecting<LoadingNetplayServerConfiguration> {
 }
 impl Connecting<PeeringState> {
     fn advance(mut self) -> ConnectingState {
-        if let Some(socket) = &mut self.state.socket {
-            socket.update_peers();
+        let socket = &mut self.state.socket;
+        socket.update_peers();
 
-            let connected_peers = socket.connected_peers().count();
-            let remaining = MAX_PLAYERS - (connected_peers + 1);
-            if remaining == 0 {
-                let players = socket.players();
-                let ggrs_config = self.state.ggrs_config.clone();
-                let mut sess_build = SessionBuilder::<GGRSConfig>::new()
-                    .with_num_players(MAX_PLAYERS)
-                    .with_max_prediction_window(ggrs_config.max_prediction)
-                    .with_input_delay(ggrs_config.input_delay)
-                    .with_fps(FPS as usize)
-                    .expect("invalid fps");
+        let connected_peers = socket.connected_peers().count();
+        let remaining = MAX_PLAYERS - (connected_peers + 1);
+        if remaining == 0 {
+            let players = socket.players();
+            let ggrs_config = self.state.ggrs_config.clone();
+            let mut sess_build = SessionBuilder::<GGRSConfig>::new()
+                .with_num_players(MAX_PLAYERS)
+                .with_max_prediction_window(ggrs_config.max_prediction)
+                .with_input_delay(ggrs_config.input_delay)
+                .with_fps(FPS as usize)
+                .expect("invalid fps");
 
-                for (i, player) in players.into_iter().enumerate() {
-                    sess_build = sess_build
-                        .add_player(player, i)
-                        .expect("failed to add player");
-                }
-
-                ConnectingState::Synchronizing(Connecting::from(
-                    SynchonizingState::new(
-                        Some(
-                            sess_build
-                                .start_p2p_session(
-                                    self.state
-                                        .socket
-                                        .take()
-                                        .expect("there should be a socket when synchronizing"),
-                                )
-                                .expect("p2p session should be able to start"),
-                        ),
-                        self.state.unlock_url.clone(),
-                    ),
-                    self,
-                ))
-            } else {
-                ConnectingState::PeeringUp(self)
+            for (i, player) in players.into_iter().enumerate() {
+                sess_build = sess_build
+                    .add_player(player, i)
+                    .expect("failed to add player");
             }
+
+            ConnectingState::Synchronizing(Connecting {
+                initial_game_state: self.initial_game_state,
+                start_method: self.start_method,
+                state: SynchonizingState::new(
+                    sess_build
+                        .start_p2p_session(self.state.socket)
+                        .expect("p2p session should be able to start"),
+                    self.state.unlock_url.clone(),
+                ),
+            })
         } else {
             ConnectingState::PeeringUp(self)
         }
@@ -288,40 +279,31 @@ impl Connecting<PeeringState> {
 
 impl Connecting<SynchonizingState> {
     fn advance(mut self) -> ConnectingState {
-        if let Some(p2p_session) = &mut self.state.p2p_session {
-            p2p_session.poll_remote_clients();
-            if let SessionState::Running = p2p_session.current_state() {
-                let p2p_session = self
-                    .state
-                    .p2p_session
-                    .take()
-                    .expect("there should be a socket when synchronizing");
-
-                let game_state = match &self.start_method {
-                    StartMethod::Resume(ResumableNetplaySession { game_state, .. }) => {
-                        let mut game_state = game_state.clone();
-                        game_state.frame = 0;
-                        game_state
-                    }
-                    _ => self.initial_game_state.clone(),
-                };
-                let start_method = self.start_method.clone();
-                ConnectingState::Connected(Connecting::from(
-                    NetplaySession::new(
-                        match &start_method {
-                            StartMethod::Resume(resumable_session) => {
-                                resumable_session.input_mapping.clone()
-                            }
-                            _ => None,
-                        },
-                        p2p_session,
-                        game_state,
-                    ),
-                    self,
-                ))
-            } else {
-                ConnectingState::Synchronizing(self)
-            }
+        self.state.p2p_session.poll_remote_clients();
+        if let SessionState::Running = self.state.p2p_session.current_state() {
+            let game_state = match &self.start_method {
+                StartMethod::Resume(ResumableNetplaySession { game_state, .. }) => {
+                    let mut game_state = game_state.clone();
+                    game_state.frame = 0;
+                    game_state
+                }
+                _ => self.initial_game_state.clone(),
+            };
+            let start_method = self.start_method.clone();
+            ConnectingState::Connected(Connecting {
+                initial_game_state: self.initial_game_state,
+                start_method: self.start_method,
+                state: NetplaySession::new(
+                    match &start_method {
+                        StartMethod::Resume(resumable_session) => {
+                            resumable_session.input_mapping.clone()
+                        }
+                        _ => None,
+                    },
+                    self.state.p2p_session,
+                    game_state,
+                ),
+            })
         } else {
             ConnectingState::Synchronizing(self)
         }
