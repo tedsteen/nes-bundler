@@ -1,7 +1,7 @@
 use crate::{
     input::JoypadInput,
     settings::{gui::GuiComponent, MAX_PLAYERS},
-    Bundle, Fps, LocalGameState, StateHandler, FPS,
+    Bundle, Fps, LocalStateHandler, StateHandler, FPS,
 };
 use serde::Deserialize;
 
@@ -39,7 +39,7 @@ pub struct NetplayBuildConfiguration {
 
 pub struct NetplayStateHandler {
     pub netplay: Option<NetplayState>,
-    local_game_state: LocalGameState,
+    local_state_handler: LocalStateHandler,
     pub gui: NetplayGui,
 }
 
@@ -52,7 +52,7 @@ impl StateHandler for NetplayStateHandler {
                 NetplayState::Connected(netplay_connected) => {
                     netplay_connected.state.netplay_session.requested_fps
                 }
-                NetplayState::Disconnected(_) => self.local_game_state.advance(inputs),
+                NetplayState::Disconnected(_) => self.local_state_handler.advance(inputs),
                 _ => FPS,
             }
         } else {
@@ -67,7 +67,7 @@ impl StateHandler for NetplayStateHandler {
                 .netplay_session
                 .game_state
                 .consume_samples(),
-            NetplayState::Disconnected(_) => self.local_game_state.consume_samples(),
+            NetplayState::Disconnected(_) => self.local_state_handler.consume_samples(),
             _ => vec![],
         }
     }
@@ -81,7 +81,7 @@ impl StateHandler for NetplayStateHandler {
                     .game_state
                     .get_frame(),
             ),
-            NetplayState::Disconnected(_) => Some(self.local_game_state.get_frame()),
+            NetplayState::Disconnected(_) => self.local_state_handler.get_frame(),
             _ => None,
         }
     }
@@ -91,7 +91,7 @@ impl StateHandler for NetplayStateHandler {
             //TODO: what to do when saving during netplay?
             netplay_connected.state.netplay_session.game_state.save()
         } else {
-            self.local_game_state.save()
+            self.local_state_handler.save()
         }
     }
 
@@ -104,7 +104,7 @@ impl StateHandler for NetplayStateHandler {
                 .game_state
                 .load(data);
         } else {
-            self.local_game_state.load(data);
+            self.local_state_handler.load(data);
         }
     }
 
@@ -118,21 +118,21 @@ impl StateHandler for NetplayStateHandler {
 
 impl NetplayStateHandler {
     pub fn new(
-        initial_game_state: LocalGameState,
+        local_state_handler: LocalStateHandler,
         bundle: &Bundle,
         netplay_id: &mut Option<String>,
     ) -> Self {
         let netplay_build_config = &bundle.config.netplay;
 
         NetplayStateHandler {
-            local_game_state: initial_game_state.clone(),
             gui: NetplayGui::new(netplay_build_config.default_room_name.clone()),
             netplay: Some(NetplayState::Disconnected(Netplay::<Disconnected>::new(
                 netplay_build_config.clone(),
                 netplay_id,
                 md5::compute(&bundle.rom),
-                initial_game_state,
+                local_state_handler.state.clone(),
             ))),
+            local_state_handler,
         }
     }
 }

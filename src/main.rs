@@ -243,15 +243,17 @@ fn initialise(
     let nes = start_nes(bundle.rom.clone(), audio.stream.get_sample_rate() as u64)?;
     let state = LocalGameState::new(nes)?;
 
-    #[cfg(feature = "netplay")]
-    let state_handler =
-        netplay::NetplayStateHandler::new(state, &bundle, &mut settings.borrow_mut().netplay_id);
-
-    #[cfg(not(feature = "netplay"))]
     let state_handler = LocalStateHandler {
         state,
         gui: EmptyGuiComponent::new(),
     };
+
+    #[cfg(feature = "netplay")]
+    let state_handler = netplay::NetplayStateHandler::new(
+        state_handler,
+        &bundle,
+        &mut settings.borrow_mut().netplay_id,
+    );
 
     let inputs = Inputs::new(
         &sdl_context,
@@ -329,7 +331,7 @@ pub trait StateHandler {
     fn get_gui(&mut self) -> &mut dyn GuiComponent;
 }
 
-struct LocalStateHandler {
+pub struct LocalStateHandler {
     state: LocalGameState,
     gui: EmptyGuiComponent,
 }
