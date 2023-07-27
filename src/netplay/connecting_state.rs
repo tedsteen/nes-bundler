@@ -54,6 +54,17 @@ pub struct Connecting<S> {
     pub start_method: StartMethod,
     pub state: S,
 }
+
+impl<T> Connecting<T> {
+    fn from<S>(state: T, other: Connecting<S>) -> Self {
+        Self {
+            start_method: other.start_method,
+            initial_game_state: other.initial_game_state,
+            state,
+        }
+    }
+}
+
 pub struct LoadingNetplayServerConfiguration {
     pub result: Receiver<Result<TurnOnResponse, TurnOnError>>,
 }
@@ -211,11 +222,10 @@ impl Connecting<LoadingNetplayServerConfiguration> {
 
     fn advance(mut self, rt: &mut Runtime, rom_hash: &Digest) -> ConnectingState {
         match self.state.result.try_recv() {
-            Ok(Some(Ok(resp))) => ConnectingState::PeeringUp(Connecting {
-                initial_game_state: self.initial_game_state,
-                start_method: self.start_method.clone(),
-                state: PeeringState::new(rt, resp, self.start_method, rom_hash),
-            }),
+            Ok(Some(Ok(resp))) => ConnectingState::PeeringUp(Connecting::from(
+                PeeringState::new(rt, resp, self.start_method.clone(), rom_hash),
+                self,
+            )),
             Ok(None) => ConnectingState::LoadingNetplayServerConfiguration(self), //No result yet
             Ok(Some(Err(err))) => {
                 //TODO: alert about not being able to fetch server configuration
@@ -236,12 +246,8 @@ impl Connecting<PeeringState> {
             let connected_peers = socket.connected_peers().count();
             let remaining = MAX_PLAYERS - (connected_peers + 1);
             if remaining == 0 {
-                let start_method = self.start_method.clone();
-                let ggrs_config = self.state.ggrs_config;
-                let unlock_url = self.state.unlock_url.clone();
-
                 let players = socket.players();
-                let ggrs_config = ggrs_config;
+                let ggrs_config = self.state.ggrs_config.clone();
                 let mut sess_build = SessionBuilder::<GGRSConfig>::new()
                     .with_num_players(MAX_PLAYERS)
                     .with_max_prediction_window(ggrs_config.max_prediction)
@@ -255,10 +261,8 @@ impl Connecting<PeeringState> {
                         .expect("failed to add player");
                 }
 
-                ConnectingState::Synchronizing(Connecting {
-                    initial_game_state: self.initial_game_state,
-                    start_method: start_method.clone(),
-                    state: SynchonizingState::new(
+                ConnectingState::Synchronizing(Connecting::from(
+                    SynchonizingState::new(
                         Some(
                             sess_build
                                 .start_p2p_session(
@@ -269,9 +273,10 @@ impl Connecting<PeeringState> {
                                 )
                                 .expect("p2p session should be able to start"),
                         ),
-                        unlock_url.clone(),
+                        self.state.unlock_url.clone(),
                     ),
-                })
+                    self,
+                ))
             } else {
                 ConnectingState::PeeringUp(self)
             }
@@ -293,18 +298,16 @@ impl Connecting<SynchonizingState> {
                     .expect("there should be a socket when synchronizing");
 
                 let game_state = match &self.start_method {
-                    StartMethod::Resume(resumable_session) => {
-                        let mut game_state = resumable_session.game_state.clone();
+                    StartMethod::Resume(ResumableNetplaySession { game_state, .. }) => {
+                        let mut game_state = game_state.clone();
                         game_state.frame = 0;
                         game_state
                     }
                     _ => self.initial_game_state.clone(),
                 };
                 let start_method = self.start_method.clone();
-                ConnectingState::Connected(Connecting {
-                    initial_game_state: self.initial_game_state,
-                    start_method: start_method.clone(),
-                    state: NetplaySession::new(
+                ConnectingState::Connected(Connecting::from(
+                    NetplaySession::new(
                         match &start_method {
                             StartMethod::Resume(resumable_session) => {
                                 resumable_session.input_mapping.clone()
@@ -314,7 +317,8 @@ impl Connecting<SynchonizingState> {
                         p2p_session,
                         game_state,
                     ),
-                })
+                    self,
+                ))
             } else {
                 ConnectingState::Synchronizing(self)
             }

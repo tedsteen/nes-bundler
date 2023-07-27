@@ -35,6 +35,19 @@ pub struct Netplay<S> {
     pub state: S,
 }
 
+impl<T> Netplay<T> {
+    fn from<S>(state: T, other: Netplay<S>) -> Self {
+        Self {
+            rt: other.rt,
+            config: other.config,
+            netplay_id: other.netplay_id,
+            rom_hash: other.rom_hash,
+            initial_game_state: other.initial_game_state,
+            state,
+        }
+    }
+}
+
 pub struct Disconnected {}
 
 pub struct Connected {
@@ -94,19 +107,6 @@ impl Netplay<Disconnected> {
 
     pub fn start(mut self, start_method: StartMethod) -> Netplay<ConnectingState> {
         Netplay::from(Connecting::create(&mut self, start_method), self)
-    }
-}
-
-impl<T> Netplay<T> {
-    fn from<S>(state: T, other: Netplay<S>) -> Netplay<T> {
-        Self {
-            rt: other.rt,
-            config: other.config,
-            netplay_id: other.netplay_id,
-            rom_hash: other.rom_hash,
-            initial_game_state: other.initial_game_state,
-            state,
-        }
     }
 }
 
