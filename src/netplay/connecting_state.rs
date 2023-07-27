@@ -10,7 +10,7 @@ use tokio::runtime::Runtime;
 
 use crate::{settings::MAX_PLAYERS, LocalGameState, FPS};
 
-use super::netplay_session::{GGRSConfig, NetplaySession};
+use super::netplay_session::GGRSConfig;
 use super::netplay_state::Netplay;
 use super::InputMapping;
 
@@ -32,7 +32,7 @@ pub enum ConnectingState {
     LoadingNetplayServerConfiguration(Connecting<LoadingNetplayServerConfiguration>),
     PeeringUp(Connecting<PeeringState>),
     Synchronizing(Connecting<SynchonizingState>),
-    Connected(Connecting<NetplaySession>),
+    Connected(Connecting<P2PSession<GGRSConfig>>),
     Failed(String),
 }
 
@@ -281,28 +281,10 @@ impl Connecting<SynchonizingState> {
     fn advance(mut self) -> ConnectingState {
         self.state.p2p_session.poll_remote_clients();
         if let SessionState::Running = self.state.p2p_session.current_state() {
-            let game_state = match &self.start_method {
-                StartMethod::Resume(ResumableNetplaySession { game_state, .. }) => {
-                    let mut game_state = game_state.clone();
-                    game_state.frame = 0;
-                    game_state
-                }
-                _ => self.initial_game_state.clone(),
-            };
-            let start_method = self.start_method.clone();
             ConnectingState::Connected(Connecting {
                 initial_game_state: self.initial_game_state,
                 start_method: self.start_method,
-                state: NetplaySession::new(
-                    match &start_method {
-                        StartMethod::Resume(resumable_session) => {
-                            resumable_session.input_mapping.clone()
-                        }
-                        _ => None,
-                    },
-                    self.state.p2p_session,
-                    game_state,
-                ),
+                state: self.state.p2p_session,
             })
         } else {
             ConnectingState::Synchronizing(self)

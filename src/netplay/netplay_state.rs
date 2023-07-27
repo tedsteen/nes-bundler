@@ -117,6 +117,8 @@ impl Netplay<ConnectingState> {
 
     fn advance(mut self) -> NetplayState {
         self.state = self.state.advance(&mut self.rt, &self.rom_hash);
+        let initial_game_state = self.initial_game_state.clone();
+
         match self.state {
             ConnectingState::Connected(connected) => NetplayState::Connected(Netplay {
                 rt: self.rt,
@@ -125,9 +127,26 @@ impl Netplay<ConnectingState> {
                 rom_hash: self.rom_hash,
                 initial_game_state: self.initial_game_state,
                 state: Connected {
-                    netplay_session: connected.state,
+                    netplay_session: NetplaySession::new(
+                        match &connected.start_method {
+                            StartMethod::Resume(resumable_session) => {
+                                resumable_session.input_mapping.clone()
+                            }
+                            _ => None,
+                        },
+                        connected.state,
+                        match &connected.start_method {
+                            StartMethod::Resume(ResumableNetplaySession { game_state, .. }) => {
+                                let mut game_state = game_state.clone();
+                                game_state.frame = 0;
+                                game_state
+                            }
+                            _ => initial_game_state,
+                        },
+                    ),
                 },
             }),
+
             ConnectingState::Failed(_) => {
                 NetplayState::Disconnected(Netplay::from(Disconnected {}, self))
             }
