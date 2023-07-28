@@ -10,7 +10,7 @@ use tokio::runtime::Runtime;
 
 use crate::{settings::MAX_PLAYERS, LocalGameState, FPS};
 
-use super::netplay_session::GGRSConfig;
+use super::netplay_session::{GGRSConfig, NetplaySession};
 use super::netplay_state::Netplay;
 use super::InputMapping;
 
@@ -32,7 +32,7 @@ pub enum ConnectingState {
     LoadingNetplayServerConfiguration(Connecting<LoadingNetplayServerConfiguration>),
     PeeringUp(Connecting<PeeringState>),
     Synchronizing(Connecting<SynchonizingState>),
-    Connected(Connecting<P2PSession<GGRSConfig>>),
+    Connected(Connecting<NetplaySession>),
     Failed(String),
 }
 
@@ -281,10 +281,17 @@ impl Connecting<SynchonizingState> {
     fn advance(mut self) -> ConnectingState {
         self.state.p2p_session.poll_remote_clients();
         if let SessionState::Running = self.state.p2p_session.current_state() {
+            let start_method = self.start_method;
+            let initial_game_state = self.initial_game_state.clone();
+
             ConnectingState::Connected(Connecting {
                 initial_game_state: self.initial_game_state,
-                start_method: self.start_method,
-                state: self.state.p2p_session,
+                start_method: start_method.clone(),
+                state: NetplaySession::new(
+                    start_method.clone(),
+                    self.state.p2p_session,
+                    initial_game_state,
+                ),
             })
         } else {
             ConnectingState::Synchronizing(self)

@@ -3,7 +3,10 @@ use matchbox_socket::PeerId;
 
 use crate::{input::JoypadInput, settings::MAX_PLAYERS, Fps, LocalGameState, FPS};
 
-use super::InputMapping;
+use super::{
+    connecting_state::{ResumableNetplaySession, StartMethod},
+    InputMapping,
+};
 
 #[derive(Debug)]
 pub struct GGRSConfig;
@@ -26,12 +29,24 @@ pub struct NetplaySession {
 
 impl NetplaySession {
     pub fn new(
-        input_mapping: Option<InputMapping>,
+        start_method: StartMethod,
         p2p_session: P2PSession<GGRSConfig>,
-        game_state: LocalGameState,
+        initial_game_state: LocalGameState,
     ) -> Self {
+        let game_state = match &start_method {
+            StartMethod::Resume(ResumableNetplaySession { game_state, .. }) => {
+                let mut game_state = game_state.clone();
+                game_state.frame = 0;
+                game_state
+            }
+            _ => initial_game_state,
+        };
+
         Self {
-            input_mapping,
+            input_mapping: match &start_method {
+                StartMethod::Resume(resumable_session) => resumable_session.input_mapping.clone(),
+                _ => None,
+            },
             p2p_session,
             game_state: game_state.clone(),
             last_confirmed_game_states: [game_state.clone(), game_state.clone()],
