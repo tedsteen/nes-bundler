@@ -5,7 +5,7 @@ use egui::{Button, Context, TextEdit, Window};
 use crate::settings::{gui::GuiComponent, MAX_PLAYERS};
 
 use super::{
-    connecting_state::{Connecting, PeeringState},
+    connecting_state::{Connecting, PeeringState, StartState},
     netplay_state::NetplayState,
     ConnectingState, NetplayStateHandler, StartMethod,
 };
@@ -148,14 +148,24 @@ impl GuiComponent for NetplayStateHandler {
                                 ui.end_row();
                             });
                         if join_clicked {
-                            NetplayState::Connecting(
-                                netplay_disconnected
-                                    .start(StartMethod::Create(self.gui.room_name.clone())),
-                            )
+                            let initial_state = netplay_disconnected.initial_game_state.clone();
+                            NetplayState::Connecting(netplay_disconnected.start(
+                                StartMethod::Create(
+                                    StartState {
+                                        game_state: initial_state,
+                                        input_mapping: None,
+                                    },
+                                    self.gui.room_name.clone(),
+                                ),
+                            ))
                         } else if random_clicked {
-                            NetplayState::Connecting(
-                                netplay_disconnected.start(StartMethod::Random),
-                            )
+                            let initial_state = netplay_disconnected.initial_game_state.clone();
+                            NetplayState::Connecting(netplay_disconnected.start(
+                                StartMethod::Random(StartState {
+                                    game_state: initial_state,
+                                    input_mapping: None,
+                                }),
+                            ))
                         } else {
                             NetplayState::Disconnected(netplay_disconnected)
                         }

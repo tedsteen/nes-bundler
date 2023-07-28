@@ -6,9 +6,7 @@ use crate::{
 use serde::Deserialize;
 
 use self::{
-    connecting_state::{
-        ConnectingState, NetplayServerConfiguration, ResumableNetplaySession, StartMethod,
-    },
+    connecting_state::{ConnectingState, NetplayServerConfiguration, StartMethod, StartState},
     gui::NetplayGui,
     netplay_state::{Disconnected, Netplay, NetplayState},
 };

@@ -50,7 +50,6 @@ impl ConnectingState {
     }
 }
 pub struct Connecting<S> {
-    pub initial_game_state: LocalGameState,
     pub start_method: StartMethod,
     pub state: S,
 }
@@ -59,7 +58,6 @@ impl<T> Connecting<T> {
     fn from<S>(state: T, other: Connecting<S>) -> Self {
         Self {
             start_method: other.start_method,
-            initial_game_state: other.initial_game_state,
             state,
         }
     }
@@ -92,11 +90,11 @@ impl PeeringState {
         let matchbox_server = &conf.matchbox.server;
 
         let room_name = match &start_method {
-            StartMethod::Create(name) => format!("join_{:x}_{}", rom_hash, name),
-            StartMethod::Resume(ResumableNetplaySession { game_state, .. }) => {
+            StartMethod::Create(_, name) => format!("join_{:x}_{}", rom_hash, name),
+            StartMethod::Resume(StartState { game_state, .. }) => {
                 format!("resume_{:x}", md5::compute(game_state.save()))
             }
-            StartMethod::Random => format!("random_{:x}?next=2", rom_hash),
+            StartMethod::Random(_) => format!("random_{:x}?next=2", rom_hash),
         };
 
         let (username, password) = match &conf.matchbox.ice.credentials {
@@ -161,25 +159,17 @@ impl SynchonizingState {
 #[derive(Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum StartMethod {
-    Create(String),
-    Resume(ResumableNetplaySession),
-    Random,
+    Create(StartState, String),
+    Resume(StartState),
+    Random(StartState),
 }
 
 #[derive(Clone)]
-pub struct ResumableNetplaySession {
+pub struct StartState {
     pub input_mapping: Option<InputMapping>,
     pub game_state: LocalGameState,
 }
 
-impl ResumableNetplaySession {
-    pub fn new(input_mapping: Option<InputMapping>, game_state: LocalGameState) -> Self {
-        Self {
-            input_mapping,
-            game_state,
-        }
-    }
-}
 impl Connecting<LoadingNetplayServerConfiguration> {
     pub fn create<T>(netplay: &mut Netplay<T>, start_method: StartMethod) -> ConnectingState {
         let reqwest_client = reqwest::Client::new();
@@ -187,7 +177,6 @@ impl Connecting<LoadingNetplayServerConfiguration> {
 
         match &netplay.config.server {
             NetplayServerConfiguration::Static(conf) => ConnectingState::PeeringUp(Connecting {
-                initial_game_state: netplay.initial_game_state.clone(),
                 start_method: start_method.clone(),
                 state: PeeringState::new(
                     &mut netplay.rt,
@@ -212,7 +201,6 @@ impl Connecting<LoadingNetplayServerConfiguration> {
                     };
                 });
                 ConnectingState::LoadingNetplayServerConfiguration(Connecting {
-                    initial_game_state: netplay.initial_game_state.clone(),
                     start_method,
                     state: LoadingNetplayServerConfiguration { result },
                 })
@@ -262,7 +250,6 @@ impl Connecting<PeeringState> {
             }
 
             ConnectingState::Synchronizing(Connecting {
-                initial_game_state: self.initial_game_state,
                 start_method: self.start_method,
                 state: SynchonizingState::new(
                     sess_build
@@ -282,16 +269,10 @@ impl Connecting<SynchonizingState> {
         self.state.p2p_session.poll_remote_clients();
         if let SessionState::Running = self.state.p2p_session.current_state() {
             let start_method = self.start_method;
-            let initial_game_state = self.initial_game_state.clone();
 
             ConnectingState::Connected(Connecting {
-                initial_game_state: self.initial_game_state,
                 start_method: start_method.clone(),
-                state: NetplaySession::new(
-                    start_method.clone(),
-                    self.state.p2p_session,
-                    initial_game_state,
-                ),
+                state: NetplaySession::new(start_method.clone(), self.state.p2p_session),
             })
         } else {
             ConnectingState::Synchronizing(self)

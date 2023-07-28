@@ -6,7 +6,7 @@ use crate::{input::JoypadInput, settings::MAX_PLAYERS, LocalGameState};
 
 use super::{
     connecting_state::Connecting, netplay_session::NetplaySession, ConnectingState, InputMapping,
-    NetplayBuildConfiguration, ResumableNetplaySession, StartMethod,
+    NetplayBuildConfiguration, StartMethod, StartState,
 };
 
 pub enum NetplayState {
@@ -69,14 +69,17 @@ impl Resuming {
         Self {
             attempt1: Connecting::create(
                 netplay,
-                StartMethod::Resume(ResumableNetplaySession::new(
-                    input_mapping.clone(),
-                    game_state_1,
-                )),
+                StartMethod::Resume(StartState {
+                    input_mapping: input_mapping.clone(),
+                    game_state: game_state_1,
+                }),
             ),
             attempt2: Connecting::create(
                 netplay,
-                StartMethod::Resume(ResumableNetplaySession::new(input_mapping, game_state_0)),
+                StartMethod::Resume(StartState {
+                    input_mapping,
+                    game_state: game_state_0,
+                }),
             ),
         }
     }
