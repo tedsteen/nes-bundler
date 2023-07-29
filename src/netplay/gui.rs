@@ -149,7 +149,7 @@ impl GuiComponent for NetplayStateHandler {
                             });
                         if join_clicked {
                             let initial_state = netplay_disconnected.initial_game_state.clone();
-                            NetplayState::Connecting(netplay_disconnected.start(
+                            NetplayState::Connecting(netplay_disconnected.connect(
                                 StartMethod::Create(
                                     StartState {
                                         game_state: initial_state,
@@ -160,7 +160,7 @@ impl GuiComponent for NetplayStateHandler {
                             ))
                         } else if random_clicked {
                             let initial_state = netplay_disconnected.initial_game_state.clone();
-                            NetplayState::Connecting(netplay_disconnected.start(
+                            NetplayState::Connecting(netplay_disconnected.connect(
                                 StartMethod::Random(StartState {
                                     game_state: initial_state,
                                     input_mapping: None,
@@ -216,11 +216,23 @@ impl GuiComponent for NetplayStateHandler {
                                     }
                                 }
                             }
+                            ConnectingState::Retrying(retrying) => {
+                                ui.label(format!(
+                                    "Connection failed ({}), retrying in {}s...",
+                                    retrying.state.fail_message,
+                                    retrying
+                                        .state
+                                        .deadline
+                                        .duration_since(Instant::now())
+                                        .as_secs()
+                                        + 1
+                                ));
+                            }
                             _ => {}
                         }
                         if let Some(start_method) = retry_start_method {
                             NetplayState::Connecting(
-                                netplay_connecting.cancel().start(start_method),
+                                netplay_connecting.cancel().connect(start_method),
                             )
                         } else if ui.button("Cancel").clicked() {
                             NetplayState::Disconnected(netplay_connecting.cancel())
