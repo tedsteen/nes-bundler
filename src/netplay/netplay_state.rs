@@ -7,8 +7,8 @@ use uuid::Uuid;
 use crate::{input::JoypadInput, settings::MAX_PLAYERS, LocalGameState};
 
 use super::{
-    connecting_state::Connecting, netplay_session::NetplaySession, ConnectingState, InputMapping,
-    NetplayBuildConfiguration, StartMethod, StartState,
+    netplay_session::NetplaySession, ConnectingState, InputMapping, NetplayBuildConfiguration,
+    StartMethod, StartState,
 };
 
 pub enum NetplayState {
@@ -69,14 +69,14 @@ impl Resuming {
         let game_state_1 = netplay_session.last_confirmed_game_states[1].clone();
 
         Self {
-            attempt1: Connecting::from_netplay(
+            attempt1: ConnectingState::connect(
                 netplay,
                 StartMethod::Resume(StartState {
                     input_mapping: input_mapping.clone(),
                     game_state: game_state_1,
                 }),
             ),
-            attempt2: Connecting::from_netplay(
+            attempt2: ConnectingState::connect(
                 netplay,
                 StartMethod::Resume(StartState {
                     input_mapping,
@@ -113,7 +113,7 @@ impl Netplay<Disconnected> {
     }
 
     pub fn connect(self, start_method: StartMethod) -> Netplay<ConnectingState> {
-        Netplay::from(Connecting::from_netplay(&self, start_method), self)
+        Netplay::from(ConnectingState::connect(&self, start_method), self)
     }
 }
 

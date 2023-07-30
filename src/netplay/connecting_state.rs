@@ -38,6 +38,63 @@ pub enum ConnectingState {
 }
 
 impl ConnectingState {
+    pub fn connect<T>(netplay: &Netplay<T>, start_method: StartMethod) -> Self {
+        Self::start(
+            netplay.config.server.clone(),
+            Rc::clone(&netplay.rt),
+            netplay.netplay_id.clone(),
+            netplay.rom_hash,
+            start_method,
+        )
+    }
+
+    fn start(
+        netplay_server_config: NetplayServerConfiguration,
+        rt: Rc<Runtime>,
+        netplay_id: String,
+        rom_hash: Digest,
+        start_method: StartMethod,
+    ) -> Self {
+        let reqwest_client = reqwest::Client::new();
+
+        match &netplay_server_config {
+            NetplayServerConfiguration::Static(conf) => {
+                Self::PeeringUp(Connecting::<PeeringState>::new(
+                    netplay_server_config.clone(),
+                    conf.clone(),
+                    rt,
+                    netplay_id,
+                    rom_hash,
+                    start_method,
+                ))
+            }
+
+            NetplayServerConfiguration::TurnOn(server) => {
+                let req = reqwest_client.get(format!("{server}/{netplay_id}")).send();
+                let (sender, result) =
+                    futures::channel::oneshot::channel::<Result<TurnOnResponse, TurnOnError>>();
+                rt.spawn(async move {
+                    let _ = match req.await {
+                        Ok(res) => sender.send(res.json().await.map_err(|e| TurnOnError {
+                            description: format!("Failed to receive response: {}", e),
+                        })),
+                        Err(e) => sender.send(Err(TurnOnError {
+                            description: format!("Could not connect: {}", e),
+                        })),
+                    };
+                });
+                Self::LoadingNetplayServerConfiguration(Connecting {
+                    rt,
+                    start_method,
+                    netplay_server_config,
+                    netplay_id,
+                    rom_hash,
+                    state: LoadingNetplayServerConfiguration { result },
+                })
+            }
+        }
+    }
+
     pub fn advance(self) -> ConnectingState {
         match self {
             ConnectingState::LoadingNetplayServerConfiguration(loading) => loading.advance(),
@@ -181,7 +238,7 @@ impl Connecting<LoadingNetplayServerConfiguration> {
         Connecting::from(
             Retrying::new(
                 fail_message,
-                Connecting::connect(
+                ConnectingState::start(
                     self.netplay_server_config.clone(),
                     self.rt.clone(),
                     self.netplay_id.clone(),
@@ -191,63 +248,6 @@ impl Connecting<LoadingNetplayServerConfiguration> {
             ),
             self,
         )
-    }
-
-    pub fn from_netplay<T>(netplay: &Netplay<T>, start_method: StartMethod) -> ConnectingState {
-        Self::connect(
-            netplay.config.server.clone(),
-            Rc::clone(&netplay.rt),
-            netplay.netplay_id.clone(),
-            netplay.rom_hash,
-            start_method,
-        )
-    }
-
-    fn connect(
-        netplay_server_config: NetplayServerConfiguration,
-        rt: Rc<Runtime>,
-        netplay_id: String,
-        rom_hash: Digest,
-        start_method: StartMethod,
-    ) -> ConnectingState {
-        let reqwest_client = reqwest::Client::new();
-
-        match &netplay_server_config {
-            NetplayServerConfiguration::Static(conf) => {
-                ConnectingState::PeeringUp(Connecting::<PeeringState>::new(
-                    netplay_server_config.clone(),
-                    conf.clone(),
-                    rt,
-                    netplay_id,
-                    rom_hash,
-                    start_method,
-                ))
-            }
-
-            NetplayServerConfiguration::TurnOn(server) => {
-                let req = reqwest_client.get(format!("{server}/{netplay_id}")).send();
-                let (sender, result) =
-                    futures::channel::oneshot::channel::<Result<TurnOnResponse, TurnOnError>>();
-                rt.spawn(async move {
-                    let _ = match req.await {
-                        Ok(res) => sender.send(res.json().await.map_err(|e| TurnOnError {
-                            description: format!("Failed to receive response: {}", e),
-                        })),
-                        Err(e) => sender.send(Err(TurnOnError {
-                            description: format!("Could not connect: {}", e),
-                        })),
-                    };
-                });
-                ConnectingState::LoadingNetplayServerConfiguration(Connecting {
-                    rt,
-                    start_method,
-                    netplay_server_config,
-                    netplay_id,
-                    rom_hash,
-                    state: LoadingNetplayServerConfiguration { result },
-                })
-            }
-        }
     }
 
     fn advance(mut self) -> ConnectingState {
