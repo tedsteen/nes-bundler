@@ -5,6 +5,7 @@ use ggrs::{P2PSession, SessionBuilder, SessionState};
 use matchbox_socket::{ChannelConfig, RtcIceServerConfig, WebRtcSocket, WebRtcSocketBuilder};
 use md5::Digest;
 use serde::Deserialize;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
 
@@ -33,39 +34,111 @@ pub enum ConnectingState {
     PeeringUp(Connecting<PeeringState>),
     Synchronizing(Connecting<SynchonizingState>),
     Connected(Connecting<NetplaySession>),
-    Failed(String),
+    Retrying(Connecting<Retrying>),
 }
 
 impl ConnectingState {
-    pub fn advance(self, rt: &mut Runtime, rom_hash: &Digest) -> ConnectingState {
-        match self {
-            ConnectingState::LoadingNetplayServerConfiguration(state) => {
-                state.advance(rt, rom_hash)
+    pub fn connect<T>(netplay: &Netplay<T>, start_method: StartMethod) -> Self {
+        Self::start(
+            netplay.config.server.clone(),
+            Rc::clone(&netplay.rt),
+            netplay.netplay_id.clone(),
+            netplay.rom_hash,
+            start_method,
+        )
+    }
+
+    fn start(
+        netplay_server_config: NetplayServerConfiguration,
+        rt: Rc<Runtime>,
+        netplay_id: String,
+        rom_hash: Digest,
+        start_method: StartMethod,
+    ) -> Self {
+        let reqwest_client = reqwest::Client::new();
+
+        match &netplay_server_config {
+            NetplayServerConfiguration::Static(conf) => {
+                Self::PeeringUp(Connecting::<PeeringState>::new(
+                    netplay_server_config.clone(),
+                    conf.clone(),
+                    rt,
+                    netplay_id,
+                    rom_hash,
+                    start_method,
+                ))
             }
-            ConnectingState::PeeringUp(state) => state.advance(),
-            ConnectingState::Synchronizing(state) => state.advance(),
-            ConnectingState::Connected(_) => self,
-            ConnectingState::Failed(_) => self,
+
+            NetplayServerConfiguration::TurnOn(server) => {
+                let req = reqwest_client.get(format!("{server}/{netplay_id}")).send();
+                let (sender, result) =
+                    futures::channel::oneshot::channel::<Result<TurnOnResponse, TurnOnError>>();
+                rt.spawn(async move {
+                    let _ = match req.await {
+                        Ok(res) => sender.send(res.json().await.map_err(|e| TurnOnError {
+                            description: format!("Failed to receive response: {}", e),
+                        })),
+                        Err(e) => sender.send(Err(TurnOnError {
+                            description: format!("Could not connect: {}", e),
+                        })),
+                    };
+                });
+                Self::LoadingNetplayServerConfiguration(Connecting {
+                    rt,
+                    start_method,
+                    netplay_server_config,
+                    netplay_id,
+                    rom_hash,
+                    state: LoadingNetplayServerConfiguration { result },
+                })
+            }
+        }
+    }
+
+    pub fn advance(self) -> ConnectingState {
+        match self {
+            ConnectingState::LoadingNetplayServerConfiguration(loading) => loading.advance(),
+            ConnectingState::PeeringUp(peering) => peering.advance(),
+            ConnectingState::Synchronizing(synchronizing) => synchronizing.advance(),
+            ConnectingState::Retrying(retrying) => retrying.advance(),
+            _ => self,
         }
     }
 }
 pub struct Connecting<S> {
-    pub initial_game_state: LocalGameState,
+    rt: Rc<Runtime>,
+    netplay_server_config: NetplayServerConfiguration,
+    netplay_id: String,
+    rom_hash: Digest,
     pub start_method: StartMethod,
     pub state: S,
 }
+
+impl<T> Connecting<T> {
+    fn from<S>(state: T, other: Connecting<S>) -> Self {
+        Self {
+            rt: other.rt,
+            netplay_server_config: other.netplay_server_config,
+            netplay_id: other.netplay_id,
+            rom_hash: other.rom_hash,
+            start_method: other.start_method,
+            state,
+        }
+    }
+}
+
 pub struct LoadingNetplayServerConfiguration {
     pub result: Receiver<Result<TurnOnResponse, TurnOnError>>,
 }
 
 pub struct PeeringState {
-    pub socket: Option<WebRtcSocket>,
+    pub socket: WebRtcSocket,
     ggrs_config: GGRSConfiguration,
     unlock_url: Option<String>,
 }
 impl PeeringState {
     pub fn new(
-        rt: &mut Runtime,
+        rt: &Rc<Runtime>,
         resp: TurnOnResponse,
         start_method: StartMethod,
         rom_hash: &Digest,
@@ -81,11 +154,11 @@ impl PeeringState {
         let matchbox_server = &conf.matchbox.server;
 
         let room_name = match &start_method {
-            StartMethod::Create(name) => format!("join_{:x}_{}", rom_hash, name),
-            StartMethod::Resume(ResumableNetplaySession { game_state, .. }) => {
+            StartMethod::Create(_, name) => format!("join_{:x}_{}", rom_hash, name),
+            StartMethod::Resume(StartState { game_state, .. }) => {
                 format!("resume_{:x}", md5::compute(game_state.save()))
             }
-            StartMethod::Random => format!("random_{:x}?next=2", rom_hash),
+            StartMethod::Random(_) => format!("random_{:x}?next=2", rom_hash),
         };
 
         let (username, password) = match &conf.matchbox.ice.credentials {
@@ -124,7 +197,7 @@ impl PeeringState {
         });
 
         Self {
-            socket: Some(socket),
+            socket,
             ggrs_config: conf.ggrs.clone(),
             unlock_url: maybe_unlock_url,
         }
@@ -132,17 +205,16 @@ impl PeeringState {
 }
 
 pub struct SynchonizingState {
-    p2p_session: Option<P2PSession<GGRSConfig>>,
+    p2p_session: P2PSession<GGRSConfig>,
     pub unlock_url: Option<String>,
     pub start_time: Instant,
 }
 impl SynchonizingState {
-    pub fn new(p2p_session: Option<P2PSession<GGRSConfig>>, unlock_url: Option<String>) -> Self {
-        let start_time = Instant::now();
+    pub fn new(p2p_session: P2PSession<GGRSConfig>, unlock_url: Option<String>) -> Self {
         SynchonizingState {
             p2p_session,
             unlock_url,
-            start_time,
+            start_time: Instant::now(),
         }
     }
 }
@@ -150,131 +222,109 @@ impl SynchonizingState {
 #[derive(Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum StartMethod {
-    Create(String),
-    Resume(ResumableNetplaySession),
-    Random,
+    Create(StartState, String),
+    Resume(StartState),
+    Random(StartState),
 }
 
 #[derive(Clone)]
-pub struct ResumableNetplaySession {
+pub struct StartState {
     pub input_mapping: Option<InputMapping>,
     pub game_state: LocalGameState,
 }
 
-impl ResumableNetplaySession {
-    pub fn new(input_mapping: Option<InputMapping>, game_state: LocalGameState) -> Self {
-        Self {
-            input_mapping,
-            game_state,
-        }
-    }
-}
 impl Connecting<LoadingNetplayServerConfiguration> {
-    pub fn create<T>(netplay: &mut Netplay<T>, start_method: StartMethod) -> ConnectingState {
-        let reqwest_client = reqwest::Client::new();
-        let netplay_id = netplay.netplay_id.clone();
-
-        match &netplay.config.server {
-            NetplayServerConfiguration::Static(conf) => ConnectingState::PeeringUp(Connecting {
-                initial_game_state: netplay.initial_game_state.clone(),
-                start_method: start_method.clone(),
-                state: PeeringState::new(
-                    &mut netplay.rt,
-                    TurnOnResponse::Full(conf.clone()),
-                    start_method,
-                    &netplay.rom_hash,
+    fn into_retrying(self, fail_message: String) -> Connecting<Retrying> {
+        Connecting::from(
+            Retrying::new(
+                fail_message,
+                ConnectingState::start(
+                    self.netplay_server_config.clone(),
+                    self.rt.clone(),
+                    self.netplay_id.clone(),
+                    self.rom_hash,
+                    self.start_method.clone(),
                 ),
-            }),
-
-            NetplayServerConfiguration::TurnOn(server) => {
-                let req = reqwest_client.get(format!("{server}/{netplay_id}")).send();
-                let (sender, result) =
-                    futures::channel::oneshot::channel::<Result<TurnOnResponse, TurnOnError>>();
-                netplay.rt.spawn(async move {
-                    let _ = match req.await {
-                        Ok(res) => sender.send(res.json().await.map_err(|e| TurnOnError {
-                            description: format!("Failed to receive response: {}", e),
-                        })),
-                        Err(e) => sender.send(Err(TurnOnError {
-                            description: format!("Could not connect: {}", e),
-                        })),
-                    };
-                });
-                ConnectingState::LoadingNetplayServerConfiguration(Connecting {
-                    initial_game_state: netplay.initial_game_state.clone(),
-                    start_method,
-                    state: LoadingNetplayServerConfiguration { result },
-                })
-            }
-        }
+            ),
+            self,
+        )
     }
 
-    fn advance(mut self, rt: &mut Runtime, rom_hash: &Digest) -> ConnectingState {
+    fn advance(mut self) -> ConnectingState {
         match self.state.result.try_recv() {
-            Ok(Some(Ok(resp))) => ConnectingState::PeeringUp(Connecting {
-                initial_game_state: self.initial_game_state,
-                start_method: self.start_method.clone(),
-                state: PeeringState::new(rt, resp, self.start_method, rom_hash),
-            }),
+            Ok(Some(Ok(resp))) => ConnectingState::PeeringUp(Connecting::from(
+                PeeringState::new(&self.rt, resp, self.start_method.clone(), &self.rom_hash),
+                self,
+            )),
             Ok(None) => ConnectingState::LoadingNetplayServerConfiguration(self), //No result yet
-            Ok(Some(Err(err))) => {
-                //TODO: alert about not being able to fetch server configuration
-                ConnectingState::Failed(format!("Could not fetch server config :( {:?}", err))
-            }
-            Err(_) => {
-                //Lost the sender, not much to do but fail
-                ConnectingState::Failed("Unexpected error".to_string())
-            }
+            Ok(Some(Err(err))) => ConnectingState::Retrying(
+                self.into_retrying(format!("Could not fetch server config ({:?})", err)),
+            ),
+            //Lost the sender, not much to do but fail
+            Err(_) => ConnectingState::Retrying(self.into_retrying("Unexpected error".to_string())),
         }
     }
 }
+
 impl Connecting<PeeringState> {
+    fn new(
+        netplay_server_config: NetplayServerConfiguration,
+        conf: StaticNetplayServerConfiguration,
+        rt: Rc<Runtime>,
+        netplay_id: String,
+        rom_hash: Digest,
+        start_method: StartMethod,
+    ) -> Self {
+        Self {
+            state: PeeringState::new(
+                &rt,
+                TurnOnResponse::Full(conf.clone()),
+                start_method.clone(),
+                &rom_hash,
+            ),
+            rt,
+            start_method,
+            netplay_server_config,
+            netplay_id,
+            rom_hash,
+        }
+    }
+
     fn advance(mut self) -> ConnectingState {
-        if let Some(socket) = &mut self.state.socket {
-            socket.update_peers();
+        let socket = &mut self.state.socket;
+        socket.update_peers();
 
-            let connected_peers = socket.connected_peers().count();
-            let remaining = MAX_PLAYERS - (connected_peers + 1);
-            if remaining == 0 {
-                let start_method = self.start_method.clone();
-                let ggrs_config = self.state.ggrs_config;
-                let unlock_url = self.state.unlock_url.clone();
+        let connected_peers = socket.connected_peers().count();
+        let remaining = MAX_PLAYERS - (connected_peers + 1);
+        if remaining == 0 {
+            let players = socket.players();
+            let ggrs_config = self.state.ggrs_config.clone();
+            let mut sess_build = SessionBuilder::<GGRSConfig>::new()
+                .with_num_players(MAX_PLAYERS)
+                .with_max_prediction_window(ggrs_config.max_prediction)
+                .with_input_delay(ggrs_config.input_delay)
+                .with_fps(FPS as usize)
+                .expect("Could not start session");
 
-                let players = socket.players();
-                let ggrs_config = ggrs_config;
-                let mut sess_build = SessionBuilder::<GGRSConfig>::new()
-                    .with_num_players(MAX_PLAYERS)
-                    .with_max_prediction_window(ggrs_config.max_prediction)
-                    .with_input_delay(ggrs_config.input_delay)
-                    .with_fps(FPS as usize)
-                    .expect("invalid fps");
-
-                for (i, player) in players.into_iter().enumerate() {
-                    sess_build = sess_build
-                        .add_player(player, i)
-                        .expect("failed to add player");
-                }
-
-                ConnectingState::Synchronizing(Connecting {
-                    initial_game_state: self.initial_game_state,
-                    start_method: start_method.clone(),
-                    state: SynchonizingState::new(
-                        Some(
-                            sess_build
-                                .start_p2p_session(
-                                    self.state
-                                        .socket
-                                        .take()
-                                        .expect("there should be a socket when synchronizing"),
-                                )
-                                .expect("p2p session should be able to start"),
-                        ),
-                        unlock_url.clone(),
-                    ),
-                })
-            } else {
-                ConnectingState::PeeringUp(self)
+            for (i, player) in players.into_iter().enumerate() {
+                sess_build = sess_build
+                    .add_player(player, i)
+                    .expect("failed to add player");
             }
+
+            ConnectingState::Synchronizing(Connecting {
+                rt: self.rt,
+                netplay_server_config: self.netplay_server_config,
+                netplay_id: self.netplay_id,
+                rom_hash: self.rom_hash,
+                start_method: self.start_method,
+                state: SynchonizingState::new(
+                    sess_build
+                        .start_p2p_session(self.state.socket)
+                        .expect("p2p session should be able to start"),
+                    self.state.unlock_url.clone(),
+                ),
+            })
         } else {
             ConnectingState::PeeringUp(self)
         }
@@ -283,43 +333,45 @@ impl Connecting<PeeringState> {
 
 impl Connecting<SynchonizingState> {
     fn advance(mut self) -> ConnectingState {
-        if let Some(p2p_session) = &mut self.state.p2p_session {
-            p2p_session.poll_remote_clients();
-            if let SessionState::Running = p2p_session.current_state() {
-                let p2p_session = self
-                    .state
-                    .p2p_session
-                    .take()
-                    .expect("there should be a socket when synchronizing");
+        self.state.p2p_session.poll_remote_clients();
+        if let SessionState::Running = self.state.p2p_session.current_state() {
+            let start_method = self.start_method;
 
-                let game_state = match &self.start_method {
-                    StartMethod::Resume(resumable_session) => {
-                        let mut game_state = resumable_session.game_state.clone();
-                        game_state.frame = 0;
-                        game_state
-                    }
-                    _ => self.initial_game_state.clone(),
-                };
-                let start_method = self.start_method.clone();
-                ConnectingState::Connected(Connecting {
-                    initial_game_state: self.initial_game_state,
-                    start_method: start_method.clone(),
-                    state: NetplaySession::new(
-                        match &start_method {
-                            StartMethod::Resume(resumable_session) => {
-                                resumable_session.input_mapping.clone()
-                            }
-                            _ => None,
-                        },
-                        p2p_session,
-                        game_state,
-                    ),
-                })
-            } else {
-                ConnectingState::Synchronizing(self)
-            }
+            ConnectingState::Connected(Connecting {
+                rt: self.rt,
+                netplay_server_config: self.netplay_server_config,
+                netplay_id: self.netplay_id,
+                rom_hash: self.rom_hash,
+                start_method: start_method.clone(),
+                state: NetplaySession::new(start_method.clone(), self.state.p2p_session),
+            })
         } else {
             ConnectingState::Synchronizing(self)
+        }
+    }
+}
+
+pub struct Retrying {
+    pub deadline: Instant,
+    pub fail_message: String,
+    pub retry_state: Box<ConnectingState>, //The state we should resume to after the deadline
+}
+impl Retrying {
+    fn new(fail_message: String, retry_state: ConnectingState) -> Self {
+        Self {
+            deadline: Instant::now() + Duration::from_secs(5),
+            fail_message,
+            retry_state: Box::new(retry_state),
+        }
+    }
+}
+
+impl Connecting<Retrying> {
+    fn advance(self) -> ConnectingState {
+        if Instant::now().gt(&self.state.deadline) {
+            *self.state.retry_state
+        } else {
+            ConnectingState::Retrying(self)
         }
     }
 }

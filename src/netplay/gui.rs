@@ -5,7 +5,7 @@ use egui::{Button, Context, TextEdit, Window};
 use crate::settings::{gui::GuiComponent, MAX_PLAYERS};
 
 use super::{
-    connecting_state::{Connecting, PeeringState},
+    connecting_state::{Connecting, PeeringState, StartState},
     netplay_state::NetplayState,
     ConnectingState, NetplayStateHandler, StartMethod,
 };
@@ -148,14 +148,24 @@ impl GuiComponent for NetplayStateHandler {
                                 ui.end_row();
                             });
                         if join_clicked {
-                            NetplayState::Connecting(
-                                netplay_disconnected
-                                    .start(StartMethod::Create(self.gui.room_name.clone())),
-                            )
+                            let initial_state = netplay_disconnected.initial_game_state.clone();
+                            NetplayState::Connecting(netplay_disconnected.connect(
+                                StartMethod::Create(
+                                    StartState {
+                                        game_state: initial_state,
+                                        input_mapping: None,
+                                    },
+                                    self.gui.room_name.clone(),
+                                ),
+                            ))
                         } else if random_clicked {
-                            NetplayState::Connecting(
-                                netplay_disconnected.start(StartMethod::Random),
-                            )
+                            let initial_state = netplay_disconnected.initial_game_state.clone();
+                            NetplayState::Connecting(netplay_disconnected.connect(
+                                StartMethod::Random(StartState {
+                                    game_state: initial_state,
+                                    input_mapping: None,
+                                }),
+                            ))
                         } else {
                             NetplayState::Disconnected(netplay_disconnected)
                         }
@@ -182,11 +192,9 @@ impl GuiComponent for NetplayStateHandler {
                                 ..
                             }) => {
                                 ui.label("Peering up...");
-                                if let Some(socket) = socket {
-                                    let connected_peers = socket.connected_peers().count();
-                                    let remaining = MAX_PLAYERS - (connected_peers + 1);
-                                    ui.label(format!("Waiting for {} players...", remaining));
-                                }
+                                let connected_peers = socket.connected_peers().count();
+                                let remaining = MAX_PLAYERS - (connected_peers + 1);
+                                ui.label(format!("Waiting for {} players...", remaining));
                             }
                             ConnectingState::Synchronizing(synchronizing_state) => {
                                 let start_method = synchronizing_state.start_method.clone();
@@ -208,11 +216,23 @@ impl GuiComponent for NetplayStateHandler {
                                     }
                                 }
                             }
+                            ConnectingState::Retrying(retrying) => {
+                                ui.label(format!(
+                                    "Connection failed ({}), retrying in {}s...",
+                                    retrying.state.fail_message,
+                                    retrying
+                                        .state
+                                        .deadline
+                                        .duration_since(Instant::now())
+                                        .as_secs()
+                                        + 1
+                                ));
+                            }
                             _ => {}
                         }
                         if let Some(start_method) = retry_start_method {
                             NetplayState::Connecting(
-                                netplay_connecting.cancel().start(start_method),
+                                netplay_connecting.cancel().connect(start_method),
                             )
                         } else if ui.button("Cancel").clicked() {
                             NetplayState::Disconnected(netplay_connecting.cancel())
