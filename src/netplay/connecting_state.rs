@@ -177,8 +177,24 @@ pub struct StartState {
 }
 
 impl Connecting<LoadingNetplayServerConfiguration> {
+    fn into_retrying(self, fail_message: String) -> Connecting<Retrying> {
+        Connecting::from(
+            Retrying::new(
+                fail_message,
+                Connecting::connect(
+                    self.netplay_server_config.clone(),
+                    self.rt.clone(),
+                    self.netplay_id.clone(),
+                    self.rom_hash,
+                    self.start_method.clone(),
+                ),
+            ),
+            self,
+        )
+    }
+
     pub fn from_netplay<T>(netplay: &Netplay<T>, start_method: StartMethod) -> ConnectingState {
-        Self::from_scratch(
+        Self::connect(
             netplay.config.server.clone(),
             Rc::clone(&netplay.rt),
             netplay.netplay_id.clone(),
@@ -186,16 +202,8 @@ impl Connecting<LoadingNetplayServerConfiguration> {
             start_method,
         )
     }
-    pub fn from_other<T>(other: &Connecting<T>) -> ConnectingState {
-        Self::from_scratch(
-            other.netplay_server_config.clone(),
-            other.rt.clone(),
-            other.netplay_id.clone(),
-            other.rom_hash,
-            other.start_method.clone(),
-        )
-    }
-    pub fn from_scratch(
+
+    fn connect(
         netplay_server_config: NetplayServerConfiguration,
         rt: Rc<Runtime>,
         netplay_id: String,
@@ -249,23 +257,11 @@ impl Connecting<LoadingNetplayServerConfiguration> {
                 self,
             )),
             Ok(None) => ConnectingState::LoadingNetplayServerConfiguration(self), //No result yet
-            Ok(Some(Err(err))) => ConnectingState::Retrying(Connecting::from(
-                Retrying::new(
-                    format!("Could not fetch server config ({:?})", err),
-                    Connecting::from_other(&self),
-                ),
-                self,
-            )),
-            Err(_) => {
-                //Lost the sender, not much to do but fail
-                ConnectingState::Retrying(Connecting::from(
-                    Retrying::new(
-                        "Unexpected error".to_string(),
-                        Connecting::from_other(&self),
-                    ),
-                    self,
-                ))
-            }
+            Ok(Some(Err(err))) => ConnectingState::Retrying(
+                self.into_retrying(format!("Could not fetch server config ({:?})", err)),
+            ),
+            //Lost the sender, not much to do but fail
+            Err(_) => ConnectingState::Retrying(self.into_retrying("Unexpected error".to_string())),
         }
     }
 }
@@ -293,6 +289,7 @@ impl Connecting<PeeringState> {
             rom_hash,
         }
     }
+
     fn advance(mut self) -> ConnectingState {
         let socket = &mut self.state.socket;
         socket.update_peers();
