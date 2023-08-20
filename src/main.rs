@@ -2,7 +2,6 @@
 #![forbid(unsafe_code)]
 
 use std::cell::RefCell;
-use std::fs::File;
 use std::rc::Rc;
 
 use crate::input::JoypadInput;
@@ -18,13 +17,11 @@ use gui::Framework;
 use input::{Input, Inputs};
 use palette::NTSC_PAL;
 use pixels::{Pixels, SurfaceTexture};
-use rfd::FileDialog;
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
 use sdl2::Sdl;
 use serde::Deserialize;
 use settings::{Settings, MAX_PLAYERS};
-use tinyfiledialogs::MessageBoxIcon;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, ModifiersState, VirtualKeyCode, WindowEvent};
 use winit::event_loop::EventLoop;
@@ -72,20 +69,9 @@ pub struct Bundle {
     rom: Vec<u8>,
 }
 
-fn get_static_bundle() -> Result<Option<Bundle>> {
-    #[cfg(feature = "static-bundle")]
-    return Ok(Some(Bundle {
-        config: serde_yaml::from_str(include_str!("../config/config.yaml"))?,
-        rom: include_bytes!("../config/rom.nes").to_vec(),
-    }));
-    #[cfg(not(feature = "static-bundle"))]
-    return Ok(None);
-}
-
-fn load_bundle() -> Result<Bundle> {
-    if let Some(bundle) = get_static_bundle()? {
-        Ok(bundle)
-    } else if let Ok(zip_file) = File::open("bundle.zip") {
+#[cfg(feature = "zip-bundle")]
+fn load_bundle_from_zip(zip_file: std::io::Result<std::fs::File>) -> Result<Bundle> {
+    if let Ok(zip_file) = zip_file {
         let mut zip = zip::ZipArchive::new(zip_file)?;
         let config: BuildConfiguration = serde_yaml::from_reader(
             zip.by_name("config.yaml")
@@ -101,7 +87,7 @@ fn load_bundle() -> Result<Bundle> {
         )?;
         Ok(Bundle { config, rom })
     } else {
-        let folder = FileDialog::new()
+        let folder = rfd::FileDialog::new()
             .set_title("Files to bundle")
             .set_directory(".")
             .pick_folder()
@@ -129,7 +115,26 @@ fn load_bundle() -> Result<Bundle> {
         zip.finish()?;
 
         // Try again with newly created bundle.zip
-        load_bundle()
+        load_bundle_from_zip(zip_file)
+    }
+}
+fn load_bundle() -> Result<Bundle> {
+    #[cfg(not(feature = "zip-bundle"))]
+    return Ok(Bundle {
+        config: serde_yaml::from_str(include_str!("../config/config.yaml"))?,
+        rom: include_bytes!("../config/rom.nes").to_vec(),
+    });
+    #[cfg(feature = "zip-bundle")]
+    {
+        let res = load_bundle_from_zip(std::fs::File::open("bundle.zip"));
+        if let Err(e) = &res {
+            tinyfiledialogs::message_box_ok(
+                "Could not load the bundle",
+                &format!("{:?}", e).replace('\'', "´").replace('\"', "``"),
+                tinyfiledialogs::MessageBoxIcon::Error,
+            );
+        }
+        res
     }
 }
 #[derive(Deserialize, Debug)]
@@ -155,18 +160,13 @@ fn main() {
             }
             run(bundle);
         }
-        Err(e) => {
-            tinyfiledialogs::message_box_ok(
-                "Could not load the bundle",
-                &format!("{:?}", e).replace('\'', "´").replace('\"', "``"),
-                MessageBoxIcon::Error,
-            );
+        Err(_e) => {
+            //TODO
         }
     }
 }
 
 fn run(bundle: Bundle) -> ! {
-    let window_title = bundle.config.window_title.clone();
     match initialise(bundle) {
         Ok((event_loop, window, framework, game_runner)) => {
             game_loop(
@@ -193,11 +193,7 @@ fn run(bundle: Bundle) -> ! {
             );
         }
         Err(e) => {
-            tinyfiledialogs::message_box_ok(
-                &format!("Could not start {}", window_title),
-                &format!("{:?}", e).replace('\'', "´").replace('\"', "``"),
-                MessageBoxIcon::Error,
-            );
+            eprintln!("Failed to start: {}", e);
             std::process::exit(0)
         }
     }
