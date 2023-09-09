@@ -78,7 +78,7 @@ impl NetplaySession {
                 for request in requests {
                     match request {
                         GGRSRequest::LoadGameState { cell, frame } => {
-                            println!("Loading (frame {:?})", frame);
+                            log::debug!("Loading (frame {:?})", frame);
                             self.game_state = cell.load().expect("No data found.");
                         }
                         GGRSRequest::SaveGameState { cell, frame } => {
@@ -112,7 +112,7 @@ impl NetplaySession {
                 //);
             }
             Err(ggrs::GGRSError::NotSynchronized) => {}
-            Err(e) => eprintln!("Ouch :( {:?}", e),
+            Err(e) => log::warn!("Ouch :( {:?}", e),
         }
 
         #[cfg(feature = "debug")]

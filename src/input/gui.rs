@@ -1,6 +1,6 @@
 use crate::{
     input::{InputId, Inputs, JoypadButton, JoypadInput},
-    settings::gui::GuiComponent,
+    settings::gui::{GuiComponent, GuiEvent},
 };
 use egui::{Button, Color32, Context, Grid, Label, RichText, Ui, Window};
 use std::{collections::BTreeMap, fmt::Debug, rc::Rc};
@@ -66,7 +66,7 @@ impl InputSettingsGui {
             .striped(true)
             .show(ui, |ui| {
                 use JoypadButton::*;
-                vec![Up, Down, Left, Right, Start, Select, B, A]
+                [Up, Down, Left, Right, Start, Select, B, A]
                     .iter()
                     .for_each(|&button| {
                         InputSettingsGui::button_map_ui(
@@ -130,7 +130,7 @@ impl InputSettingsGui {
 }
 
 impl GuiComponent for Input {
-    fn event(&mut self, event: &winit::event::Event<()>) {
+    fn event(&mut self, event: &GuiEvent) {
         self.inputs.advance(event, self.settings.clone());
     }
 

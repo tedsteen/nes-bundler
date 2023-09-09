@@ -1,18 +1,48 @@
 use self::{
+    buttons::GamepadButton,
     gamepad::{Gamepads, JoypadGamepadMapping},
     gui::InputSettingsGui,
     keyboard::{JoypadKeyboardMapping, Keyboards},
+    keys::{KeyCode, Mod},
+    sdl2::Sdl2Gamepads,
     settings::InputConfigurationRef,
 };
-use crate::settings::{Settings, MAX_PLAYERS};
+use crate::settings::{gui::GuiEvent, Settings, MAX_PLAYERS};
+use ::sdl2::Sdl;
 use serde::{Deserialize, Serialize};
-use std::{cell::RefCell, collections::HashSet, rc::Rc};
-use winit::event::Event;
+use std::{cell::RefCell, collections::HashSet, fmt::Debug, rc::Rc};
 
+pub mod buttons;
 pub mod gamepad;
 pub mod gui;
 pub mod keyboard;
+pub mod keys;
+pub mod sdl2;
 pub mod settings;
+
+#[derive(Debug)]
+pub enum KeyEvent {
+    Pressed(KeyCode, Mod),
+    Released(KeyCode, Mod),
+}
+
+#[derive(Debug)]
+pub enum GamepadEvent {
+    ControllerAdded {
+        which: InputId,
+    },
+    ControllerRemoved {
+        which: InputId,
+    },
+    ButtonDown {
+        which: InputId,
+        button: GamepadButton,
+    },
+    ButtonUp {
+        which: InputId,
+        button: GamepadButton,
+    },
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JoypadButton {
@@ -42,7 +72,7 @@ pub struct JoypadMapping<KeyType> {
 
 impl<KeyType> JoypadMapping<KeyType>
 where
-    KeyType: PartialEq,
+    KeyType: PartialEq + Debug,
 {
     pub fn lookup(&mut self, button: &JoypadButton) -> &mut Option<KeyType> {
         match button {
@@ -102,6 +132,9 @@ impl JoypadInput {
 }
 
 pub type InputId = String;
+pub trait ToInputId {
+    fn to_input_id(&self) -> InputId;
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub struct InputConfiguration {
@@ -116,18 +149,17 @@ pub enum InputConfigurationKind {
 }
 pub struct Inputs {
     keyboards: Keyboards,
-    gamepads: Gamepads,
+    gamepads: Box<dyn Gamepads>,
     joypads: [JoypadInput; MAX_PLAYERS],
     default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
 }
 
 impl Inputs {
     pub fn new(
-        sdl_context: &sdl2::Sdl,
+        sdl_context: &Sdl,
         default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
-        settings: Rc<RefCell<Settings>>,
     ) -> Self {
-        let gamepads = Gamepads::new(sdl_context, &mut settings.borrow_mut().input);
+        let gamepads = Box::new(Sdl2Gamepads::new(sdl_context));
         let keyboards = Keyboards::new();
 
         Self {
@@ -138,14 +170,15 @@ impl Inputs {
         }
     }
 
-    pub fn advance(&mut self, event: &winit::event::Event<()>, settings: Rc<RefCell<Settings>>) {
-        self.gamepads.advance(&mut settings.borrow_mut().input);
-        if let Event::WindowEvent {
-            event: winit::event::WindowEvent::KeyboardInput { input, .. },
-            ..
-        } = event
-        {
-            self.keyboards.advance(input);
+    pub fn advance(&mut self, event: &GuiEvent, settings: Rc<RefCell<Settings>>) {
+        match event {
+            GuiEvent::Keyboard(key_event) => {
+                self.keyboards.advance(key_event);
+            }
+            GuiEvent::Gamepad(gamepad_event) => {
+                self.gamepads
+                    .advance(gamepad_event, &mut settings.borrow_mut().input);
+            }
         }
         let input_settings = &mut settings.borrow_mut().input;
         input_settings.reset_selected_disconnected_inputs(self);
@@ -203,11 +236,11 @@ impl Inputs {
                 }
             }
             InputConfigurationKind::Gamepad(mapping) => {
-                if let Some(state) = self
+                if let Some(state) = &mut self
                     .gamepads
                     .get_gamepad_by_input_id(&input_configuration_id)
                 {
-                    if let Some(new_button) = state.pressed_buttons.iter().next() {
+                    if let Some(new_button) = state.get_pressed_buttons().iter().next() {
                         //If there's any button pressed, use the first found.
                         let _ = mapping.lookup(button).insert(*new_button);
                         return true;

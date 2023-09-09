@@ -1,16 +1,33 @@
-use time::TimeTrait;
+pub trait TimeTrait: Copy {
+    fn now() -> Self;
+    fn sub(&self, other: &Self) -> f64;
+}
 
-mod time;
-pub struct GameLoop<G, T: TimeTrait, W> {
+use std::{fmt::Debug, time::Instant};
+
+#[derive(Debug, Copy, Clone)]
+pub struct Time(Instant);
+
+impl TimeTrait for Time {
+    fn now() -> Self {
+        Self(Instant::now())
+    }
+
+    fn sub(&self, other: &Self) -> f64 {
+        self.0.duration_since(other.0).as_secs_f64()
+    }
+}
+
+pub struct GameLoop<G, T: TimeTrait> {
     pub game: G,
     pub updates_per_second: u32,
     pub max_frame_time: f64,
     pub exit_next_iteration: bool,
-    pub window: W,
 
     fixed_time_step: f64,
-    number_of_updates: u32,
-    number_of_renders: u32,
+    pub last_stats: T,
+    updates: Vec<T>,
+    renders: Vec<T>,
     last_frame_time: f64,
     running_time: f64,
     accumulated_time: f64,
@@ -18,19 +35,22 @@ pub struct GameLoop<G, T: TimeTrait, W> {
     previous_instant: T,
     current_instant: T,
 }
+const SAMPLE_WINDOW: f64 = 1.0;
 
-impl<G, T: TimeTrait, W> GameLoop<G, T, W> {
-    pub fn new(game: G, updates_per_second: u32, max_frame_time: f64, window: W) -> Self {
+impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
+    pub fn new(game: G, updates_per_second: u32, max_frame_time: f64) -> Self {
         Self {
             game,
             updates_per_second,
             max_frame_time,
-            window,
             exit_next_iteration: false,
 
             fixed_time_step: 1.0 / updates_per_second as f64,
-            number_of_updates: 0,
-            number_of_renders: 0,
+
+            last_stats: T::now(),
+            updates: vec![],
+            renders: vec![],
+
             running_time: 0.0,
             accumulated_time: 0.0,
             blending_factor: 0.0,
@@ -40,10 +60,21 @@ impl<G, T: TimeTrait, W> GameLoop<G, T, W> {
         }
     }
 
-    pub fn next_frame<U, R>(&mut self, mut update: U, mut render: R) -> bool
+    pub fn get_stats(&mut self) -> (f64, f64, f64, T) {
+        let res = (
+            self.updates.len() as f64 / SAMPLE_WINDOW,
+            self.renders.len() as f64 / SAMPLE_WINDOW,
+            self.running_time,
+            self.last_stats,
+        );
+        self.last_stats = T::now();
+        res
+    }
+
+    pub fn next_frame<U, R, E>(&mut self, mut update: U, mut render: R, extra: E) -> bool
     where
-        U: FnMut(&mut GameLoop<G, T, W>),
-        R: FnMut(&mut GameLoop<G, T, W>),
+        U: FnMut(&mut GameLoop<G, T>, &E),
+        R: FnMut(&mut GameLoop<G, T>, &E),
     {
         let g = self;
 
@@ -64,17 +95,21 @@ impl<G, T: TimeTrait, W> GameLoop<G, T, W> {
         g.accumulated_time += elapsed;
 
         while g.accumulated_time >= g.fixed_time_step {
-            update(g);
+            update(g, &extra);
 
             g.accumulated_time -= g.fixed_time_step;
-            g.number_of_updates += 1;
+            g.updates.push(g.current_instant);
+            g.updates
+                .retain(|e| g.current_instant.sub(e) <= SAMPLE_WINDOW);
         }
 
         g.blending_factor = g.accumulated_time / g.fixed_time_step;
 
-        render(g);
+        render(g, &extra);
 
-        g.number_of_renders += 1;
+        g.renders.push(g.current_instant);
+        g.renders
+            .retain(|e| g.current_instant.sub(e) <= SAMPLE_WINDOW);
         g.previous_instant = g.current_instant;
 
         true
@@ -88,52 +123,4 @@ impl<G, T: TimeTrait, W> GameLoop<G, T, W> {
         self.updates_per_second = new_updates_per_second;
         self.fixed_time_step = 1.0 / new_updates_per_second as f64;
     }
-}
-
-use winit::event::Event;
-use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::Window;
-
-pub use winit;
-
-use self::time::Time;
-
-#[allow(clippy::too_many_arguments)]
-pub fn game_loop<G, U, R, H, T>(
-    event_loop: EventLoop<T>,
-    window: Window,
-    game: G,
-    updates_per_second: u32,
-    max_frame_time: f64,
-    mut update: U,
-    mut render: R,
-    mut handler: H,
-) -> !
-where
-    G: 'static,
-    U: FnMut(&mut GameLoop<G, Time, Window>) + 'static,
-    R: FnMut(&mut GameLoop<G, Time, Window>) + 'static,
-    H: FnMut(&mut GameLoop<G, Time, Window>, &Event<'_, T>) + 'static,
-    T: 'static,
-{
-    let mut game_loop = GameLoop::new(game, updates_per_second, max_frame_time, window);
-
-    event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Poll;
-
-        // Forward events to existing handlers.
-        handler(&mut game_loop, &event);
-
-        match event {
-            Event::RedrawRequested(_) => {
-                if !game_loop.next_frame(&mut update, &mut render) {
-                    *control_flow = ControlFlow::Exit;
-                }
-            }
-            Event::MainEventsCleared => {
-                game_loop.window.request_redraw();
-            }
-            _ => {}
-        }
-    })
 }

@@ -1,4 +1,4 @@
-use crate::settings::gui::GuiComponent;
+use crate::settings::gui::{GuiComponent, GuiEvent};
 use egui::{Context, Slider, Window};
 
 use super::Debug;
@@ -48,5 +48,5 @@ impl GuiComponent for Debug {
         &mut self.gui.is_open
     }
 
-    fn event(&mut self, _event: &winit::event::Event<()>) {}
+    fn event(&mut self, _event: &GuiEvent) {}
 }

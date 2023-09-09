@@ -10,7 +10,7 @@ default = []
 #default = ["netplay", "debug"]
 
 netplay = ["matchbox_socket", "tokio", "ggrs", "futures-timer", "futures", "uuid", "reqwest", "md5"]
-static-bundle = []
+zip-bundle = ["rfd", "zip"]
 debug = []
 
 [profile.release]
@@ -22,23 +22,30 @@ codegen-units = 1
 # panic = "abort"
 
 [dependencies]
+log = "0.4"
+env_logger = "0.10"
 anyhow = "1.0"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
+bitflags = "2"
 
-winit = {version = "0.28", features = ["serde"] }
-rfd = "0.11.0"
-tinyfiledialogs = "3.9"
-pixels = "0.13"
-egui = "0.22"
-egui-winit = "0.22"
-egui-wgpu = "0.22"
+egui = { version = "0.22", default-features = false, features = [
+  "bytemuck", "default_fonts"
+] }
+egui_glow = "0.22"
+glow = "0.12"
 
-sdl2 = { version="0.35", features = ["bundled", "static-link"] }
+#sdl2 = { version="0.35", features = ["bundled", "static-link"] }
+# rev="b36d04851aae15a7f792e1bf8a5ce5b138d76346" 0.35.2
+# Gamepad working + compiles on Mac 0c4fb75bc4797147241ccd4ae2a52717908b785b
+sdl2 = { git="https://github.com/Rust-SDL2/rust-sdl2.git", rev="0c4fb75bc4797147241ccd4ae2a52717908b785b", features = ["bundled", "static-link"] }
 
 rusticnes-core = { git = "https://github.com/tedsteen/rusticnes-core-for-nes-bundler" }
 base64 = "0.21"
-zip = { version = "0.6", default-features = false, features = ["deflate"] }
+
+# zip-bundle deps
+rfd = { version = "0.12.0", optional = true }
+zip = { version = "0.6", default-features = false, features = ["deflate"], optional = true }
 
 # Netplay deps
 matchbox_socket = { version="0.7.0", features = ["ggrs"], optional = true }

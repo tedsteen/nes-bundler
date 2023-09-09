@@ -82,10 +82,6 @@ impl Stream {
             / (audio_spec.channels as u64 * audio_spec.freq as u64)) as u8
     }
 
-    pub fn get_latency(&self) -> u8 {
-        Stream::frames_to_latency(self.output_device.spec())
-    }
-
     pub fn set_latency(&mut self, latency: u8) {
         self.output_device = Stream::start_output_device(
             self.output_device.subsystem(),
@@ -100,10 +96,6 @@ impl Stream {
 
     pub fn get_supported_latency(&self) -> Option<RangeInclusive<u8>> {
         Some(1..=50)
-    }
-
-    pub fn drain(&mut self) {
-        self.output_device.clear()
     }
 
     pub(crate) fn push_samples(&mut self, samples: &[SampleFormat]) {
