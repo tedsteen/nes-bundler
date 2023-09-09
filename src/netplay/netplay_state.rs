@@ -144,7 +144,7 @@ impl Netplay<ConnectingState> {
 impl Netplay<Connected> {
     pub fn resume(mut self) -> Netplay<Resuming> {
         #[cfg(feature = "debug")]
-        println!(
+        log::debug!(
             "Resuming netplay to one of the frames ({:?})",
             self.state
                 .netplay_session

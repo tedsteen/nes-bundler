@@ -1,37 +1,38 @@
 #![deny(clippy::all)]
-#![forbid(unsafe_code)]
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::input::JoypadInput;
+use crate::{
+    gameloop::TimeTrait,
+    input::{JoypadInput, KeyEvent},
+    settings::gui::{Gui, ToGuiEvent},
+};
 use anyhow::{Context, Result};
 use audio::Audio;
+use egui::{epaint::ImageDelta, Color32, ColorImage, ImageData, TextureOptions};
+use gameloop::{GameLoop, Time};
 use settings::gui::{EmptyGuiComponent, GuiComponent};
 
-use crate::gameloop::game_loop;
 use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
 use base64::Engine;
 
-use gui::Framework;
-use input::{Input, Inputs};
+use input::{
+    keys::{KeyCode, Mod},
+    Input, Inputs,
+};
 use palette::NTSC_PAL;
-use pixels::{Pixels, SurfaceTexture};
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
-use sdl2::Sdl;
+use sdl2::{clipboard::ClipboardUtil, video::FullscreenType, Sdl};
 use serde::Deserialize;
 use settings::{Settings, MAX_PLAYERS};
-use winit::dpi::LogicalSize;
-use winit::event::{Event, ModifiersState, VirtualKeyCode, WindowEvent};
-use winit::event_loop::EventLoop;
-use winit::window::{Window, WindowBuilder};
 
 mod audio;
 #[cfg(feature = "debug")]
 mod debug;
+mod egui_sdl2;
 mod gameloop;
-mod gui;
 mod input;
 #[cfg(feature = "netplay")]
 mod netplay;
@@ -115,7 +116,7 @@ fn load_bundle_from_zip(zip_file: std::io::Result<std::fs::File>) -> Result<Bund
         zip.finish()?;
 
         // Try again with newly created bundle.zip
-        load_bundle_from_zip(zip_file)
+        load_bundle_from_zip(std::fs::File::open("bundle.zip"))
     }
 }
 fn load_bundle() -> Result<Bundle> {
@@ -128,11 +129,7 @@ fn load_bundle() -> Result<Bundle> {
     {
         let res = load_bundle_from_zip(std::fs::File::open("bundle.zip"));
         if let Err(e) = &res {
-            tinyfiledialogs::message_box_ok(
-                "Could not load the bundle",
-                &format!("{:?}", e).replace('\'', "´").replace('\"', "``"),
-                tinyfiledialogs::MessageBoxIcon::Error,
-            );
+            log::error!("Could not load the bundle: {:?}", e);
         }
         res
     }
@@ -145,91 +142,91 @@ pub struct BuildConfiguration {
     netplay: netplay::NetplayBuildConfiguration,
 }
 
-fn main() {
-    match load_bundle() {
-        Ok(bundle) => {
-            #[cfg(feature = "netplay")]
-            if std::env::args()
-                .collect::<String>()
-                .contains(&"--print-netplay-id".to_string())
-            {
-                if let Some(id) = bundle.config.netplay.netplay_id {
-                    println!("{id}");
-                }
-                std::process::exit(0);
-            }
-            run(bundle);
-        }
-        Err(_e) => {
-            //TODO
-        }
+fn check_and_set_fullscreen(
+    window: &mut sdl2::video::Window,
+    key_mod: Mod,
+    key_code: KeyCode,
+) -> bool {
+    let mut flip = |fs_type: FullscreenType| {
+        let fs_type = if window.fullscreen_state() == FullscreenType::Off {
+            fs_type
+        } else {
+            FullscreenType::Off
+        };
+        window.set_fullscreen(fs_type).unwrap();
+    };
+
+    #[cfg(target_os = "macos")]
+    if key_mod.contains(Mod::LGUIMOD) && (key_code == KeyCode::F || key_code == KeyCode::Return) {
+        flip(FullscreenType::True);
+        return true;
     }
+
+    #[cfg(not(target_os = "macos"))]
+    if (key_mod.contains(Mod::LALTMOD | Mod::RALTMOD) && key_code == KeyCode::Return)
+        || key_code == KeyCode::F11
+    {
+        flip(FullscreenType::True);
+        return true;
+    };
+    false
 }
 
-fn run(bundle: Bundle) -> ! {
-    match initialise(bundle) {
-        Ok((event_loop, window, framework, game_runner)) => {
-            game_loop(
-                event_loop,
-                window,
-                (game_runner, framework),
-                FPS,
-                0.08,
-                move |g| {
-                    let game_runner = &mut g.game.0;
-                    let fps = game_runner.advance();
-                    g.set_updates_per_second(fps);
-                },
-                move |g| {
-                    let game_runner = &mut g.game.0;
-                    game_runner.render(&g.window, &mut g.game.1);
-                },
-                move |g, event| {
-                    let game_runner = &mut g.game.0;
-                    if !game_runner.handle(&g.window, event, &mut g.game.1) {
-                        g.exit();
-                    }
-                },
-            );
-        }
-        Err(e) => {
-            eprintln!("Failed to start: {}", e);
-            std::process::exit(0)
-        }
-    }
-}
+fn main() -> Result<()> {
+    env_logger::init();
 
-fn initialise(
-    bundle: Bundle,
-) -> Result<(EventLoop<()>, winit::window::Window, Framework, GameRunner)> {
     // This is required for certain controllers to work on Windows without the
     // video subsystem enabled:
     sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
     let sdl_context: Sdl = sdl2::init().map_err(anyhow::Error::msg)?;
-    let event_loop = EventLoop::new();
-    let window = {
-        WindowBuilder::new()
-            .with_title(&bundle.config.window_title)
-            .with_inner_size(LogicalSize::new(WIDTH as f32 * ZOOM, HEIGHT as f32 * ZOOM))
-            .with_min_inner_size(LogicalSize::new(WIDTH, HEIGHT))
-            .build(&event_loop)?
-    };
-    let (pixels, framework) = {
-        let window_size = window.inner_size();
-        let scale_factor = window.scale_factor() as f32;
-        let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
-        let pixels = Pixels::new(WIDTH, HEIGHT, surface_texture).context("No pixels available")?;
+    let video = sdl_context.video().unwrap();
+    let gl_attr = video.gl_attr();
+    gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
+    gl_attr.set_context_version(3, 0);
 
-        let framework = Framework::new(
-            &event_loop,
-            window_size.width,
-            window_size.height,
-            scale_factor,
-            &pixels,
-        );
+    let bundle = load_bundle()?;
+    #[cfg(feature = "netplay")]
+    if std::env::args()
+        .collect::<String>()
+        .contains(&"--print-netplay-id".to_string())
+    {
+        if let Some(id) = bundle.config.netplay.netplay_id {
+            println!("{id}");
+        }
+        std::process::exit(0);
+    }
 
-        (pixels, framework)
+    let window = video
+        .window(
+            &bundle.config.window_title,
+            (WIDTH as f32 * ZOOM) as u32,
+            (HEIGHT as f32 * ZOOM) as u32,
+        )
+        .opengl()
+        .resizable()
+        .allow_highdpi()
+        .build()
+        .unwrap();
+    let gl_context = window.gl_create_context().unwrap();
+    window
+        .subsystem()
+        .gl_set_swap_interval(sdl2::video::SwapInterval::LateSwapTearing)
+        .or_else(|_| {
+            window
+                .subsystem()
+                .gl_set_swap_interval(sdl2::video::SwapInterval::VSync)
+        })
+        .expect("Could not gl_set_swap_interval(...)");
+
+    let (gl, window, mut events_loop, _gl_context) = {
+        let gl = unsafe {
+            glow::Context::from_loader_function(|s| video.gl_get_proc_address(s) as *const _)
+        };
+        let event_loop = sdl_context.event_pump().unwrap();
+        (gl, window, event_loop, gl_context)
     };
+    let gl = std::sync::Arc::new(gl);
+    let egui_glow = egui_sdl2::EguiGlow::new(&window, gl.clone(), None);
 
     let settings = Rc::new(RefCell::new(Settings::new(
         bundle.config.default_settings.clone(),
@@ -251,15 +248,217 @@ fn initialise(
         &mut settings.borrow_mut().netplay_id,
     );
 
-    let inputs = Inputs::new(
-        &sdl_context,
-        bundle.config.default_settings.input.selected,
-        settings.clone(),
-    );
+    let inputs = Inputs::new(&sdl_context, bundle.config.default_settings.input.selected);
     let input = Input::new(inputs, settings.clone());
 
-    let game_runner = GameRunner::new(pixels, audio, input, settings, Box::new(state_handler))?;
-    Ok((event_loop, window, framework, game_runner))
+    let game_runner = GameRunner::new(Box::new(state_handler))?;
+
+    let nes_texture_options = TextureOptions {
+        magnification: egui::TextureFilter::Nearest,
+        minification: egui::TextureFilter::Nearest,
+    };
+
+    let no_image = ImageData::Color(ColorImage::new([0, 0], Color32::TRANSPARENT));
+
+    let nes_texture = egui_glow.egui_ctx.load_texture(
+        "nes",
+        ImageData::Color(ColorImage::new(
+            [WIDTH as usize, HEIGHT as usize],
+            Color32::BLACK,
+        )),
+        nes_texture_options,
+    );
+
+    struct GameLoopState {
+        game_runner: GameRunner,
+        window: sdl2::video::Window,
+        egui_glow: egui_sdl2::EguiGlow,
+        gui: Gui,
+        settings: Rc<RefCell<Settings>>,
+        #[cfg(feature = "debug")]
+        debug: debug::Debug,
+        audio: Audio,
+        input: Input,
+        clipboard: ClipboardUtil,
+    }
+
+    let mut game_loop: GameLoop<GameLoopState, Time> = GameLoop::new(
+        GameLoopState {
+            game_runner,
+            window,
+            egui_glow,
+            gui: Gui::new(true),
+            settings,
+            #[cfg(feature = "debug")]
+            debug: debug::Debug {
+                settings: debug::DebugSettings::new(),
+                gui: debug::gui::DebugGui::new(),
+            },
+            audio,
+            input,
+            clipboard: sdl_context.video().unwrap().clipboard(),
+        },
+        FPS,
+        0.08,
+    );
+    let run_frame = Rc::new(std::sync::Mutex::new(|events: Vec<sdl2::event::Event>| {
+        game_loop.next_frame(
+            |g, _| {
+                let loop_state = &mut g.game;
+                let egui_glow = &mut loop_state.egui_glow;
+                let game_runner = &mut loop_state.game_runner;
+
+                #[allow(unused_mut)] //debug feature needs this
+                let mut fps = game_runner.advance(&loop_state.input);
+                #[cfg(feature = "debug")]
+                if loop_state.debug.settings.override_fps {
+                    fps = loop_state.debug.settings.fps;
+                }
+
+                // No need to update graphics or audio more than once per update
+                let new_frame = game_runner.get_frame().unwrap_or_else(|| no_image.clone());
+                egui_glow.egui_ctx.tex_manager().write().set(
+                    nes_texture.id(),
+                    ImageDelta::full(new_frame, nes_texture_options),
+                );
+
+                loop_state
+                    .audio
+                    .stream
+                    .push_samples(game_runner.state_handler.consume_samples().as_slice());
+
+                g.set_updates_per_second(fps);
+            },
+            |g, extra| {
+                if log::max_level() == log::Level::Debug && Time::now().sub(&g.last_stats) >= 0.5 {
+                    let (ups, rps, ..) = g.get_stats();
+                    log::debug!("UPS: {:?}, RPS: {:?}", ups, rps);
+                }
+
+                let loop_state = &mut g.game;
+                let settings = &loop_state.settings;
+                let settings_hash_before = settings.borrow().get_hash();
+
+                let egui_glow = &mut loop_state.egui_glow;
+                let gui = &mut loop_state.gui;
+                let window = &mut loop_state.window;
+                let mut quit = false;
+
+                let game_runner = &mut loop_state.game_runner;
+                for event in extra {
+                    egui_glow.on_event(event, window);
+                    if let Some(gui_event) = event.to_gui_event() {
+                        if let settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(
+                            key_code,
+                            keymod,
+                        )) = gui_event
+                        {
+                            use crate::input::keys::KeyCode::*;
+                            match key_code {
+                                F1 => {
+                                    let mut settings = settings.borrow_mut();
+                                    settings.last_save_state =
+                                        Some(b64.encode(game_runner.state_handler.save()));
+                                    settings.save().unwrap();
+                                }
+                                F2 => {
+                                    if let Some(save_state) = &settings.borrow().last_save_state {
+                                        if let Ok(buf) = &mut b64.decode(save_state) {
+                                            game_runner.state_handler.load(buf);
+                                        }
+                                    }
+                                }
+                                key_code => {
+                                    if check_and_set_fullscreen(window, keymod, key_code) {
+                                        return; // Event consumed
+                                    }
+                                }
+                            }
+                        }
+                        gui.handle_event(
+                            &gui_event,
+                            vec![
+                                #[cfg(feature = "debug")]
+                                &mut loop_state.debug,
+                                &mut loop_state.audio,
+                                &mut loop_state.input,
+                                game_runner.state_handler.get_gui(),
+                            ],
+                        );
+                    }
+
+                    if let sdl2::event::Event::Quit { .. } = event {
+                        quit = true;
+                    }
+                }
+                let clipboard = &mut loop_state.clipboard;
+                egui_glow.run(window, clipboard, |egui_ctx| {
+                    let game_runner = &mut loop_state.game_runner;
+                    gui.ui(
+                        egui_ctx,
+                        &mut vec![
+                            #[cfg(feature = "debug")]
+                            &mut loop_state.debug,
+                            &mut loop_state.audio,
+                            &mut loop_state.input,
+                            game_runner.state_handler.get_gui(),
+                        ],
+                        &nes_texture,
+                    );
+                });
+
+                if settings_hash_before != settings.borrow().get_hash() {
+                    log::debug!("Settings saved");
+                    settings.borrow().save().unwrap();
+                }
+
+                unsafe {
+                    use glow::HasContext as _;
+                    //gl.clear_color(clear_colour[0], clear_colour[1], clear_colour[2], 1.0);
+                    gl.clear(glow::COLOR_BUFFER_BIT);
+                }
+
+                // draw things behind egui here
+
+                egui_glow.paint(window);
+
+                // draw things on top of egui here
+
+                window.gl_swap_window();
+                if quit {
+                    g.exit();
+                }
+            },
+            events,
+        )
+    }));
+
+    let handle = |events: Vec<sdl2::event::Event>| -> bool {
+        run_frame.lock().map_or(true, |mut handle| handle(events))
+    };
+
+    //Note: this is a workaround for https://stackoverflow.com/a/40693139
+    //TODO: Enable this when I figured out how to make it stable (without deadlocks)
+    //let _event_watch = sdl_context.event().unwrap().add_event_watch(|event| {
+    //    use sdl2::event::{Event, WindowEvent};
+    //    if let Event::Window {
+    //        win_event: WindowEvent::Resized(..) | WindowEvent::SizeChanged(..),
+    //        ..
+    //    } = event
+    //    {
+    //        handle(vec![event]);
+    //    };
+    //});
+
+    'mainloop: loop {
+        let events = events_loop.poll_iter().collect::<Vec<_>>();
+        if !handle(events) {
+            log::info!("Game loop ended");
+            break 'mainloop;
+        }
+    }
+
+    Ok(())
 }
 
 pub struct LocalGameState {
@@ -273,7 +472,6 @@ impl LocalGameState {
     }
 
     pub fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps {
-        //println!("Advancing! {:?}", inputs);
         self.nes.p1_input = inputs[0].0;
         self.nes.p2_input = inputs[1].0;
         self.nes.run_until_vblank();
@@ -284,7 +482,7 @@ impl LocalGameState {
     fn save(&self) -> Vec<u8> {
         let mut data = self.nes.save_state();
         data.extend(self.frame.to_le_bytes());
-        //println!("SAVED {:?}", self.frame);
+        log::debug!("SAVED {:?}", self.frame);
         data
     }
     fn load(&mut self, data: &mut Vec<u8>) {
@@ -294,7 +492,7 @@ impl LocalGameState {
                 .unwrap(),
         );
         self.nes.load_state(data);
-        //println!("LOADED {:?}", self.frame);
+        log::debug!("LOADED {:?}", self.frame);
     }
 
     fn consume_samples(&mut self) -> Vec<i16> {
@@ -355,186 +553,36 @@ impl StateHandler for LocalStateHandler {
 }
 
 pub struct GameRunner {
-    state_handler: Box<dyn StateHandler>,
-    audio: Audio,
-    pixels: Pixels,
-    settings: Rc<RefCell<Settings>>,
-    input: Input,
-    #[cfg(feature = "debug")]
-    debug: debug::Debug,
-    modifiers: ModifiersState,
+    pub state_handler: Box<dyn StateHandler>,
 }
 
 impl GameRunner {
-    pub fn new(
-        pixels: Pixels,
-        audio: Audio,
-        input: Input,
-        settings: Rc<RefCell<Settings>>,
-        state_handler: Box<dyn StateHandler>,
-    ) -> Result<Self> {
-        Ok(Self {
-            state_handler,
-            audio,
-            pixels,
-            input,
-            settings,
-            modifiers: Default::default(),
-            #[cfg(feature = "debug")]
-            debug: debug::Debug {
-                settings: debug::DebugSettings::new(),
-                gui: debug::gui::DebugGui::new(),
-            },
-        })
+    pub fn new(state_handler: Box<dyn StateHandler>) -> Result<Self> {
+        Ok(Self { state_handler })
     }
-    pub fn advance(&mut self) -> Fps {
-        let inputs = [
-            self.input.inputs.get_joypad(0),
-            self.input.inputs.get_joypad(1),
-        ];
+    pub fn advance(&mut self, input: &Input) -> Fps {
+        let inputs = [input.inputs.get_joypad(0), input.inputs.get_joypad(1)];
 
-        let fps = self.state_handler.advance(inputs);
-
-        self.audio
-            .stream
-            .push_samples(self.state_handler.consume_samples().as_slice());
-
-        #[cfg(feature = "debug")]
-        if self.debug.settings.override_fps {
-            return self.debug.settings.fps;
-        }
-        fps
+        self.state_handler.advance(inputs)
     }
 
-    pub fn render(&mut self, window: &winit::window::Window, gui_framework: &mut Framework) {
-        let settings_hash_before = self.settings.borrow().get_hash();
-
-        gui_framework.prepare(
-            window,
-            &mut vec![
-                #[cfg(feature = "debug")]
-                &mut self.debug,
-                &mut self.audio,
-                &mut self.input,
-                self.state_handler.get_gui(),
-            ],
-        );
-
-        if settings_hash_before != self.settings.borrow().get_hash() {
-            self.settings.borrow().save().unwrap();
-        }
-
-        let pixels = &mut self.pixels;
-
+    pub fn get_frame(&mut self) -> Option<ImageData> {
         if let Some(frame) = self.state_handler.get_frame() {
-            for (i, pixel) in pixels.frame_mut().chunks_exact_mut(4).enumerate() {
-                let palette_index = frame[i] as usize * 4;
-                pixel.copy_from_slice(&NTSC_PAL[palette_index..palette_index + 4]);
-            }
-        }
-
-        // Render everything together
-        pixels
-            .render_with(|encoder, render_target, context| {
-                // Render the world texture
-                context.scaling_renderer.render(encoder, render_target);
-
-                // Render egui
-                gui_framework.render(encoder, render_target, context);
-
-                Ok(())
-            })
-            .expect("Failed to render :(");
-    }
-
-    pub fn handle(
-        &mut self,
-        window: &Window,
-        event: &winit::event::Event<()>,
-        gui_framework: &mut Framework,
-    ) -> bool {
-        // Handle input events
-        if let Event::WindowEvent { event, .. } = event {
-            match event {
-                WindowEvent::CloseRequested => {
-                    return false;
+            let mut image_data = ImageData::Color(ColorImage::new(
+                [WIDTH as usize, HEIGHT as usize],
+                Color32::BLACK,
+            ));
+            if let ImageData::Color(color_data) = &mut image_data {
+                for (i, pixel) in color_data.pixels.iter_mut().enumerate() {
+                    let palette_index = frame[i] as usize * 4;
+                    let color = &NTSC_PAL[palette_index..palette_index + 4];
+                    *pixel =
+                        Color32::from_rgba_premultiplied(color[0], color[1], color[2], color[3]);
                 }
-                WindowEvent::Resized(size) => {
-                    self.pixels.resize_surface(size.width, size.height).unwrap();
-                }
-                WindowEvent::ModifiersChanged(modifiers) => {
-                    self.modifiers = *modifiers;
-                }
-                WindowEvent::KeyboardInput { input, .. } => {
-                    if input.state == winit::event::ElementState::Pressed {
-                        if self.check_fullscreen(window, input.virtual_keycode) {
-                            return true; // Consider this event consumed by nes-bundler
-                        }
-                        match input.virtual_keycode {
-                            Some(VirtualKeyCode::F1) => {
-                                self.save_state();
-                                return true; // Consider this event consumed by nes-bundler
-                            }
-                            Some(VirtualKeyCode::F2) => {
-                                self.load_state();
-                                return true; // Consider this event consumed by nes-bundler
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                _ => {}
             }
+            Some(image_data)
+        } else {
+            None
         }
-
-        // Update egui inputs
-        gui_framework.handle_event(
-            event,
-            vec![
-                #[cfg(feature = "debug")]
-                &mut self.debug,
-                &mut self.audio,
-                &mut self.input,
-                self.state_handler.get_gui(),
-            ],
-        );
-
-        true
-    }
-
-    fn save_state(&mut self) {
-        let settings = &mut self.settings.borrow_mut();
-        settings.last_save_state = Some(b64.encode(self.state_handler.save()));
-        settings.save().unwrap();
-    }
-
-    fn load_state(&mut self) {
-        if let Some(save_state) = &mut self.settings.borrow_mut().last_save_state {
-            if let Ok(buf) = &mut b64.decode(save_state) {
-                self.state_handler.load(buf);
-                self.audio.stream.drain(); //make sure we don't build up a delay
-            }
-        }
-    }
-
-    fn check_fullscreen(&self, window: &Window, virtual_keycode: Option<VirtualKeyCode>) -> bool {
-        #[cfg(target_os = "macos")]
-        if self.modifiers.logo() && virtual_keycode == Some(VirtualKeyCode::F) {
-            use winit::platform::macos::WindowExtMacOS;
-            window.set_simple_fullscreen(!window.simple_fullscreen());
-            return true;
-        }
-        #[cfg(not(target_os = "macos"))]
-        if self.modifiers.alt() && virtual_keycode == Some(VirtualKeyCode::Return) {
-            if window.fullscreen().is_some() {
-                window.set_fullscreen(None);
-            } else {
-                window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
-            }
-
-            return true;
-        }
-
-        false
     }
 }

@@ -2,7 +2,10 @@ use std::time::{Duration, Instant};
 
 use egui::{Button, Context, TextEdit, Window};
 
-use crate::settings::{gui::GuiComponent, MAX_PLAYERS};
+use crate::settings::{
+    gui::{GuiComponent, GuiEvent},
+    MAX_PLAYERS,
+};
 
 use super::{
     connecting_state::{Connecting, PeeringState, StartState},
@@ -100,13 +103,15 @@ impl GuiComponent for NetplayStateHandler {
             &mut self.netplay.as_mut().unwrap()
         {
             egui::CentralPanel::default().show(ctx, |ui| {
-                ui.vertical_centered(|ui| {
-                    if let NetplayState::Resuming(_) = &mut self.netplay.as_mut().unwrap()
-                    {
-                        ui.label("Connection lost, trying to reconnect...\nSee NetPlay! settings for details");    
-                    } else {
-                        ui.label("Connecting...\nSee NetPlay! settings for details");
-                    }
+                ui.centered_and_justified(|ui| {
+                    let message =
+                        if let NetplayState::Resuming(_) = &mut self.netplay.as_mut().unwrap() {
+                            "Connection lost, trying to reconnect..."
+                        } else {
+                            "Connecting..."
+                        };
+
+                    ui.label(format!("{message}\nSee NetPlay! settings for details"));
                 });
             });
         }
@@ -280,5 +285,5 @@ impl GuiComponent for NetplayStateHandler {
         &mut self.gui.is_open
     }
 
-    fn event(&mut self, _event: &winit::event::Event<()>) {}
+    fn event(&mut self, _event: &GuiEvent) {}
 }

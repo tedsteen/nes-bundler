@@ -1,11 +1,10 @@
-use super::{JoypadInput, JoypadMapping};
+use super::{JoypadInput, JoypadMapping, KeyCode, KeyEvent};
 use std::collections::HashSet;
-use winit::event::{KeyboardInput, VirtualKeyCode};
 
-pub type JoypadKeyboardMapping = JoypadMapping<VirtualKeyCode>;
+pub type JoypadKeyboardMapping = JoypadMapping<KeyCode>;
 
 pub struct Keyboards {
-    pub pressed_keys: HashSet<VirtualKeyCode>,
+    pub pressed_keys: HashSet<KeyCode>,
 }
 
 impl Keyboards {
@@ -14,13 +13,11 @@ impl Keyboards {
             pressed_keys: HashSet::new(),
         }
     }
-    pub fn advance(&mut self, input: &KeyboardInput) {
-        if let Some(key) = input.virtual_keycode {
-            match input.state {
-                winit::event::ElementState::Pressed => self.pressed_keys.insert(key),
-                winit::event::ElementState::Released => self.pressed_keys.remove(&key),
-            };
-        }
+    pub fn advance(&mut self, key_event: &KeyEvent) {
+        match key_event {
+            KeyEvent::Pressed(key, _) => self.pressed_keys.insert(*key),
+            KeyEvent::Released(key, _) => self.pressed_keys.remove(key),
+        };
     }
 
     pub fn get_joypad(&mut self, mapping: &JoypadKeyboardMapping) -> JoypadInput {
