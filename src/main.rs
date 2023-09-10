@@ -330,9 +330,9 @@ fn main() -> Result<()> {
                 g.set_updates_per_second(fps);
             },
             |g, extra| {
-                if log::max_level() == log::Level::Debug && Time::now().sub(&g.last_stats) >= 0.5 {
+                if log::max_level() == log::Level::Trace && Time::now().sub(&g.last_stats) >= 0.5 {
                     let (ups, rps, ..) = g.get_stats();
-                    log::debug!("UPS: {:?}, RPS: {:?}", ups, rps);
+                    log::trace!("UPS: {:?}, RPS: {:?}", ups, rps);
                 }
 
                 let loop_state = &mut g.game;
@@ -448,15 +448,13 @@ fn main() -> Result<()> {
         } = event
         {
             handle(vec![event]);
-        } else {
-            log::trace!("Unhandled event in watch: {:?}", event);
         };
     });
 
     'mainloop: loop {
         let events = events_loop.poll_iter().collect::<Vec<_>>();
         if !handle(events) {
-            log::info!("Game loop ended");
+            log::debug!("Game loop ended");
             break 'mainloop;
         }
     }
@@ -485,7 +483,7 @@ impl LocalGameState {
     fn save(&self) -> Vec<u8> {
         let mut data = self.nes.save_state();
         data.extend(self.frame.to_le_bytes());
-        log::debug!("SAVED {:?}", self.frame);
+        log::debug!("State saved at frame {:?}", self.frame);
         data
     }
     fn load(&mut self, data: &mut Vec<u8>) {
@@ -495,7 +493,7 @@ impl LocalGameState {
                 .unwrap(),
         );
         self.nes.load_state(data);
-        log::debug!("LOADED {:?}", self.frame);
+        log::debug!("State loaded at frame {:?}", self.frame);
     }
 
     fn consume_samples(&mut self) -> Vec<i16> {

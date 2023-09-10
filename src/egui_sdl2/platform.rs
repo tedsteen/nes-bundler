@@ -41,7 +41,6 @@ pub struct Platform {
 
 impl Platform {
     pub fn new(window: &sdl2::video::Window, scale: DpiScaling) -> Self {
-        //log::info!("window size: {size:?}, drawable: {drawable_size:?}");
         let ratio = Self::get_dpi(window);
         let scale = match scale {
             DpiScaling::Default => ratio,
