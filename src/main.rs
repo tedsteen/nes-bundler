@@ -448,6 +448,8 @@ fn main() -> Result<()> {
         } = event
         {
             handle(vec![event]);
+        } else {
+            log::trace!("Unhandled event in watch: {:?}", event);
         };
     });
 
