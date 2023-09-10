@@ -434,21 +434,22 @@ fn main() -> Result<()> {
     }));
 
     let handle = |events: Vec<sdl2::event::Event>| -> bool {
-        run_frame.lock().map_or(true, |mut handle| handle(events))
+        run_frame
+            .try_lock()
+            .map_or(true, |mut handle| handle(events))
     };
 
     //Note: this is a workaround for https://stackoverflow.com/a/40693139
-    //TODO: Enable this when I figured out how to make it stable (without deadlocks)
-    //let _event_watch = sdl_context.event().unwrap().add_event_watch(|event| {
-    //    use sdl2::event::{Event, WindowEvent};
-    //    if let Event::Window {
-    //        win_event: WindowEvent::Resized(..) | WindowEvent::SizeChanged(..),
-    //        ..
-    //    } = event
-    //    {
-    //        handle(vec![event]);
-    //    };
-    //});
+    let _event_watch = sdl_context.event().unwrap().add_event_watch(|event| {
+        use sdl2::event::{Event, WindowEvent};
+        if let Event::Window {
+            win_event: WindowEvent::Resized(..) | WindowEvent::SizeChanged(..),
+            ..
+        } = event
+        {
+            handle(vec![event]);
+        };
+    });
 
     'mainloop: loop {
         let events = events_loop.poll_iter().collect::<Vec<_>>();
