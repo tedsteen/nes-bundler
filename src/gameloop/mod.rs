@@ -71,10 +71,10 @@ impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
         res
     }
 
-    pub fn next_frame<U, R, E>(&mut self, mut update: U, mut render: R, extra: E) -> bool
+    pub fn next_frame<U, R>(&mut self, mut update: U, mut render: R) -> bool
     where
-        U: FnMut(&mut GameLoop<G, T>, &E),
-        R: FnMut(&mut GameLoop<G, T>, &E),
+        U: FnMut(&mut GameLoop<G, T>),
+        R: FnMut(&mut GameLoop<G, T>),
     {
         let g = self;
 
@@ -95,7 +95,7 @@ impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
         g.accumulated_time += elapsed;
 
         while g.accumulated_time >= g.fixed_time_step {
-            update(g, &extra);
+            update(g);
 
             g.accumulated_time -= g.fixed_time_step;
             g.updates.push(g.current_instant);
@@ -105,7 +105,7 @@ impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
 
         g.blending_factor = g.accumulated_time / g.fixed_time_step;
 
-        render(g, &extra);
+        render(g);
 
         g.renders.push(g.current_instant);
         g.renders

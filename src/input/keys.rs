@@ -1,31 +1,26 @@
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 
-pub trait ToKeyCode {
+pub trait ToGuiKeyCode {
     /// Convert the struct to a KeyCode
-    fn to_key_code(&self) -> Option<KeyCode>;
+    fn to_gui_key_code(&self) -> Option<KeyCode>;
 }
 
-pub trait ToMod {
-    fn to_mod(&self) -> Option<Mod>;
+pub trait ToGuiMod {
+    fn to_gui_mod(&self) -> Option<Modifiers>;
 }
 
 bitflags! {
     #[derive(Debug, Default, Clone, Copy)]
-    pub struct Mod: u16 {
-        const NOMOD = 0x0000;
-        const LSHIFTMOD = 0x0001;
-        const RSHIFTMOD = 0x0002;
-        const LCTRLMOD = 0x0040;
-        const RCTRLMOD = 0x0080;
-        const LALTMOD = 0x0100;
-        const RALTMOD = 0x0200;
-        const LGUIMOD = 0x0400;
-        const RGUIMOD = 0x0800;
-        const NUMMOD = 0x1000;
-        const CAPSMOD = 0x2000;
-        const MODEMOD = 0x4000;
-        const RESERVEDMOD = 0x8000;
+    pub struct Modifiers: u32 {
+        /// The "shift" key.
+        const SHIFT = 0b100;
+        /// The "control" key.
+        const CTRL = 0b100 << 3;
+        /// The "alt" key.
+        const ALT = 0b100 << 6;
+        /// This is the "windows" key on PC and "command" key on Mac.
+        const LOGO = 0b100 << 9;
     }
 }
 
