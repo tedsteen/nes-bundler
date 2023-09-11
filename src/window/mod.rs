@@ -157,12 +157,12 @@ impl GlutinWindowContext {
 
 pub fn create_display(
     title: &str,
-    width: f32,
-    height: f32,
+    width: u32,
+    height: u32,
     event_loop: &winit::event_loop::EventLoopWindowTarget<()>,
 ) -> (GlutinWindowContext, glow::Context) {
     let glutin_window_context =
-        unsafe { GlutinWindowContext::new(title, width, height, event_loop) };
+        unsafe { GlutinWindowContext::new(title, width as f32, height as f32, event_loop) };
     let gl = unsafe {
         glow::Context::from_loader_function(|s| {
             let s = std::ffi::CString::new(s)

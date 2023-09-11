@@ -46,6 +46,11 @@ const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
 const ZOOM: f32 = 3.0;
 
+const DEFAULT_WINDOW_SIZE: (u32, u32) = (
+    crate::WIDTH * crate::ZOOM as u32,
+    crate::WIDTH * crate::ZOOM as u32,
+);
+
 pub fn start_nes(cart_data: Vec<u8>, sample_rate: u64) -> Result<NesState> {
     let rom_data = match std::env::var("ROM_FILE") {
         Ok(rom_file) => {
@@ -166,8 +171,8 @@ fn main() -> Result<()> {
     let event_loop = winit::event_loop::EventLoopBuilder::with_user_event().build();
     let (gl_window, gl) = create_display(
         &bundle.config.window_title,
-        WIDTH as f32 * ZOOM,
-        HEIGHT as f32 * ZOOM,
+        DEFAULT_WINDOW_SIZE.0,
+        DEFAULT_WINDOW_SIZE.1,
         &event_loop,
     );
     let gl = std::sync::Arc::new(gl);

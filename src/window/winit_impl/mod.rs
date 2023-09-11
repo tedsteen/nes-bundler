@@ -5,6 +5,7 @@ use crate::input::keys::{KeyCode, Modifiers};
 use super::Fullscreen;
 
 mod conversions;
+
 impl Fullscreen for winit::window::Window {
     fn check_and_set_fullscreen(&mut self, key_mod: Modifiers, key_code: KeyCode) -> bool {
         let window = self;
@@ -16,8 +17,8 @@ impl Fullscreen for winit::window::Window {
             if window.simple_fullscreen() {
                 window.set_simple_fullscreen(false);
                 window.set_inner_size(LogicalSize::new(
-                    crate::WIDTH * crate::ZOOM as u32,
-                    crate::HEIGHT * crate::ZOOM as u32,
+                    crate::DEFAULT_WINDOW_SIZE.0,
+                    crate::DEFAULT_WINDOW_SIZE.1,
                 ));
             } else {
                 window.set_simple_fullscreen(true);
@@ -31,7 +32,10 @@ impl Fullscreen for winit::window::Window {
         {
             if window.fullscreen().is_some() {
                 window.set_fullscreen(None);
-                window.set_inner_size(LogicalSize::new(WIDTH * ZOOM as u32, HEIGHT * ZOOM as u32));
+                window.set_inner_size(LogicalSize::new(
+                    crate::DEFAULT_WINDOW_SIZE.0,
+                    crate::DEFAULT_WINDOW_SIZE.1,
+                ));
             } else {
                 window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
             }
