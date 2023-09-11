@@ -25,7 +25,7 @@ use input::{Input, Inputs};
 use palette::NTSC_PAL;
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
-use sdl2::{EventPump, Sdl};
+use sdl2::Sdl;
 use serde::Deserialize;
 use settings::{Settings, MAX_PLAYERS};
 
@@ -44,7 +44,7 @@ type Fps = u32;
 const FPS: Fps = 60;
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
-const ZOOM: f32 = 3.0;
+const ZOOM: u8 = 3;
 
 const DEFAULT_WINDOW_SIZE: (u32, u32) = (
     crate::WIDTH * crate::ZOOM as u32,
@@ -221,7 +221,6 @@ fn main() -> Result<()> {
         game_runner: GameRunner,
         gl_window: GlutinWindowContext,
         egui_glow: egui_glow::EguiGlow,
-        sdl_event_pump: EventPump,
         gui: Gui,
         settings: Rc<RefCell<Settings>>,
         #[cfg(feature = "debug")]
@@ -235,7 +234,6 @@ fn main() -> Result<()> {
             game_runner: GameRunner::new(Box::new(state_handler))?,
             gl_window,
             egui_glow,
-            sdl_event_pump: sdl_context.event_pump().unwrap(),
             gui: Gui::new(true),
             settings: settings.clone(),
             #[cfg(feature = "debug")]
@@ -249,9 +247,91 @@ fn main() -> Result<()> {
         FPS,
         0.08,
     );
+    let mut sdl_event_pump = sdl_context.event_pump().unwrap();
 
     event_loop.run(move |event, _, control_flow| {
-        let quit = !game_loop.next_frame(
+        if log::max_level() == log::Level::Trace && Time::now().sub(&game_loop.last_stats) >= 1.0 {
+            let (ups, rps, ..) = game_loop.get_stats();
+            log::trace!("UPS: {:?}, RPS: {:?}", ups, rps);
+        }
+        let loop_state = &mut game_loop.game;
+
+        let winit_gui_event = if let winit::event::Event::WindowEvent { event, .. } = &event {
+            use winit::event::WindowEvent;
+            if matches!(event, WindowEvent::CloseRequested | WindowEvent::Destroyed) {
+                *control_flow = winit::event_loop::ControlFlow::Exit;
+            }
+
+            let gl_window = &mut loop_state.gl_window;
+            if let winit::event::WindowEvent::Resized(physical_size) = &event {
+                gl_window.resize(*physical_size);
+            } else if let winit::event::WindowEvent::ScaleFactorChanged { new_inner_size, .. } =
+                &event
+            {
+                gl_window.resize(**new_inner_size);
+            }
+
+            let winit_gui_event = event.to_gui_event();
+            let egui_glow = &mut loop_state.egui_glow;
+            if !egui_glow.on_event(event).consumed {
+                if let Some(settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(
+                    key_code,
+                    modifiers,
+                ))) = winit_gui_event.clone()
+                {
+                    let settings = &loop_state.settings;
+                    let game_runner = &mut loop_state.game_runner;
+
+                    use crate::input::keys::KeyCode::*;
+                    match key_code {
+                        F1 => {
+                            let mut settings = settings.borrow_mut();
+                            settings.last_save_state =
+                                Some(b64.encode(game_runner.state_handler.save()));
+                            settings.save().unwrap();
+                        }
+                        F2 => {
+                            if let Some(save_state) = &settings.borrow().last_save_state {
+                                if let Ok(buf) = &mut b64.decode(save_state) {
+                                    game_runner.state_handler.load(buf);
+                                }
+                            }
+                        }
+                        key_code => {
+                            gl_window
+                                .window_mut()
+                                .check_and_set_fullscreen(modifiers, key_code);
+                        }
+                    }
+                }
+            }
+            winit_gui_event
+        } else {
+            None
+        };
+
+        let sdl2_gui_event = sdl_event_pump
+            .poll_event()
+            .and_then(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad));
+
+        loop_state.gui.handle_events(
+            [sdl2_gui_event, winit_gui_event].iter().flatten().collect(),
+            vec![
+                #[cfg(feature = "debug")]
+                &mut loop_state.debug,
+                &mut loop_state.audio,
+                &mut loop_state.input,
+                loop_state.game_runner.state_handler.get_gui(),
+            ],
+        );
+
+        if let winit::event::Event::LoopDestroyed = &event {
+            println!("DRESTORY");
+            loop_state.egui_glow.destroy();
+            return;
+        }
+
+        game_loop.next_frame(
             |g| {
                 let loop_state = &mut g.game;
                 let egui_glow = &mut loop_state.egui_glow;
@@ -279,142 +359,53 @@ fn main() -> Result<()> {
                 g.set_updates_per_second(fps);
             },
             |g| {
-                let mut gui_events = vec![];
-                if let Some(event) = g
-                    .game
-                    .sdl_event_pump
-                    .poll_event()
-                    .and_then(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad))
-                {
-                    gui_events.push(event);
-                }
+                if let winit::event::Event::RedrawEventsCleared = &event {
+                    let loop_state = &mut g.game;
+                    let gl_window = &loop_state.gl_window;
+                    let settings = &loop_state.settings;
+                    let settings_hash_before = settings.borrow().get_hash();
+                    let gui = &mut loop_state.gui;
 
-                match &event {
-                    winit::event::Event::RedrawEventsCleared => {
-                        let loop_state = &mut g.game;
-                        let gl_window = &loop_state.gl_window;
-                        let settings = &loop_state.settings;
-                        let settings_hash_before = settings.borrow().get_hash();
-                        let gui = &mut loop_state.gui;
+                    let egui_glow = &mut loop_state.egui_glow;
 
-                        let egui_glow = &mut loop_state.egui_glow;
+                    let window = &mut gl_window.window();
 
-                        let window = &mut gl_window.window();
+                    egui_glow.run(gl_window.window(), |egui_ctx| {
+                        let game_runner = &mut loop_state.game_runner;
+                        gui.ui(
+                            egui_ctx,
+                            &mut vec![
+                                #[cfg(feature = "debug")]
+                                &mut loop_state.debug,
+                                &mut loop_state.audio,
+                                &mut loop_state.input,
+                                game_runner.state_handler.get_gui(),
+                            ],
+                            &nes_texture,
+                        );
+                    });
 
-                        egui_glow.run(gl_window.window(), |egui_ctx| {
-                            let game_runner = &mut loop_state.game_runner;
-                            gui.ui(
-                                egui_ctx,
-                                &mut vec![
-                                    #[cfg(feature = "debug")]
-                                    &mut loop_state.debug,
-                                    &mut loop_state.audio,
-                                    &mut loop_state.input,
-                                    game_runner.state_handler.get_gui(),
-                                ],
-                                &nes_texture,
-                            );
-                        });
-
-                        if settings_hash_before != settings.borrow().get_hash() {
-                            log::debug!("Settings saved");
-                            settings.borrow().save().unwrap();
-                        }
-
-                        unsafe {
-                            use glow::HasContext as _;
-                            //gl.clear_color(clear_colour[0], clear_colour[1], clear_colour[2], 1.0);
-                            gl.clear(glow::COLOR_BUFFER_BIT);
-                        }
-
-                        // draw things behind egui here
-
-                        egui_glow.paint(window);
-
-                        // draw things on top of egui here
-
-                        gl_window.swap_buffers().unwrap();
+                    if settings_hash_before != settings.borrow().get_hash() {
+                        log::debug!("Settings saved");
+                        settings.borrow().save().unwrap();
                     }
 
-                    winit::event::Event::WindowEvent { event, .. } => {
-                        use winit::event::WindowEvent;
-                        if matches!(event, WindowEvent::CloseRequested | WindowEvent::Destroyed) {
-                            g.exit();
-                        }
-
-                        if let winit::event::WindowEvent::Resized(physical_size) = &event {
-                            g.game.gl_window.resize(*physical_size);
-                        } else if let winit::event::WindowEvent::ScaleFactorChanged {
-                            new_inner_size,
-                            ..
-                        } = &event
-                        {
-                            g.game.gl_window.resize(**new_inner_size);
-                        }
-
-                        let egui_glow = &mut g.game.egui_glow;
-                        let window = g.game.gl_window.window_mut();
-                        if !egui_glow.on_event(event).consumed {
-                            //let game_runner = &mut game_loop.game.game_runner;
-
-                            if let Some(gui_event_from_winit) = event.to_gui_event() {
-                                gui_events.push(gui_event_from_winit.clone());
-                                if let settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(
-                                    key_code,
-                                    modifiers,
-                                )) = gui_event_from_winit
-                                {
-                                    let settings = &g.game.settings;
-                                    use crate::input::keys::KeyCode::*;
-                                    match key_code {
-                                        F1 => {
-                                            let mut settings = settings.borrow_mut();
-                                            settings.last_save_state = Some(
-                                                b64.encode(g.game.game_runner.state_handler.save()),
-                                            );
-                                            settings.save().unwrap();
-                                        }
-                                        F2 => {
-                                            if let Some(save_state) =
-                                                &settings.borrow().last_save_state
-                                            {
-                                                if let Ok(buf) = &mut b64.decode(save_state) {
-                                                    g.game.game_runner.state_handler.load(buf);
-                                                }
-                                            }
-                                        }
-                                        key_code => {
-                                            window.check_and_set_fullscreen(modifiers, key_code);
-                                        } //_ => {}
-                                    }
-                                }
-                            }
-                        }
+                    unsafe {
+                        use glow::HasContext as _;
+                        //gl.clear_color(clear_colour[0], clear_colour[1], clear_colour[2], 1.0);
+                        gl.clear(glow::COLOR_BUFFER_BIT);
                     }
-                    _ => (),
-                }
-                g.game.gui.handle_events(
-                    gui_events,
-                    vec![
-                        #[cfg(feature = "debug")]
-                        &mut g.game.debug,
-                        &mut g.game.audio,
-                        &mut g.game.input,
-                        g.game.game_runner.state_handler.get_gui(),
-                    ],
-                );
 
-                if log::max_level() == log::Level::Trace && Time::now().sub(&g.last_stats) >= 0.5 {
-                    let (ups, rps, ..) = g.get_stats();
-                    log::trace!("UPS: {:?}, RPS: {:?}", ups, rps);
+                    // draw things behind egui here
+
+                    egui_glow.paint(window);
+
+                    // draw things on top of egui here
+
+                    gl_window.swap_buffers().unwrap();
                 }
             },
         );
-
-        if quit {
-            *control_flow = winit::event_loop::ControlFlow::Exit;
-            game_loop.game.egui_glow.destroy();
-        }
     });
 }
 

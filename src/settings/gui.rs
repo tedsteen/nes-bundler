@@ -53,7 +53,7 @@ impl Gui {
         Self { visible }
     }
 
-    pub fn handle_events(&mut self, events: Vec<GuiEvent>, guis: Vec<&mut dyn GuiComponent>) {
+    pub fn handle_events(&mut self, events: Vec<&GuiEvent>, guis: Vec<&mut dyn GuiComponent>) {
         for event in &events {
             if let GuiEvent::Keyboard(KeyEvent::Pressed(KeyCode::Escape, _)) = event {
                 self.visible = !self.visible;
