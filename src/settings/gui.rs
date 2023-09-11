@@ -1,7 +1,7 @@
 use egui::{Context, Order, TextureHandle};
 
 use crate::{
-    input::{keys::KeyCode, GamepadEvent, KeyEvent},
+    input::{gamepad::GamepadEvent, keys::KeyCode, KeyEvent},
     HEIGHT, WIDTH,
 };
 pub trait ToGuiEvent {
@@ -9,7 +9,7 @@ pub trait ToGuiEvent {
     fn to_gui_event(&self) -> Option<GuiEvent>;
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum GuiEvent {
     Keyboard(KeyEvent),
     Gamepad(GamepadEvent),
@@ -53,12 +53,16 @@ impl Gui {
         Self { visible }
     }
 
-    pub fn handle_event(&mut self, event: &GuiEvent, guis: Vec<&mut dyn GuiComponent>) {
-        if let GuiEvent::Keyboard(KeyEvent::Pressed(KeyCode::Escape, _)) = event {
-            self.visible = !self.visible;
+    pub fn handle_events(&mut self, events: Vec<&GuiEvent>, guis: Vec<&mut dyn GuiComponent>) {
+        for event in &events {
+            if let GuiEvent::Keyboard(KeyEvent::Pressed(KeyCode::Escape, _)) = event {
+                self.visible = !self.visible;
+            }
         }
         for gui in guis {
-            gui.event(event);
+            for event in &events {
+                gui.event(event);
+            }
         }
     }
 

@@ -22,7 +22,6 @@ pub struct GameLoop<G, T: TimeTrait> {
     pub game: G,
     pub updates_per_second: u32,
     pub max_frame_time: f64,
-    pub exit_next_iteration: bool,
 
     fixed_time_step: f64,
     pub last_stats: T,
@@ -43,7 +42,6 @@ impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
             game,
             updates_per_second,
             max_frame_time,
-            exit_next_iteration: false,
 
             fixed_time_step: 1.0 / updates_per_second as f64,
 
@@ -71,16 +69,12 @@ impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
         res
     }
 
-    pub fn next_frame<U, R, E>(&mut self, mut update: U, mut render: R, extra: E) -> bool
+    pub fn next_frame<U, R>(&mut self, mut update: U, mut render: R)
     where
-        U: FnMut(&mut GameLoop<G, T>, &E),
-        R: FnMut(&mut GameLoop<G, T>, &E),
+        U: FnMut(&mut GameLoop<G, T>),
+        R: FnMut(&mut GameLoop<G, T>),
     {
         let g = self;
-
-        if g.exit_next_iteration {
-            return false;
-        }
 
         g.current_instant = T::now();
 
@@ -95,7 +89,7 @@ impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
         g.accumulated_time += elapsed;
 
         while g.accumulated_time >= g.fixed_time_step {
-            update(g, &extra);
+            update(g);
 
             g.accumulated_time -= g.fixed_time_step;
             g.updates.push(g.current_instant);
@@ -105,18 +99,12 @@ impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
 
         g.blending_factor = g.accumulated_time / g.fixed_time_step;
 
-        render(g, &extra);
+        render(g);
 
         g.renders.push(g.current_instant);
         g.renders
             .retain(|e| g.current_instant.sub(e) <= SAMPLE_WINDOW);
         g.previous_instant = g.current_instant;
-
-        true
-    }
-
-    pub fn exit(&mut self) {
-        self.exit_next_iteration = true;
     }
 
     pub fn set_updates_per_second(&mut self, new_updates_per_second: u32) {

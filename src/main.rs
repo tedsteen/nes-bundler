@@ -1,12 +1,16 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+#![allow(unsafe_code)]
 #![deny(clippy::all)]
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::settings::gui::ToGuiEvent;
+use crate::window::{create_display, Fullscreen, GlutinWindowContext};
 use crate::{
     gameloop::TimeTrait,
-    input::{JoypadInput, KeyEvent},
-    settings::gui::{Gui, ToGuiEvent},
+    input::{gamepad::ToGamepadEvent, JoypadInput, KeyEvent},
+    settings::gui::{Gui, GuiEvent},
 };
 use anyhow::{Context, Result};
 use audio::Audio;
@@ -17,33 +21,35 @@ use settings::gui::{EmptyGuiComponent, GuiComponent};
 use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
 use base64::Engine;
 
-use input::{
-    keys::{KeyCode, Mod},
-    Input, Inputs,
-};
+use input::{Input, Inputs};
 use palette::NTSC_PAL;
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
-use sdl2::{clipboard::ClipboardUtil, video::FullscreenType, Sdl};
+use sdl2::Sdl;
 use serde::Deserialize;
 use settings::{Settings, MAX_PLAYERS};
 
 mod audio;
 #[cfg(feature = "debug")]
 mod debug;
-mod egui_sdl2;
 mod gameloop;
 mod input;
 #[cfg(feature = "netplay")]
 mod netplay;
 mod palette;
 mod settings;
+mod window;
 
 type Fps = u32;
 const FPS: Fps = 60;
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
-const ZOOM: f32 = 3.0;
+const ZOOM: u8 = 3;
+
+const DEFAULT_WINDOW_SIZE: (u32, u32) = (
+    crate::WIDTH * crate::ZOOM as u32,
+    crate::WIDTH * crate::ZOOM as u32,
+);
 
 pub fn start_nes(cart_data: Vec<u8>, sample_rate: u64) -> Result<NesState> {
     let rom_data = match std::env::var("ROM_FILE") {
@@ -142,36 +148,6 @@ pub struct BuildConfiguration {
     netplay: netplay::NetplayBuildConfiguration,
 }
 
-fn check_and_set_fullscreen(
-    window: &mut sdl2::video::Window,
-    key_mod: Mod,
-    key_code: KeyCode,
-) -> bool {
-    let mut flip = |fs_type: FullscreenType| {
-        let fs_type = if window.fullscreen_state() == FullscreenType::Off {
-            fs_type
-        } else {
-            FullscreenType::Off
-        };
-        window.set_fullscreen(fs_type).unwrap();
-    };
-
-    #[cfg(target_os = "macos")]
-    if key_mod.contains(Mod::LGUIMOD) && (key_code == KeyCode::F || key_code == KeyCode::Return) {
-        flip(FullscreenType::True);
-        return true;
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    if (key_mod.contains(Mod::LALTMOD | Mod::RALTMOD) && key_code == KeyCode::Return)
-        || key_code == KeyCode::F11
-    {
-        flip(FullscreenType::True);
-        return true;
-    };
-    false
-}
-
 fn main() -> Result<()> {
     env_logger::init();
 
@@ -179,10 +155,6 @@ fn main() -> Result<()> {
     // video subsystem enabled:
     sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
     let sdl_context: Sdl = sdl2::init().map_err(anyhow::Error::msg)?;
-    let video = sdl_context.video().unwrap();
-    let gl_attr = video.gl_attr();
-    gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
-    gl_attr.set_context_version(3, 0);
 
     let bundle = load_bundle()?;
     #[cfg(feature = "netplay")]
@@ -196,37 +168,17 @@ fn main() -> Result<()> {
         std::process::exit(0);
     }
 
-    let window = video
-        .window(
-            &bundle.config.window_title,
-            (WIDTH as f32 * ZOOM) as u32,
-            (HEIGHT as f32 * ZOOM) as u32,
-        )
-        .opengl()
-        .resizable()
-        .allow_highdpi()
-        .build()
-        .unwrap();
-    let gl_context = window.gl_create_context().unwrap();
-    window
-        .subsystem()
-        .gl_set_swap_interval(sdl2::video::SwapInterval::LateSwapTearing)
-        .or_else(|_| {
-            window
-                .subsystem()
-                .gl_set_swap_interval(sdl2::video::SwapInterval::VSync)
-        })
-        .expect("Could not gl_set_swap_interval(...)");
-
-    let (gl, window, mut events_loop, _gl_context) = {
-        let gl = unsafe {
-            glow::Context::from_loader_function(|s| video.gl_get_proc_address(s) as *const _)
-        };
-        let event_loop = sdl_context.event_pump().unwrap();
-        (gl, window, event_loop, gl_context)
-    };
+    let event_loop = winit::event_loop::EventLoopBuilder::with_user_event().build();
+    let (gl_window, gl) = create_display(
+        &bundle.config.window_title,
+        DEFAULT_WINDOW_SIZE.0,
+        DEFAULT_WINDOW_SIZE.1,
+        &event_loop,
+    );
     let gl = std::sync::Arc::new(gl);
-    let egui_glow = egui_sdl2::EguiGlow::new(&window, gl.clone(), None);
+
+    let egui_glow = egui_glow::EguiGlow::new(&event_loop, gl.clone(), None);
+    egui_glow.egui_ctx.set_pixels_per_point(gl_window.get_dpi());
 
     let settings = Rc::new(RefCell::new(Settings::new(
         bundle.config.default_settings.clone(),
@@ -249,9 +201,6 @@ fn main() -> Result<()> {
     );
 
     let inputs = Inputs::new(&sdl_context, bundle.config.default_settings.input.selected);
-    let input = Input::new(inputs, settings.clone());
-
-    let game_runner = GameRunner::new(Box::new(state_handler))?;
 
     let nes_texture_options = TextureOptions {
         magnification: egui::TextureFilter::Nearest,
@@ -268,42 +217,121 @@ fn main() -> Result<()> {
         )),
         nes_texture_options,
     );
-
     struct GameLoopState {
         game_runner: GameRunner,
-        window: sdl2::video::Window,
-        egui_glow: egui_sdl2::EguiGlow,
+        gl_window: GlutinWindowContext,
+        egui_glow: egui_glow::EguiGlow,
         gui: Gui,
         settings: Rc<RefCell<Settings>>,
         #[cfg(feature = "debug")]
         debug: debug::Debug,
         audio: Audio,
         input: Input,
-        clipboard: ClipboardUtil,
     }
 
     let mut game_loop: GameLoop<GameLoopState, Time> = GameLoop::new(
         GameLoopState {
-            game_runner,
-            window,
+            game_runner: GameRunner::new(Box::new(state_handler))?,
+            gl_window,
             egui_glow,
             gui: Gui::new(true),
-            settings,
+            settings: settings.clone(),
             #[cfg(feature = "debug")]
             debug: debug::Debug {
                 settings: debug::DebugSettings::new(),
                 gui: debug::gui::DebugGui::new(),
             },
             audio,
-            input,
-            clipboard: sdl_context.video().unwrap().clipboard(),
+            input: Input::new(inputs, settings),
         },
         FPS,
         0.08,
     );
-    let run_frame = Rc::new(std::sync::Mutex::new(|events: Vec<sdl2::event::Event>| {
+    let mut sdl_event_pump = sdl_context.event_pump().unwrap();
+
+    event_loop.run(move |event, _, control_flow| {
+        if log::max_level() == log::Level::Trace && Time::now().sub(&game_loop.last_stats) >= 1.0 {
+            let (ups, rps, ..) = game_loop.get_stats();
+            log::trace!("UPS: {:?}, RPS: {:?}", ups, rps);
+        }
+        let loop_state = &mut game_loop.game;
+
+        let winit_gui_event = if let winit::event::Event::WindowEvent { event, .. } = &event {
+            use winit::event::WindowEvent;
+            if matches!(event, WindowEvent::CloseRequested | WindowEvent::Destroyed) {
+                *control_flow = winit::event_loop::ControlFlow::Exit;
+            }
+
+            let gl_window = &mut loop_state.gl_window;
+            if let winit::event::WindowEvent::Resized(physical_size) = &event {
+                gl_window.resize(*physical_size);
+            } else if let winit::event::WindowEvent::ScaleFactorChanged { new_inner_size, .. } =
+                &event
+            {
+                gl_window.resize(**new_inner_size);
+            }
+
+            let winit_gui_event = event.to_gui_event();
+            let egui_glow = &mut loop_state.egui_glow;
+            if !egui_glow.on_event(event).consumed {
+                if let Some(settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(
+                    key_code,
+                    modifiers,
+                ))) = winit_gui_event.clone()
+                {
+                    let settings = &loop_state.settings;
+                    let game_runner = &mut loop_state.game_runner;
+
+                    use crate::input::keys::KeyCode::*;
+                    match key_code {
+                        F1 => {
+                            let mut settings = settings.borrow_mut();
+                            settings.last_save_state =
+                                Some(b64.encode(game_runner.state_handler.save()));
+                            settings.save().unwrap();
+                        }
+                        F2 => {
+                            if let Some(save_state) = &settings.borrow().last_save_state {
+                                if let Ok(buf) = &mut b64.decode(save_state) {
+                                    game_runner.state_handler.load(buf);
+                                }
+                            }
+                        }
+                        key_code => {
+                            gl_window
+                                .window_mut()
+                                .check_and_set_fullscreen(modifiers, key_code);
+                        }
+                    }
+                }
+            }
+            winit_gui_event
+        } else {
+            None
+        };
+
+        let sdl2_gui_event = sdl_event_pump
+            .poll_event()
+            .and_then(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad));
+
+        loop_state.gui.handle_events(
+            [sdl2_gui_event, winit_gui_event].iter().flatten().collect(),
+            vec![
+                #[cfg(feature = "debug")]
+                &mut loop_state.debug,
+                &mut loop_state.audio,
+                &mut loop_state.input,
+                loop_state.game_runner.state_handler.get_gui(),
+            ],
+        );
+
+        if let winit::event::Event::LoopDestroyed = &event {
+            loop_state.egui_glow.destroy();
+            return;
+        }
+
         game_loop.next_frame(
-            |g, _| {
+            |g| {
                 let loop_state = &mut g.game;
                 let egui_glow = &mut loop_state.egui_glow;
                 let game_runner = &mut loop_state.game_runner;
@@ -329,136 +357,55 @@ fn main() -> Result<()> {
 
                 g.set_updates_per_second(fps);
             },
-            |g, extra| {
-                if log::max_level() == log::Level::Debug && Time::now().sub(&g.last_stats) >= 0.5 {
-                    let (ups, rps, ..) = g.get_stats();
-                    log::debug!("UPS: {:?}, RPS: {:?}", ups, rps);
-                }
+            |g| {
+                if let winit::event::Event::RedrawEventsCleared = &event {
+                    let loop_state = &mut g.game;
+                    let gl_window = &loop_state.gl_window;
+                    let settings = &loop_state.settings;
+                    let settings_hash_before = settings.borrow().get_hash();
+                    let gui = &mut loop_state.gui;
 
-                let loop_state = &mut g.game;
-                let settings = &loop_state.settings;
-                let settings_hash_before = settings.borrow().get_hash();
+                    let egui_glow = &mut loop_state.egui_glow;
 
-                let egui_glow = &mut loop_state.egui_glow;
-                let gui = &mut loop_state.gui;
-                let window = &mut loop_state.window;
-                let mut quit = false;
+                    let window = &mut gl_window.window();
 
-                let game_runner = &mut loop_state.game_runner;
-                for event in extra {
-                    egui_glow.on_event(event, window);
-                    if let Some(gui_event) = event.to_gui_event() {
-                        if let settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(
-                            key_code,
-                            keymod,
-                        )) = gui_event
-                        {
-                            use crate::input::keys::KeyCode::*;
-                            match key_code {
-                                F1 => {
-                                    let mut settings = settings.borrow_mut();
-                                    settings.last_save_state =
-                                        Some(b64.encode(game_runner.state_handler.save()));
-                                    settings.save().unwrap();
-                                }
-                                F2 => {
-                                    if let Some(save_state) = &settings.borrow().last_save_state {
-                                        if let Ok(buf) = &mut b64.decode(save_state) {
-                                            game_runner.state_handler.load(buf);
-                                        }
-                                    }
-                                }
-                                key_code => {
-                                    if check_and_set_fullscreen(window, keymod, key_code) {
-                                        return; // Event consumed
-                                    }
-                                }
-                            }
-                        }
-                        gui.handle_event(
-                            &gui_event,
-                            vec![
+                    egui_glow.run(gl_window.window(), |egui_ctx| {
+                        let game_runner = &mut loop_state.game_runner;
+                        gui.ui(
+                            egui_ctx,
+                            &mut vec![
                                 #[cfg(feature = "debug")]
                                 &mut loop_state.debug,
                                 &mut loop_state.audio,
                                 &mut loop_state.input,
                                 game_runner.state_handler.get_gui(),
                             ],
+                            &nes_texture,
                         );
+                    });
+
+                    if settings_hash_before != settings.borrow().get_hash() {
+                        log::debug!("Settings saved");
+                        settings.borrow().save().unwrap();
                     }
 
-                    if let sdl2::event::Event::Quit { .. } = event {
-                        quit = true;
+                    unsafe {
+                        use glow::HasContext as _;
+                        //gl.clear_color(clear_colour[0], clear_colour[1], clear_colour[2], 1.0);
+                        gl.clear(glow::COLOR_BUFFER_BIT);
                     }
-                }
-                let clipboard = &mut loop_state.clipboard;
-                egui_glow.run(window, clipboard, |egui_ctx| {
-                    let game_runner = &mut loop_state.game_runner;
-                    gui.ui(
-                        egui_ctx,
-                        &mut vec![
-                            #[cfg(feature = "debug")]
-                            &mut loop_state.debug,
-                            &mut loop_state.audio,
-                            &mut loop_state.input,
-                            game_runner.state_handler.get_gui(),
-                        ],
-                        &nes_texture,
-                    );
-                });
 
-                if settings_hash_before != settings.borrow().get_hash() {
-                    log::debug!("Settings saved");
-                    settings.borrow().save().unwrap();
-                }
+                    // draw things behind egui here
 
-                unsafe {
-                    use glow::HasContext as _;
-                    //gl.clear_color(clear_colour[0], clear_colour[1], clear_colour[2], 1.0);
-                    gl.clear(glow::COLOR_BUFFER_BIT);
-                }
+                    egui_glow.paint(window);
 
-                // draw things behind egui here
+                    // draw things on top of egui here
 
-                egui_glow.paint(window);
-
-                // draw things on top of egui here
-
-                window.gl_swap_window();
-                if quit {
-                    g.exit();
+                    gl_window.swap_buffers().unwrap();
                 }
             },
-            events,
-        )
-    }));
-
-    let handle = |events: Vec<sdl2::event::Event>| -> bool {
-        run_frame.lock().map_or(true, |mut handle| handle(events))
-    };
-
-    //Note: this is a workaround for https://stackoverflow.com/a/40693139
-    //TODO: Enable this when I figured out how to make it stable (without deadlocks)
-    //let _event_watch = sdl_context.event().unwrap().add_event_watch(|event| {
-    //    use sdl2::event::{Event, WindowEvent};
-    //    if let Event::Window {
-    //        win_event: WindowEvent::Resized(..) | WindowEvent::SizeChanged(..),
-    //        ..
-    //    } = event
-    //    {
-    //        handle(vec![event]);
-    //    };
-    //});
-
-    'mainloop: loop {
-        let events = events_loop.poll_iter().collect::<Vec<_>>();
-        if !handle(events) {
-            log::info!("Game loop ended");
-            break 'mainloop;
-        }
-    }
-
-    Ok(())
+        );
+    });
 }
 
 pub struct LocalGameState {
@@ -482,7 +429,7 @@ impl LocalGameState {
     fn save(&self) -> Vec<u8> {
         let mut data = self.nes.save_state();
         data.extend(self.frame.to_le_bytes());
-        log::debug!("SAVED {:?}", self.frame);
+        log::debug!("State saved at frame {:?}", self.frame);
         data
     }
     fn load(&mut self, data: &mut Vec<u8>) {
@@ -492,7 +439,7 @@ impl LocalGameState {
                 .unwrap(),
         );
         self.nes.load_state(data);
-        log::debug!("LOADED {:?}", self.frame);
+        log::debug!("State loaded at frame {:?}", self.frame);
     }
 
     fn consume_samples(&mut self) -> Vec<i16> {

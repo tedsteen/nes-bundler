@@ -7,7 +7,7 @@ publish = false
 
 [features]
 default = []
-#default = ["netplay", "debug"]
+#default = ["netplay", "debug", "zip-bundle"]
 
 netplay = ["matchbox_socket", "tokio", "ggrs", "futures-timer", "futures", "uuid", "reqwest", "md5"]
 zip-bundle = ["rfd", "zip"]
@@ -32,8 +32,12 @@ bitflags = "2"
 egui = { version = "0.22", default-features = false, features = [
   "bytemuck", "default_fonts"
 ] }
-egui_glow = "0.22"
+egui_glow = { version = "0.22", features = ["winit"] }
 glow = "0.12"
+winit = "0.28"
+glutin-winit = "0.3"
+glutin="0.30"
+raw-window-handle = "0.5"
 
 #sdl2 = { version="0.35", features = ["bundled", "static-link"] }
 # rev="b36d04851aae15a7f792e1bf8a5ce5b138d76346" 0.35.2

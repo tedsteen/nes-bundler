@@ -1,5 +1,6 @@
+use super::buttons::ToGamepadButton;
 use super::ToInputId;
-use super::{buttons::GamepadButton, settings::InputSettings, GamepadEvent, InputId, JoypadInput};
+use super::{buttons::GamepadButton, settings::InputSettings, InputId, JoypadInput};
 use crate::input::{self, InputConfigurationKind};
 use std::collections::{HashMap, HashSet};
 use std::{cell::RefCell, rc::Rc};
@@ -7,9 +8,7 @@ use std::{cell::RefCell, rc::Rc};
 use sdl2::Sdl;
 use sdl2::{controller::GameController, GameControllerSubsystem};
 
-use super::gamepad::{GamepadState, Gamepads, JoypadGamepadMapping};
-
-pub mod conversion;
+use super::gamepad::{GamepadEvent, GamepadState, Gamepads, JoypadGamepadMapping, ToGamepadEvent};
 
 pub struct Sdl2GamepadState {
     pub pressed_buttons: HashSet<GamepadButton>,
@@ -158,6 +157,65 @@ impl Sdl2Gamepads {
             Some(Rc::clone(conf))
         } else {
             None
+        }
+    }
+}
+
+impl ToGamepadEvent for sdl2::event::Event {
+    fn to_gamepad_event(&self) -> Option<GamepadEvent> {
+        match self {
+            sdl2::event::Event::ControllerDeviceAdded { which, .. } => {
+                Some(GamepadEvent::ControllerAdded {
+                    which: which.to_input_id(),
+                })
+            }
+            sdl2::event::Event::ControllerDeviceRemoved { which, .. } => {
+                Some(GamepadEvent::ControllerRemoved {
+                    which: which.to_input_id(),
+                })
+            }
+            sdl2::event::Event::ControllerButtonDown { which, button, .. } => button
+                .to_gamepad_button()
+                .map(|button| GamepadEvent::ButtonDown {
+                    which: which.to_input_id(),
+                    button,
+                }),
+            sdl2::event::Event::ControllerButtonUp { which, button, .. } => button
+                .to_gamepad_button()
+                .map(|button| GamepadEvent::ButtonUp {
+                    which: which.to_input_id(),
+                    button,
+                }),
+            _ => None,
+        }
+    }
+}
+
+impl ToGamepadButton for sdl2::controller::Button {
+    fn to_gamepad_button(&self) -> Option<GamepadButton> {
+        use sdl2::controller::Button::*;
+        match self {
+            A => Some(GamepadButton::A),
+            B => Some(GamepadButton::B),
+            X => Some(GamepadButton::X),
+            Y => Some(GamepadButton::Y),
+            Back => Some(GamepadButton::Back),
+            Guide => Some(GamepadButton::Guide),
+            Start => Some(GamepadButton::Start),
+            LeftStick => Some(GamepadButton::LeftStick),
+            RightStick => Some(GamepadButton::RightStick),
+            LeftShoulder => Some(GamepadButton::LeftShoulder),
+            RightShoulder => Some(GamepadButton::RightShoulder),
+            DPadUp => Some(GamepadButton::DPadUp),
+            DPadDown => Some(GamepadButton::DPadDown),
+            DPadLeft => Some(GamepadButton::DPadLeft),
+            DPadRight => Some(GamepadButton::DPadRight),
+            Misc1 => Some(GamepadButton::Misc1),
+            Paddle1 => Some(GamepadButton::Paddle1),
+            Paddle2 => Some(GamepadButton::Paddle2),
+            Paddle3 => Some(GamepadButton::Paddle3),
+            Paddle4 => Some(GamepadButton::Paddle4),
+            Touchpad => Some(GamepadButton::Touchpad),
         }
     }
 }

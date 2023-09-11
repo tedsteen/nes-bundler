@@ -1,14 +1,13 @@
 use self::{
-    buttons::GamepadButton,
     gamepad::{Gamepads, JoypadGamepadMapping},
     gui::InputSettingsGui,
     keyboard::{JoypadKeyboardMapping, Keyboards},
-    keys::{KeyCode, Mod},
-    sdl2::Sdl2Gamepads,
+    keys::{KeyCode, Modifiers},
+    sdl2_impl::Sdl2Gamepads,
     settings::InputConfigurationRef,
 };
 use crate::settings::{gui::GuiEvent, Settings, MAX_PLAYERS};
-use ::sdl2::Sdl;
+use sdl2::Sdl;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::HashSet, fmt::Debug, rc::Rc};
 
@@ -17,31 +16,13 @@ pub mod gamepad;
 pub mod gui;
 pub mod keyboard;
 pub mod keys;
-pub mod sdl2;
+pub mod sdl2_impl;
 pub mod settings;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum KeyEvent {
-    Pressed(KeyCode, Mod),
-    Released(KeyCode, Mod),
-}
-
-#[derive(Debug)]
-pub enum GamepadEvent {
-    ControllerAdded {
-        which: InputId,
-    },
-    ControllerRemoved {
-        which: InputId,
-    },
-    ButtonDown {
-        which: InputId,
-        button: GamepadButton,
-    },
-    ButtonUp {
-        which: InputId,
-        button: GamepadButton,
-    },
+    Pressed(KeyCode, Modifiers),
+    Released(KeyCode, Modifiers),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
