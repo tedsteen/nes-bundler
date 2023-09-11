@@ -326,7 +326,6 @@ fn main() -> Result<()> {
         );
 
         if let winit::event::Event::LoopDestroyed = &event {
-            println!("DRESTORY");
             loop_state.egui_glow.destroy();
             return;
         }
