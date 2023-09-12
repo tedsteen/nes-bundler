@@ -7,6 +7,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::bundle::{Bundle, LoadBundle};
+use crate::input::buttons::GamepadButton;
 use crate::settings::gui::ToGuiEvent;
 use crate::window::{create_display, Fullscreen, GlutinWindowContext};
 use crate::{
@@ -182,6 +183,11 @@ fn main() -> Result<()> {
                                 }
                                 true
                             }
+                            Escape => {
+                                game.gui.toggle_visibility();
+                                true
+                            }
+
                             key_code => gl_window
                                 .window_mut()
                                 .check_and_set_fullscreen(modifiers, key_code),
@@ -196,11 +202,21 @@ fn main() -> Result<()> {
             }
         };
 
-        if let Some(gui_event) = sdl_event_pump
+        if let Some(sdl2_gui_event) = sdl_event_pump
             .poll_event()
             .and_then(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad))
         {
-            game.apply_gui_event(&gui_event);
+            match &sdl2_gui_event {
+                GuiEvent::Gamepad(input::gamepad::GamepadEvent::ButtonDown {
+                    button: GamepadButton::Guide,
+                    ..
+                }) => {
+                    game.gui.toggle_visibility();
+                }
+                _ => {
+                    game.apply_gui_event(&sdl2_gui_event);
+                }
+            }
         }
 
         if let winit::event::Event::LoopDestroyed = &event {

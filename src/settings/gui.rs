@@ -1,7 +1,7 @@
 use egui::{Context, Order, TextureHandle};
 
 use crate::{
-    input::{gamepad::GamepadEvent, keys::KeyCode, KeyEvent},
+    input::{gamepad::GamepadEvent, KeyEvent},
     HEIGHT, WIDTH,
 };
 pub trait ToGuiEvent {
@@ -54,9 +54,6 @@ impl Gui {
     }
 
     pub fn handle_events(&mut self, event: &GuiEvent, guis: Vec<&mut dyn GuiComponent>) {
-        if let GuiEvent::Keyboard(KeyEvent::Pressed(KeyCode::Escape, _)) = event {
-            self.visible = !self.visible;
-        }
         for gui in guis {
             gui.event(event);
         }
@@ -122,5 +119,9 @@ impl Gui {
                     }
                 }
             });
+    }
+
+    pub fn toggle_visibility(&mut self) {
+        self.visible = !self.visible;
     }
 }
