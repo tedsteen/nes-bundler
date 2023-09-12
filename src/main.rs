@@ -4,7 +4,6 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use crate::bundle::{Bundle, LoadBundle};
 use crate::input::buttons::GamepadButton;
@@ -235,7 +234,7 @@ fn run(
                     unsafe {
                         use glow::HasContext as _;
                         //gl.clear_color(clear_colour[0], clear_colour[1], clear_colour[2], 1.0);
-                        game.gl.clear(glow::COLOR_BUFFER_BIT);
+                        game.gl_window.glow_context.clear(glow::COLOR_BUFFER_BIT);
                     }
 
                     // draw things behind egui here
@@ -274,14 +273,14 @@ fn initialise() -> Result<
         std::process::exit(0);
     }
     let event_loop = winit::event_loop::EventLoopBuilder::with_user_event().build();
-    let (gl_window, gl) = create_display(
+    let gl_window = create_display(
         &bundle.config.window_title,
         DEFAULT_WINDOW_SIZE.0,
         DEFAULT_WINDOW_SIZE.1,
         &event_loop,
     );
-    let gl = std::sync::Arc::new(gl);
-    let egui_glow = egui_glow::EguiGlow::new(&event_loop, gl.clone(), None);
+
+    let egui_glow = egui_glow::EguiGlow::new(&event_loop, gl_window.glow_context.clone(), None);
     egui_glow.egui_ctx.set_pixels_per_point(gl_window.get_dpi());
     let settings = Rc::new(RefCell::new(Settings::new(
         bundle.config.default_settings.clone(),
@@ -305,7 +304,6 @@ fn initialise() -> Result<
         Game::new(
             Box::new(state_handler),
             gl_window,
-            gl,
             egui_glow,
             settings,
             audio,
@@ -411,7 +409,6 @@ impl StateHandler for LocalStateHandler {
 struct Game {
     state_handler: Box<dyn StateHandler>,
     gl_window: GlutinWindowContext,
-    gl: Arc<glow::Context>,
     egui_glow: egui_glow::EguiGlow,
     gui: Gui,
     settings: Rc<RefCell<Settings>>,
@@ -428,7 +425,6 @@ impl Game {
     pub fn new(
         state_handler: Box<dyn StateHandler>,
         gl_window: GlutinWindowContext,
-        gl: Arc<glow::Context>,
         egui_glow: egui_glow::EguiGlow,
         settings: Rc<RefCell<Settings>>,
         audio: Audio,
@@ -453,7 +449,6 @@ impl Game {
         Self {
             state_handler,
             gl_window,
-            gl,
             egui_glow,
             gui: Gui::new(true),
             input: Input::new(inputs, settings.clone()),
