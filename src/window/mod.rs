@@ -1,4 +1,4 @@
-use std::num::NonZeroU32;
+use std::{num::NonZeroU32, sync::Arc};
 
 use egui::NumExt;
 
@@ -12,8 +12,8 @@ pub trait Fullscreen {
 pub struct GlutinWindowContext {
     window: winit::window::Window,
     gl_context: glutin::context::PossiblyCurrentContext,
-    gl_display: glutin::display::Display,
     gl_surface: glutin::surface::Surface<glutin::surface::WindowSurface>,
+    pub glow_context: Arc<glow::Context>,
 }
 
 impl GlutinWindowContext {
@@ -118,7 +118,11 @@ impl GlutinWindowContext {
         GlutinWindowContext {
             window,
             gl_context,
-            gl_display,
+            glow_context: Arc::new(glow::Context::from_loader_function(|s| {
+                let s = std::ffi::CString::new(s)
+                    .expect("failed to construct C string from string for gl proc address");
+                gl_display.get_proc_address(&s)
+            })),
             gl_surface,
         }
     }
@@ -148,11 +152,6 @@ impl GlutinWindowContext {
     pub fn get_dpi(&self) -> f32 {
         self.window.scale_factor() as f32
     }
-
-    fn get_proc_address(&self, addr: &std::ffi::CStr) -> *const std::ffi::c_void {
-        use glutin::display::GlDisplay;
-        self.gl_display.get_proc_address(addr)
-    }
 }
 
 pub fn create_display(
@@ -160,17 +159,6 @@ pub fn create_display(
     width: u32,
     height: u32,
     event_loop: &winit::event_loop::EventLoopWindowTarget<()>,
-) -> (GlutinWindowContext, glow::Context) {
-    let glutin_window_context =
-        unsafe { GlutinWindowContext::new(title, width as f32, height as f32, event_loop) };
-    let gl = unsafe {
-        glow::Context::from_loader_function(|s| {
-            let s = std::ffi::CString::new(s)
-                .expect("failed to construct C string from string for gl proc address");
-
-            glutin_window_context.get_proc_address(&s)
-        })
-    };
-
-    (glutin_window_context, gl)
+) -> GlutinWindowContext {
+    unsafe { GlutinWindowContext::new(title, width as f32, height as f32, event_loop) }
 }
