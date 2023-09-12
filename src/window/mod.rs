@@ -6,7 +6,7 @@ use crate::input::keys::{KeyCode, Modifiers};
 mod winit_impl;
 
 pub trait Fullscreen {
-    fn check_and_set_fullscreen(&mut self, key_mod: Modifiers, key_code: KeyCode) -> bool;
+    fn check_and_set_fullscreen(&mut self, key_mod: &Modifiers, key_code: &KeyCode) -> bool;
 }
 
 pub struct GlutinWindowContext {

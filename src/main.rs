@@ -153,6 +153,20 @@ fn main() -> Result<()> {
         audio: Audio,
         input: Input,
     }
+    impl GameLoopState {
+        fn apply_gui_event(&mut self, gui_event: &GuiEvent) {
+            self.gui.handle_events(
+                gui_event,
+                vec![
+                    #[cfg(feature = "debug")]
+                    &mut self.debug,
+                    &mut self.audio,
+                    &mut self.input,
+                    self.game_runner.state_handler.get_gui(),
+                ],
+            )
+        }
+    }
 
     let mut game_loop: GameLoop<GameLoopState, Time> = GameLoop::new(
         GameLoopState {
@@ -181,7 +195,7 @@ fn main() -> Result<()> {
         }
         let loop_state = &mut game_loop.game;
 
-        let winit_gui_event = if let winit::event::Event::WindowEvent { event, .. } = &event {
+        if let winit::event::Event::WindowEvent { event, .. } = &event {
             use winit::event::WindowEvent;
             if matches!(event, WindowEvent::CloseRequested | WindowEvent::Destroyed) {
                 *control_flow = winit::event_loop::ControlFlow::Exit;
@@ -196,59 +210,54 @@ fn main() -> Result<()> {
                 gl_window.resize(**new_inner_size);
             }
 
-            let winit_gui_event = event.to_gui_event();
             let egui_glow = &mut loop_state.egui_glow;
             if !egui_glow.on_event(event).consumed {
-                if let Some(settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(
-                    key_code,
-                    modifiers,
-                ))) = winit_gui_event.clone()
-                {
-                    let settings = &loop_state.settings;
-                    let game_runner = &mut loop_state.game_runner;
+                if let Some(winit_gui_event) = &event.to_gui_event() {
+                    let consumed = if let settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(
+                        key_code,
+                        modifiers,
+                    )) = winit_gui_event
+                    {
+                        let settings = &loop_state.settings;
+                        let game_runner = &mut loop_state.game_runner;
 
-                    use crate::input::keys::KeyCode::*;
-                    match key_code {
-                        F1 => {
-                            let mut settings = settings.borrow_mut();
-                            settings.last_save_state =
-                                Some(b64.encode(game_runner.state_handler.save()));
-                            settings.save().unwrap();
-                        }
-                        F2 => {
-                            if let Some(save_state) = &settings.borrow().last_save_state {
-                                if let Ok(buf) = &mut b64.decode(save_state) {
-                                    game_runner.state_handler.load(buf);
-                                }
+                        use crate::input::keys::KeyCode::*;
+                        match key_code {
+                            F1 => {
+                                let mut settings = settings.borrow_mut();
+                                settings.last_save_state =
+                                    Some(b64.encode(game_runner.state_handler.save()));
+                                settings.save().unwrap();
+                                true
                             }
-                        }
-                        key_code => {
-                            gl_window
+                            F2 => {
+                                if let Some(save_state) = &settings.borrow().last_save_state {
+                                    if let Ok(buf) = &mut b64.decode(save_state) {
+                                        game_runner.state_handler.load(buf);
+                                    }
+                                }
+                                true
+                            }
+                            key_code => gl_window
                                 .window_mut()
-                                .check_and_set_fullscreen(modifiers, key_code);
+                                .check_and_set_fullscreen(modifiers, key_code),
                         }
+                    } else {
+                        false
+                    };
+                    if !consumed {
+                        loop_state.apply_gui_event(winit_gui_event);
                     }
                 }
             }
-            winit_gui_event
-        } else {
-            None
         };
 
-        let sdl2_gui_event = sdl_event_pump
+        if let Some(gui_event) = sdl_event_pump
             .poll_event()
-            .and_then(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad));
-
-        loop_state.gui.handle_events(
-            [sdl2_gui_event, winit_gui_event].iter().flatten().collect(),
-            vec![
-                #[cfg(feature = "debug")]
-                &mut loop_state.debug,
-                &mut loop_state.audio,
-                &mut loop_state.input,
-                loop_state.game_runner.state_handler.get_gui(),
-            ],
-        );
+            .and_then(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad))
+        {
+            loop_state.apply_gui_event(&gui_event);
+        }
 
         if let winit::event::Event::LoopDestroyed = &event {
             loop_state.egui_glow.destroy();
