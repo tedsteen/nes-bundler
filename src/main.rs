@@ -5,6 +5,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::bundle::{Bundle, LoadBundle};
 use crate::settings::gui::ToGuiEvent;
 use crate::window::{create_display, Fullscreen, GlutinWindowContext};
 use crate::{
@@ -26,10 +27,10 @@ use palette::NTSC_PAL;
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
 use sdl2::Sdl;
-use serde::Deserialize;
 use settings::{Settings, MAX_PLAYERS};
 
 mod audio;
+mod bundle;
 #[cfg(feature = "debug")]
 mod debug;
 mod gameloop;
@@ -71,83 +72,6 @@ pub fn start_nes(cart_data: Vec<u8>, sample_rate: u64) -> Result<NesState> {
     Ok(nes)
 }
 
-pub struct Bundle {
-    config: BuildConfiguration,
-    rom: Vec<u8>,
-}
-
-#[cfg(feature = "zip-bundle")]
-fn load_bundle_from_zip(zip_file: std::io::Result<std::fs::File>) -> Result<Bundle> {
-    if let Ok(zip_file) = zip_file {
-        let mut zip = zip::ZipArchive::new(zip_file)?;
-        let config: BuildConfiguration = serde_yaml::from_reader(
-            zip.by_name("config.yaml")
-                .context("config.yaml not found in bundle.zip")?,
-        )?;
-
-        let mut rom = Vec::new();
-        std::io::copy(
-            &mut zip
-                .by_name("rom.nes")
-                .context("rom.nes not found in bundle.zip")?,
-            &mut rom,
-        )?;
-        Ok(Bundle { config, rom })
-    } else {
-        let folder = rfd::FileDialog::new()
-            .set_title("Files to bundle")
-            .set_directory(".")
-            .pick_folder()
-            .context("No bundle to load")?;
-
-        let mut config_path = folder.clone();
-        config_path.push("config.yaml");
-        let mut config_file = std::fs::File::open(config_path)
-            .context(format!("config.yaml not found in {:?}", folder))?;
-
-        let mut rom_path = folder.clone();
-        rom_path.push("rom.nes");
-        let mut rom_file =
-            std::fs::File::open(rom_path).context(format!("rom.nes not found in {:?}", folder))?;
-
-        let mut zip = zip::ZipWriter::new(
-            std::fs::File::create("bundle.zip").context("Could not create bundle.zip")?,
-        );
-        zip.start_file("config.yaml", Default::default())?;
-        std::io::copy(&mut config_file, &mut zip)?;
-
-        zip.start_file("rom.nes", Default::default())?;
-        std::io::copy(&mut rom_file, &mut zip)?;
-
-        zip.finish()?;
-
-        // Try again with newly created bundle.zip
-        load_bundle_from_zip(std::fs::File::open("bundle.zip"))
-    }
-}
-fn load_bundle() -> Result<Bundle> {
-    #[cfg(not(feature = "zip-bundle"))]
-    return Ok(Bundle {
-        config: serde_yaml::from_str(include_str!("../config/config.yaml"))?,
-        rom: include_bytes!("../config/rom.nes").to_vec(),
-    });
-    #[cfg(feature = "zip-bundle")]
-    {
-        let res = load_bundle_from_zip(std::fs::File::open("bundle.zip"));
-        if let Err(e) = &res {
-            log::error!("Could not load the bundle: {:?}", e);
-        }
-        res
-    }
-}
-#[derive(Deserialize, Debug)]
-pub struct BuildConfiguration {
-    window_title: String,
-    default_settings: Settings,
-    #[cfg(feature = "netplay")]
-    netplay: netplay::NetplayBuildConfiguration,
-}
-
 fn main() -> Result<()> {
     #[cfg(windows)]
     {
@@ -180,7 +104,7 @@ fn main() -> Result<()> {
     sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
     let sdl_context: Sdl = sdl2::init().map_err(anyhow::Error::msg)?;
 
-    let bundle = load_bundle()?;
+    let bundle = Bundle::load()?;
     #[cfg(feature = "netplay")]
     if std::env::args()
         .collect::<String>()
