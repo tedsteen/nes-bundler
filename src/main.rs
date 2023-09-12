@@ -15,6 +15,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use audio::Audio;
+use egui::TextureHandle;
 use egui::{epaint::ImageDelta, Color32, ColorImage, ImageData, TextureOptions};
 use gameloop::{GameLoop, Time};
 use settings::gui::{EmptyGuiComponent, GuiComponent};
@@ -127,62 +128,15 @@ fn main() -> Result<()> {
 
     let inputs = Inputs::new(&sdl_context, bundle.config.default_settings.input.selected);
 
-    let nes_texture_options = TextureOptions {
-        magnification: egui::TextureFilter::Nearest,
-        minification: egui::TextureFilter::Nearest,
-    };
-
-    let no_image = ImageData::Color(ColorImage::new([0, 0], Color32::TRANSPARENT));
-
-    let nes_texture = egui_glow.egui_ctx.load_texture(
-        "nes",
-        ImageData::Color(ColorImage::new(
-            [WIDTH as usize, HEIGHT as usize],
-            Color32::BLACK,
-        )),
-        nes_texture_options,
-    );
-    struct GameLoopState {
-        game_runner: GameRunner,
-        gl_window: GlutinWindowContext,
-        egui_glow: egui_glow::EguiGlow,
-        gui: Gui,
-        settings: Rc<RefCell<Settings>>,
-        #[cfg(feature = "debug")]
-        debug: debug::Debug,
-        audio: Audio,
-        input: Input,
-    }
-    impl GameLoopState {
-        fn apply_gui_event(&mut self, gui_event: &GuiEvent) {
-            self.gui.handle_events(
-                gui_event,
-                vec![
-                    #[cfg(feature = "debug")]
-                    &mut self.debug,
-                    &mut self.audio,
-                    &mut self.input,
-                    self.game_runner.state_handler.get_gui(),
-                ],
-            )
-        }
-    }
-
-    let mut game_loop: GameLoop<GameLoopState, Time> = GameLoop::new(
-        GameLoopState {
-            game_runner: GameRunner::new(Box::new(state_handler))?,
+    let mut game_loop: GameLoop<Game, Time> = GameLoop::new(
+        Game::new(
+            Box::new(state_handler),
             gl_window,
             egui_glow,
-            gui: Gui::new(true),
-            settings: settings.clone(),
-            #[cfg(feature = "debug")]
-            debug: debug::Debug {
-                settings: debug::DebugSettings::new(),
-                gui: debug::gui::DebugGui::new(),
-            },
+            settings,
             audio,
-            input: Input::new(inputs, settings),
-        },
+            inputs,
+        ),
         FPS,
         0.08,
     );
@@ -193,7 +147,7 @@ fn main() -> Result<()> {
             let (ups, rps, ..) = game_loop.get_stats();
             log::trace!("UPS: {:?}, RPS: {:?}", ups, rps);
         }
-        let loop_state = &mut game_loop.game;
+        let game = &mut game_loop.game;
 
         if let winit::event::Event::WindowEvent { event, .. } = &event {
             use winit::event::WindowEvent;
@@ -201,7 +155,7 @@ fn main() -> Result<()> {
                 *control_flow = winit::event_loop::ControlFlow::Exit;
             }
 
-            let gl_window = &mut loop_state.gl_window;
+            let gl_window = &mut game.gl_window;
             if let winit::event::WindowEvent::Resized(physical_size) = &event {
                 gl_window.resize(*physical_size);
             } else if let winit::event::WindowEvent::ScaleFactorChanged { new_inner_size, .. } =
@@ -210,7 +164,7 @@ fn main() -> Result<()> {
                 gl_window.resize(**new_inner_size);
             }
 
-            let egui_glow = &mut loop_state.egui_glow;
+            let egui_glow = &mut game.egui_glow;
             if !egui_glow.on_event(event).consumed {
                 if let Some(winit_gui_event) = &event.to_gui_event() {
                     let consumed = if let settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(
@@ -218,22 +172,21 @@ fn main() -> Result<()> {
                         modifiers,
                     )) = winit_gui_event
                     {
-                        let settings = &loop_state.settings;
-                        let game_runner = &mut loop_state.game_runner;
+                        let settings = &game.settings;
 
                         use crate::input::keys::KeyCode::*;
                         match key_code {
                             F1 => {
                                 let mut settings = settings.borrow_mut();
                                 settings.last_save_state =
-                                    Some(b64.encode(game_runner.state_handler.save()));
+                                    Some(b64.encode(game.state_handler.save()));
                                 settings.save().unwrap();
                                 true
                             }
                             F2 => {
                                 if let Some(save_state) = &settings.borrow().last_save_state {
                                     if let Ok(buf) = &mut b64.decode(save_state) {
-                                        game_runner.state_handler.load(buf);
+                                        game.state_handler.load(buf);
                                     }
                                 }
                                 true
@@ -246,7 +199,7 @@ fn main() -> Result<()> {
                         false
                     };
                     if !consumed {
-                        loop_state.apply_gui_event(winit_gui_event);
+                        game.apply_gui_event(winit_gui_event);
                     }
                 }
             }
@@ -256,65 +209,54 @@ fn main() -> Result<()> {
             .poll_event()
             .and_then(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad))
         {
-            loop_state.apply_gui_event(&gui_event);
+            game.apply_gui_event(&gui_event);
         }
 
         if let winit::event::Event::LoopDestroyed = &event {
-            loop_state.egui_glow.destroy();
+            game.egui_glow.destroy();
             return;
         }
 
         game_loop.next_frame(
             |g| {
-                let loop_state = &mut g.game;
-                let egui_glow = &mut loop_state.egui_glow;
-                let game_runner = &mut loop_state.game_runner;
+                let game = &mut g.game;
 
                 #[allow(unused_mut)] //debug feature needs this
-                let mut fps = game_runner.advance(&loop_state.input);
+                let mut fps = game.advance();
                 #[cfg(feature = "debug")]
-                if loop_state.debug.settings.override_fps {
-                    fps = loop_state.debug.settings.fps;
+                if game.debug.settings.override_fps {
+                    fps = game.debug.settings.fps;
                 }
 
                 // No need to update graphics or audio more than once per update
-                let new_frame = game_runner.get_frame().unwrap_or_else(|| no_image.clone());
-                egui_glow.egui_ctx.tex_manager().write().set(
-                    nes_texture.id(),
-                    ImageDelta::full(new_frame, nes_texture_options),
-                );
-
-                loop_state
-                    .audio
-                    .stream
-                    .push_samples(game_runner.state_handler.consume_samples().as_slice());
+                game.draw_frame();
+                game.push_audio();
 
                 g.set_updates_per_second(fps);
             },
             |g| {
                 if let winit::event::Event::RedrawEventsCleared = &event {
-                    let loop_state = &mut g.game;
-                    let gl_window = &loop_state.gl_window;
-                    let settings = &loop_state.settings;
+                    let game = &mut g.game;
+                    let gl_window = &game.gl_window;
+                    let settings = &game.settings;
                     let settings_hash_before = settings.borrow().get_hash();
-                    let gui = &mut loop_state.gui;
+                    let gui = &mut game.gui;
 
-                    let egui_glow = &mut loop_state.egui_glow;
+                    let egui_glow = &mut game.egui_glow;
 
                     let window = &mut gl_window.window();
 
                     egui_glow.run(gl_window.window(), |egui_ctx| {
-                        let game_runner = &mut loop_state.game_runner;
                         gui.ui(
                             egui_ctx,
                             &mut vec![
                                 #[cfg(feature = "debug")]
-                                &mut loop_state.debug,
-                                &mut loop_state.audio,
-                                &mut loop_state.input,
-                                game_runner.state_handler.get_gui(),
+                                &mut game.debug,
+                                &mut game.audio,
+                                &mut game.input,
+                                game.state_handler.get_gui(),
                             ],
-                            &nes_texture,
+                            &game.nes_texture,
                         );
                     });
 
@@ -433,22 +375,86 @@ impl StateHandler for LocalStateHandler {
     }
 }
 
-pub struct GameRunner {
-    pub state_handler: Box<dyn StateHandler>,
-}
+struct Game {
+    state_handler: Box<dyn StateHandler>,
+    gl_window: GlutinWindowContext,
+    egui_glow: egui_glow::EguiGlow,
+    gui: Gui,
+    settings: Rc<RefCell<Settings>>,
+    #[cfg(feature = "debug")]
+    debug: debug::Debug,
+    audio: Audio,
+    input: Input,
 
-impl GameRunner {
-    pub fn new(state_handler: Box<dyn StateHandler>) -> Result<Self> {
-        Ok(Self { state_handler })
+    nes_texture: TextureHandle,
+    nes_texture_options: TextureOptions,
+    no_image: ImageData,
+}
+impl Game {
+    pub fn new(
+        state_handler: Box<dyn StateHandler>,
+        gl_window: GlutinWindowContext,
+        egui_glow: egui_glow::EguiGlow,
+        settings: Rc<RefCell<Settings>>,
+        audio: Audio,
+        inputs: Inputs,
+    ) -> Self {
+        let no_image = ImageData::Color(ColorImage::new([0, 0], Color32::TRANSPARENT));
+
+        let nes_texture_options = TextureOptions {
+            magnification: egui::TextureFilter::Nearest,
+            minification: egui::TextureFilter::Nearest,
+        };
+
+        let nes_texture = egui_glow.egui_ctx.load_texture(
+            "nes",
+            ImageData::Color(ColorImage::new(
+                [WIDTH as usize, HEIGHT as usize],
+                Color32::BLACK,
+            )),
+            nes_texture_options,
+        );
+
+        Self {
+            state_handler,
+            gl_window,
+            egui_glow,
+            gui: Gui::new(true),
+            input: Input::new(inputs, settings.clone()),
+            settings,
+            #[cfg(feature = "debug")]
+            debug: debug::Debug {
+                settings: debug::DebugSettings::new(),
+                gui: debug::gui::DebugGui::new(),
+            },
+            audio,
+
+            nes_texture,
+            nes_texture_options,
+            no_image,
+        }
     }
-    pub fn advance(&mut self, input: &Input) -> Fps {
+    fn apply_gui_event(&mut self, gui_event: &GuiEvent) {
+        self.gui.handle_events(
+            gui_event,
+            vec![
+                #[cfg(feature = "debug")]
+                &mut self.debug,
+                &mut self.audio,
+                &mut self.input,
+                self.state_handler.get_gui(),
+            ],
+        )
+    }
+    pub fn advance(&mut self) -> Fps {
+        let input = &self.input;
         let inputs = [input.inputs.get_joypad(0), input.inputs.get_joypad(1)];
 
         self.state_handler.advance(inputs)
     }
 
-    pub fn get_frame(&mut self) -> Option<ImageData> {
-        if let Some(frame) = self.state_handler.get_frame() {
+    pub fn draw_frame(&mut self) {
+        let new_frame = if let Some(frame) = self.state_handler.get_frame() {
             let mut image_data = ImageData::Color(ColorImage::new(
                 [WIDTH as usize, HEIGHT as usize],
                 Color32::BLACK,
@@ -461,10 +467,22 @@ impl GameRunner {
                         Color32::from_rgba_premultiplied(color[0], color[1], color[2], color[3]);
                 }
             }
-            Some(image_data)
+            image_data
         } else {
-            None
-        }
+            self.no_image.clone()
+        };
+
+        let egui_glow = &self.egui_glow;
+        egui_glow.egui_ctx.tex_manager().write().set(
+            self.nes_texture.id(),
+            ImageDelta::full(new_frame, self.nes_texture_options),
+        );
+    }
+
+    fn push_audio(&mut self) {
+        self.audio
+            .stream
+            .push_samples(self.state_handler.consume_samples().as_slice());
     }
 }
 
