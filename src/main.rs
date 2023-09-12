@@ -4,6 +4,7 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::bundle::{Bundle, LoadBundle};
 use crate::settings::gui::ToGuiEvent;
@@ -77,11 +78,8 @@ fn main() -> Result<()> {
     init_logger();
     log::info!("nes-bundler starting!");
 
-    // This is required for certain controllers to work on Windows without the
-    // video subsystem enabled:
     sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
     let sdl_context: Sdl = sdl2::init().map_err(anyhow::Error::msg)?;
-
     let bundle = Bundle::load()?;
     #[cfg(feature = "netplay")]
     if std::env::args()
@@ -93,7 +91,6 @@ fn main() -> Result<()> {
         }
         std::process::exit(0);
     }
-
     let event_loop = winit::event_loop::EventLoopBuilder::with_user_event().build();
     let (gl_window, gl) = create_display(
         &bundle.config.window_title,
@@ -102,36 +99,30 @@ fn main() -> Result<()> {
         &event_loop,
     );
     let gl = std::sync::Arc::new(gl);
-
     let egui_glow = egui_glow::EguiGlow::new(&event_loop, gl.clone(), None);
     egui_glow.egui_ctx.set_pixels_per_point(gl_window.get_dpi());
-
     let settings = Rc::new(RefCell::new(Settings::new(
         bundle.config.default_settings.clone(),
     )));
-
     let audio = Audio::new(&sdl_context, settings.clone())?;
     let nes = start_nes(bundle.rom.clone(), audio.stream.get_sample_rate() as u64)?;
     let state = LocalGameState::new(nes)?;
-
     let state_handler = LocalStateHandler {
         state,
         gui: EmptyGuiComponent::new(),
     };
-
     #[cfg(feature = "netplay")]
     let state_handler = netplay::NetplayStateHandler::new(
         state_handler,
         &bundle,
         &mut settings.borrow_mut().netplay_id,
     );
-
     let inputs = Inputs::new(&sdl_context, bundle.config.default_settings.input.selected);
-
     let mut game_loop: GameLoop<Game, Time> = GameLoop::new(
         Game::new(
             Box::new(state_handler),
             gl_window,
+            gl,
             egui_glow,
             settings,
             audio,
@@ -140,7 +131,7 @@ fn main() -> Result<()> {
         FPS,
         0.08,
     );
-    let mut sdl_event_pump = sdl_context.event_pump().unwrap();
+    let mut sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
 
     event_loop.run(move |event, _, control_flow| {
         if log::max_level() == log::Level::Trace && Time::now().sub(&game_loop.last_stats) >= 1.0 {
@@ -268,7 +259,7 @@ fn main() -> Result<()> {
                     unsafe {
                         use glow::HasContext as _;
                         //gl.clear_color(clear_colour[0], clear_colour[1], clear_colour[2], 1.0);
-                        gl.clear(glow::COLOR_BUFFER_BIT);
+                        game.gl.clear(glow::COLOR_BUFFER_BIT);
                     }
 
                     // draw things behind egui here
@@ -378,6 +369,7 @@ impl StateHandler for LocalStateHandler {
 struct Game {
     state_handler: Box<dyn StateHandler>,
     gl_window: GlutinWindowContext,
+    gl: Arc<glow::Context>,
     egui_glow: egui_glow::EguiGlow,
     gui: Gui,
     settings: Rc<RefCell<Settings>>,
@@ -394,6 +386,7 @@ impl Game {
     pub fn new(
         state_handler: Box<dyn StateHandler>,
         gl_window: GlutinWindowContext,
+        gl: Arc<glow::Context>,
         egui_glow: egui_glow::EguiGlow,
         settings: Rc<RefCell<Settings>>,
         audio: Audio,
@@ -418,6 +411,7 @@ impl Game {
         Self {
             state_handler,
             gl_window,
+            gl,
             egui_glow,
             gui: Gui::new(true),
             input: Input::new(inputs, settings.clone()),
