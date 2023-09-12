@@ -149,7 +149,33 @@ pub struct BuildConfiguration {
 }
 
 fn main() -> Result<()> {
-    env_logger::init();
+    #[cfg(windows)]
+    {
+        use std::os::windows::prelude::*;
+        match std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .open("nes-bundler-log.txt")
+        {
+            Ok(log_file) => {
+                env_logger::Builder::from_env(env_logger::Env::default())
+                    .target(env_logger::Target::Pipe(Box::new(log_file)))
+                    .init();
+            }
+            Err(e) => {
+                eprintln!("Could not open nes-bundler-log.txt for writing, {:?}", e);
+                env_logger::init();
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        env_logger::init();
+    }
+
+    log::info!("nes-bundler starting!");
 
     // This is required for certain controllers to work on Windows without the
     // video subsystem enabled:
