@@ -4,7 +4,10 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
+use crate::bundle::{Bundle, LoadBundle};
+use crate::input::buttons::GamepadButton;
 use crate::settings::gui::ToGuiEvent;
 use crate::window::{create_display, Fullscreen, GlutinWindowContext};
 use crate::{
@@ -14,6 +17,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use audio::Audio;
+use egui::TextureHandle;
 use egui::{epaint::ImageDelta, Color32, ColorImage, ImageData, TextureOptions};
 use gameloop::{GameLoop, Time};
 use settings::gui::{EmptyGuiComponent, GuiComponent};
@@ -26,10 +30,10 @@ use palette::NTSC_PAL;
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
 use sdl2::Sdl;
-use serde::Deserialize;
 use settings::{Settings, MAX_PLAYERS};
 
 mod audio;
+mod bundle;
 #[cfg(feature = "debug")]
 mod debug;
 mod gameloop;
@@ -71,116 +75,13 @@ pub fn start_nes(cart_data: Vec<u8>, sample_rate: u64) -> Result<NesState> {
     Ok(nes)
 }
 
-pub struct Bundle {
-    config: BuildConfiguration,
-    rom: Vec<u8>,
-}
-
-#[cfg(feature = "zip-bundle")]
-fn load_bundle_from_zip(zip_file: std::io::Result<std::fs::File>) -> Result<Bundle> {
-    if let Ok(zip_file) = zip_file {
-        let mut zip = zip::ZipArchive::new(zip_file)?;
-        let config: BuildConfiguration = serde_yaml::from_reader(
-            zip.by_name("config.yaml")
-                .context("config.yaml not found in bundle.zip")?,
-        )?;
-
-        let mut rom = Vec::new();
-        std::io::copy(
-            &mut zip
-                .by_name("rom.nes")
-                .context("rom.nes not found in bundle.zip")?,
-            &mut rom,
-        )?;
-        Ok(Bundle { config, rom })
-    } else {
-        let folder = rfd::FileDialog::new()
-            .set_title("Files to bundle")
-            .set_directory(".")
-            .pick_folder()
-            .context("No bundle to load")?;
-
-        let mut config_path = folder.clone();
-        config_path.push("config.yaml");
-        let mut config_file = std::fs::File::open(config_path)
-            .context(format!("config.yaml not found in {:?}", folder))?;
-
-        let mut rom_path = folder.clone();
-        rom_path.push("rom.nes");
-        let mut rom_file =
-            std::fs::File::open(rom_path).context(format!("rom.nes not found in {:?}", folder))?;
-
-        let mut zip = zip::ZipWriter::new(
-            std::fs::File::create("bundle.zip").context("Could not create bundle.zip")?,
-        );
-        zip.start_file("config.yaml", Default::default())?;
-        std::io::copy(&mut config_file, &mut zip)?;
-
-        zip.start_file("rom.nes", Default::default())?;
-        std::io::copy(&mut rom_file, &mut zip)?;
-
-        zip.finish()?;
-
-        // Try again with newly created bundle.zip
-        load_bundle_from_zip(std::fs::File::open("bundle.zip"))
-    }
-}
-fn load_bundle() -> Result<Bundle> {
-    #[cfg(not(feature = "zip-bundle"))]
-    return Ok(Bundle {
-        config: serde_yaml::from_str(include_str!("../config/config.yaml"))?,
-        rom: include_bytes!("../config/rom.nes").to_vec(),
-    });
-    #[cfg(feature = "zip-bundle")]
-    {
-        let res = load_bundle_from_zip(std::fs::File::open("bundle.zip"));
-        if let Err(e) = &res {
-            log::error!("Could not load the bundle: {:?}", e);
-        }
-        res
-    }
-}
-#[derive(Deserialize, Debug)]
-pub struct BuildConfiguration {
-    window_title: String,
-    default_settings: Settings,
-    #[cfg(feature = "netplay")]
-    netplay: netplay::NetplayBuildConfiguration,
-}
-
 fn main() -> Result<()> {
-    #[cfg(windows)]
-    {
-        match std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open("nes-bundler-log.txt")
-        {
-            Ok(log_file) => {
-                env_logger::Builder::from_env(env_logger::Env::default())
-                    .target(env_logger::Target::Pipe(Box::new(log_file)))
-                    .init();
-            }
-            Err(e) => {
-                eprintln!("Could not open nes-bundler-log.txt for writing, {:?}", e);
-                env_logger::init();
-            }
-        }
-    }
-    #[cfg(not(windows))]
-    {
-        env_logger::init();
-    }
-
+    init_logger();
     log::info!("nes-bundler starting!");
 
-    // This is required for certain controllers to work on Windows without the
-    // video subsystem enabled:
     sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
     let sdl_context: Sdl = sdl2::init().map_err(anyhow::Error::msg)?;
-
-    let bundle = load_bundle()?;
+    let bundle = Bundle::load()?;
     #[cfg(feature = "netplay")]
     if std::env::args()
         .collect::<String>()
@@ -191,7 +92,6 @@ fn main() -> Result<()> {
         }
         std::process::exit(0);
     }
-
     let event_loop = winit::event_loop::EventLoopBuilder::with_user_event().build();
     let (gl_window, gl) = create_display(
         &bundle.config.window_title,
@@ -200,93 +100,54 @@ fn main() -> Result<()> {
         &event_loop,
     );
     let gl = std::sync::Arc::new(gl);
-
     let egui_glow = egui_glow::EguiGlow::new(&event_loop, gl.clone(), None);
     egui_glow.egui_ctx.set_pixels_per_point(gl_window.get_dpi());
-
     let settings = Rc::new(RefCell::new(Settings::new(
         bundle.config.default_settings.clone(),
     )));
-
     let audio = Audio::new(&sdl_context, settings.clone())?;
     let nes = start_nes(bundle.rom.clone(), audio.stream.get_sample_rate() as u64)?;
     let state = LocalGameState::new(nes)?;
-
     let state_handler = LocalStateHandler {
         state,
         gui: EmptyGuiComponent::new(),
     };
-
     #[cfg(feature = "netplay")]
     let state_handler = netplay::NetplayStateHandler::new(
         state_handler,
         &bundle,
         &mut settings.borrow_mut().netplay_id,
     );
-
     let inputs = Inputs::new(&sdl_context, bundle.config.default_settings.input.selected);
-
-    let nes_texture_options = TextureOptions {
-        magnification: egui::TextureFilter::Nearest,
-        minification: egui::TextureFilter::Nearest,
-    };
-
-    let no_image = ImageData::Color(ColorImage::new([0, 0], Color32::TRANSPARENT));
-
-    let nes_texture = egui_glow.egui_ctx.load_texture(
-        "nes",
-        ImageData::Color(ColorImage::new(
-            [WIDTH as usize, HEIGHT as usize],
-            Color32::BLACK,
-        )),
-        nes_texture_options,
-    );
-    struct GameLoopState {
-        game_runner: GameRunner,
-        gl_window: GlutinWindowContext,
-        egui_glow: egui_glow::EguiGlow,
-        gui: Gui,
-        settings: Rc<RefCell<Settings>>,
-        #[cfg(feature = "debug")]
-        debug: debug::Debug,
-        audio: Audio,
-        input: Input,
-    }
-
-    let mut game_loop: GameLoop<GameLoopState, Time> = GameLoop::new(
-        GameLoopState {
-            game_runner: GameRunner::new(Box::new(state_handler))?,
+    let mut game_loop: GameLoop<Game, Time> = GameLoop::new(
+        Game::new(
+            Box::new(state_handler),
             gl_window,
+            gl,
             egui_glow,
-            gui: Gui::new(true),
-            settings: settings.clone(),
-            #[cfg(feature = "debug")]
-            debug: debug::Debug {
-                settings: debug::DebugSettings::new(),
-                gui: debug::gui::DebugGui::new(),
-            },
+            settings,
             audio,
-            input: Input::new(inputs, settings),
-        },
+            inputs,
+        ),
         FPS,
         0.08,
     );
-    let mut sdl_event_pump = sdl_context.event_pump().unwrap();
+    let mut sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
 
     event_loop.run(move |event, _, control_flow| {
         if log::max_level() == log::Level::Trace && Time::now().sub(&game_loop.last_stats) >= 1.0 {
             let (ups, rps, ..) = game_loop.get_stats();
             log::trace!("UPS: {:?}, RPS: {:?}", ups, rps);
         }
-        let loop_state = &mut game_loop.game;
+        let game = &mut game_loop.game;
 
-        let winit_gui_event = if let winit::event::Event::WindowEvent { event, .. } = &event {
+        if let winit::event::Event::WindowEvent { event, .. } = &event {
             use winit::event::WindowEvent;
             if matches!(event, WindowEvent::CloseRequested | WindowEvent::Destroyed) {
                 *control_flow = winit::event_loop::ControlFlow::Exit;
             }
 
-            let gl_window = &mut loop_state.gl_window;
+            let gl_window = &mut game.gl_window;
             if let winit::event::WindowEvent::Resized(physical_size) = &event {
                 gl_window.resize(*physical_size);
             } else if let winit::event::WindowEvent::ScaleFactorChanged { new_inner_size, .. } =
@@ -295,116 +156,114 @@ fn main() -> Result<()> {
                 gl_window.resize(**new_inner_size);
             }
 
-            let winit_gui_event = event.to_gui_event();
-            let egui_glow = &mut loop_state.egui_glow;
+            let egui_glow = &mut game.egui_glow;
             if !egui_glow.on_event(event).consumed {
-                if let Some(settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(
-                    key_code,
-                    modifiers,
-                ))) = winit_gui_event.clone()
-                {
-                    let settings = &loop_state.settings;
-                    let game_runner = &mut loop_state.game_runner;
+                if let Some(winit_gui_event) = &event.to_gui_event() {
+                    let consumed = if let settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(
+                        key_code,
+                        modifiers,
+                    )) = winit_gui_event
+                    {
+                        let settings = &game.settings;
 
-                    use crate::input::keys::KeyCode::*;
-                    match key_code {
-                        F1 => {
-                            let mut settings = settings.borrow_mut();
-                            settings.last_save_state =
-                                Some(b64.encode(game_runner.state_handler.save()));
-                            settings.save().unwrap();
-                        }
-                        F2 => {
-                            if let Some(save_state) = &settings.borrow().last_save_state {
-                                if let Ok(buf) = &mut b64.decode(save_state) {
-                                    game_runner.state_handler.load(buf);
-                                }
+                        use crate::input::keys::KeyCode::*;
+                        match key_code {
+                            F1 => {
+                                let mut settings = settings.borrow_mut();
+                                settings.last_save_state =
+                                    Some(b64.encode(game.state_handler.save()));
+                                settings.save().unwrap();
+                                true
                             }
-                        }
-                        key_code => {
-                            gl_window
+                            F2 => {
+                                if let Some(save_state) = &settings.borrow().last_save_state {
+                                    if let Ok(buf) = &mut b64.decode(save_state) {
+                                        game.state_handler.load(buf);
+                                    }
+                                }
+                                true
+                            }
+                            Escape => {
+                                game.gui.toggle_visibility();
+                                true
+                            }
+
+                            key_code => gl_window
                                 .window_mut()
-                                .check_and_set_fullscreen(modifiers, key_code);
+                                .check_and_set_fullscreen(modifiers, key_code),
                         }
+                    } else {
+                        false
+                    };
+                    if !consumed {
+                        game.apply_gui_event(winit_gui_event);
                     }
                 }
             }
-            winit_gui_event
-        } else {
-            None
         };
 
-        let sdl2_gui_event = sdl_event_pump
+        if let Some(sdl2_gui_event) = sdl_event_pump
             .poll_event()
-            .and_then(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad));
-
-        loop_state.gui.handle_events(
-            [sdl2_gui_event, winit_gui_event].iter().flatten().collect(),
-            vec![
-                #[cfg(feature = "debug")]
-                &mut loop_state.debug,
-                &mut loop_state.audio,
-                &mut loop_state.input,
-                loop_state.game_runner.state_handler.get_gui(),
-            ],
-        );
+            .and_then(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad))
+        {
+            match &sdl2_gui_event {
+                GuiEvent::Gamepad(input::gamepad::GamepadEvent::ButtonDown {
+                    button: GamepadButton::Guide,
+                    ..
+                }) => {
+                    game.gui.toggle_visibility();
+                }
+                _ => {
+                    game.apply_gui_event(&sdl2_gui_event);
+                }
+            }
+        }
 
         if let winit::event::Event::LoopDestroyed = &event {
-            loop_state.egui_glow.destroy();
+            game.egui_glow.destroy();
             return;
         }
 
         game_loop.next_frame(
             |g| {
-                let loop_state = &mut g.game;
-                let egui_glow = &mut loop_state.egui_glow;
-                let game_runner = &mut loop_state.game_runner;
+                let game = &mut g.game;
 
                 #[allow(unused_mut)] //debug feature needs this
-                let mut fps = game_runner.advance(&loop_state.input);
+                let mut fps = game.advance();
                 #[cfg(feature = "debug")]
-                if loop_state.debug.settings.override_fps {
-                    fps = loop_state.debug.settings.fps;
+                if game.debug.settings.override_fps {
+                    fps = game.debug.settings.fps;
                 }
 
                 // No need to update graphics or audio more than once per update
-                let new_frame = game_runner.get_frame().unwrap_or_else(|| no_image.clone());
-                egui_glow.egui_ctx.tex_manager().write().set(
-                    nes_texture.id(),
-                    ImageDelta::full(new_frame, nes_texture_options),
-                );
-
-                loop_state
-                    .audio
-                    .stream
-                    .push_samples(game_runner.state_handler.consume_samples().as_slice());
+                game.draw_frame();
+                game.push_audio();
 
                 g.set_updates_per_second(fps);
             },
             |g| {
                 if let winit::event::Event::RedrawEventsCleared = &event {
-                    let loop_state = &mut g.game;
-                    let gl_window = &loop_state.gl_window;
-                    let settings = &loop_state.settings;
+                    let game = &mut g.game;
+                    let gl_window = &game.gl_window;
+                    let settings = &game.settings;
                     let settings_hash_before = settings.borrow().get_hash();
-                    let gui = &mut loop_state.gui;
+                    let gui = &mut game.gui;
 
-                    let egui_glow = &mut loop_state.egui_glow;
+                    let egui_glow = &mut game.egui_glow;
 
                     let window = &mut gl_window.window();
 
                     egui_glow.run(gl_window.window(), |egui_ctx| {
-                        let game_runner = &mut loop_state.game_runner;
                         gui.ui(
                             egui_ctx,
                             &mut vec![
                                 #[cfg(feature = "debug")]
-                                &mut loop_state.debug,
-                                &mut loop_state.audio,
-                                &mut loop_state.input,
-                                game_runner.state_handler.get_gui(),
+                                &mut game.debug,
+                                &mut game.audio,
+                                &mut game.input,
+                                game.state_handler.get_gui(),
                             ],
-                            &nes_texture,
+                            &game.nes_texture,
                         );
                     });
 
@@ -416,7 +275,7 @@ fn main() -> Result<()> {
                     unsafe {
                         use glow::HasContext as _;
                         //gl.clear_color(clear_colour[0], clear_colour[1], clear_colour[2], 1.0);
-                        gl.clear(glow::COLOR_BUFFER_BIT);
+                        game.gl.clear(glow::COLOR_BUFFER_BIT);
                     }
 
                     // draw things behind egui here
@@ -523,22 +382,89 @@ impl StateHandler for LocalStateHandler {
     }
 }
 
-pub struct GameRunner {
-    pub state_handler: Box<dyn StateHandler>,
-}
+struct Game {
+    state_handler: Box<dyn StateHandler>,
+    gl_window: GlutinWindowContext,
+    gl: Arc<glow::Context>,
+    egui_glow: egui_glow::EguiGlow,
+    gui: Gui,
+    settings: Rc<RefCell<Settings>>,
+    #[cfg(feature = "debug")]
+    debug: debug::Debug,
+    audio: Audio,
+    input: Input,
 
-impl GameRunner {
-    pub fn new(state_handler: Box<dyn StateHandler>) -> Result<Self> {
-        Ok(Self { state_handler })
+    nes_texture: TextureHandle,
+    nes_texture_options: TextureOptions,
+    no_image: ImageData,
+}
+impl Game {
+    pub fn new(
+        state_handler: Box<dyn StateHandler>,
+        gl_window: GlutinWindowContext,
+        gl: Arc<glow::Context>,
+        egui_glow: egui_glow::EguiGlow,
+        settings: Rc<RefCell<Settings>>,
+        audio: Audio,
+        inputs: Inputs,
+    ) -> Self {
+        let no_image = ImageData::Color(ColorImage::new([0, 0], Color32::TRANSPARENT));
+
+        let nes_texture_options = TextureOptions {
+            magnification: egui::TextureFilter::Nearest,
+            minification: egui::TextureFilter::Nearest,
+        };
+
+        let nes_texture = egui_glow.egui_ctx.load_texture(
+            "nes",
+            ImageData::Color(ColorImage::new(
+                [WIDTH as usize, HEIGHT as usize],
+                Color32::BLACK,
+            )),
+            nes_texture_options,
+        );
+
+        Self {
+            state_handler,
+            gl_window,
+            gl,
+            egui_glow,
+            gui: Gui::new(true),
+            input: Input::new(inputs, settings.clone()),
+            settings,
+            #[cfg(feature = "debug")]
+            debug: debug::Debug {
+                settings: debug::DebugSettings::new(),
+                gui: debug::gui::DebugGui::new(),
+            },
+            audio,
+
+            nes_texture,
+            nes_texture_options,
+            no_image,
+        }
     }
-    pub fn advance(&mut self, input: &Input) -> Fps {
+    fn apply_gui_event(&mut self, gui_event: &GuiEvent) {
+        self.gui.handle_events(
+            gui_event,
+            vec![
+                #[cfg(feature = "debug")]
+                &mut self.debug,
+                &mut self.audio,
+                &mut self.input,
+                self.state_handler.get_gui(),
+            ],
+        )
+    }
+    pub fn advance(&mut self) -> Fps {
+        let input = &self.input;
         let inputs = [input.inputs.get_joypad(0), input.inputs.get_joypad(1)];
 
         self.state_handler.advance(inputs)
     }
 
-    pub fn get_frame(&mut self) -> Option<ImageData> {
-        if let Some(frame) = self.state_handler.get_frame() {
+    pub fn draw_frame(&mut self) {
+        let new_frame = if let Some(frame) = self.state_handler.get_frame() {
             let mut image_data = ImageData::Color(ColorImage::new(
                 [WIDTH as usize, HEIGHT as usize],
                 Color32::BLACK,
@@ -551,9 +477,47 @@ impl GameRunner {
                         Color32::from_rgba_premultiplied(color[0], color[1], color[2], color[3]);
                 }
             }
-            Some(image_data)
+            image_data
         } else {
-            None
+            self.no_image.clone()
+        };
+
+        let egui_glow = &self.egui_glow;
+        egui_glow.egui_ctx.tex_manager().write().set(
+            self.nes_texture.id(),
+            ImageDelta::full(new_frame, self.nes_texture_options),
+        );
+    }
+
+    fn push_audio(&mut self) {
+        self.audio
+            .stream
+            .push_samples(self.state_handler.consume_samples().as_slice());
+    }
+}
+
+fn init_logger() {
+    #[cfg(windows)]
+    {
+        match std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open("nes-bundler-log.txt")
+        {
+            Ok(log_file) => {
+                env_logger::Builder::from_env(env_logger::Env::default())
+                    .target(env_logger::Target::Pipe(Box::new(log_file)))
+                    .init();
+            }
+            Err(e) => {
+                eprintln!("Could not open nes-bundler-log.txt for writing, {:?}", e);
+                env_logger::init();
+            }
         }
+    }
+    #[cfg(not(windows))]
+    {
+        env_logger::init();
     }
 }
