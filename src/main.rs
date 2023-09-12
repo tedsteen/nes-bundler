@@ -80,8 +80,8 @@ fn main() {
 
     log::info!("nes-bundler starting!");
     match initialise() {
-        Ok((event_loop, game_loop)) => {
-            run(event_loop, game_loop);
+        Ok((game_loop, event_loop, sdl_event_pump)) => {
+            run(game_loop, event_loop, sdl_event_pump);
         }
         Err(e) => {
             log::error!("nes-bundler failed to start :(\n{:?}", e);
@@ -89,7 +89,11 @@ fn main() {
     }
 }
 
-fn run(event_loop: winit::event_loop::EventLoop<()>, mut game_loop: GameLoop<Game, Time>) -> ! {
+fn run(
+    mut game_loop: GameLoop<Game, Time>,
+    event_loop: winit::event_loop::EventLoop<()>,
+    mut sdl_event_pump: EventPump,
+) -> ! {
     event_loop.run(move |event, _, control_flow| {
         if log::max_level() == log::Level::Trace && Time::now().sub(&game_loop.last_stats) >= 1.0 {
             let (ups, rps, ..) = game_loop.get_stats();
@@ -158,8 +162,7 @@ fn run(event_loop: winit::event_loop::EventLoop<()>, mut game_loop: GameLoop<Gam
             }
         };
 
-        if let Some(sdl2_gui_event) = game
-            .sdl_event_pump
+        if let Some(sdl2_gui_event) = sdl_event_pump
             .poll_event()
             .and_then(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad))
         {
@@ -248,7 +251,15 @@ fn run(event_loop: winit::event_loop::EventLoop<()>, mut game_loop: GameLoop<Gam
     })
 }
 
-fn initialise() -> Result<(winit::event_loop::EventLoop<()>, GameLoop<Game, Time>), anyhow::Error> {
+#[allow(clippy::type_complexity)]
+fn initialise() -> Result<
+    (
+        GameLoop<Game, Time>,
+        winit::event_loop::EventLoop<()>,
+        EventPump,
+    ),
+    anyhow::Error,
+> {
     sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
     let sdl_context: Sdl = sdl2::init().map_err(anyhow::Error::msg)?;
     let bundle = Bundle::load()?;
@@ -292,7 +303,6 @@ fn initialise() -> Result<(winit::event_loop::EventLoop<()>, GameLoop<Game, Time
     let sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
     let game_loop: GameLoop<Game, Time> = GameLoop::new(
         Game::new(
-            sdl_event_pump,
             Box::new(state_handler),
             gl_window,
             gl,
@@ -304,7 +314,7 @@ fn initialise() -> Result<(winit::event_loop::EventLoop<()>, GameLoop<Game, Time
         FPS,
         0.08,
     );
-    Ok((event_loop, game_loop))
+    Ok((game_loop, event_loop, sdl_event_pump))
 }
 
 pub struct LocalGameState {
@@ -399,7 +409,6 @@ impl StateHandler for LocalStateHandler {
 }
 
 struct Game {
-    sdl_event_pump: EventPump,
     state_handler: Box<dyn StateHandler>,
     gl_window: GlutinWindowContext,
     gl: Arc<glow::Context>,
@@ -416,9 +425,7 @@ struct Game {
     no_image: ImageData,
 }
 impl Game {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        sdl_event_pump: EventPump,
         state_handler: Box<dyn StateHandler>,
         gl_window: GlutinWindowContext,
         gl: Arc<glow::Context>,
@@ -444,7 +451,6 @@ impl Game {
         );
 
         Self {
-            sdl_event_pump,
             state_handler,
             gl_window,
             gl,
