@@ -16,8 +16,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use audio::Audio;
-use egui::TextureHandle;
-use egui::{epaint::ImageDelta, Color32, ColorImage, ImageData, TextureOptions};
+use egui::{Color32, ColorImage, ImageData};
 use gameloop::{GameLoop, Time};
 use settings::gui::{EmptyGuiComponent, GuiComponent};
 
@@ -98,89 +97,87 @@ fn run(
             let (ups, rps, ..) = game_loop.get_stats();
             log::trace!("UPS: {:?}, RPS: {:?}", ups, rps);
         }
+
+        let mut events: Vec<GuiEvent> = sdl_event_pump
+            .poll_iter()
+            .filter_map(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad))
+            .collect();
         let game = &mut game_loop.game;
 
-        if let winit::event::Event::WindowEvent { event, .. } = &event {
-            use winit::event::WindowEvent;
-            if matches!(event, WindowEvent::CloseRequested | WindowEvent::Destroyed) {
-                *control_flow = winit::event_loop::ControlFlow::Exit;
-            }
+        match &event {
+            winit::event::Event::WindowEvent { event, .. } => {
+                use winit::event::WindowEvent;
+                if matches!(event, WindowEvent::CloseRequested | WindowEvent::Destroyed) {
+                    *control_flow = winit::event_loop::ControlFlow::Exit;
+                }
 
-            let gl_window = &mut game.gl_window;
-            if let winit::event::WindowEvent::Resized(physical_size) = &event {
-                gl_window.resize(*physical_size);
-            } else if let winit::event::WindowEvent::ScaleFactorChanged { new_inner_size, .. } =
-                &event
-            {
-                gl_window.resize(**new_inner_size);
-            }
+                let gl_window = &mut game.gl_window;
+                if let winit::event::WindowEvent::Resized(physical_size) = &event {
+                    gl_window.resize(*physical_size);
+                } else if let winit::event::WindowEvent::ScaleFactorChanged {
+                    new_inner_size, ..
+                } = &event
+                {
+                    gl_window.resize(**new_inner_size);
+                }
 
-            let egui_glow = &mut game.egui_glow;
-            if !egui_glow.on_event(event).consumed {
-                if let Some(winit_gui_event) = &event.to_gui_event() {
-                    let consumed = if let settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(
-                        key_code,
-                        modifiers,
-                    )) = winit_gui_event
-                    {
-                        let settings = &game.settings;
-
-                        use crate::input::keys::KeyCode::*;
-                        match key_code {
-                            F1 => {
-                                let mut settings = settings.borrow_mut();
-                                settings.last_save_state =
-                                    Some(b64.encode(game.state_handler.save()));
-                                settings.save().unwrap();
-                                true
-                            }
-                            F2 => {
-                                if let Some(save_state) = &settings.borrow().last_save_state {
-                                    if let Ok(buf) = &mut b64.decode(save_state) {
-                                        game.state_handler.load(buf);
-                                    }
-                                }
-                                true
-                            }
-                            Escape => {
-                                game.gui.toggle_visibility();
-                                true
-                            }
-
-                            key_code => gl_window
-                                .window_mut()
-                                .check_and_set_fullscreen(modifiers, key_code),
-                        }
-                    } else {
-                        false
-                    };
-                    if !consumed {
-                        game.apply_gui_event(winit_gui_event);
+                if !game.gui.on_event(event) {
+                    if let Some(winit_gui_event) = &event.to_gui_event() {
+                        events.push(winit_gui_event.clone());
                     }
                 }
             }
-        };
+            winit::event::Event::LoopDestroyed => {
+                game.gui.destroy();
+                return;
+            }
+            _ => {}
+        }
 
-        if let Some(sdl2_gui_event) = sdl_event_pump
-            .poll_event()
-            .and_then(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad))
-        {
-            match &sdl2_gui_event {
+        for event in events {
+            let consumed = match &event {
+                settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(key_code, modifiers)) => {
+                    let settings = &game.settings;
+
+                    use crate::input::keys::KeyCode::*;
+                    match key_code {
+                        F1 => {
+                            let mut settings = settings.borrow_mut();
+                            settings.last_save_state = Some(b64.encode(game.state_handler.save()));
+                            settings.save().unwrap();
+                            true
+                        }
+                        F2 => {
+                            if let Some(save_state) = &settings.borrow().last_save_state {
+                                if let Ok(buf) = &mut b64.decode(save_state) {
+                                    game.state_handler.load(buf);
+                                }
+                            }
+                            true
+                        }
+                        Escape => {
+                            game.gui.toggle_visibility();
+                            true
+                        }
+
+                        key_code => game
+                            .gl_window
+                            .window_mut()
+                            .check_and_set_fullscreen(modifiers, key_code),
+                    }
+                }
                 GuiEvent::Gamepad(input::gamepad::GamepadEvent::ButtonDown {
                     button: GamepadButton::Guide,
                     ..
                 }) => {
                     game.gui.toggle_visibility();
+                    true
                 }
-                _ => {
-                    game.apply_gui_event(&sdl2_gui_event);
-                }
+                _ => false,
+            };
+            if !consumed {
+                game.apply_gui_event(event);
             }
-        }
-
-        if let winit::event::Event::LoopDestroyed = &event {
-            game.egui_glow.destroy();
-            return;
         }
 
         game_loop.next_frame(
@@ -207,24 +204,18 @@ fn run(
                     let settings = &game.settings;
                     let settings_hash_before = settings.borrow().get_hash();
                     let gui = &mut game.gui;
-
-                    let egui_glow = &mut game.egui_glow;
-
                     let window = &mut gl_window.window();
 
-                    egui_glow.run(gl_window.window(), |egui_ctx| {
-                        gui.ui(
-                            egui_ctx,
-                            &mut vec![
-                                #[cfg(feature = "debug")]
-                                &mut game.debug,
-                                &mut game.audio,
-                                &mut game.input,
-                                game.state_handler.get_gui(),
-                            ],
-                            &game.nes_texture,
-                        );
-                    });
+                    gui.ui(
+                        window,
+                        vec![
+                            #[cfg(feature = "debug")]
+                            &mut game.debug,
+                            &mut game.audio,
+                            &mut game.input,
+                            game.state_handler.get_gui(),
+                        ],
+                    );
 
                     if settings_hash_before != settings.borrow().get_hash() {
                         log::debug!("Settings saved");
@@ -239,7 +230,7 @@ fn run(
 
                     // draw things behind egui here
 
-                    egui_glow.paint(window);
+                    gui.paint(window);
 
                     // draw things on top of egui here
 
@@ -304,7 +295,7 @@ fn initialise() -> Result<
         Game::new(
             Box::new(state_handler),
             gl_window,
-            egui_glow,
+            Gui::new(true, egui_glow),
             settings,
             audio,
             inputs,
@@ -409,48 +400,26 @@ impl StateHandler for LocalStateHandler {
 struct Game {
     state_handler: Box<dyn StateHandler>,
     gl_window: GlutinWindowContext,
-    egui_glow: egui_glow::EguiGlow,
     gui: Gui,
     settings: Rc<RefCell<Settings>>,
     #[cfg(feature = "debug")]
     debug: debug::Debug,
     audio: Audio,
     input: Input,
-
-    nes_texture: TextureHandle,
-    nes_texture_options: TextureOptions,
-    no_image: ImageData,
 }
 impl Game {
     pub fn new(
         state_handler: Box<dyn StateHandler>,
         gl_window: GlutinWindowContext,
-        egui_glow: egui_glow::EguiGlow,
+        gui: Gui,
         settings: Rc<RefCell<Settings>>,
         audio: Audio,
         inputs: Inputs,
     ) -> Self {
-        let no_image = ImageData::Color(ColorImage::new([0, 0], Color32::TRANSPARENT));
-
-        let nes_texture_options = TextureOptions {
-            magnification: egui::TextureFilter::Nearest,
-            minification: egui::TextureFilter::Nearest,
-        };
-
-        let nes_texture = egui_glow.egui_ctx.load_texture(
-            "nes",
-            ImageData::Color(ColorImage::new(
-                [WIDTH as usize, HEIGHT as usize],
-                Color32::BLACK,
-            )),
-            nes_texture_options,
-        );
-
         Self {
             state_handler,
             gl_window,
-            egui_glow,
-            gui: Gui::new(true),
+            gui,
             input: Input::new(inputs, settings.clone()),
             settings,
             #[cfg(feature = "debug")]
@@ -459,15 +428,11 @@ impl Game {
                 gui: debug::gui::DebugGui::new(),
             },
             audio,
-
-            nes_texture,
-            nes_texture_options,
-            no_image,
         }
     }
-    fn apply_gui_event(&mut self, gui_event: &GuiEvent) {
+    fn apply_gui_event(&mut self, gui_event: GuiEvent) {
         self.gui.handle_events(
-            gui_event,
+            &gui_event,
             vec![
                 #[cfg(feature = "debug")]
                 &mut self.debug,
@@ -485,7 +450,7 @@ impl Game {
     }
 
     pub fn draw_frame(&mut self) {
-        let new_frame = if let Some(frame) = self.state_handler.get_frame() {
+        let new_image_data = self.state_handler.get_frame().map(|frame| {
             let mut image_data = ImageData::Color(ColorImage::new(
                 [WIDTH as usize, HEIGHT as usize],
                 Color32::BLACK,
@@ -499,15 +464,9 @@ impl Game {
                 }
             }
             image_data
-        } else {
-            self.no_image.clone()
-        };
+        });
 
-        let egui_glow = &self.egui_glow;
-        egui_glow.egui_ctx.tex_manager().write().set(
-            self.nes_texture.id(),
-            ImageDelta::full(new_frame, self.nes_texture_options),
-        );
+        self.gui.update_nes_texture(new_image_data);
     }
 
     fn push_audio(&mut self) {
