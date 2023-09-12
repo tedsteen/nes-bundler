@@ -1,4 +1,7 @@
-use egui::{Context, Order, TextureHandle};
+use egui::{
+    epaint::ImageDelta, Color32, ColorImage, Context, ImageData, Order, TextureHandle,
+    TextureOptions,
+};
 
 use crate::{
     input::{gamepad::GamepadEvent, KeyEvent},
@@ -46,11 +49,37 @@ impl GuiComponent for EmptyGuiComponent {
 
 pub struct Gui {
     visible: bool,
+    egui_glow: egui_glow::EguiGlow,
+    nes_texture: TextureHandle,
+    nes_texture_options: TextureOptions,
+    no_image: ImageData,
 }
 
 impl Gui {
-    pub fn new(visible: bool) -> Self {
-        Self { visible }
+    pub fn new(visible: bool, egui_glow: egui_glow::EguiGlow) -> Self {
+        let no_image = ImageData::Color(ColorImage::new([0, 0], Color32::TRANSPARENT));
+
+        let nes_texture_options = TextureOptions {
+            magnification: egui::TextureFilter::Nearest,
+            minification: egui::TextureFilter::Nearest,
+        };
+
+        let nes_texture = egui_glow.egui_ctx.load_texture(
+            "nes",
+            ImageData::Color(ColorImage::new(
+                [WIDTH as usize, HEIGHT as usize],
+                Color32::BLACK,
+            )),
+            nes_texture_options,
+        );
+
+        Self {
+            visible,
+            egui_glow,
+            nes_texture,
+            nes_texture_options,
+            no_image,
+        }
     }
 
     pub fn handle_events(&mut self, event: &GuiEvent, guis: Vec<&mut dyn GuiComponent>) {
@@ -59,69 +88,89 @@ impl Gui {
         }
     }
 
-    pub fn ui(
-        &mut self,
-        ctx: &Context,
-        guis: &mut Vec<&mut dyn GuiComponent>,
-        texture_handle: &TextureHandle,
-    ) {
-        egui::Area::new("game_area")
-            .fixed_pos(egui::Pos2::new(0.0, 0.0))
-            .order(Order::Background)
-            .show(ctx, |ui| {
-                if let Some(t) = ctx.tex_manager().read().meta(texture_handle.id()) {
-                    if t.size[0] != 0 {
-                        let texture_width = WIDTH as f32;
-                        let texture_height = HEIGHT as f32;
+    pub fn ui(&mut self, window: &winit::window::Window, mut guis: Vec<&mut dyn GuiComponent>) {
+        let texture_handle = &self.nes_texture;
 
-                        let screen_width = ui.available_size().x;
-                        let screen_height = ui.available_size().y;
+        self.egui_glow.run(window, |ctx| {
+            egui::Area::new("game_area")
+                .fixed_pos(egui::Pos2::new(0.0, 0.0))
+                .order(Order::Background)
+                .show(ctx, |ui| {
+                    if let Some(t) = ctx.tex_manager().read().meta(texture_handle.id()) {
+                        if t.size[0] != 0 {
+                            let texture_width = WIDTH as f32;
+                            let texture_height = HEIGHT as f32;
 
-                        let width_ratio = (screen_width / texture_width).max(1.0);
-                        let height_ratio = (screen_height / texture_height).max(1.0);
+                            let screen_width = ui.available_size().x;
+                            let screen_height = ui.available_size().y;
 
-                        // Get smallest scale size
-                        let scale = width_ratio.clamp(1.0, height_ratio);
+                            let width_ratio = (screen_width / texture_width).max(1.0);
+                            let height_ratio = (screen_height / texture_height).max(1.0);
 
-                        let scaled_width = texture_width * scale;
-                        let scaled_height = texture_height * scale;
-                        ui.centered_and_justified(|ui| {
-                            ui.add(egui::Image::new(
-                                texture_handle,
-                                [scaled_width, scaled_height],
-                            ));
-                        });
+                            // Get smallest scale size
+                            let scale = width_ratio.clamp(1.0, height_ratio);
+
+                            let scaled_width = texture_width * scale;
+                            let scaled_height = texture_height * scale;
+                            ui.centered_and_justified(|ui| {
+                                ui.add(egui::Image::new(
+                                    texture_handle,
+                                    [scaled_width, scaled_height],
+                                ));
+                            });
+                        }
                     }
-                }
-            });
-        egui::Area::new("window_area")
-            .fixed_pos(egui::Pos2::new(0.0, 0.0))
-            .show(ctx, |ui| {
-                if self.visible {
-                    egui::TopBottomPanel::top("menubar_container").show_inside(ui, |ui| {
-                        egui::menu::bar(ui, |ui| {
-                            ui.menu_button("Settings", |ui| {
-                                for gui in guis.iter_mut() {
-                                    if let Some(name) = gui.name() {
-                                        if ui.button(name).clicked() {
-                                            *gui.open() = !*gui.open();
-                                            ui.close_menu();
-                                        };
+                });
+            egui::Area::new("window_area")
+                .fixed_pos(egui::Pos2::new(0.0, 0.0))
+                .show(ctx, |ui| {
+                    if self.visible {
+                        egui::TopBottomPanel::top("menubar_container").show_inside(ui, |ui| {
+                            egui::menu::bar(ui, |ui| {
+                                ui.menu_button("Settings", |ui| {
+                                    for gui in guis.iter_mut() {
+                                        if let Some(name) = gui.name() {
+                                            if ui.button(name).clicked() {
+                                                *gui.open() = !*gui.open();
+                                                ui.close_menu();
+                                            };
+                                        }
                                     }
-                                }
-                            })
+                                })
+                            });
                         });
-                    });
-                }
-                for gui in guis {
-                    if let Some(name) = gui.name() {
-                        gui.ui(ctx, self.visible, name);
                     }
-                }
-            });
+                    for gui in &mut guis {
+                        if let Some(name) = gui.name() {
+                            gui.ui(ctx, self.visible, name);
+                        }
+                    }
+                });
+        });
     }
 
     pub fn toggle_visibility(&mut self) {
         self.visible = !self.visible;
+    }
+
+    pub(crate) fn update_nes_texture(&self, new_image_data: Option<ImageData>) {
+        self.egui_glow.egui_ctx.tex_manager().write().set(
+            self.nes_texture.id(),
+            ImageDelta::full(
+                new_image_data.unwrap_or_else(|| self.no_image.clone()),
+                self.nes_texture_options,
+            ),
+        );
+    }
+
+    pub(crate) fn on_event(&mut self, event: &winit::event::WindowEvent<'_>) -> bool {
+        self.egui_glow.on_event(event).consumed
+    }
+    pub fn destroy(&mut self) {
+        self.egui_glow.destroy();
+    }
+
+    pub fn paint(&mut self, window: &winit::window::Window) {
+        self.egui_glow.paint(window);
     }
 }
