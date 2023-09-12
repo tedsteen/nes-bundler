@@ -29,7 +29,7 @@ use input::{Input, Inputs};
 use palette::NTSC_PAL;
 use rusticnes_core::cartridge::mapper_from_file;
 use rusticnes_core::nes::NesState;
-use sdl2::Sdl;
+use sdl2::{EventPump, Sdl};
 use settings::{Settings, MAX_PLAYERS};
 
 mod audio;
@@ -75,65 +75,21 @@ pub fn start_nes(cart_data: Vec<u8>, sample_rate: u64) -> Result<NesState> {
     Ok(nes)
 }
 
-fn main() -> Result<()> {
+fn main() {
     init_logger();
+
     log::info!("nes-bundler starting!");
-
-    sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
-    let sdl_context: Sdl = sdl2::init().map_err(anyhow::Error::msg)?;
-    let bundle = Bundle::load()?;
-    #[cfg(feature = "netplay")]
-    if std::env::args()
-        .collect::<String>()
-        .contains(&"--print-netplay-id".to_string())
-    {
-        if let Some(id) = bundle.config.netplay.netplay_id {
-            println!("{id}");
+    match initialise() {
+        Ok((event_loop, game_loop)) => {
+            run(event_loop, game_loop);
         }
-        std::process::exit(0);
+        Err(e) => {
+            log::error!("nes-bundler failed to start :(\n{:?}", e);
+        }
     }
-    let event_loop = winit::event_loop::EventLoopBuilder::with_user_event().build();
-    let (gl_window, gl) = create_display(
-        &bundle.config.window_title,
-        DEFAULT_WINDOW_SIZE.0,
-        DEFAULT_WINDOW_SIZE.1,
-        &event_loop,
-    );
-    let gl = std::sync::Arc::new(gl);
-    let egui_glow = egui_glow::EguiGlow::new(&event_loop, gl.clone(), None);
-    egui_glow.egui_ctx.set_pixels_per_point(gl_window.get_dpi());
-    let settings = Rc::new(RefCell::new(Settings::new(
-        bundle.config.default_settings.clone(),
-    )));
-    let audio = Audio::new(&sdl_context, settings.clone())?;
-    let nes = start_nes(bundle.rom.clone(), audio.stream.get_sample_rate() as u64)?;
-    let state = LocalGameState::new(nes)?;
-    let state_handler = LocalStateHandler {
-        state,
-        gui: EmptyGuiComponent::new(),
-    };
-    #[cfg(feature = "netplay")]
-    let state_handler = netplay::NetplayStateHandler::new(
-        state_handler,
-        &bundle,
-        &mut settings.borrow_mut().netplay_id,
-    );
-    let inputs = Inputs::new(&sdl_context, bundle.config.default_settings.input.selected);
-    let mut game_loop: GameLoop<Game, Time> = GameLoop::new(
-        Game::new(
-            Box::new(state_handler),
-            gl_window,
-            gl,
-            egui_glow,
-            settings,
-            audio,
-            inputs,
-        ),
-        FPS,
-        0.08,
-    );
-    let mut sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
+}
 
+fn run(event_loop: winit::event_loop::EventLoop<()>, mut game_loop: GameLoop<Game, Time>) -> ! {
     event_loop.run(move |event, _, control_flow| {
         if log::max_level() == log::Level::Trace && Time::now().sub(&game_loop.last_stats) >= 1.0 {
             let (ups, rps, ..) = game_loop.get_stats();
@@ -202,7 +158,8 @@ fn main() -> Result<()> {
             }
         };
 
-        if let Some(sdl2_gui_event) = sdl_event_pump
+        if let Some(sdl2_gui_event) = game
+            .sdl_event_pump
             .poll_event()
             .and_then(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad))
         {
@@ -288,7 +245,66 @@ fn main() -> Result<()> {
                 }
             },
         );
-    });
+    })
+}
+
+fn initialise() -> Result<(winit::event_loop::EventLoop<()>, GameLoop<Game, Time>), anyhow::Error> {
+    sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
+    let sdl_context: Sdl = sdl2::init().map_err(anyhow::Error::msg)?;
+    let bundle = Bundle::load()?;
+    #[cfg(feature = "netplay")]
+    if std::env::args()
+        .collect::<String>()
+        .contains(&"--print-netplay-id".to_string())
+    {
+        if let Some(id) = bundle.config.netplay.netplay_id {
+            println!("{id}");
+        }
+        std::process::exit(0);
+    }
+    let event_loop = winit::event_loop::EventLoopBuilder::with_user_event().build();
+    let (gl_window, gl) = create_display(
+        &bundle.config.window_title,
+        DEFAULT_WINDOW_SIZE.0,
+        DEFAULT_WINDOW_SIZE.1,
+        &event_loop,
+    );
+    let gl = std::sync::Arc::new(gl);
+    let egui_glow = egui_glow::EguiGlow::new(&event_loop, gl.clone(), None);
+    egui_glow.egui_ctx.set_pixels_per_point(gl_window.get_dpi());
+    let settings = Rc::new(RefCell::new(Settings::new(
+        bundle.config.default_settings.clone(),
+    )));
+    let audio = Audio::new(&sdl_context, settings.clone())?;
+    let nes = start_nes(bundle.rom.clone(), audio.stream.get_sample_rate() as u64)?;
+    let state = LocalGameState::new(nes)?;
+    let state_handler = LocalStateHandler {
+        state,
+        gui: EmptyGuiComponent::new(),
+    };
+    #[cfg(feature = "netplay")]
+    let state_handler = netplay::NetplayStateHandler::new(
+        state_handler,
+        &bundle,
+        &mut settings.borrow_mut().netplay_id,
+    );
+    let inputs = Inputs::new(&sdl_context, bundle.config.default_settings.input.selected);
+    let sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
+    let game_loop: GameLoop<Game, Time> = GameLoop::new(
+        Game::new(
+            sdl_event_pump,
+            Box::new(state_handler),
+            gl_window,
+            gl,
+            egui_glow,
+            settings,
+            audio,
+            inputs,
+        ),
+        FPS,
+        0.08,
+    );
+    Ok((event_loop, game_loop))
 }
 
 pub struct LocalGameState {
@@ -383,6 +399,7 @@ impl StateHandler for LocalStateHandler {
 }
 
 struct Game {
+    sdl_event_pump: EventPump,
     state_handler: Box<dyn StateHandler>,
     gl_window: GlutinWindowContext,
     gl: Arc<glow::Context>,
@@ -399,7 +416,9 @@ struct Game {
     no_image: ImageData,
 }
 impl Game {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
+        sdl_event_pump: EventPump,
         state_handler: Box<dyn StateHandler>,
         gl_window: GlutinWindowContext,
         gl: Arc<glow::Context>,
@@ -425,6 +444,7 @@ impl Game {
         );
 
         Self {
+            sdl_event_pump,
             state_handler,
             gl_window,
             gl,
