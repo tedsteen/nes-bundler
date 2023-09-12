@@ -48,11 +48,11 @@ rusticnes-core = { git = "https://github.com/tedsteen/rusticnes-core-for-nes-bun
 base64 = "0.21"
 
 # zip-bundle deps
-rfd = { version = "0.12.0", optional = true }
+rfd = { version = "0.12", optional = true }
 zip = { version = "0.6", default-features = false, features = ["deflate"], optional = true }
 
 # Netplay deps
-matchbox_socket = { version="0.7.0", features = ["ggrs"], optional = true }
+matchbox_socket = { version="0.7", features = ["ggrs"], optional = true }
 futures-timer = { version = "3", features = ["wasm-bindgen"], optional = true }
 ggrs = { version = "0.9", optional = true }
 tokio = { version = "1", features = ["rt"], optional = true }
