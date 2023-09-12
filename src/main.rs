@@ -152,6 +152,7 @@ fn main() -> Result<()> {
     #[cfg(windows)]
     {
         use std::os::windows::prelude::*;
+        use std::os::windows::Win32::Storage::FileSystem::{FILE_SHARE_READ, FILE_SHARE_WRITE};
         match std::fs::OpenOptions::new()
             .create(true)
             .write(true)
