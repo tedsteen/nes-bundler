@@ -73,30 +73,7 @@ pub fn start_nes(cart_data: Vec<u8>, sample_rate: u64) -> Result<NesState> {
 }
 
 fn main() -> Result<()> {
-    #[cfg(windows)]
-    {
-        match std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open("nes-bundler-log.txt")
-        {
-            Ok(log_file) => {
-                env_logger::Builder::from_env(env_logger::Env::default())
-                    .target(env_logger::Target::Pipe(Box::new(log_file)))
-                    .init();
-            }
-            Err(e) => {
-                eprintln!("Could not open nes-bundler-log.txt for writing, {:?}", e);
-                env_logger::init();
-            }
-        }
-    }
-    #[cfg(not(windows))]
-    {
-        env_logger::init();
-    }
-
+    init_logger();
     log::info!("nes-bundler starting!");
 
     // This is required for certain controllers to work on Windows without the
@@ -479,5 +456,31 @@ impl GameRunner {
         } else {
             None
         }
+    }
+}
+
+fn init_logger() {
+    #[cfg(windows)]
+    {
+        match std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open("nes-bundler-log.txt")
+        {
+            Ok(log_file) => {
+                env_logger::Builder::from_env(env_logger::Env::default())
+                    .target(env_logger::Target::Pipe(Box::new(log_file)))
+                    .init();
+            }
+            Err(e) => {
+                eprintln!("Could not open nes-bundler-log.txt for writing, {:?}", e);
+                env_logger::init();
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        env_logger::init();
     }
 }
