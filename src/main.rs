@@ -2,9 +2,6 @@
 #![allow(unsafe_code)]
 #![deny(clippy::all)]
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use crate::bundle::{Bundle, LoadBundle};
 use crate::input::buttons::GamepadButton;
 use crate::settings::gui::ToGuiEvent;
@@ -137,18 +134,17 @@ fn run(
         for event in events {
             let consumed = match &event {
                 settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(key_code, modifiers)) => {
-                    let settings = &game.settings;
+                    let settings = &mut game.settings;
 
                     use crate::input::keys::KeyCode::*;
                     match key_code {
                         F1 => {
-                            let mut settings = settings.borrow_mut();
                             settings.last_save_state = Some(b64.encode(game.state_handler.save()));
-                            settings.save().unwrap();
+                            settings.save();
                             true
                         }
                         F2 => {
-                            if let Some(save_state) = &settings.borrow().last_save_state {
+                            if let Some(save_state) = &settings.last_save_state {
                                 if let Ok(buf) = &mut b64.decode(save_state) {
                                     game.state_handler.load(buf);
                                 }
@@ -200,28 +196,11 @@ fn run(
             |g| {
                 if let winit::event::Event::RedrawEventsCleared = &event {
                     let game = &mut g.game;
-                    let gl_window = &game.gl_window;
-                    let settings = &game.settings;
-                    let settings_hash_before = settings.borrow().get_hash();
-                    let gui = &mut game.gui;
-                    let window = &mut gl_window.window();
-
-                    gui.ui(
-                        window,
-                        vec![
-                            #[cfg(feature = "debug")]
-                            &mut game.debug,
-                            &mut game.audio,
-                            &mut game.input,
-                            game.state_handler.get_gui(),
-                        ],
-                    );
-
-                    if settings_hash_before != settings.borrow().get_hash() {
-                        log::debug!("Settings saved");
-                        settings.borrow().save().unwrap();
+                    if game.run_gui() {
+                        game.settings.save();
                     }
 
+                    let gl_window = &game.gl_window;
                     unsafe {
                         use glow::HasContext as _;
                         //gl.clear_color(clear_colour[0], clear_colour[1], clear_colour[2], 1.0);
@@ -230,7 +209,7 @@ fn run(
 
                     // draw things behind egui here
 
-                    gui.paint(window);
+                    game.gui.paint(gl_window.window());
 
                     // draw things on top of egui here
 
@@ -269,14 +248,12 @@ fn initialise() -> Result<
         DEFAULT_WINDOW_SIZE.0,
         DEFAULT_WINDOW_SIZE.1,
         &event_loop,
-    );
+    )?;
 
     let egui_glow = egui_glow::EguiGlow::new(&event_loop, gl_window.glow_context.clone(), None);
     egui_glow.egui_ctx.set_pixels_per_point(gl_window.get_dpi());
-    let settings = Rc::new(RefCell::new(Settings::new(
-        bundle.config.default_settings.clone(),
-    )));
-    let audio = Audio::new(&sdl_context, settings.clone())?;
+    let mut settings = Settings::new(bundle.config.default_settings.clone());
+    let audio = Audio::new(&sdl_context, &settings)?;
     let nes = start_nes(bundle.rom.clone(), audio.stream.get_sample_rate() as u64)?;
     let state = LocalGameState::new(nes)?;
     let state_handler = LocalStateHandler {
@@ -284,11 +261,8 @@ fn initialise() -> Result<
         gui: EmptyGuiComponent::new(),
     };
     #[cfg(feature = "netplay")]
-    let state_handler = netplay::NetplayStateHandler::new(
-        state_handler,
-        &bundle,
-        &mut settings.borrow_mut().netplay_id,
-    );
+    let state_handler =
+        netplay::NetplayStateHandler::new(state_handler, &bundle, &mut settings.netplay_id);
     let inputs = Inputs::new(&sdl_context, bundle.config.default_settings.input.selected);
     let sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
     let game_loop: GameLoop<Game, Time> = GameLoop::new(
@@ -401,7 +375,7 @@ struct Game {
     state_handler: Box<dyn StateHandler>,
     gl_window: GlutinWindowContext,
     gui: Gui,
-    settings: Rc<RefCell<Settings>>,
+    settings: Settings,
     #[cfg(feature = "debug")]
     debug: debug::Debug,
     audio: Audio,
@@ -412,7 +386,7 @@ impl Game {
         state_handler: Box<dyn StateHandler>,
         gl_window: GlutinWindowContext,
         gui: Gui,
-        settings: Rc<RefCell<Settings>>,
+        settings: Settings,
         audio: Audio,
         inputs: Inputs,
     ) -> Self {
@@ -420,7 +394,7 @@ impl Game {
             state_handler,
             gl_window,
             gui,
-            input: Input::new(inputs, settings.clone()),
+            input: Input::new(inputs),
             settings,
             #[cfg(feature = "debug")]
             debug: debug::Debug {
@@ -440,8 +414,28 @@ impl Game {
                 &mut self.input,
                 self.state_handler.get_gui(),
             ],
+            &mut self.settings,
         )
     }
+
+    fn run_gui(&mut self) -> bool {
+        let settings_hash_before = self.settings.get_hash();
+        self.audio.sync_audio_devices(&mut self.settings.audio);
+
+        self.gui.ui(
+            self.gl_window.window(),
+            vec![
+                #[cfg(feature = "debug")]
+                &mut self.debug,
+                &mut self.audio,
+                &mut self.input,
+                self.state_handler.get_gui(),
+            ],
+            &mut self.settings,
+        );
+        settings_hash_before != self.settings.get_hash()
+    }
+
     pub fn advance(&mut self) -> Fps {
         let input = &self.input;
         let inputs = [input.inputs.get_joypad(0), input.inputs.get_joypad(1)];

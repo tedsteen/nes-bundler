@@ -7,6 +7,8 @@ use crate::{
     input::{gamepad::GamepadEvent, KeyEvent},
     HEIGHT, WIDTH,
 };
+
+use super::Settings;
 pub trait ToGuiEvent {
     /// Convert the struct to a GuiEvent
     fn to_gui_event(&self) -> Option<GuiEvent>;
@@ -18,8 +20,8 @@ pub enum GuiEvent {
     Gamepad(GamepadEvent),
 }
 pub trait GuiComponent {
-    fn ui(&mut self, ctx: &Context, ui_visible: bool, name: String);
-    fn event(&mut self, event: &GuiEvent);
+    fn ui(&mut self, ctx: &Context, ui_visible: bool, name: String, settings: &mut Settings);
+    fn event(&mut self, event: &GuiEvent, settings: &mut Settings);
     fn name(&self) -> Option<String>;
     fn open(&mut self) -> &mut bool;
 }
@@ -36,7 +38,7 @@ impl EmptyGuiComponent {
 }
 
 impl GuiComponent for EmptyGuiComponent {
-    fn ui(&mut self, _ctx: &Context, _ui_visible: bool, _name: String) {}
+    fn ui(&mut self, _ctx: &Context, _ui_visible: bool, _name: String, _settings: &mut Settings) {}
     fn name(&self) -> Option<String> {
         None
     }
@@ -44,7 +46,7 @@ impl GuiComponent for EmptyGuiComponent {
         &mut self.is_open
     }
 
-    fn event(&mut self, _event: &GuiEvent) {}
+    fn event(&mut self, _event: &GuiEvent, _settings: &mut Settings) {}
 }
 
 pub struct Gui {
@@ -82,13 +84,23 @@ impl Gui {
         }
     }
 
-    pub fn handle_events(&mut self, event: &GuiEvent, guis: Vec<&mut dyn GuiComponent>) {
+    pub fn handle_events(
+        &mut self,
+        event: &GuiEvent,
+        guis: Vec<&mut dyn GuiComponent>,
+        settings: &mut Settings,
+    ) {
         for gui in guis {
-            gui.event(event);
+            gui.event(event, settings);
         }
     }
 
-    pub fn ui(&mut self, window: &winit::window::Window, mut guis: Vec<&mut dyn GuiComponent>) {
+    pub fn ui(
+        &mut self,
+        window: &winit::window::Window,
+        mut guis: Vec<&mut dyn GuiComponent>,
+        settings: &mut Settings,
+    ) {
         let texture_handle = &self.nes_texture;
 
         self.egui_glow.run(window, |ctx| {
@@ -142,7 +154,7 @@ impl Gui {
                     }
                     for gui in &mut guis {
                         if let Some(name) = gui.name() {
-                            gui.ui(ctx, self.visible, name);
+                            gui.ui(ctx, self.visible, name, settings);
                         }
                     }
                 });

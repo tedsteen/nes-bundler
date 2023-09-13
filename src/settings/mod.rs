@@ -9,7 +9,6 @@ use std::{
     fs::File,
     hash::{Hash, Hasher},
     io::{BufReader, BufWriter},
-    rc::Rc,
 };
 pub mod gui;
 
@@ -30,14 +29,14 @@ impl Settings {
         if let Ok(settings) = &mut settings {
             //Make sure no gamepads are selected after loading settings (they will be autoselected later if they are connected)
             if let InputConfigurationKind::Gamepad(_) =
-                Rc::clone(&settings.input.selected[0]).borrow().kind
+                &settings.input.selected[0].clone().borrow().kind
             {
-                settings.input.selected[0] = Rc::clone(&default_selected[0]);
+                settings.input.selected[0] = default_selected[0].clone();
             }
             if let InputConfigurationKind::Gamepad(_) =
-                Rc::clone(&settings.input.selected[1]).borrow().kind
+                &settings.input.selected[1].clone().borrow().kind
             {
-                settings.input.selected[1] = Rc::clone(&default_selected[1]);
+                settings.input.selected[1] = default_selected[1].clone();
             }
         }
         //TODO: Check if the error is something else than file not found and log
@@ -50,9 +49,17 @@ impl Settings {
         Ok(settings)
     }
 
-    pub fn save(&self) -> anyhow::Result<()> {
-        serde_yaml::to_writer(BufWriter::new(File::create("settings.yaml")?), &self)?;
-        Ok(())
+    pub fn save(&self) {
+        if let Err(e) = File::create("settings.yaml")
+            .map_err(anyhow::Error::msg)
+            .and_then(|file| {
+                serde_yaml::to_writer(BufWriter::new(file), &self).map_err(anyhow::Error::msg)
+            })
+        {
+            log::error!("Failed to save settings: {:?}", e);
+        } else {
+            log::debug!("Settings saved");
+        }
     }
 
     pub fn get_hash(&self) -> u64 {

@@ -1,9 +1,12 @@
 use crate::{
     input::{InputId, Inputs, JoypadButton, JoypadInput},
-    settings::gui::{GuiComponent, GuiEvent},
+    settings::{
+        gui::{GuiComponent, GuiEvent},
+        Settings,
+    },
 };
 use egui::{Button, Color32, Context, Grid, Label, RichText, Ui, Window};
-use std::{collections::BTreeMap, fmt::Debug, rc::Rc};
+use std::{collections::BTreeMap, fmt::Debug};
 
 use super::{settings::InputConfigurationRef, Input};
 
@@ -53,7 +56,7 @@ impl InputSettingsGui {
                 for input_configuration in sorted_configurations {
                     ui.selectable_value(
                         selected_configuration,
-                        Rc::clone(input_configuration),
+                        input_configuration.clone(),
                         input_configuration.borrow().name.clone(),
                     );
                 }
@@ -130,11 +133,11 @@ impl InputSettingsGui {
 }
 
 impl GuiComponent for Input {
-    fn event(&mut self, event: &GuiEvent) {
-        self.inputs.advance(event, self.settings.clone());
+    fn event(&mut self, event: &GuiEvent, settings: &mut Settings) {
+        self.inputs.advance(event, settings);
     }
 
-    fn ui(&mut self, ctx: &Context, ui_visible: bool, name: String) {
+    fn ui(&mut self, ctx: &Context, ui_visible: bool, name: String, settings: &mut Settings) {
         if !ui_visible {
             return;
         }
@@ -143,7 +146,7 @@ impl GuiComponent for Input {
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
-                let input_settings = &mut self.settings.borrow_mut().input;
+                let input_settings = &mut settings.input;
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         InputSettingsGui::key_map_ui(

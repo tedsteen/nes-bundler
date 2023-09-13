@@ -1,5 +1,6 @@
 use std::{num::NonZeroU32, sync::Arc};
 
+use anyhow::Result;
 use egui::NumExt;
 
 use crate::input::keys::{KeyCode, Modifiers};
@@ -25,7 +26,7 @@ impl GlutinWindowContext {
         width: f32,
         height: f32,
         event_loop: &winit::event_loop::EventLoopWindowTarget<()>,
-    ) -> Self {
+    ) -> Result<Self> {
         use glutin::context::NotCurrentGlContextSurfaceAccessor;
         use glutin::display::GetGlDisplay;
         use glutin::display::GlDisplay;
@@ -100,22 +101,17 @@ impl GlutinWindowContext {
             "creating surface with attributes: {:?}",
             &surface_attributes
         );
-        let gl_surface = unsafe {
-            gl_display
-                .create_window_surface(&gl_config, &surface_attributes)
-                .unwrap()
-        };
+        let gl_surface =
+            unsafe { gl_display.create_window_surface(&gl_config, &surface_attributes)? };
         log::debug!("surface created successfully: {gl_surface:?}.making context current");
-        let gl_context = not_current_gl_context.make_current(&gl_surface).unwrap();
+        let gl_context = not_current_gl_context.make_current(&gl_surface)?;
 
-        gl_surface
-            .set_swap_interval(
-                &gl_context,
-                glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap()),
-            )
-            .unwrap();
+        gl_surface.set_swap_interval(
+            &gl_context,
+            glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap()),
+        )?;
 
-        GlutinWindowContext {
+        Ok(GlutinWindowContext {
             window,
             gl_context,
             glow_context: Arc::new(glow::Context::from_loader_function(|s| {
@@ -124,7 +120,7 @@ impl GlutinWindowContext {
                 gl_display.get_proc_address(&s)
             })),
             gl_surface,
-        }
+        })
     }
 
     pub fn window(&self) -> &winit::window::Window {
@@ -159,6 +155,6 @@ pub fn create_display(
     width: u32,
     height: u32,
     event_loop: &winit::event_loop::EventLoopWindowTarget<()>,
-) -> GlutinWindowContext {
+) -> Result<GlutinWindowContext> {
     unsafe { GlutinWindowContext::new(title, width as f32, height as f32, event_loop) }
 }

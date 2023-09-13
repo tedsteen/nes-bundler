@@ -1,7 +1,7 @@
-use std::cell::RefCell;
-use std::ops::RangeInclusive;
-use std::rc::Rc;
+use std::ops::{Add, RangeInclusive};
+use std::time::{Duration, Instant};
 
+use anyhow::Result;
 use sdl2::audio::{AudioQueue, AudioSpec, AudioSpecDesired};
 use sdl2::{AudioSubsystem, Sdl};
 
@@ -24,31 +24,39 @@ pub struct Stream {
 impl Stream {
     pub fn get_available_output_device_names(&self) -> Vec<String> {
         let subsystem = self.output_device.subsystem();
-        (0..subsystem.num_audio_playback_devices().unwrap())
-            .map(|i| subsystem.audio_playback_device_name(i).unwrap())
-            .collect()
+        if let Some(num_devices) = subsystem.num_audio_playback_devices() {
+            (0..num_devices)
+                .flat_map(|i| subsystem.audio_playback_device_name(i))
+                .collect()
+        } else {
+            vec![]
+        }
     }
+
     pub fn get_default_device_name(&self) -> Option<String> {
         self.get_available_output_device_names().first().cloned()
     }
 
-    pub(crate) fn new(audio_subsystem: &AudioSubsystem, audio_settings: &AudioSettings) -> Self {
-        Self {
+    pub(crate) fn new(
+        audio_subsystem: &AudioSubsystem,
+        audio_settings: &AudioSettings,
+    ) -> Result<Self> {
+        Ok(Self {
             output_device_name: audio_settings.output_device.clone(),
             output_device: Stream::start_output_device(
                 audio_subsystem,
                 &audio_settings.output_device,
                 audio_settings.latency,
-            ),
+            )?,
             volume: audio_settings.volume as f32 / 100.0,
-        }
+        })
     }
 
     fn start_output_device(
         audio_subsystem: &AudioSubsystem,
         output_device: &Option<String>,
         latency: u8,
-    ) -> AudioQueue<i16> {
+    ) -> Result<AudioQueue<i16>> {
         let channels = 1;
         let sample_rate = 44100;
 
@@ -68,9 +76,9 @@ impl Stream {
         let output_device = audio_subsystem
             .open_queue::<i16, _>(output_device.as_deref(), &desired_spec)
             .or_else(|_| audio_subsystem.open_queue::<i16, _>(None, &desired_spec))
-            .unwrap();
+            .map_err(anyhow::Error::msg)?;
         output_device.resume();
-        output_device
+        Ok(output_device)
     }
 
     fn latency_to_frames(latency: u8, channels: u8, sample_rate: u32) -> u16 {
@@ -83,11 +91,15 @@ impl Stream {
     }
 
     pub fn set_latency(&mut self, latency: u8) {
-        self.output_device = Stream::start_output_device(
+        if let Ok(new_device) = Stream::start_output_device(
             self.output_device.subsystem(),
             &self.output_device_name,
             latency,
-        )
+        ) {
+            self.output_device = new_device;
+        } else {
+            log::error!("Failed to set audio latency to {}", latency);
+        }
     }
 
     pub fn get_sample_rate(&self) -> u32 {
@@ -99,42 +111,73 @@ impl Stream {
     }
 
     pub(crate) fn push_samples(&mut self, samples: &[SampleFormat]) {
-        self.output_device
-            .queue_audio(
-                &samples
-                    .iter()
-                    .map(|s| (*s as f32 * self.volume) as i16)
-                    .collect::<Vec<i16>>(),
-            )
-            .unwrap();
+        if let Err(e) = self.output_device.queue_audio(
+            &samples
+                .iter()
+                .map(|s| (*s as f32 * self.volume) as i16)
+                .collect::<Vec<i16>>(),
+        ) {
+            log::warn!("Failed to queue audio: {:?}", e);
+        }
     }
 
     pub(crate) fn set_output_device(&mut self, output_device_name: Option<String>) {
         if self.output_device_name != output_device_name {
-            self.output_device_name = output_device_name;
-            self.output_device = Stream::start_output_device(
+            match Stream::start_output_device(
                 self.output_device.subsystem(),
                 &self.output_device_name,
                 Stream::frames_to_latency(self.output_device.spec()),
-            );
+            ) {
+                Ok(new_device) => {
+                    self.output_device_name = output_device_name;
+                    self.output_device = new_device;
+                }
+                Err(e) => {
+                    log::error!("Failed to set audio output device: {:?}", e);
+                }
+            }
         }
     }
 }
 
 pub struct Audio {
-    settings: Rc<RefCell<Settings>>,
     gui: AudioSettingsGui,
     pub stream: Stream,
+    available_device_names: Vec<String>,
+    next_device_names_clear: Instant,
 }
 
 impl Audio {
-    pub fn new(sdl_context: &Sdl, settings: Rc<RefCell<Settings>>) -> anyhow::Result<Self> {
+    pub fn new(sdl_context: &Sdl, settings: &Settings) -> Result<Self> {
         let audio_subsystem = sdl_context.audio().map_err(anyhow::Error::msg)?;
 
         Ok(Audio {
-            stream: Stream::new(&audio_subsystem, &settings.clone().borrow().audio),
-            settings,
+            stream: Stream::new(&audio_subsystem, &settings.audio)?,
             gui: Default::default(),
+            available_device_names: vec![],
+            next_device_names_clear: Instant::now(),
         })
+    }
+    fn get_available_output_device_names(&self) -> Vec<String> {
+        self.available_device_names.clone()
+    }
+
+    pub fn sync_audio_devices(&mut self, audio_settings: &mut AudioSettings) {
+        if self.next_device_names_clear < Instant::now() {
+            self.next_device_names_clear = Instant::now().add(Duration::new(1, 0));
+            self.available_device_names = self.stream.get_available_output_device_names();
+        }
+
+        let available_device_names = self.get_available_output_device_names();
+
+        let selected_device = &mut audio_settings.output_device;
+        if let Some(name) = selected_device {
+            if !available_device_names.contains(name) {
+                *selected_device = None;
+            }
+        }
+        if selected_device.is_none() {
+            *selected_device = self.stream.get_default_device_name();
+        }
     }
 }

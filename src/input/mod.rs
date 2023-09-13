@@ -9,7 +9,7 @@ use self::{
 use crate::settings::{gui::GuiEvent, Settings, MAX_PLAYERS};
 use sdl2::Sdl;
 use serde::{Deserialize, Serialize};
-use std::{cell::RefCell, collections::HashSet, fmt::Debug, rc::Rc};
+use std::{collections::HashSet, fmt::Debug};
 
 pub mod buttons;
 pub mod gamepad;
@@ -130,7 +130,7 @@ pub enum InputConfigurationKind {
 }
 pub struct Inputs {
     keyboards: Keyboards,
-    gamepads: Box<dyn Gamepads>,
+    gamepads: Option<Box<dyn Gamepads>>,
     joypads: [JoypadInput; MAX_PLAYERS],
     default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
 }
@@ -140,7 +140,13 @@ impl Inputs {
         sdl_context: &Sdl,
         default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
     ) -> Self {
-        let gamepads = Box::new(Sdl2Gamepads::new(sdl_context));
+        let gamepads: Option<Box<dyn Gamepads>> = match Sdl2Gamepads::new(sdl_context) {
+            Ok(gamepads) => Some(Box::new(gamepads)),
+            Err(e) => {
+                log::error!("Failed to initialize gamepads: {:?}", e);
+                None
+            }
+        };
         let keyboards = Keyboards::new();
 
         Self {
@@ -151,17 +157,18 @@ impl Inputs {
         }
     }
 
-    pub fn advance(&mut self, event: &GuiEvent, settings: Rc<RefCell<Settings>>) {
+    pub fn advance(&mut self, event: &GuiEvent, settings: &mut Settings) {
         match event {
             GuiEvent::Keyboard(key_event) => {
                 self.keyboards.advance(key_event);
             }
             GuiEvent::Gamepad(gamepad_event) => {
-                self.gamepads
-                    .advance(gamepad_event, &mut settings.borrow_mut().input);
+                if let Some(gamepads) = &mut self.gamepads {
+                    gamepads.advance(gamepad_event, &mut settings.input);
+                }
             }
         }
-        let input_settings = &mut settings.borrow_mut().input;
+        let input_settings = &mut settings.input;
         input_settings.reset_selected_disconnected_inputs(self);
 
         self.joypads[0] =
@@ -185,7 +192,11 @@ impl Inputs {
         match &input_conf.kind {
             InputConfigurationKind::Keyboard(mapping) => self.keyboards.get_joypad(mapping),
             InputConfigurationKind::Gamepad(mapping) => {
-                self.gamepads.get_joypad(&input_conf.id, mapping)
+                if let Some(gamepads) = &mut self.gamepads {
+                    gamepads.get_joypad(&input_conf.id, mapping)
+                } else {
+                    JoypadInput(0)
+                }
             }
         }
     }
@@ -193,11 +204,14 @@ impl Inputs {
     pub fn is_connected(&self, input_conf: &InputConfiguration) -> bool {
         match &input_conf.kind {
             InputConfigurationKind::Keyboard(_) => true,
-            InputConfigurationKind::Gamepad(_) => self
-                .gamepads
-                .get_gamepad_by_input_id(&input_conf.id)
-                .map(|state| state.is_connected())
-                .unwrap_or(false),
+            InputConfigurationKind::Gamepad(_) => {
+                self.gamepads.as_ref().map_or(false, |gamepads| {
+                    gamepads
+                        .get_gamepad_by_input_id(&input_conf.id)
+                        .map(|state| state.is_connected())
+                        .unwrap_or(false)
+                })
+            }
         }
     }
 
@@ -217,14 +231,13 @@ impl Inputs {
                 }
             }
             InputConfigurationKind::Gamepad(mapping) => {
-                if let Some(state) = &mut self
-                    .gamepads
-                    .get_gamepad_by_input_id(&input_configuration_id)
-                {
-                    if let Some(new_button) = state.get_pressed_buttons().iter().next() {
-                        //If there's any button pressed, use the first found.
-                        let _ = mapping.lookup(button).insert(*new_button);
-                        return true;
+                if let Some(gamepads) = &self.gamepads {
+                    if let Some(state) = gamepads.get_gamepad_by_input_id(&input_configuration_id) {
+                        if let Some(new_button) = state.get_pressed_buttons().iter().next() {
+                            //If there's any button pressed, use the first found.
+                            let _ = mapping.lookup(button).insert(*new_button);
+                            return true;
+                        }
                     }
                 }
             }
@@ -234,14 +247,12 @@ impl Inputs {
 }
 
 pub struct Input {
-    settings: Rc<RefCell<Settings>>,
     pub inputs: Inputs,
     gui: InputSettingsGui,
 }
 impl Input {
-    pub fn new(inputs: Inputs, settings: Rc<RefCell<Settings>>) -> Self {
+    pub fn new(inputs: Inputs) -> Self {
         Input {
-            settings,
             inputs,
             gui: Default::default(),
         }
