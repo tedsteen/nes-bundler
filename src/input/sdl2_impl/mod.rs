@@ -5,6 +5,7 @@ use super::{buttons::GamepadButton, settings::InputSettings, InputId, JoypadInpu
 use crate::input::{self, InputConfigurationKind};
 use std::collections::{HashMap, HashSet};
 
+use anyhow::Result;
 use sdl2::Sdl;
 use sdl2::{controller::GameController, GameControllerSubsystem};
 
@@ -105,13 +106,14 @@ impl Gamepads for Sdl2Gamepads {
     }
 }
 impl Sdl2Gamepads {
-    pub fn new(sdl_context: &Sdl) -> Self {
-        let game_controller_subsystem = sdl_context.game_controller().unwrap();
+    pub fn new(sdl_context: &Sdl) -> Result<Self> {
+        let game_controller_subsystem =
+            sdl_context.game_controller().map_err(anyhow::Error::msg)?;
 
-        Sdl2Gamepads {
+        Ok(Sdl2Gamepads {
             game_controller_subsystem,
             all: HashMap::new(),
-        }
+        })
     }
 
     fn get_gamepad(&mut self, id: InputId) -> Option<&mut Box<dyn GamepadState>> {
@@ -123,8 +125,8 @@ impl Sdl2Gamepads {
         input_id: InputId,
         input_settings: &mut InputSettings,
     ) -> Option<InputConfigurationRef> {
-        if let Some(found_controller) = (0..self.game_controller_subsystem.num_joysticks().unwrap())
-            .find_map(|id| {
+        if let Some(found_controller) =
+            (0..self.game_controller_subsystem.num_joysticks().unwrap_or(0)).find_map(|id| {
                 if input_id == id.to_input_id()
                     && self.game_controller_subsystem.is_game_controller(id)
                 {
