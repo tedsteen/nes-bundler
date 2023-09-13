@@ -23,10 +23,15 @@ pub struct Stream {
 impl Stream {
     pub fn get_available_output_device_names(&self) -> Vec<String> {
         let subsystem = self.output_device.subsystem();
-        (0..subsystem.num_audio_playback_devices().unwrap())
-            .map(|i| subsystem.audio_playback_device_name(i).unwrap())
-            .collect()
+        if let Some(num_devices) = subsystem.num_audio_playback_devices() {
+            (0..num_devices)
+                .flat_map(|i| subsystem.audio_playback_device_name(i))
+                .collect()
+        } else {
+            vec![]
+        }
     }
+
     pub fn get_default_device_name(&self) -> Option<String> {
         self.get_available_output_device_names().first().cloned()
     }
