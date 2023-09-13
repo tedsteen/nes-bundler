@@ -248,7 +248,7 @@ fn initialise() -> Result<
         DEFAULT_WINDOW_SIZE.0,
         DEFAULT_WINDOW_SIZE.1,
         &event_loop,
-    );
+    )?;
 
     let egui_glow = egui_glow::EguiGlow::new(&event_loop, gl_window.glow_context.clone(), None);
     egui_glow.egui_ctx.set_pixels_per_point(gl_window.get_dpi());
