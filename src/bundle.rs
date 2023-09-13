@@ -75,8 +75,8 @@ impl LoadBundle for Bundle {
 impl LoadBundle for Bundle {
     fn load() -> Result<Bundle> {
         Ok(Bundle {
-            config: serde_yaml::from_str(include_str!("../../config/config.yaml"))?,
-            rom: include_bytes!("../../config/rom.nes").to_vec(),
+            config: serde_yaml::from_str(include_str!("../config/config.yaml"))?,
+            rom: include_bytes!("../config/rom.nes").to_vec(),
         })
     }
 }

@@ -252,7 +252,10 @@ fn initialise() -> Result<
 
     let egui_glow = egui_glow::EguiGlow::new(&event_loop, gl_window.glow_context.clone(), None);
     egui_glow.egui_ctx.set_pixels_per_point(gl_window.get_dpi());
+
+    #[allow(unused_mut)] //Needed by the netplay feature
     let mut settings = Settings::new(bundle.config.default_settings.clone());
+
     let audio = Audio::new(&sdl_context, &settings)?;
     let nes = start_nes(bundle.rom.clone(), audio.stream.get_sample_rate() as u64)?;
     let state = LocalGameState::new(nes)?;
