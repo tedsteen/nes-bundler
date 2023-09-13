@@ -1,6 +1,4 @@
-use std::cell::RefCell;
 use std::ops::RangeInclusive;
-use std::rc::Rc;
 
 use sdl2::audio::{AudioQueue, AudioSpec, AudioSpecDesired};
 use sdl2::{AudioSubsystem, Sdl};
@@ -122,18 +120,16 @@ impl Stream {
 }
 
 pub struct Audio {
-    settings: Rc<RefCell<Settings>>,
     gui: AudioSettingsGui,
     pub stream: Stream,
 }
 
 impl Audio {
-    pub fn new(sdl_context: &Sdl, settings: Rc<RefCell<Settings>>) -> anyhow::Result<Self> {
+    pub fn new(sdl_context: &Sdl, settings: &Settings) -> anyhow::Result<Self> {
         let audio_subsystem = sdl_context.audio().map_err(anyhow::Error::msg)?;
 
         Ok(Audio {
-            stream: Stream::new(&audio_subsystem, &settings.clone().borrow().audio),
-            settings,
+            stream: Stream::new(&audio_subsystem, &settings.audio),
             gui: Default::default(),
         })
     }

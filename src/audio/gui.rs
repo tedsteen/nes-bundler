@@ -3,7 +3,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::settings::gui::{GuiComponent, GuiEvent};
+use crate::settings::{
+    gui::{GuiComponent, GuiEvent},
+    Settings,
+};
 use egui::{Context, Slider, Window};
 
 use super::Audio;
@@ -26,7 +29,7 @@ impl Default for AudioSettingsGui {
 }
 
 impl GuiComponent for Audio {
-    fn ui(&mut self, ctx: &Context, ui_visible: bool, name: String) {
+    fn ui(&mut self, ctx: &Context, ui_visible: bool, name: String, settings: &mut Settings) {
         if !ui_visible {
             return;
         }
@@ -42,7 +45,7 @@ impl GuiComponent for Audio {
                         .spacing([10.0, 4.0])
                         .striped(true)
                         .show(ui, |ui| {
-                            let audio_settings = &mut self.settings.borrow_mut().audio;
+                            let audio_settings = &mut settings.audio;
 
                             ui.label("Output");
                             let selected_device = &mut audio_settings.output_device;
@@ -116,5 +119,5 @@ impl GuiComponent for Audio {
         &mut self.gui.is_open
     }
 
-    fn event(&mut self, _event: &GuiEvent) {}
+    fn event(&mut self, _event: &GuiEvent, _settings: &mut Settings) {}
 }

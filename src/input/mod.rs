@@ -9,7 +9,7 @@ use self::{
 use crate::settings::{gui::GuiEvent, Settings, MAX_PLAYERS};
 use sdl2::Sdl;
 use serde::{Deserialize, Serialize};
-use std::{cell::RefCell, collections::HashSet, fmt::Debug, rc::Rc};
+use std::{collections::HashSet, fmt::Debug};
 
 pub mod buttons;
 pub mod gamepad;
@@ -151,17 +151,16 @@ impl Inputs {
         }
     }
 
-    pub fn advance(&mut self, event: &GuiEvent, settings: Rc<RefCell<Settings>>) {
+    pub fn advance(&mut self, event: &GuiEvent, settings: &mut Settings) {
         match event {
             GuiEvent::Keyboard(key_event) => {
                 self.keyboards.advance(key_event);
             }
             GuiEvent::Gamepad(gamepad_event) => {
-                self.gamepads
-                    .advance(gamepad_event, &mut settings.borrow_mut().input);
+                self.gamepads.advance(gamepad_event, &mut settings.input);
             }
         }
-        let input_settings = &mut settings.borrow_mut().input;
+        let input_settings = &mut settings.input;
         input_settings.reset_selected_disconnected_inputs(self);
 
         self.joypads[0] =
@@ -234,14 +233,12 @@ impl Inputs {
 }
 
 pub struct Input {
-    settings: Rc<RefCell<Settings>>,
     pub inputs: Inputs,
     gui: InputSettingsGui,
 }
 impl Input {
-    pub fn new(inputs: Inputs, settings: Rc<RefCell<Settings>>) -> Self {
+    pub fn new(inputs: Inputs) -> Self {
         Input {
-            settings,
             inputs,
             gui: Default::default(),
         }

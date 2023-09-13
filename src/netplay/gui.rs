@@ -4,7 +4,7 @@ use egui::{Button, Context, TextEdit, Window};
 
 use crate::settings::{
     gui::{GuiComponent, GuiEvent},
-    MAX_PLAYERS,
+    Settings, MAX_PLAYERS,
 };
 
 use super::{
@@ -98,7 +98,7 @@ impl NetplayGui {
 }
 
 impl GuiComponent for NetplayStateHandler {
-    fn ui(&mut self, ctx: &Context, ui_visible: bool, name: String) {
+    fn ui(&mut self, ctx: &Context, ui_visible: bool, name: String, _settings: &mut Settings) {
         if let NetplayState::Connecting(_) | NetplayState::Resuming(_) =
             &mut self.netplay.as_mut().unwrap()
         {
@@ -285,5 +285,5 @@ impl GuiComponent for NetplayStateHandler {
         &mut self.gui.is_open
     }
 
-    fn event(&mut self, _event: &GuiEvent) {}
+    fn event(&mut self, _event: &GuiEvent, _settings: &mut Settings) {}
 }
