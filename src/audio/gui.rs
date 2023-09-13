@@ -1,8 +1,3 @@
-use std::{
-    ops::Add,
-    time::{Duration, Instant},
-};
-
 use crate::settings::{
     gui::{GuiComponent, GuiEvent},
     Settings,
@@ -11,21 +6,9 @@ use egui::{Context, Slider, Window};
 
 use super::Audio;
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash, PartialEq, Eq, Default)]
 pub struct AudioSettingsGui {
-    available_device_names: Option<Vec<String>>,
-    next_device_names_clear: Instant,
     is_open: bool,
-}
-
-impl Default for AudioSettingsGui {
-    fn default() -> Self {
-        Self {
-            available_device_names: None,
-            next_device_names_clear: Instant::now(),
-            is_open: false,
-        }
-    }
 }
 
 impl GuiComponent for Audio {
@@ -33,6 +16,7 @@ impl GuiComponent for Audio {
         if !ui_visible {
             return;
         }
+        let available_device_names = self.get_available_output_device_names();
 
         Window::new(name)
             .open(&mut self.gui.is_open)
@@ -49,27 +33,15 @@ impl GuiComponent for Audio {
 
                             ui.label("Output");
                             let selected_device = &mut audio_settings.output_device;
-                            if let Some(selected_text) = selected_device
-                                .clone()
-                                .or_else(|| self.stream.get_default_device_name())
-                            {
+                            if selected_device.is_none() {
+                                *selected_device = self.stream.get_default_device_name();
+                            }
+                            if let Some(selected_text) = selected_device.as_deref_mut() {
                                 egui::ComboBox::from_id_source("audio-output")
                                     .width(160.0)
-                                    .selected_text(selected_text)
+                                    .selected_text(selected_text.to_string())
                                     .show_ui(ui, |ui| {
-                                        if self.gui.next_device_names_clear < Instant::now() {
-                                            self.gui.next_device_names_clear =
-                                                Instant::now().add(Duration::new(1, 0));
-                                            self.gui.available_device_names = None;
-                                        }
-                                        for name in self
-                                            .gui
-                                            .available_device_names
-                                            .get_or_insert_with(|| {
-                                                self.stream.get_available_output_device_names()
-                                            })
-                                            .clone()
-                                        {
+                                        for name in available_device_names {
                                             if ui
                                                 .selectable_value(
                                                     selected_device,

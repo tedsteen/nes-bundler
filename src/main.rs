@@ -421,6 +421,8 @@ impl Game {
 
     fn run_gui(&mut self) -> bool {
         let settings_hash_before = self.settings.get_hash();
+        self.audio.sync_audio_devices(&mut self.settings.audio);
+
         self.gui.ui(
             self.gl_window.window(),
             vec![

@@ -41,7 +41,7 @@ impl ConnectingState {
     pub fn connect<T>(netplay: &Netplay<T>, start_method: StartMethod) -> Self {
         Self::start(
             netplay.config.server.clone(),
-            Rc::clone(&netplay.rt),
+            netplay.rt.clone(),
             netplay.netplay_id.clone(),
             netplay.rom_hash,
             start_method,

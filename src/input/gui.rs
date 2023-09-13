@@ -6,7 +6,7 @@ use crate::{
     },
 };
 use egui::{Button, Color32, Context, Grid, Label, RichText, Ui, Window};
-use std::{collections::BTreeMap, fmt::Debug, rc::Rc};
+use std::{collections::BTreeMap, fmt::Debug};
 
 use super::{settings::InputConfigurationRef, Input};
 
@@ -56,7 +56,7 @@ impl InputSettingsGui {
                 for input_configuration in sorted_configurations {
                     ui.selectable_value(
                         selected_configuration,
-                        Rc::clone(input_configuration),
+                        input_configuration.clone(),
                         input_configuration.borrow().name.clone(),
                     );
                 }

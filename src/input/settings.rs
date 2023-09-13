@@ -26,10 +26,10 @@ impl InputSettings {
 
     pub(crate) fn reset_selected_disconnected_inputs(&mut self, inputs: &Inputs) {
         if !inputs.is_connected(&self.selected[0].borrow()) {
-            self.selected[0] = Rc::clone(inputs.get_default_conf(0));
+            self.selected[0] = inputs.get_default_conf(0).clone();
         }
         if !inputs.is_connected(&self.selected[1].borrow()) {
-            self.selected[1] = Rc::clone(inputs.get_default_conf(1));
+            self.selected[1] = inputs.get_default_conf(1).clone();
         }
     }
 }
@@ -98,14 +98,12 @@ impl<'de> InputSettings {
             .collect();
         Ok(Self {
             selected: [
-                Rc::clone(
-                    Self::map_selected(&configurations, &source.selected[0], 1)
-                        .map_err(serde::de::Error::custom)?,
-                ),
-                Rc::clone(
-                    Self::map_selected(&configurations, &source.selected[1], 2)
-                        .map_err(serde::de::Error::custom)?,
-                ),
+                Self::map_selected(&configurations, &source.selected[0], 1)
+                    .map_err(serde::de::Error::custom)?
+                    .clone(),
+                Self::map_selected(&configurations, &source.selected[1], 2)
+                    .map_err(serde::de::Error::custom)?
+                    .clone(),
             ],
             configurations,
             default_gamepad_mapping: source.default_gamepad_mapping,

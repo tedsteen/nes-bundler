@@ -1,4 +1,5 @@
-use std::ops::RangeInclusive;
+use std::ops::{Add, RangeInclusive};
+use std::time::{Duration, Instant};
 
 use sdl2::audio::{AudioQueue, AudioSpec, AudioSpecDesired};
 use sdl2::{AudioSubsystem, Sdl};
@@ -122,6 +123,8 @@ impl Stream {
 pub struct Audio {
     gui: AudioSettingsGui,
     pub stream: Stream,
+    available_device_names: Vec<String>,
+    next_device_names_clear: Instant,
 }
 
 impl Audio {
@@ -131,6 +134,30 @@ impl Audio {
         Ok(Audio {
             stream: Stream::new(&audio_subsystem, &settings.audio),
             gui: Default::default(),
+            available_device_names: vec![],
+            next_device_names_clear: Instant::now(),
         })
+    }
+    fn get_available_output_device_names(&self) -> Vec<String> {
+        self.available_device_names.clone()
+    }
+
+    pub fn sync_audio_devices(&mut self, audio_settings: &mut AudioSettings) {
+        if self.next_device_names_clear < Instant::now() {
+            self.next_device_names_clear = Instant::now().add(Duration::new(1, 0));
+            self.available_device_names = self.stream.get_available_output_device_names();
+        }
+
+        let available_device_names = self.get_available_output_device_names();
+
+        let selected_device = &mut audio_settings.output_device;
+        if let Some(name) = selected_device {
+            if !available_device_names.contains(name) {
+                *selected_device = None;
+            }
+        }
+        if selected_device.is_none() {
+            *selected_device = self.stream.get_default_device_name();
+        }
     }
 }
