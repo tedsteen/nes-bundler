@@ -49,9 +49,17 @@ impl Settings {
         Ok(settings)
     }
 
-    pub fn save(&self) -> anyhow::Result<()> {
-        serde_yaml::to_writer(BufWriter::new(File::create("settings.yaml")?), &self)?;
-        Ok(())
+    pub fn save(&self) {
+        if let Err(e) = File::create("settings.yaml")
+            .map_err(anyhow::Error::msg)
+            .and_then(|file| {
+                serde_yaml::to_writer(BufWriter::new(file), &self).map_err(anyhow::Error::msg)
+            })
+        {
+            log::error!("Failed to save settings: {:?}", e);
+        } else {
+            log::debug!("Settings saved");
+        }
     }
 
     pub fn get_hash(&self) -> u64 {

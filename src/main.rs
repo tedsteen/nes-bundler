@@ -140,7 +140,7 @@ fn run(
                     match key_code {
                         F1 => {
                             settings.last_save_state = Some(b64.encode(game.state_handler.save()));
-                            settings.save().unwrap();
+                            settings.save();
                             true
                         }
                         F2 => {
@@ -197,8 +197,7 @@ fn run(
                 if let winit::event::Event::RedrawEventsCleared = &event {
                     let game = &mut g.game;
                     if game.run_gui() {
-                        game.settings.save().unwrap();
-                        log::debug!("Settings saved");
+                        game.settings.save();
                     }
 
                     let gl_window = &game.gl_window;
