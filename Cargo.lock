@@ -1895,7 +1895,7 @@ dependencies = [
 [[package]]
 name = "matchbox_protocol"
 version = "0.7.0"
-source = "git+https://github.com/tedsteen/matchbox?branch=upgrade-webrtc#e4f5126c82da483219bd0d6e643513559b3c7ade"
+source = "git+https://github.com/johanhelsing/matchbox#a93041acef968f6660eb6ec9f776c757bf8f921d"
 dependencies = [
  "cfg-if",
  "derive_more",
@@ -1906,7 +1906,7 @@ dependencies = [
 [[package]]
 name = "matchbox_socket"
 version = "0.7.0"
-source = "git+https://github.com/tedsteen/matchbox?branch=upgrade-webrtc#e4f5126c82da483219bd0d6e643513559b3c7ade"
+source = "git+https://github.com/johanhelsing/matchbox#a93041acef968f6660eb6ec9f776c757bf8f921d"
 dependencies = [
  "async-compat",
  "async-trait",
