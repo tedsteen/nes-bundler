@@ -52,7 +52,7 @@ rfd = { version = "0.12", optional = true }
 zip = { version = "0.6", default-features = false, features = ["deflate"], optional = true }
 
 # Netplay deps
-matchbox_socket = { version="0.7", features = ["ggrs"], optional = true }
+matchbox_socket = { git="https://github.com/johanhelsing/matchbox", features = ["ggrs"], optional = true }
 futures-timer = { version = "3", features = ["wasm-bindgen"], optional = true }
 ggrs = { version = "0.9", optional = true }
 tokio = { version = "1", features = ["rt"], optional = true }

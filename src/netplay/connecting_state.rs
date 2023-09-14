@@ -5,6 +5,7 @@ use ggrs::{P2PSession, SessionBuilder, SessionState};
 use matchbox_socket::{ChannelConfig, RtcIceServerConfig, WebRtcSocket, WebRtcSocketBuilder};
 use md5::Digest;
 use serde::Deserialize;
+use std::fmt::Debug;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
@@ -56,7 +57,7 @@ impl ConnectingState {
         start_method: StartMethod,
     ) -> Self {
         let reqwest_client = reqwest::Client::new();
-
+        log::debug!("Connecting: {:?}", netplay_server_config);
         match &netplay_server_config {
             NetplayServerConfiguration::Static(conf) => {
                 Self::PeeringUp(Connecting::<PeeringState>::new(
@@ -70,14 +71,18 @@ impl ConnectingState {
             }
 
             NetplayServerConfiguration::TurnOn(server) => {
+                log::debug!("Fetching TurnOn config from server: {}", server);
                 let req = reqwest_client.get(format!("{server}/{netplay_id}")).send();
                 let (sender, result) =
                     futures::channel::oneshot::channel::<Result<TurnOnResponse, TurnOnError>>();
                 rt.spawn(async move {
                     let _ = match req.await {
-                        Ok(res) => sender.send(res.json().await.map_err(|e| TurnOnError {
-                            description: format!("Failed to receive response: {}", e),
-                        })),
+                        Ok(res) => {
+                            log::trace!("Received response from TurnOn server: {:?}", res);
+                            sender.send(res.json().await.map_err(|e| TurnOnError {
+                                description: format!("Failed to receive response: {}", e),
+                            }))
+                        }
                         Err(e) => sender.send(Err(TurnOnError {
                             description: format!("Could not connect: {}", e),
                         })),
@@ -156,7 +161,7 @@ impl PeeringState {
         let room_name = match &start_method {
             StartMethod::Create(_, name) => format!("join_{:x}_{}", rom_hash, name),
             StartMethod::Resume(StartState { game_state, .. }) => {
-                format!("resume_{:x}", md5::compute(game_state.save()))
+                format!("resume_{:x}", game_state.frame)
             }
             StartMethod::Random(_) => format!("random_{:x}?next=2", rom_hash),
         };
@@ -168,15 +173,23 @@ impl PeeringState {
             IceCredentials::None => (None, None),
         };
 
-        let (socket, loop_fut) =
-            WebRtcSocketBuilder::new(format!("ws://{matchbox_server}/{room_name}"))
-                .ice_server(RtcIceServerConfig {
-                    urls: conf.matchbox.ice.urls.clone(),
-                    username,
-                    credential: password,
-                })
+        let (socket, loop_fut) = {
+            let room_url = format!("ws://{matchbox_server}/{room_name}");
+            let ice_server = RtcIceServerConfig {
+                urls: conf.matchbox.ice.urls.clone(),
+                username,
+                credential: password,
+            };
+            log::debug!(
+                "Peering up through WebRTC socket: room_url={:?}, ice_server={:?}",
+                room_url,
+                ice_server
+            );
+            WebRtcSocketBuilder::new(room_url)
+                .ice_server(ice_server)
                 .add_channel(ChannelConfig::unreliable())
-                .build();
+                .build()
+        };
 
         let loop_fut = loop_fut.fuse();
 
@@ -219,7 +232,7 @@ impl SynchonizingState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum StartMethod {
     Create(StartState, String),
@@ -233,11 +246,19 @@ pub struct StartState {
     pub game_state: LocalGameState,
 }
 
+impl Debug for StartState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StartState")
+            .field("input_mapping", &self.input_mapping)
+            .finish()
+    }
+}
+
 impl Connecting<LoadingNetplayServerConfiguration> {
-    fn into_retrying(self, fail_message: String) -> Connecting<Retrying> {
+    fn into_retrying(self, fail_message: &str) -> Connecting<Retrying> {
         Connecting::from(
             Retrying::new(
-                fail_message,
+                fail_message.to_string(),
                 ConnectingState::start(
                     self.netplay_server_config.clone(),
                     self.rt.clone(),
@@ -249,19 +270,27 @@ impl Connecting<LoadingNetplayServerConfiguration> {
             self,
         )
     }
-
     fn advance(mut self) -> ConnectingState {
-        match self.state.result.try_recv() {
-            Ok(Some(Ok(resp))) => ConnectingState::PeeringUp(Connecting::from(
-                PeeringState::new(&self.rt, resp, self.start_method.clone(), &self.rom_hash),
-                self,
-            )),
+        match self.state.result.try_recv().map_err(|e| TurnOnError {
+            description: format!("Unexpected error: {:?}", e),
+        }) {
+            Ok(Some(Ok(resp))) => {
+                log::debug!("Got TurnOn config response: {:?}", resp);
+                ConnectingState::PeeringUp(Connecting::from(
+                    PeeringState::new(&self.rt, resp, self.start_method.clone(), &self.rom_hash),
+                    self,
+                ))
+            }
             Ok(None) => ConnectingState::LoadingNetplayServerConfiguration(self), //No result yet
-            Ok(Some(Err(err))) => ConnectingState::Retrying(
-                self.into_retrying(format!("Could not fetch server config ({:?})", err)),
-            ),
-            //Lost the sender, not much to do but fail
-            Err(_) => ConnectingState::Retrying(self.into_retrying("Unexpected error".to_string())),
+            Ok(Some(Err(e))) | Err(e) => {
+                log::error!(
+                    "Failed to retrieve netplay server configuration: {:?}, retrying...",
+                    e
+                );
+                ConnectingState::Retrying(
+                    self.into_retrying("Failed to retrieve netplay server configuration."),
+                )
+            }
         }
     }
 }
@@ -297,6 +326,7 @@ impl Connecting<PeeringState> {
         let connected_peers = socket.connected_peers().count();
         let remaining = MAX_PLAYERS - (connected_peers + 1);
         if remaining == 0 {
+            log::debug!("Got all players! Synchonizing...");
             let players = socket.players();
             let ggrs_config = self.state.ggrs_config.clone();
             let mut sess_build = SessionBuilder::<GGRSConfig>::new()
@@ -336,7 +366,7 @@ impl Connecting<SynchonizingState> {
         self.state.p2p_session.poll_remote_clients();
         if let SessionState::Running = self.state.p2p_session.current_state() {
             let start_method = self.start_method;
-
+            log::debug!("Synchronized!");
             ConnectingState::Connected(Connecting {
                 rt: self.rt,
                 netplay_server_config: self.netplay_server_config,
@@ -350,8 +380,11 @@ impl Connecting<SynchonizingState> {
         }
     }
 }
+const RETRY_COOLDOWN: Duration = Duration::from_secs(3);
+const MAX_RETRY_ATTEMPTS: u16 = 3;
 
 pub struct Retrying {
+    failed_attempts: u16,
     pub deadline: Instant,
     pub fail_message: String,
     pub retry_state: Box<ConnectingState>, //The state we should resume to after the deadline
@@ -359,7 +392,8 @@ pub struct Retrying {
 impl Retrying {
     fn new(fail_message: String, retry_state: ConnectingState) -> Self {
         Self {
-            deadline: Instant::now() + Duration::from_secs(5),
+            failed_attempts: 1,
+            deadline: Instant::now() + RETRY_COOLDOWN,
             fail_message,
             retry_state: Box::new(retry_state),
         }
@@ -369,9 +403,45 @@ impl Retrying {
 impl Connecting<Retrying> {
     fn advance(self) -> ConnectingState {
         if Instant::now().gt(&self.state.deadline) {
-            *self.state.retry_state
+            match self.state.retry_state.advance() {
+                ConnectingState::Retrying(mut retrying) => {
+                    let failed_attempts = self.state.failed_attempts + 1;
+                    if failed_attempts > MAX_RETRY_ATTEMPTS {
+                        log::warn!("All retry attempt failed, using fallback configuration");
+                        ConnectingState::PeeringUp(Connecting::from(
+                            PeeringState::new(
+                                &self.rt,
+                                TurnOnResponse::Full(StaticNetplayServerConfiguration {
+                                    matchbox: MatchboxConfiguration {
+                                        server: "matchbox.netplay.tech:3536".to_string(),
+                                        ice: IceConfiguration {
+                                            urls: vec![
+                                                "stun:stun.l.google.com:19302".to_string(),
+                                                "stun:stun1.l.google.com:19302".to_string(),
+                                            ],
+                                            credentials: IceCredentials::None,
+                                        },
+                                    },
+                                    ggrs: GGRSConfiguration {
+                                        max_prediction: 12,
+                                        input_delay: 2,
+                                    },
+                                }),
+                                self.start_method.clone(),
+                                &self.rom_hash,
+                            ),
+                            retrying,
+                        ))
+                    } else {
+                        log::info!("Retrying... ({}/{})", failed_attempts, MAX_RETRY_ATTEMPTS);
+                        retrying.state.failed_attempts = failed_attempts;
+                        ConnectingState::Retrying(retrying)
+                    }
+                }
+                other => other,
+            }
         } else {
-            ConnectingState::Retrying(self)
+            ConnectingState::Retrying(self) //Keep waiting
         }
     }
 }
