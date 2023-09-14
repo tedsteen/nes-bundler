@@ -90,9 +90,11 @@ impl NetplaySession {
                                 .advance([JoypadInput(inputs[0].0), JoypadInput(inputs[1].0)]);
 
                             if self.last_handled_frame >= self.game_state.frame {
+                                //This is a replay
                                 // Discard the samples for this frame since it's a replay from ggrs. Audio has already been produced and pushed for it.
                                 self.game_state.nes.apu.consume_samples();
                             } else {
+                                //This is not a replay
                                 self.last_handled_frame = self.game_state.frame;
                                 if self.game_state.frame % (sess.max_prediction() * 2) as i32 == 0 {
                                     self.last_confirmed_game_states = [

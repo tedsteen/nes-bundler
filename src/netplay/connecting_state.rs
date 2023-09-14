@@ -161,7 +161,7 @@ impl PeeringState {
         let room_name = match &start_method {
             StartMethod::Create(_, name) => format!("join_{:x}_{}", rom_hash, name),
             StartMethod::Resume(StartState { game_state, .. }) => {
-                format!("resume_{:x}", md5::compute(game_state.save()))
+                format!("resume_{:x}", game_state.frame)
             }
             StartMethod::Random(_) => format!("random_{:x}?next=2", rom_hash),
         };
