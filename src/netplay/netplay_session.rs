@@ -105,14 +105,9 @@ impl NetplaySession {
                     }
                 }
             }
-            Err(ggrs::GGRSError::PredictionThreshold) => {
-                //println!(
-                //    "Frame {} skipped: PredictionThreshold",
-                //    self.game_state.frame
-                //);
+            Err(e) => {
+                log::warn!("Frame {} skipped: {:?}", self.game_state.frame, e)
             }
-            Err(ggrs::GGRSError::NotSynchronized) => {}
-            Err(e) => log::warn!("Ouch :( {:?}", e),
         }
 
         #[cfg(feature = "debug")]

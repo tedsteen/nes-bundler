@@ -5,6 +5,7 @@ use ggrs::{P2PSession, SessionBuilder, SessionState};
 use matchbox_socket::{ChannelConfig, RtcIceServerConfig, WebRtcSocket, WebRtcSocketBuilder};
 use md5::Digest;
 use serde::Deserialize;
+use std::fmt::Debug;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
@@ -56,7 +57,7 @@ impl ConnectingState {
         start_method: StartMethod,
     ) -> Self {
         let reqwest_client = reqwest::Client::new();
-
+        log::debug!("Connecting: {:?}", netplay_server_config);
         match &netplay_server_config {
             NetplayServerConfiguration::Static(conf) => {
                 Self::PeeringUp(Connecting::<PeeringState>::new(
@@ -70,7 +71,7 @@ impl ConnectingState {
             }
 
             NetplayServerConfiguration::TurnOn(server) => {
-                log::debug!("Fetching TURN config from TurnOn server: {}", server);
+                log::debug!("Fetching TurnOn config from server: {}", server);
                 let req = reqwest_client.get(format!("{server}/{netplay_id}")).send();
                 let (sender, result) =
                     futures::channel::oneshot::channel::<Result<TurnOnResponse, TurnOnError>>();
@@ -172,15 +173,23 @@ impl PeeringState {
             IceCredentials::None => (None, None),
         };
 
-        let (socket, loop_fut) =
-            WebRtcSocketBuilder::new(format!("ws://{matchbox_server}/{room_name}"))
-                .ice_server(RtcIceServerConfig {
-                    urls: conf.matchbox.ice.urls.clone(),
-                    username,
-                    credential: password,
-                })
+        let (socket, loop_fut) = {
+            let room_url = format!("ws://{matchbox_server}/{room_name}");
+            let ice_server = RtcIceServerConfig {
+                urls: conf.matchbox.ice.urls.clone(),
+                username,
+                credential: password,
+            };
+            log::debug!(
+                "Peering up through WebRTC socket: room_url={:?}, ice_server={:?}",
+                room_url,
+                ice_server
+            );
+            WebRtcSocketBuilder::new(room_url)
+                .ice_server(ice_server)
                 .add_channel(ChannelConfig::unreliable())
-                .build();
+                .build()
+        };
 
         let loop_fut = loop_fut.fuse();
 
@@ -223,7 +232,7 @@ impl SynchonizingState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum StartMethod {
     Create(StartState, String),
@@ -235,6 +244,14 @@ pub enum StartMethod {
 pub struct StartState {
     pub input_mapping: Option<InputMapping>,
     pub game_state: LocalGameState,
+}
+
+impl Debug for StartState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StartState")
+            .field("input_mapping", &self.input_mapping)
+            .finish()
+    }
 }
 
 impl Connecting<LoadingNetplayServerConfiguration> {
@@ -257,10 +274,13 @@ impl Connecting<LoadingNetplayServerConfiguration> {
         match self.state.result.try_recv().map_err(|e| TurnOnError {
             description: format!("Unexpected error: {:?}", e),
         }) {
-            Ok(Some(Ok(resp))) => ConnectingState::PeeringUp(Connecting::from(
-                PeeringState::new(&self.rt, resp, self.start_method.clone(), &self.rom_hash),
-                self,
-            )),
+            Ok(Some(Ok(resp))) => {
+                log::debug!("Got TurnOn config response: {:?}", resp);
+                ConnectingState::PeeringUp(Connecting::from(
+                    PeeringState::new(&self.rt, resp, self.start_method.clone(), &self.rom_hash),
+                    self,
+                ))
+            }
             Ok(None) => ConnectingState::LoadingNetplayServerConfiguration(self), //No result yet
             Ok(Some(Err(e))) | Err(e) => {
                 log::error!(
@@ -306,6 +326,7 @@ impl Connecting<PeeringState> {
         let connected_peers = socket.connected_peers().count();
         let remaining = MAX_PLAYERS - (connected_peers + 1);
         if remaining == 0 {
+            log::debug!("Got all players! Synchonizing...");
             let players = socket.players();
             let ggrs_config = self.state.ggrs_config.clone();
             let mut sess_build = SessionBuilder::<GGRSConfig>::new()
@@ -345,7 +366,7 @@ impl Connecting<SynchonizingState> {
         self.state.p2p_session.poll_remote_clients();
         if let SessionState::Running = self.state.p2p_session.current_state() {
             let start_method = self.start_method;
-
+            log::debug!("Synchronized!");
             ConnectingState::Connected(Connecting {
                 rt: self.rt,
                 netplay_server_config: self.netplay_server_config,

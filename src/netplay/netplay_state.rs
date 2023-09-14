@@ -112,13 +112,15 @@ impl Netplay<Disconnected> {
         }
     }
 
-    pub fn connect(self, start_method: StartMethod) -> Netplay<ConnectingState> {
+    pub fn start(self, start_method: StartMethod) -> Netplay<ConnectingState> {
+        log::debug!("Starting: {:?}", start_method);
         Netplay::from(ConnectingState::connect(&self, start_method), self)
     }
 }
 
 impl Netplay<ConnectingState> {
     pub fn cancel(self) -> Netplay<Disconnected> {
+        log::debug!("Connection cancelled by user");
         Netplay::from(Disconnected {}, self)
     }
 
@@ -126,16 +128,19 @@ impl Netplay<ConnectingState> {
         self.state = self.state.advance();
 
         match self.state {
-            ConnectingState::Connected(connected) => NetplayState::Connected(Netplay {
-                rt: self.rt,
-                config: self.config,
-                netplay_id: self.netplay_id,
-                rom_hash: self.rom_hash,
-                initial_game_state: self.initial_game_state,
-                state: Connected {
-                    netplay_session: connected.state,
-                },
-            }),
+            ConnectingState::Connected(connected) => {
+                log::debug!("Connected! Starting netplay session");
+                NetplayState::Connected(Netplay {
+                    rt: self.rt,
+                    config: self.config,
+                    netplay_id: self.netplay_id,
+                    rom_hash: self.rom_hash,
+                    initial_game_state: self.initial_game_state,
+                    state: Connected {
+                        netplay_session: connected.state,
+                    },
+                })
+            }
             _ => NetplayState::Connecting(self),
         }
     }
@@ -176,6 +181,7 @@ impl Netplay<Connected> {
         }
     }
     pub(crate) fn disconnect(self) -> Netplay<Disconnected> {
+        log::debug!("Netplay disconnected by user");
         Netplay::from(Disconnected {}, self)
     }
 }
@@ -209,6 +215,7 @@ impl Netplay<Resuming> {
     }
 
     pub fn cancel(self) -> Netplay<Disconnected> {
+        log::debug!("Resume cancelled by user");
         Netplay::from(Disconnected {}, self)
     }
 }
