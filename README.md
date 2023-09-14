@@ -28,7 +28,7 @@ After that you can either ship your game with the configuration inside the execu
 
 * [Install Rust](https://www.rust-lang.org/tools/install).
 * Make sure your bundle configuration is in the config directory.
-* Build with the `static-bundle`-feature enabled `cargo build --release --features static-bundle`. Enable the `netplay`-feature for Netplay.
+* Run `cargo build --release` to build and if you want netplay use `--features netplay`
 * This will result in an executable with the bundle embedded inside of it.
 
 ## Limitations
