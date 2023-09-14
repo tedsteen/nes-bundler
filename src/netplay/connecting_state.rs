@@ -70,14 +70,18 @@ impl ConnectingState {
             }
 
             NetplayServerConfiguration::TurnOn(server) => {
+                log::debug!("Fetching TURN config from TurnOn server: {}", server);
                 let req = reqwest_client.get(format!("{server}/{netplay_id}")).send();
                 let (sender, result) =
                     futures::channel::oneshot::channel::<Result<TurnOnResponse, TurnOnError>>();
                 rt.spawn(async move {
                     let _ = match req.await {
-                        Ok(res) => sender.send(res.json().await.map_err(|e| TurnOnError {
-                            description: format!("Failed to receive response: {}", e),
-                        })),
+                        Ok(res) => {
+                            log::trace!("Received response from TurnOn server: {:?}", res);
+                            sender.send(res.json().await.map_err(|e| TurnOnError {
+                                description: format!("Failed to receive response: {}", e),
+                            }))
+                        }
                         Err(e) => sender.send(Err(TurnOnError {
                             description: format!("Could not connect: {}", e),
                         })),
@@ -234,10 +238,10 @@ pub struct StartState {
 }
 
 impl Connecting<LoadingNetplayServerConfiguration> {
-    fn into_retrying(self, fail_message: String) -> Connecting<Retrying> {
+    fn into_retrying(self, fail_message: &str) -> Connecting<Retrying> {
         Connecting::from(
             Retrying::new(
-                fail_message,
+                fail_message.to_string(),
                 ConnectingState::start(
                     self.netplay_server_config.clone(),
                     self.rt.clone(),
@@ -249,19 +253,24 @@ impl Connecting<LoadingNetplayServerConfiguration> {
             self,
         )
     }
-
     fn advance(mut self) -> ConnectingState {
-        match self.state.result.try_recv() {
+        match self.state.result.try_recv().map_err(|e| TurnOnError {
+            description: format!("Unexpected error: {:?}", e),
+        }) {
             Ok(Some(Ok(resp))) => ConnectingState::PeeringUp(Connecting::from(
                 PeeringState::new(&self.rt, resp, self.start_method.clone(), &self.rom_hash),
                 self,
             )),
             Ok(None) => ConnectingState::LoadingNetplayServerConfiguration(self), //No result yet
-            Ok(Some(Err(err))) => ConnectingState::Retrying(
-                self.into_retrying(format!("Could not fetch server config ({:?})", err)),
-            ),
-            //Lost the sender, not much to do but fail
-            Err(_) => ConnectingState::Retrying(self.into_retrying("Unexpected error".to_string())),
+            Ok(Some(Err(e))) | Err(e) => {
+                log::error!(
+                    "Failed to retrieve netplay server configuration: {:?}, retrying...",
+                    e
+                );
+                ConnectingState::Retrying(
+                    self.into_retrying("Failed to retrieve netplay server configuration."),
+                )
+            }
         }
     }
 }
@@ -350,8 +359,11 @@ impl Connecting<SynchonizingState> {
         }
     }
 }
+const RETRY_COOLDOWN: Duration = Duration::from_secs(3);
+const MAX_RETRY_ATTEMPTS: u16 = 3;
 
 pub struct Retrying {
+    failed_attempts: u16,
     pub deadline: Instant,
     pub fail_message: String,
     pub retry_state: Box<ConnectingState>, //The state we should resume to after the deadline
@@ -359,7 +371,8 @@ pub struct Retrying {
 impl Retrying {
     fn new(fail_message: String, retry_state: ConnectingState) -> Self {
         Self {
-            deadline: Instant::now() + Duration::from_secs(5),
+            failed_attempts: 1,
+            deadline: Instant::now() + RETRY_COOLDOWN,
             fail_message,
             retry_state: Box::new(retry_state),
         }
@@ -369,9 +382,45 @@ impl Retrying {
 impl Connecting<Retrying> {
     fn advance(self) -> ConnectingState {
         if Instant::now().gt(&self.state.deadline) {
-            *self.state.retry_state
+            match self.state.retry_state.advance() {
+                ConnectingState::Retrying(mut retrying) => {
+                    let failed_attempts = self.state.failed_attempts + 1;
+                    if failed_attempts > MAX_RETRY_ATTEMPTS {
+                        log::warn!("All retry attempt failed, using fallback configuration");
+                        ConnectingState::PeeringUp(Connecting::from(
+                            PeeringState::new(
+                                &self.rt,
+                                TurnOnResponse::Full(StaticNetplayServerConfiguration {
+                                    matchbox: MatchboxConfiguration {
+                                        server: "matchbox.netplay.tech:3536".to_string(),
+                                        ice: IceConfiguration {
+                                            urls: vec![
+                                                "stun:stun.l.google.com:19302".to_string(),
+                                                "stun:stun1.l.google.com:19302".to_string(),
+                                            ],
+                                            credentials: IceCredentials::None,
+                                        },
+                                    },
+                                    ggrs: GGRSConfiguration {
+                                        max_prediction: 12,
+                                        input_delay: 2,
+                                    },
+                                }),
+                                self.start_method.clone(),
+                                &self.rom_hash,
+                            ),
+                            retrying,
+                        ))
+                    } else {
+                        log::info!("Retrying... ({}/{})", failed_attempts, MAX_RETRY_ATTEMPTS);
+                        retrying.state.failed_attempts = failed_attempts;
+                        ConnectingState::Retrying(retrying)
+                    }
+                }
+                other => other,
+            }
         } else {
-            ConnectingState::Retrying(self)
+            ConnectingState::Retrying(self) //Keep waiting
         }
     }
 }
