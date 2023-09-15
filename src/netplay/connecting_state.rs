@@ -37,6 +37,7 @@ pub enum ConnectingState {
     Synchronizing(Connecting<SynchonizingState>),
     Connected(Connecting<NetplaySession>),
     Retrying(Connecting<Retrying>),
+    Failed(String),
 }
 
 impl ConnectingState {
@@ -130,6 +131,21 @@ impl<T> Connecting<T> {
             start_method: other.start_method,
             state,
         }
+    }
+    fn into_retrying(self, fail_message: &str) -> Connecting<Retrying> {
+        Connecting::from(
+            Retrying::new(
+                fail_message.to_string(),
+                ConnectingState::start(
+                    self.netplay_server_config.clone(),
+                    self.rt.clone(),
+                    self.netplay_id.clone(),
+                    self.rom_hash,
+                    self.start_method.clone(),
+                ),
+            ),
+            self,
+        )
     }
 }
 
@@ -261,21 +277,6 @@ impl Debug for StartState {
 }
 
 impl Connecting<LoadingNetplayServerConfiguration> {
-    fn into_retrying(self, fail_message: &str) -> Connecting<Retrying> {
-        Connecting::from(
-            Retrying::new(
-                fail_message.to_string(),
-                ConnectingState::start(
-                    self.netplay_server_config.clone(),
-                    self.rt.clone(),
-                    self.netplay_id.clone(),
-                    self.rom_hash,
-                    self.start_method.clone(),
-                ),
-            ),
-            self,
-        )
-    }
     fn advance(mut self) -> ConnectingState {
         match self.state.result.try_recv().map_err(|e| TurnOnError {
             description: format!("Unexpected error: {:?}", e),
@@ -329,6 +330,10 @@ impl Connecting<PeeringState> {
         socket.update_peers();
 
         let connected_peers = socket.connected_peers().count();
+        if connected_peers >= MAX_PLAYERS {
+            return ConnectingState::Failed("Room is full".to_string());
+        }
+
         let remaining = MAX_PLAYERS - (connected_peers + 1);
         if remaining == 0 {
             log::debug!("Got all players! Synchonizing...");
