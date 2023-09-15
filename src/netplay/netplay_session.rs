@@ -27,9 +27,9 @@ pub struct NetplaySession {
 impl NetplaySession {
     pub fn new(start_method: StartMethod, p2p_session: P2PSession<GGRSConfig>) -> Self {
         let start_state = match &start_method {
-            StartMethod::Create(start_state, _)
+            StartMethod::Join(start_state, _)
             | StartMethod::Resume(start_state)
-            | StartMethod::Random(start_state) => {
+            | StartMethod::MatchWithRandom(start_state) => {
                 let mut start_state = start_state.clone();
                 start_state.game_state.frame = 0;
                 start_state

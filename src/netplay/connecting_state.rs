@@ -10,7 +10,8 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
 
-use crate::{settings::MAX_PLAYERS, LocalGameState, FPS};
+use crate::LocalGameState;
+use crate::{settings::MAX_PLAYERS, FPS};
 
 use super::netplay_session::{GGRSConfig, NetplaySession};
 use super::netplay_state::Netplay;
@@ -142,12 +143,7 @@ pub struct PeeringState {
     unlock_url: Option<String>,
 }
 impl PeeringState {
-    pub fn new(
-        rt: &Rc<Runtime>,
-        resp: TurnOnResponse,
-        start_method: StartMethod,
-        rom_hash: &Digest,
-    ) -> Self {
+    pub fn new(rt: &Rc<Runtime>, resp: TurnOnResponse, start_method: StartMethod) -> Self {
         let mut maybe_unlock_url = None;
         let conf = match resp {
             TurnOnResponse::Basic(BasicConfiguration { unlock_url, conf }) => {
@@ -159,11 +155,19 @@ impl PeeringState {
         let matchbox_server = &conf.matchbox.server;
 
         let room_name = match &start_method {
-            StartMethod::Create(_, name) => format!("join_{:x}_{}", rom_hash, name),
-            StartMethod::Resume(StartState { game_state, .. }) => {
-                format!("resume_{:x}", game_state.frame)
+            StartMethod::Join(StartState { session_id, .. }, _) => {
+                format!("join_{}", session_id)
             }
-            StartMethod::Random(_) => format!("random_{:x}?next=2", rom_hash),
+            StartMethod::Resume(StartState {
+                session_id,
+                game_state,
+                ..
+            }) => {
+                format!("resume_{}_{}", session_id, game_state.frame)
+            }
+            StartMethod::MatchWithRandom(StartState { session_id, .. }) => {
+                format!("random_{}?next=2", session_id)
+            }
         };
 
         let (username, password) = match &conf.matchbox.ice.credentials {
@@ -231,19 +235,21 @@ impl SynchonizingState {
         }
     }
 }
+type RoomName = String;
 
 #[derive(Clone, Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum StartMethod {
-    Create(StartState, String),
+    Join(StartState, RoomName),
     Resume(StartState),
-    Random(StartState),
+    MatchWithRandom(StartState),
 }
 
 #[derive(Clone)]
 pub struct StartState {
     pub input_mapping: Option<InputMapping>,
     pub game_state: LocalGameState,
+    pub session_id: String,
 }
 
 impl Debug for StartState {
@@ -277,7 +283,7 @@ impl Connecting<LoadingNetplayServerConfiguration> {
             Ok(Some(Ok(resp))) => {
                 log::debug!("Got TurnOn config response: {:?}", resp);
                 ConnectingState::PeeringUp(Connecting::from(
-                    PeeringState::new(&self.rt, resp, self.start_method.clone(), &self.rom_hash),
+                    PeeringState::new(&self.rt, resp, self.start_method.clone()),
                     self,
                 ))
             }
@@ -309,7 +315,6 @@ impl Connecting<PeeringState> {
                 &rt,
                 TurnOnResponse::Full(conf.clone()),
                 start_method.clone(),
-                &rom_hash,
             ),
             rt,
             start_method,
@@ -428,7 +433,6 @@ impl Connecting<Retrying> {
                                     },
                                 }),
                                 self.start_method.clone(),
-                                &self.rom_hash,
                             ),
                             retrying,
                         ))
