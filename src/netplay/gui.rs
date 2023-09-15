@@ -257,6 +257,17 @@ impl GuiComponent for NetplayStateHandler {
                             NetplayState::Connected(netplay_connected)
                         }
                     }
+                    NetplayState::Failed(netplay_failed) => {
+                        ui.label(format!(
+                            "Failed to connect: {}",
+                            netplay_failed.state.reason
+                        ));
+                        if ui.button("Ok").clicked() {
+                            NetplayState::Disconnected(netplay_failed.resume())
+                        } else {
+                            NetplayState::Failed(netplay_failed)
+                        }
+                    }
                 });
             });
     }

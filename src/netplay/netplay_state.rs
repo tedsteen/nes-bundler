@@ -16,7 +16,13 @@ pub enum NetplayState {
     Connecting(Netplay<ConnectingState>),
     Connected(Netplay<Connected>),
     Resuming(Netplay<Resuming>),
+    Failed(Netplay<Failed>),
 }
+
+pub struct Failed {
+    pub reason: String,
+}
+
 impl NetplayState {
     pub fn advance(self, inputs: [JoypadInput; MAX_PLAYERS]) -> Self {
         match self {
@@ -24,6 +30,7 @@ impl NetplayState {
             NetplayState::Connecting(netplay) => netplay.advance(),
             NetplayState::Connected(netplay) => netplay.advance(inputs),
             NetplayState::Resuming(netplay) => netplay.advance(),
+            NetplayState::Failed(_) => self,
         }
     }
 }
@@ -174,6 +181,14 @@ impl Netplay<ConnectingState> {
                     },
                 })
             }
+            ConnectingState::Failed(reason) => NetplayState::Failed(Netplay {
+                rt: self.rt,
+                config: self.config,
+                netplay_id: self.netplay_id,
+                rom_hash: self.rom_hash,
+                initial_game_state: self.initial_game_state,
+                state: Failed { reason },
+            }),
             _ => NetplayState::Connecting(self),
         }
     }
@@ -212,8 +227,8 @@ impl Netplay<Connected> {
             NetplayState::Connected(self)
         }
     }
-    pub(crate) fn disconnect(self) -> Netplay<Disconnected> {
-        log::debug!("Netplay disconnected by user");
+    pub fn disconnect(self) -> Netplay<Disconnected> {
+        log::debug!("Netplay disconnected");
         Netplay::from(Disconnected {}, self)
     }
 }
@@ -248,6 +263,13 @@ impl Netplay<Resuming> {
 
     pub fn cancel(self) -> Netplay<Disconnected> {
         log::debug!("Resume cancelled by user");
+        Netplay::from(Disconnected {}, self)
+    }
+}
+
+impl Netplay<Failed> {
+    pub fn resume(self) -> Netplay<Disconnected> {
+        log::debug!("Connection cancelled by user");
         Netplay::from(Disconnected {}, self)
     }
 }
