@@ -54,6 +54,7 @@ pub struct Disconnected {}
 
 pub struct Connected {
     pub netplay_session: NetplaySession,
+    session_id: String,
 }
 
 pub struct Resuming {
@@ -65,22 +66,22 @@ impl Resuming {
         let netplay_session = &netplay.state.netplay_session;
         let input_mapping = netplay_session.input_mapping.clone();
 
-        let game_state_0 = netplay_session.last_confirmed_game_states[0].clone();
-        let game_state_1 = netplay_session.last_confirmed_game_states[1].clone();
-
+        let session_id = netplay.state.session_id.clone();
         Self {
             attempt1: ConnectingState::connect(
                 netplay,
                 StartMethod::Resume(StartState {
                     input_mapping: input_mapping.clone(),
-                    game_state: game_state_1,
+                    game_state: netplay_session.last_confirmed_game_states[1].clone(),
+                    session_id: session_id.clone(),
                 }),
             ),
             attempt2: ConnectingState::connect(
                 netplay,
                 StartMethod::Resume(StartState {
                     input_mapping,
-                    game_state: game_state_0,
+                    game_state: netplay_session.last_confirmed_game_states[0].clone(),
+                    session_id,
                 }),
             ),
         }
@@ -112,9 +113,37 @@ impl Netplay<Disconnected> {
         }
     }
 
-    pub fn start(self, start_method: StartMethod) -> Netplay<ConnectingState> {
-        log::debug!("Starting: {:?}", start_method);
-        Netplay::from(ConnectingState::connect(&self, start_method), self)
+    pub fn join_by_name(self, room_name: &str) -> NetplayState {
+        let initial_state = self.initial_game_state.clone();
+        let session_id = format!("{}_{:x}", room_name, self.rom_hash);
+        self.join(StartMethod::Join(
+            StartState {
+                game_state: initial_state,
+                input_mapping: None,
+                session_id,
+            },
+            room_name.to_string(),
+        ))
+    }
+
+    pub fn match_with_random(self) -> NetplayState {
+        let initial_state = self.initial_game_state.clone();
+        // TODO: When resuming using this session id there might be collisions, but it's unlikely.
+        //       Should be fixed though.
+        let session_id = format!("{:x}", self.rom_hash);
+        self.join(StartMethod::MatchWithRandom(StartState {
+            game_state: initial_state,
+            input_mapping: None,
+            session_id,
+        }))
+    }
+
+    pub fn join(self, start_method: StartMethod) -> NetplayState {
+        log::debug!("Joining: {:?}", start_method);
+        NetplayState::Connecting(Netplay::from(
+            ConnectingState::connect(&self, start_method),
+            self,
+        ))
     }
 }
 
@@ -126,7 +155,6 @@ impl Netplay<ConnectingState> {
 
     fn advance(mut self) -> NetplayState {
         self.state = self.state.advance();
-
         match self.state {
             ConnectingState::Connected(connected) => {
                 log::debug!("Connected! Starting netplay session");
@@ -138,6 +166,11 @@ impl Netplay<ConnectingState> {
                     initial_game_state: self.initial_game_state,
                     state: Connected {
                         netplay_session: connected.state,
+                        session_id: match connected.start_method {
+                            StartMethod::Join(StartState { session_id, .. }, _)
+                            | StartMethod::MatchWithRandom(StartState { session_id, .. })
+                            | StartMethod::Resume(StartState { session_id, .. }) => session_id,
+                        },
                     },
                 })
             }

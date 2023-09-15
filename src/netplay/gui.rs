@@ -8,9 +8,9 @@ use crate::settings::{
 };
 
 use super::{
-    connecting_state::{Connecting, PeeringState, StartState},
+    connecting_state::{Connecting, PeeringState},
     netplay_state::NetplayState,
-    ConnectingState, NetplayStateHandler, StartMethod,
+    ConnectingState, NetplayStateHandler,
 };
 
 #[cfg(feature = "debug")]
@@ -153,24 +153,9 @@ impl GuiComponent for NetplayStateHandler {
                                 ui.end_row();
                             });
                         if join_clicked {
-                            let initial_state = netplay_disconnected.initial_game_state.clone();
-                            NetplayState::Connecting(netplay_disconnected.start(
-                                StartMethod::Create(
-                                    StartState {
-                                        game_state: initial_state,
-                                        input_mapping: None,
-                                    },
-                                    self.gui.room_name.clone(),
-                                ),
-                            ))
+                            netplay_disconnected.join_by_name(&self.gui.room_name)
                         } else if random_clicked {
-                            let initial_state = netplay_disconnected.initial_game_state.clone();
-                            NetplayState::Connecting(netplay_disconnected.start(
-                                StartMethod::Random(StartState {
-                                    game_state: initial_state,
-                                    input_mapping: None,
-                                }),
-                            ))
+                            netplay_disconnected.match_with_random()
                         } else {
                             NetplayState::Disconnected(netplay_disconnected)
                         }
@@ -236,9 +221,7 @@ impl GuiComponent for NetplayStateHandler {
                             _ => {}
                         }
                         if let Some(start_method) = retry_start_method {
-                            NetplayState::Connecting(
-                                netplay_connecting.cancel().start(start_method),
-                            )
+                            netplay_connecting.cancel().join(start_method)
                         } else if ui.button("Cancel").clicked() {
                             NetplayState::Disconnected(netplay_connecting.cancel())
                         } else {
