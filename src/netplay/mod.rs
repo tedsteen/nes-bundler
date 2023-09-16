@@ -128,8 +128,8 @@ impl NesStateHandler for NetplayStateHandler {
             self.nes_state.load(data);
         }
     }
-    fn get_gui(&mut self) -> &mut dyn crate::settings::gui::GuiComponent {
-        self
+    fn get_gui(&mut self) -> Option<&mut dyn crate::settings::gui::GuiComponent> {
+        Some(self)
     }
 }
 

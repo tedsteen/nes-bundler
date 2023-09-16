@@ -1,11 +1,6 @@
-use egui::Context;
-
 use crate::{
     input::JoypadInput,
-    settings::{
-        gui::{GuiComponent, GuiEvent},
-        Settings, MAX_PLAYERS,
-    },
+    settings::{gui::GuiComponent, MAX_PLAYERS},
     Fps, FPS,
 };
 
@@ -33,18 +28,7 @@ impl NesStateHandler for NesState {
     fn get_frame(&self) -> Option<Vec<u16>> {
         Some(self.ppu.screen.clone())
     }
-    fn get_gui(&mut self) -> &mut dyn GuiComponent {
-        self
-    }
-}
-
-impl GuiComponent for NesState {
-    fn ui(&mut self, _ctx: &Context, _ui_visible: bool, _name: String, _settings: &mut Settings) {}
-    fn event(&mut self, _event: &GuiEvent, _settings: &mut Settings) {}
-    fn name(&self) -> Option<String> {
+    fn get_gui(&mut self) -> Option<&mut dyn GuiComponent> {
         None
-    }
-    fn open(&mut self) -> &mut bool {
-        &mut self.1
     }
 }

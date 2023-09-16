@@ -297,9 +297,9 @@ impl Game {
             &gui_event,
             vec![
                 #[cfg(feature = "debug")]
-                &mut self.debug,
-                &mut self.audio,
-                &mut self.inputs,
+                Some(&mut self.debug),
+                Some(&mut self.audio),
+                Some(&mut self.inputs),
                 self.nes_state.get_gui(),
             ],
             &mut self.settings,
@@ -314,9 +314,9 @@ impl Game {
             self.gl_window.window(),
             vec![
                 #[cfg(feature = "debug")]
-                &mut self.debug,
-                &mut self.audio,
-                &mut self.inputs,
+                Some(&mut self.debug),
+                Some(&mut self.audio),
+                Some(&mut self.inputs),
                 self.nes_state.get_gui(),
             ],
             &mut self.settings,
