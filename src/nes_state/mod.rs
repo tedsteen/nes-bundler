@@ -6,31 +6,10 @@ use crate::{
     settings::{gui::GuiComponent, MAX_PLAYERS},
     Fps,
 };
-use std::ops::{Deref, DerefMut};
+
+use self::local::LocalNesState;
+
 pub mod local;
-
-pub struct NesState(pub rusticnes_core::nes::NesState);
-impl Deref for NesState {
-    type Target = rusticnes_core::nes::NesState;
-    fn deref(&self) -> &rusticnes_core::nes::NesState {
-        &self.0
-    }
-}
-
-impl DerefMut for NesState {
-    fn deref_mut(&mut self) -> &mut rusticnes_core::nes::NesState {
-        &mut self.0
-    }
-}
-
-impl Clone for NesState {
-    fn clone(&self) -> Self {
-        let data = &mut self.save();
-        let mut clone = Self(rusticnes_core::nes::NesState::new(self.0.mapper.clone()));
-        clone.load(data);
-        clone
-    }
-}
 
 pub trait NesStateHandler {
     fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps;
@@ -41,7 +20,7 @@ pub trait NesStateHandler {
     fn get_gui(&mut self) -> Option<&mut dyn GuiComponent>;
 }
 
-pub fn start_nes(cart_data: Vec<u8>, sample_rate: u64) -> Result<NesState> {
+pub fn start_nes(cart_data: Vec<u8>, sample_rate: u64) -> Result<LocalNesState> {
     let rom_data = match std::env::var("ROM_FILE") {
         Ok(rom_file) => {
             std::fs::read(&rom_file).context(format!("Could not read ROM {}", rom_file))?
@@ -54,7 +33,7 @@ pub fn start_nes(cart_data: Vec<u8>, sample_rate: u64) -> Result<NesState> {
         .context("Failed to load ROM")?;
     #[cfg(feature = "debug")]
     mapper.print_debug_status();
-    let mut nes = NesState(rusticnes_core::nes::NesState::new(mapper));
+    let mut nes = LocalNesState(rusticnes_core::nes::NesState::new(mapper));
     nes.power_on();
     nes.apu.set_sample_rate(sample_rate);
 

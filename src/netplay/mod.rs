@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::{
     input::JoypadInput,
-    nes_state::{NesState, NesStateHandler},
+    nes_state::{local::LocalNesState, NesStateHandler},
     settings::MAX_PLAYERS,
     Bundle, Fps, FPS,
 };
@@ -39,7 +39,7 @@ pub struct NetplayBuildConfiguration {
 
 pub struct NetplayStateHandler {
     netplay: Option<NetplayState>,
-    nes_state: NesState,
+    nes_state: LocalNesState,
 
     //Gui
     gui_is_open: bool,
@@ -48,19 +48,19 @@ pub struct NetplayStateHandler {
 
 #[derive(Clone)]
 pub struct NetplayNesState {
-    nes_state: NesState,
+    nes_state: LocalNesState,
     frame: i32,
 }
 
 impl Deref for NetplayNesState {
-    type Target = NesState;
-    fn deref(&self) -> &NesState {
+    type Target = LocalNesState;
+    fn deref(&self) -> &LocalNesState {
         &self.nes_state
     }
 }
 
 impl DerefMut for NetplayNesState {
-    fn deref_mut(&mut self) -> &mut NesState {
+    fn deref_mut(&mut self) -> &mut LocalNesState {
         &mut self.nes_state
     }
 }
@@ -134,7 +134,7 @@ impl NesStateHandler for NetplayStateHandler {
 }
 
 impl NetplayStateHandler {
-    pub fn new(nes_state: NesState, bundle: &Bundle, netplay_id: &mut Option<String>) -> Self {
+    pub fn new(nes_state: LocalNesState, bundle: &Bundle, netplay_id: &mut Option<String>) -> Self {
         let netplay_build_config = &bundle.config.netplay;
 
         NetplayStateHandler {
