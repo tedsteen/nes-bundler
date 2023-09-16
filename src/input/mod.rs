@@ -1,6 +1,5 @@
 use self::{
     gamepad::{Gamepads, JoypadGamepadMapping},
-    gui::InputSettingsGui,
     keyboard::{JoypadKeyboardMapping, Keyboards},
     keys::{KeyCode, Modifiers},
     sdl2_impl::Sdl2Gamepads,
@@ -128,11 +127,21 @@ pub enum InputConfigurationKind {
     Keyboard(JoypadKeyboardMapping),
     Gamepad(JoypadGamepadMapping),
 }
+#[derive(Debug)]
+struct MapRequest {
+    input_configuration: InputConfigurationRef,
+    button: JoypadButton,
+}
+
 pub struct Inputs {
     keyboards: Keyboards,
     gamepads: Option<Box<dyn Gamepads>>,
     joypads: [JoypadInput; MAX_PLAYERS],
     default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
+
+    //Gui
+    mapping_request: Option<MapRequest>,
+    gui_is_open: bool,
 }
 
 impl Inputs {
@@ -154,6 +163,10 @@ impl Inputs {
             gamepads,
             joypads: [JoypadInput(0), JoypadInput(0)],
             default_input_configurations,
+
+            //Gui
+            mapping_request: None,
+            gui_is_open: true,
         }
     }
 
@@ -217,44 +230,41 @@ impl Inputs {
 
     pub fn remap_configuration(
         &mut self,
-        input_configuration: &InputConfigurationRef,
-        button: &JoypadButton,
-    ) -> bool {
-        let mut input_configuration = input_configuration.borrow_mut();
-        let input_configuration_id = input_configuration.id.clone();
-        match &mut input_configuration.kind {
-            InputConfigurationKind::Keyboard(mapping) => {
-                if let Some(code) = self.keyboards.pressed_keys.iter().next() {
-                    //If there's any key pressed, use the first found.
-                    let _ = mapping.lookup(button).insert(*code);
-                    return true;
+        //input_configuration: &InputConfigurationRef,
+        //button: &JoypadButton,
+    ) {
+        let mut remapped = false;
+        if let Some(map_request) = &mut self.mapping_request {
+            let input_configuration = &map_request.input_configuration;
+            let button = &map_request.button;
+
+            let mut input_configuration = input_configuration.borrow_mut();
+            let input_configuration_id = input_configuration.id.clone();
+            match &mut input_configuration.kind {
+                InputConfigurationKind::Keyboard(mapping) => {
+                    if let Some(code) = self.keyboards.pressed_keys.iter().next() {
+                        //If there's any key pressed, use the first found.
+                        let _ = mapping.lookup(button).insert(*code);
+                        remapped = true;
+                    }
                 }
-            }
-            InputConfigurationKind::Gamepad(mapping) => {
-                if let Some(gamepads) = &self.gamepads {
-                    if let Some(state) = gamepads.get_gamepad_by_input_id(&input_configuration_id) {
-                        if let Some(new_button) = state.get_pressed_buttons().iter().next() {
-                            //If there's any button pressed, use the first found.
-                            let _ = mapping.lookup(button).insert(*new_button);
-                            return true;
+                InputConfigurationKind::Gamepad(mapping) => {
+                    if let Some(gamepads) = &self.gamepads {
+                        if let Some(state) =
+                            gamepads.get_gamepad_by_input_id(&input_configuration_id)
+                        {
+                            if let Some(new_button) = state.get_pressed_buttons().iter().next() {
+                                //If there's any button pressed, use the first found.
+                                let _ = mapping.lookup(button).insert(*new_button);
+                                remapped = true;
+                            }
                         }
                     }
                 }
             }
         }
-        false
-    }
-}
-
-pub struct Input {
-    pub inputs: Inputs,
-    gui: InputSettingsGui,
-}
-impl Input {
-    pub fn new(inputs: Inputs) -> Self {
-        Input {
-            inputs,
-            gui: Default::default(),
+        if remapped {
+            self.mapping_request = None;
         }
     }
 }

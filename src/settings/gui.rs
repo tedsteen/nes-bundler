@@ -26,29 +26,6 @@ pub trait GuiComponent {
     fn open(&mut self) -> &mut bool;
 }
 
-pub struct EmptyGuiComponent {
-    is_open: bool,
-}
-
-impl EmptyGuiComponent {
-    #[allow(dead_code)] //Only used when not using netplay
-    pub fn new() -> Self {
-        Self { is_open: false }
-    }
-}
-
-impl GuiComponent for EmptyGuiComponent {
-    fn ui(&mut self, _ctx: &Context, _ui_visible: bool, _name: String, _settings: &mut Settings) {}
-    fn name(&self) -> Option<String> {
-        None
-    }
-    fn open(&mut self) -> &mut bool {
-        &mut self.is_open
-    }
-
-    fn event(&mut self, _event: &GuiEvent, _settings: &mut Settings) {}
-}
-
 pub struct Gui {
     visible: bool,
     egui_glow: egui_glow::EguiGlow,
@@ -58,7 +35,7 @@ pub struct Gui {
 }
 
 impl Gui {
-    pub fn new(visible: bool, egui_glow: egui_glow::EguiGlow) -> Self {
+    pub fn new(egui_glow: egui_glow::EguiGlow) -> Self {
         let no_image = ImageData::Color(ColorImage::new([0, 0], Color32::TRANSPARENT));
 
         let nes_texture_options = TextureOptions {
@@ -74,9 +51,8 @@ impl Gui {
             )),
             nes_texture_options,
         );
-
         Self {
-            visible,
+            visible: true,
             egui_glow,
             nes_texture,
             nes_texture_options,
@@ -87,10 +63,10 @@ impl Gui {
     pub fn handle_events(
         &mut self,
         event: &GuiEvent,
-        guis: Vec<&mut dyn GuiComponent>,
+        guis: Vec<Option<&mut dyn GuiComponent>>,
         settings: &mut Settings,
     ) {
-        for gui in guis {
+        for gui in guis.into_iter().flatten() {
             gui.event(event, settings);
         }
     }
@@ -98,10 +74,11 @@ impl Gui {
     pub fn ui(
         &mut self,
         window: &winit::window::Window,
-        mut guis: Vec<&mut dyn GuiComponent>,
+        guis: Vec<Option<&mut dyn GuiComponent>>,
         settings: &mut Settings,
     ) {
         let texture_handle = &self.nes_texture;
+        let mut guis = guis.into_iter().flatten();
 
         self.egui_glow.run(window, |ctx| {
             egui::Area::new("game_area")
@@ -140,7 +117,7 @@ impl Gui {
                         egui::TopBottomPanel::top("menubar_container").show_inside(ui, |ui| {
                             egui::menu::bar(ui, |ui| {
                                 ui.menu_button("Settings", |ui| {
-                                    for gui in guis.iter_mut() {
+                                    for gui in &mut guis {
                                         if let Some(name) = gui.name() {
                                             if ui.button(name).clicked() {
                                                 *gui.open() = !*gui.open();

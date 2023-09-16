@@ -6,36 +6,15 @@ use crate::{
     },
 };
 use egui::{Button, Color32, Context, Grid, Label, RichText, Ui, Window};
-use std::{collections::BTreeMap, fmt::Debug};
+use std::collections::BTreeMap;
 
-use super::{settings::InputConfigurationRef, Input};
+use super::{settings::InputConfigurationRef, MapRequest};
 
-#[derive(Debug)]
-struct MapRequest {
-    input_configuration: InputConfigurationRef,
-    button: JoypadButton,
-}
-
-pub struct InputSettingsGui {
-    mapping_request: Option<MapRequest>,
-    is_open: bool,
-}
-
-impl Default for InputSettingsGui {
-    fn default() -> Self {
-        Self {
-            mapping_request: None,
-            is_open: true,
-        }
-    }
-}
-
-impl InputSettingsGui {
+impl Inputs {
     fn key_map_ui(
-        map_request: &mut Option<MapRequest>,
+        &mut self,
         ui: &mut Ui,
         available_configurations: &BTreeMap<InputId, InputConfigurationRef>,
-        inputs: &Inputs,
         selected_configuration: &mut InputConfigurationRef,
         player: usize,
     ) {
@@ -48,7 +27,7 @@ impl InputSettingsGui {
                 let mut sorted_configurations: Vec<&InputConfigurationRef> =
                     available_configurations
                         .values()
-                        .filter(|e| inputs.is_connected(&e.borrow()))
+                        .filter(|e| self.is_connected(&e.borrow()))
                         .collect();
 
                 sorted_configurations.sort_by(|a, b| a.borrow().id.cmp(&b.borrow().id));
@@ -63,7 +42,7 @@ impl InputSettingsGui {
             });
 
         let input_configuration = selected_configuration;
-        let joypad_input = inputs.get_joypad(player);
+        let joypad_input = self.get_joypad(player);
         Grid::new(format!("joypadmap_grid_{}", player))
             .num_columns(2)
             .striped(true)
@@ -72,8 +51,8 @@ impl InputSettingsGui {
                 [Up, Down, Left, Right, Start, Select, B, A]
                     .iter()
                     .for_each(|&button| {
-                        InputSettingsGui::button_map_ui(
-                            map_request,
+                        Self::button_map_ui(
+                            &mut self.mapping_request,
                             ui,
                             input_configuration,
                             joypad_input,
@@ -132,38 +111,35 @@ impl InputSettingsGui {
     }
 }
 
-impl GuiComponent for Input {
+impl GuiComponent for Inputs {
     fn event(&mut self, event: &GuiEvent, settings: &mut Settings) {
-        self.inputs.advance(event, settings);
+        self.advance(event, settings);
     }
 
     fn ui(&mut self, ctx: &Context, ui_visible: bool, name: String, settings: &mut Settings) {
         if !ui_visible {
             return;
         }
+
         Window::new(name)
-            .open(&mut self.gui.is_open)
+            //.open(&mut gui.is_open)
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
                 let input_settings = &mut settings.input;
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
-                        InputSettingsGui::key_map_ui(
-                            &mut self.gui.mapping_request,
+                        self.key_map_ui(
                             ui,
                             &input_settings.configurations,
-                            &self.inputs,
                             &mut input_settings.selected[0],
                             0,
                         );
                     });
                     ui.vertical(|ui| {
-                        InputSettingsGui::key_map_ui(
-                            &mut self.gui.mapping_request,
+                        self.key_map_ui(
                             ui,
                             &input_settings.configurations,
-                            &self.inputs,
                             &mut input_settings.selected[1],
                             1,
                         );
@@ -171,14 +147,7 @@ impl GuiComponent for Input {
                 });
             });
 
-        if let Some(map_request) = &self.gui.mapping_request {
-            if self
-                .inputs
-                .remap_configuration(&map_request.input_configuration, &map_request.button)
-            {
-                self.gui.mapping_request = None;
-            }
-        }
+        self.remap_configuration();
     }
 
     fn name(&self) -> Option<String> {
@@ -186,6 +155,6 @@ impl GuiComponent for Input {
     }
 
     fn open(&mut self) -> &mut bool {
-        &mut self.gui.is_open
+        &mut self.gui_is_open
     }
 }

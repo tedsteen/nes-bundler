@@ -4,11 +4,11 @@ use md5::Digest;
 use tokio::runtime::{Builder, Runtime};
 use uuid::Uuid;
 
-use crate::{input::JoypadInput, settings::MAX_PLAYERS, LocalGameState};
+use crate::{input::JoypadInput, settings::MAX_PLAYERS};
 
 use super::{
     netplay_session::NetplaySession, ConnectingState, InputMapping, NetplayBuildConfiguration,
-    StartMethod, StartState,
+    NetplayNesState, StartMethod, StartState,
 };
 
 pub enum NetplayState {
@@ -40,7 +40,7 @@ pub struct Netplay<S> {
     pub config: NetplayBuildConfiguration,
     pub netplay_id: String,
     pub rom_hash: Digest,
-    pub initial_game_state: LocalGameState,
+    pub initial_game_state: NetplayNesState,
     pub state: S,
 }
 
@@ -100,7 +100,7 @@ impl Netplay<Disconnected> {
         config: NetplayBuildConfiguration,
         netplay_id: &mut Option<String>,
         rom_hash: Digest,
-        initial_game_state: LocalGameState,
+        initial_game_state: NetplayNesState,
     ) -> Self {
         Self {
             rt: Rc::new(

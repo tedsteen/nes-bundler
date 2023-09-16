@@ -10,12 +10,11 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
 
-use crate::LocalGameState;
 use crate::{settings::MAX_PLAYERS, FPS};
 
 use super::netplay_session::{GGRSConfig, NetplaySession};
 use super::netplay_state::Netplay;
-use super::InputMapping;
+use super::{InputMapping, NetplayNesState};
 
 #[derive(Deserialize, Clone, Debug)]
 pub enum NetplayServerConfiguration {
@@ -264,7 +263,7 @@ pub enum StartMethod {
 #[derive(Clone)]
 pub struct StartState {
     pub input_mapping: Option<InputMapping>,
-    pub game_state: LocalGameState,
+    pub game_state: NetplayNesState,
     pub session_id: String,
 }
 

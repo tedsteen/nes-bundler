@@ -1,24 +1,24 @@
 use ggrs::{Config, GGRSRequest, P2PSession};
 use matchbox_socket::PeerId;
 
-use crate::{input::JoypadInput, settings::MAX_PLAYERS, Fps, LocalGameState, FPS};
+use crate::{input::JoypadInput, nes_state::NesStateHandler, settings::MAX_PLAYERS, Fps, FPS};
 
-use super::{connecting_state::StartMethod, InputMapping};
+use super::{connecting_state::StartMethod, InputMapping, NetplayNesState};
 
 #[derive(Debug)]
 pub struct GGRSConfig;
 impl Config for GGRSConfig {
     type Input = u8;
-    type State = LocalGameState;
+    type State = NetplayNesState;
     type Address = PeerId;
 }
 
 pub struct NetplaySession {
     pub input_mapping: Option<InputMapping>,
     pub p2p_session: P2PSession<GGRSConfig>,
-    pub game_state: LocalGameState,
+    pub game_state: NetplayNesState,
     pub last_handled_frame: i32,
-    pub last_confirmed_game_states: [LocalGameState; 2],
+    pub last_confirmed_game_states: [NetplayNesState; 2],
     #[cfg(feature = "debug")]
     pub stats: [super::stats::NetplayStats; MAX_PLAYERS],
     pub requested_fps: Fps,
@@ -88,11 +88,12 @@ impl NetplaySession {
                         GGRSRequest::AdvanceFrame { inputs } => {
                             self.game_state
                                 .advance([JoypadInput(inputs[0].0), JoypadInput(inputs[1].0)]);
+                            self.game_state.frame += 1;
 
                             if self.last_handled_frame >= self.game_state.frame {
                                 //This is a replay
                                 // Discard the samples for this frame since it's a replay from ggrs. Audio has already been produced and pushed for it.
-                                self.game_state.nes.apu.consume_samples();
+                                self.game_state.apu.consume_samples();
                             } else {
                                 //This is not a replay
                                 self.last_handled_frame = self.game_state.frame;
