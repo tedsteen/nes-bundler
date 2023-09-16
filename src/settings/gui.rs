@@ -26,29 +26,6 @@ pub trait GuiComponent {
     fn open(&mut self) -> &mut bool;
 }
 
-pub struct EmptyGuiComponent {
-    is_open: bool,
-}
-
-impl EmptyGuiComponent {
-    #[allow(dead_code)] //Only used when not using netplay
-    pub fn new() -> Self {
-        Self { is_open: false }
-    }
-}
-
-impl GuiComponent for EmptyGuiComponent {
-    fn ui(&mut self, _ctx: &Context, _ui_visible: bool, _name: String, _settings: &mut Settings) {}
-    fn name(&self) -> Option<String> {
-        None
-    }
-    fn open(&mut self) -> &mut bool {
-        &mut self.is_open
-    }
-
-    fn event(&mut self, _event: &GuiEvent, _settings: &mut Settings) {}
-}
-
 pub struct Gui {
     visible: bool,
     egui_glow: egui_glow::EguiGlow,
@@ -58,7 +35,7 @@ pub struct Gui {
 }
 
 impl Gui {
-    pub fn new(visible: bool, egui_glow: egui_glow::EguiGlow) -> Self {
+    pub fn new(egui_glow: egui_glow::EguiGlow) -> Self {
         let no_image = ImageData::Color(ColorImage::new([0, 0], Color32::TRANSPARENT));
 
         let nes_texture_options = TextureOptions {
@@ -74,9 +51,8 @@ impl Gui {
             )),
             nes_texture_options,
         );
-
         Self {
-            visible,
+            visible: true,
             egui_glow,
             nes_texture,
             nes_texture_options,

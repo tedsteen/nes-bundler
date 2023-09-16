@@ -1,18 +1,20 @@
+use std::ops::{Deref, DerefMut};
+
 use crate::{
     input::JoypadInput,
-    settings::{gui::GuiComponent, MAX_PLAYERS},
-    Bundle, Fps, LocalStateHandler, StateHandler, FPS,
+    nes_state::{NesState, NesStateHandler},
+    settings::MAX_PLAYERS,
+    Bundle, Fps, FPS,
 };
 use serde::Deserialize;
 
 use self::{
     connecting_state::{ConnectingState, NetplayServerConfiguration, StartMethod, StartState},
-    gui::NetplayGui,
     netplay_state::{Disconnected, Netplay, NetplayState},
 };
 
 mod connecting_state;
-mod gui;
+pub mod gui;
 mod netplay_session;
 mod netplay_state;
 #[cfg(feature = "debug")]
@@ -36,12 +38,34 @@ pub struct NetplayBuildConfiguration {
 }
 
 pub struct NetplayStateHandler {
-    pub netplay: Option<NetplayState>,
-    local_state_handler: LocalStateHandler,
-    pub gui: NetplayGui,
+    netplay: Option<NetplayState>,
+    nes_state: NesState,
+
+    //Gui
+    gui_is_open: bool,
+    room_name: String,
 }
 
-impl StateHandler for NetplayStateHandler {
+#[derive(Clone)]
+pub struct NetplayNesState {
+    nes_state: NesState,
+    frame: i32,
+}
+
+impl Deref for NetplayNesState {
+    type Target = NesState;
+    fn deref(&self) -> &NesState {
+        &self.nes_state
+    }
+}
+
+impl DerefMut for NetplayNesState {
+    fn deref_mut(&mut self) -> &mut NesState {
+        &mut self.nes_state
+    }
+}
+
+impl NesStateHandler for NetplayStateHandler {
     fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps {
         self.netplay = self.netplay.take().map(|netplay| netplay.advance(inputs));
 
@@ -50,7 +74,7 @@ impl StateHandler for NetplayStateHandler {
                 NetplayState::Connected(netplay_connected) => {
                     netplay_connected.state.netplay_session.requested_fps
                 }
-                NetplayState::Disconnected(_) => self.local_state_handler.advance(inputs),
+                NetplayState::Disconnected(_) => self.nes_state.advance(inputs),
                 _ => FPS,
             }
         } else {
@@ -65,21 +89,20 @@ impl StateHandler for NetplayStateHandler {
                 .netplay_session
                 .game_state
                 .consume_samples(),
-            NetplayState::Disconnected(_) => self.local_state_handler.consume_samples(),
+            NetplayState::Disconnected(_) => self.nes_state.consume_samples(),
             _ => vec![],
         }
     }
 
-    fn get_frame(&self) -> Option<&Vec<u16>> {
+    fn get_frame(&self) -> Option<Vec<u16>> {
         match &self.netplay.as_ref().unwrap() {
-            NetplayState::Connected(netplay_connected) => Some(
-                netplay_connected
-                    .state
-                    .netplay_session
-                    .game_state
-                    .get_frame(),
-            ),
-            NetplayState::Disconnected(_) => self.local_state_handler.get_frame(),
+            NetplayState::Connected(netplay_connected) => netplay_connected
+                .state
+                .netplay_session
+                .game_state
+                .get_frame()
+                .clone(),
+            NetplayState::Disconnected(_) => self.nes_state.get_frame(),
             _ => None,
         }
     }
@@ -89,7 +112,7 @@ impl StateHandler for NetplayStateHandler {
             //TODO: what to do when saving during netplay?
             netplay_connected.state.netplay_session.game_state.save()
         } else {
-            self.local_state_handler.save()
+            self.nes_state.save()
         }
     }
 
@@ -102,35 +125,31 @@ impl StateHandler for NetplayStateHandler {
                 .game_state
                 .load(data);
         } else {
-            self.local_state_handler.load(data);
+            self.nes_state.load(data);
         }
     }
-
-    fn get_gui(&mut self) -> &mut dyn GuiComponent {
-        //TODO: Would rather extend StateHandler with GuiComponent and do
-        //      state_handler.as_mut() on the Box but couldn't due to
-        //      https://github.com/rust-lang/rust/issues/65991
+    fn get_gui(&mut self) -> &mut dyn crate::settings::gui::GuiComponent {
         self
     }
 }
 
 impl NetplayStateHandler {
-    pub fn new(
-        local_state_handler: LocalStateHandler,
-        bundle: &Bundle,
-        netplay_id: &mut Option<String>,
-    ) -> Self {
+    pub fn new(nes_state: NesState, bundle: &Bundle, netplay_id: &mut Option<String>) -> Self {
         let netplay_build_config = &bundle.config.netplay;
 
         NetplayStateHandler {
-            gui: NetplayGui::new(netplay_build_config.default_room_name.clone()),
             netplay: Some(NetplayState::Disconnected(Netplay::<Disconnected>::new(
                 netplay_build_config.clone(),
                 netplay_id,
                 md5::compute(&bundle.rom),
-                local_state_handler.state.clone(),
+                NetplayNesState {
+                    nes_state: nes_state.clone(),
+                    frame: 0,
+                },
             ))),
-            local_state_handler,
+            nes_state,
+            gui_is_open: true,
+            room_name: netplay_build_config.default_room_name.clone(),
         }
     }
 }

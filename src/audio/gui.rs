@@ -2,24 +2,19 @@ use crate::settings::{
     gui::{GuiComponent, GuiEvent},
     Settings,
 };
-use egui::{Context, Slider, Window};
+use egui::{Slider, Window};
 
 use super::Audio;
 
-#[derive(Hash, PartialEq, Eq, Default)]
-pub struct AudioSettingsGui {
-    is_open: bool,
-}
-
 impl GuiComponent for Audio {
-    fn ui(&mut self, ctx: &Context, ui_visible: bool, name: String, settings: &mut Settings) {
+    fn ui(&mut self, ctx: &egui::Context, ui_visible: bool, name: String, settings: &mut Settings) {
         if !ui_visible {
             return;
         }
         let available_device_names = self.get_available_output_device_names();
 
         Window::new(name)
-            .open(&mut self.gui.is_open)
+            .open(&mut self.gui_is_open)
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
@@ -88,7 +83,7 @@ impl GuiComponent for Audio {
     }
 
     fn open(&mut self) -> &mut bool {
-        &mut self.gui.is_open
+        &mut self.gui_is_open
     }
 
     fn event(&mut self, _event: &GuiEvent, _settings: &mut Settings) {}

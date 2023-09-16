@@ -14,7 +14,7 @@ use super::{
 };
 
 #[cfg(feature = "debug")]
-impl NetplayGui {
+impl NetplayStateHandler {
     fn stats_ui(ui: &mut egui::Ui, stats: &super::stats::NetplayStats, player: usize) {
         if !stats.get_ping().is_empty() {
             ui.label(format!("Player {player}"));
@@ -83,19 +83,6 @@ impl NetplayGui {
         }
     }
 }
-pub struct NetplayGui {
-    room_name: String,
-    is_open: bool,
-}
-
-impl NetplayGui {
-    pub fn new(room_name: String) -> Self {
-        Self {
-            room_name,
-            is_open: true,
-        }
-    }
-}
 
 impl GuiComponent for NetplayStateHandler {
     fn ui(&mut self, ctx: &Context, ui_visible: bool, name: String, _settings: &mut Settings) {
@@ -120,7 +107,7 @@ impl GuiComponent for NetplayStateHandler {
         }
 
         Window::new(name)
-            .open(&mut self.gui.is_open)
+            .open(&mut self.gui_is_open)
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
@@ -136,15 +123,12 @@ impl GuiComponent for NetplayStateHandler {
                             .show(ui, |ui| {
                                 ui.label("Join a game by name");
                                 ui.add(
-                                    TextEdit::singleline(&mut self.gui.room_name)
+                                    TextEdit::singleline(&mut self.room_name)
                                         .desired_width(140.0)
                                         .hint_text("Netplay room"),
                                 );
                                 join_clicked = ui
-                                    .add_enabled(
-                                        !self.gui.room_name.is_empty(),
-                                        Button::new("Join"),
-                                    )
+                                    .add_enabled(!self.room_name.is_empty(), Button::new("Join"))
                                     .on_disabled_hover_text("Which room do you want to join?")
                                     .clicked();
                                 ui.end_row();
@@ -153,7 +137,7 @@ impl GuiComponent for NetplayStateHandler {
                                 ui.end_row();
                             });
                         if join_clicked {
-                            netplay_disconnected.join_by_name(&self.gui.room_name)
+                            netplay_disconnected.join_by_name(&self.room_name)
                         } else if random_clicked {
                             netplay_disconnected.match_with_random()
                         } else {
@@ -234,12 +218,12 @@ impl GuiComponent for NetplayStateHandler {
                         #[cfg(feature = "debug")]
                         let fake_lost_connection_clicked = {
                             ui.collapsing("Stats", |ui| {
-                                NetplayGui::stats_ui(
+                                Self::stats_ui(
                                     ui,
                                     &netplay_connected.state.netplay_session.stats[0],
                                     0,
                                 );
-                                NetplayGui::stats_ui(
+                                Self::stats_ui(
                                     ui,
                                     &netplay_connected.state.netplay_session.stats[1],
                                     1,
@@ -277,7 +261,7 @@ impl GuiComponent for NetplayStateHandler {
     }
 
     fn open(&mut self) -> &mut bool {
-        &mut self.gui.is_open
+        &mut self.gui_is_open
     }
 
     fn event(&mut self, _event: &GuiEvent, _settings: &mut Settings) {}

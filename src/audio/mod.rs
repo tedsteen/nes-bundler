@@ -7,7 +7,6 @@ use sdl2::{AudioSubsystem, Sdl};
 
 use crate::settings::Settings;
 
-use self::gui::AudioSettingsGui;
 use self::settings::AudioSettings;
 
 pub mod gui;
@@ -141,10 +140,11 @@ impl Stream {
 }
 
 pub struct Audio {
-    gui: AudioSettingsGui,
     pub stream: Stream,
     available_device_names: Vec<String>,
     next_device_names_clear: Instant,
+
+    gui_is_open: bool,
 }
 
 impl Audio {
@@ -153,9 +153,10 @@ impl Audio {
 
         Ok(Audio {
             stream: Stream::new(&audio_subsystem, &settings.audio)?,
-            gui: Default::default(),
             available_device_names: vec![],
             next_device_names_clear: Instant::now(),
+
+            gui_is_open: false,
         })
     }
     fn get_available_output_device_names(&self) -> Vec<String> {

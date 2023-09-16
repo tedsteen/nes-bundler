@@ -4,28 +4,28 @@
 
 use crate::bundle::{Bundle, LoadBundle};
 use crate::input::buttons::GamepadButton;
+use crate::nes_state::NesStateHandler;
 use crate::settings::gui::ToGuiEvent;
 use crate::window::{create_display, Fullscreen, GlutinWindowContext};
 use crate::{
     gameloop::TimeTrait,
-    input::{gamepad::ToGamepadEvent, JoypadInput, KeyEvent},
+    input::{gamepad::ToGamepadEvent, KeyEvent},
     settings::gui::{Gui, GuiEvent},
 };
-use anyhow::{Context, Result};
+use anyhow::Result;
 use audio::Audio;
 use egui::{Color32, ColorImage, ImageData};
 use gameloop::{GameLoop, Time};
-use settings::gui::{EmptyGuiComponent, GuiComponent};
 
 use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
 use base64::Engine;
 
-use input::{Input, Inputs};
+use input::Inputs;
+use nes_state::start_nes;
 use palette::NTSC_PAL;
-use rusticnes_core::cartridge::mapper_from_file;
-use rusticnes_core::nes::NesState;
+
 use sdl2::{EventPump, Sdl};
-use settings::{Settings, MAX_PLAYERS};
+use settings::Settings;
 
 mod audio;
 mod bundle;
@@ -33,6 +33,7 @@ mod bundle;
 mod debug;
 mod gameloop;
 mod input;
+mod nes_state;
 #[cfg(feature = "netplay")]
 mod netplay;
 mod palette;
@@ -49,26 +50,6 @@ const DEFAULT_WINDOW_SIZE: (u32, u32) = (
     crate::WIDTH * crate::ZOOM as u32,
     crate::WIDTH * crate::ZOOM as u32,
 );
-
-pub fn start_nes(cart_data: Vec<u8>, sample_rate: u64) -> Result<NesState> {
-    let rom_data = match std::env::var("ROM_FILE") {
-        Ok(rom_file) => {
-            std::fs::read(&rom_file).context(format!("Could not read ROM {}", rom_file))?
-        }
-        Err(_e) => cart_data.to_vec(),
-    };
-
-    let mapper = mapper_from_file(rom_data.as_slice())
-        .map_err(anyhow::Error::msg)
-        .context("Failed to load ROM")?;
-    #[cfg(feature = "debug")]
-    mapper.print_debug_status();
-    let mut nes = NesState::new(mapper);
-    nes.power_on();
-    nes.apu.set_sample_rate(sample_rate);
-
-    Ok(nes)
-}
 
 fn main() {
     init_logger();
@@ -139,14 +120,14 @@ fn run(
                     use crate::input::keys::KeyCode::*;
                     match key_code {
                         F1 => {
-                            settings.last_save_state = Some(b64.encode(game.state_handler.save()));
+                            settings.last_save_state = Some(b64.encode(game.nes_state.save()));
                             settings.save();
                             true
                         }
                         F2 => {
                             if let Some(save_state) = &settings.last_save_state {
                                 if let Ok(buf) = &mut b64.decode(save_state) {
-                                    game.state_handler.load(buf);
+                                    game.nes_state.load(buf);
                                 }
                             }
                             true
@@ -183,8 +164,8 @@ fn run(
                 #[allow(unused_mut)] //debug feature needs this
                 let mut fps = game.advance();
                 #[cfg(feature = "debug")]
-                if game.debug.settings.override_fps {
-                    fps = game.debug.settings.fps;
+                if game.debug.override_fps {
+                    fps = game.debug.fps;
                 }
 
                 // No need to update graphics or audio more than once per update
@@ -257,22 +238,20 @@ fn initialise() -> Result<
     let mut settings = Settings::new(bundle.config.default_settings.clone());
 
     let audio = Audio::new(&sdl_context, &settings)?;
-    let nes = start_nes(bundle.rom.clone(), audio.stream.get_sample_rate() as u64)?;
-    let state = LocalGameState::new(nes)?;
-    let state_handler = LocalStateHandler {
-        state,
-        gui: EmptyGuiComponent::new(),
-    };
+    let nes_state = start_nes(bundle.rom.clone(), audio.stream.get_sample_rate() as u64)?;
     #[cfg(feature = "netplay")]
-    let state_handler =
-        netplay::NetplayStateHandler::new(state_handler, &bundle, &mut settings.netplay_id);
-    let inputs = Inputs::new(&sdl_context, bundle.config.default_settings.input.selected);
+    let nes_state = netplay::NetplayStateHandler::new(nes_state, &bundle, &mut settings.netplay_id);
+
+    let inputs = Inputs::new(
+        &sdl_context,
+        bundle.config.default_settings.input.selected.clone(),
+    );
     let sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
     let game_loop: GameLoop<Game, Time> = GameLoop::new(
         Game::new(
-            Box::new(state_handler),
+            Box::new(nes_state),
             gl_window,
-            Gui::new(true, egui_glow),
+            Gui::new(egui_glow),
             settings,
             audio,
             inputs,
@@ -283,110 +262,19 @@ fn initialise() -> Result<
     Ok((game_loop, event_loop, sdl_event_pump))
 }
 
-pub struct LocalGameState {
-    nes: NesState,
-    frame: i32,
-}
-
-impl LocalGameState {
-    fn new(nes: NesState) -> Result<Self> {
-        Ok(Self { nes, frame: 0 })
-    }
-
-    pub fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps {
-        self.nes.p1_input = inputs[0].0;
-        self.nes.p2_input = inputs[1].0;
-        self.nes.run_until_vblank();
-        self.frame += 1;
-        FPS
-    }
-
-    fn save(&self) -> Vec<u8> {
-        let mut data = self.nes.save_state();
-        data.extend(self.frame.to_le_bytes());
-        log::debug!("State saved at frame {:?}", self.frame);
-        data
-    }
-    fn load(&mut self, data: &mut Vec<u8>) {
-        self.frame = i32::from_le_bytes(
-            data.split_off(data.len() - std::mem::size_of::<i32>())
-                .try_into()
-                .unwrap(),
-        );
-        self.nes.load_state(data);
-        log::debug!("State loaded at frame {:?}", self.frame);
-    }
-
-    fn consume_samples(&mut self) -> Vec<i16> {
-        self.nes.apu.consume_samples()
-    }
-
-    fn get_frame(&self) -> &Vec<u16> {
-        &self.nes.ppu.screen
-    }
-}
-
-impl Clone for LocalGameState {
-    fn clone(&self) -> Self {
-        let data = &mut self.save();
-        let mut clone = Self {
-            nes: NesState::new(self.nes.mapper.clone()),
-            frame: 0,
-        };
-        clone.load(data);
-        clone
-    }
-}
-
-pub trait StateHandler {
-    fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps;
-    fn consume_samples(&mut self) -> Vec<i16>;
-    fn get_frame(&self) -> Option<&Vec<u16>>;
-    fn save(&self) -> Vec<u8>;
-    fn load(&mut self, data: &mut Vec<u8>);
-    fn get_gui(&mut self) -> &mut dyn GuiComponent;
-}
-
-pub struct LocalStateHandler {
-    state: LocalGameState,
-    gui: EmptyGuiComponent,
-}
-
-impl StateHandler for LocalStateHandler {
-    fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps {
-        self.state.advance(inputs)
-    }
-    fn consume_samples(&mut self) -> Vec<i16> {
-        self.state.consume_samples()
-    }
-    fn get_frame(&self) -> Option<&Vec<u16>> {
-        Some(self.state.get_frame())
-    }
-    fn save(&self) -> Vec<u8> {
-        self.state.save()
-    }
-    fn load(&mut self, data: &mut Vec<u8>) {
-        self.state.load(data)
-    }
-
-    fn get_gui(&mut self) -> &mut dyn GuiComponent {
-        &mut self.gui
-    }
-}
-
 struct Game {
-    state_handler: Box<dyn StateHandler>,
+    nes_state: Box<dyn NesStateHandler>,
     gl_window: GlutinWindowContext,
     gui: Gui,
     settings: Settings,
     #[cfg(feature = "debug")]
     debug: debug::Debug,
     audio: Audio,
-    input: Input,
+    inputs: Inputs,
 }
 impl Game {
     pub fn new(
-        state_handler: Box<dyn StateHandler>,
+        nes_state: Box<dyn NesStateHandler>,
         gl_window: GlutinWindowContext,
         gui: Gui,
         settings: Settings,
@@ -394,16 +282,13 @@ impl Game {
         inputs: Inputs,
     ) -> Self {
         Self {
-            state_handler,
+            nes_state,
             gl_window,
             gui,
-            input: Input::new(inputs),
+            inputs,
             settings,
             #[cfg(feature = "debug")]
-            debug: debug::Debug {
-                settings: debug::DebugSettings::new(),
-                gui: debug::gui::DebugGui::new(),
-            },
+            debug: debug::Debug::new(),
             audio,
         }
     }
@@ -414,8 +299,8 @@ impl Game {
                 #[cfg(feature = "debug")]
                 &mut self.debug,
                 &mut self.audio,
-                &mut self.input,
-                self.state_handler.get_gui(),
+                &mut self.inputs,
+                self.nes_state.get_gui(),
             ],
             &mut self.settings,
         )
@@ -431,8 +316,8 @@ impl Game {
                 #[cfg(feature = "debug")]
                 &mut self.debug,
                 &mut self.audio,
-                &mut self.input,
-                self.state_handler.get_gui(),
+                &mut self.inputs,
+                self.nes_state.get_gui(),
             ],
             &mut self.settings,
         );
@@ -440,14 +325,12 @@ impl Game {
     }
 
     pub fn advance(&mut self) -> Fps {
-        let input = &self.input;
-        let inputs = [input.inputs.get_joypad(0), input.inputs.get_joypad(1)];
-
-        self.state_handler.advance(inputs)
+        self.nes_state
+            .advance([self.inputs.get_joypad(0), self.inputs.get_joypad(1)])
     }
 
     pub fn draw_frame(&mut self) {
-        let new_image_data = self.state_handler.get_frame().map(|frame| {
+        let new_image_data = self.nes_state.get_frame().map(|frame| {
             let mut image_data = ImageData::Color(ColorImage::new(
                 [WIDTH as usize, HEIGHT as usize],
                 Color32::BLACK,
@@ -469,7 +352,7 @@ impl Game {
     fn push_audio(&mut self) {
         self.audio
             .stream
-            .push_samples(self.state_handler.consume_samples().as_slice());
+            .push_samples(self.nes_state.consume_samples().as_slice());
     }
 }
 
