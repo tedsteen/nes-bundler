@@ -1,5 +1,5 @@
 use crate::{
-    audio::settings::AudioSettings,
+    audio::AudioSettings,
     input::{settings::InputSettings, InputConfigurationKind},
 };
 
