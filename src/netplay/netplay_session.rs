@@ -77,7 +77,7 @@ impl NetplaySession {
         }
 
         for handle in sess.local_player_handles() {
-            sess.add_local_input(handle, inputs[0].0)?;
+            sess.add_local_input(handle, *inputs[0])?;
         }
         match sess.advance_frame() {
             Ok(requests) => {

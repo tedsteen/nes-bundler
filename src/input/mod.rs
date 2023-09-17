@@ -8,7 +8,7 @@ use self::{
 use crate::settings::{gui::GuiEvent, Settings, MAX_PLAYERS};
 use sdl2::Sdl;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, fmt::Debug};
+use std::{collections::HashSet, fmt::Debug, ops::Deref};
 
 pub mod buttons;
 pub mod gamepad;
@@ -105,9 +105,17 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct JoypadInput(pub u8);
 
+impl Deref for JoypadInput {
+    type Target = u8;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl JoypadInput {
     pub fn is_pressed(&self, button: JoypadButton) -> bool {
-        self.0 & (button as u8) != 0
+        self.deref() & (button as u8) != 0
     }
 }
 
