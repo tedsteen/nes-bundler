@@ -14,7 +14,7 @@ use crate::{settings::MAX_PLAYERS, FPS};
 
 use super::netplay_session::{GGRSConfig, NetplaySession};
 use super::netplay_state::Netplay;
-use super::{InputMapping, NetplayNesState};
+use super::NetplayNesState;
 
 #[derive(Deserialize, Clone, Debug)]
 pub enum NetplayServerConfiguration {
@@ -262,7 +262,6 @@ pub enum StartMethod {
 
 #[derive(Clone)]
 pub struct StartState {
-    pub input_mapping: Option<InputMapping>,
     pub game_state: NetplayNesState,
     pub session_id: String,
 }
@@ -270,7 +269,7 @@ pub struct StartState {
 impl Debug for StartState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("StartState")
-            .field("input_mapping", &self.input_mapping)
+            .field("session_id", &self.session_id)
             .finish()
     }
 }

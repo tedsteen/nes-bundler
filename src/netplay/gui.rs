@@ -247,7 +247,7 @@ impl GuiComponent for NetplayStateHandler {
                             netplay_failed.state.reason
                         ));
                         if ui.button("Ok").clicked() {
-                            NetplayState::Disconnected(netplay_failed.resume())
+                            NetplayState::Disconnected(netplay_failed.restart())
                         } else {
                             NetplayState::Failed(netplay_failed)
                         }

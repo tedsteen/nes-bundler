@@ -10,7 +10,7 @@ use serde::Deserialize;
 
 use self::{
     connecting_state::{ConnectingState, NetplayServerConfiguration, StartMethod, StartState},
-    netplay_state::{Disconnected, Netplay, NetplayState},
+    netplay_state::{Netplay, NetplayState},
 };
 
 mod connecting_state;
@@ -21,12 +21,33 @@ mod netplay_state;
 mod stats;
 
 #[derive(Clone, Debug)]
-pub struct InputMapping {
-    pub ids: [usize; MAX_PLAYERS],
+pub enum JoypadMapping {
+    P1,
+    P2,
 }
-impl InputMapping {
-    fn map(&self, local_input: usize) -> usize {
-        self.ids[local_input]
+
+impl JoypadMapping {
+    fn map(
+        &self,
+        inputs: [JoypadInput; MAX_PLAYERS],
+        local_player_idx: usize,
+    ) -> [JoypadInput; MAX_PLAYERS] {
+        match self {
+            JoypadMapping::P1 => {
+                if local_player_idx == 0 {
+                    [inputs[0], inputs[1]]
+                } else {
+                    [inputs[1], inputs[0]]
+                }
+            }
+            JoypadMapping::P2 => {
+                if local_player_idx == 0 {
+                    [inputs[1], inputs[0]]
+                } else {
+                    [inputs[0], inputs[1]]
+                }
+            }
+        }
     }
 }
 
@@ -50,6 +71,7 @@ pub struct NetplayStateHandler {
 pub struct NetplayNesState {
     nes_state: LocalNesState,
     frame: i32,
+    joypad_mapping: Option<JoypadMapping>,
 }
 
 impl Deref for NetplayNesState {
@@ -138,13 +160,14 @@ impl NetplayStateHandler {
         let netplay_build_config = &bundle.config.netplay;
 
         NetplayStateHandler {
-            netplay: Some(NetplayState::Disconnected(Netplay::<Disconnected>::new(
+            netplay: Some(NetplayState::Disconnected(Netplay::new(
                 netplay_build_config.clone(),
                 netplay_id,
                 md5::compute(&bundle.rom),
                 NetplayNesState {
                     nes_state: nes_state.clone(),
                     frame: 0,
+                    joypad_mapping: None,
                 },
             ))),
             nes_state,
