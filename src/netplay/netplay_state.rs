@@ -7,12 +7,12 @@ use uuid::Uuid;
 use crate::{input::JoypadInput, settings::MAX_PLAYERS};
 
 use super::{
-    netplay_session::NetplaySession, ConnectingState, InputMapping, NetplayBuildConfiguration,
+    netplay_session::NetplaySession, ConnectingState, JoypadMapping, NetplayBuildConfiguration,
     NetplayNesState, StartMethod, StartState,
 };
 
 pub enum NetplayState {
-    Disconnected(Netplay<Disconnected>),
+    Disconnected(Netplay<()>),
     Connecting(Netplay<ConnectingState>),
     Connected(Netplay<Connected>),
     Resuming(Netplay<Resuming>),
@@ -25,12 +25,12 @@ pub struct Failed {
 
 impl NetplayState {
     pub fn advance(self, inputs: [JoypadInput; MAX_PLAYERS]) -> Self {
+        use NetplayState::*;
         match self {
-            NetplayState::Disconnected(_) => self,
-            NetplayState::Connecting(netplay) => netplay.advance(),
-            NetplayState::Connected(netplay) => netplay.advance(inputs),
-            NetplayState::Resuming(netplay) => netplay.advance(),
-            NetplayState::Failed(_) => self,
+            Connecting(netplay) => netplay.advance(),
+            Connected(netplay) => netplay.advance(inputs),
+            Resuming(netplay) => netplay.advance(),
+            Failed(_) | NetplayState::Disconnected(_) => self,
         }
     }
 }
@@ -55,9 +55,17 @@ impl<T> Netplay<T> {
             state,
         }
     }
-}
 
-pub struct Disconnected {}
+    pub fn disconnect(self) -> Netplay<()> {
+        log::debug!("Disconnecting");
+        Netplay::new(
+            self.config,
+            &mut Some(self.netplay_id),
+            self.rom_hash,
+            self.initial_game_state,
+        )
+    }
+}
 
 pub struct Connected {
     pub netplay_session: NetplaySession,
@@ -71,14 +79,12 @@ pub struct Resuming {
 impl Resuming {
     fn new(netplay: &mut Netplay<Connected>) -> Self {
         let netplay_session = &netplay.state.netplay_session;
-        let input_mapping = netplay_session.input_mapping.clone();
 
         let session_id = netplay.state.session_id.clone();
         Self {
             attempt1: ConnectingState::connect(
                 netplay,
                 StartMethod::Resume(StartState {
-                    input_mapping: input_mapping.clone(),
                     game_state: netplay_session.last_confirmed_game_states[1].clone(),
                     session_id: session_id.clone(),
                 }),
@@ -86,7 +92,6 @@ impl Resuming {
             attempt2: ConnectingState::connect(
                 netplay,
                 StartMethod::Resume(StartState {
-                    input_mapping,
                     game_state: netplay_session.last_confirmed_game_states[0].clone(),
                     session_id,
                 }),
@@ -95,7 +100,7 @@ impl Resuming {
     }
 }
 
-impl Netplay<Disconnected> {
+impl Netplay<()> {
     pub fn new(
         config: NetplayBuildConfiguration,
         netplay_id: &mut Option<String>,
@@ -116,7 +121,7 @@ impl Netplay<Disconnected> {
                 .to_string(),
             rom_hash,
             initial_game_state,
-            state: Disconnected {},
+            state: (),
         }
     }
 
@@ -126,7 +131,6 @@ impl Netplay<Disconnected> {
         self.join(StartMethod::Join(
             StartState {
                 game_state: initial_state,
-                input_mapping: None,
                 session_id,
             },
             room_name.to_string(),
@@ -140,7 +144,6 @@ impl Netplay<Disconnected> {
         let session_id = format!("{:x}", self.rom_hash);
         self.join(StartMethod::MatchWithRandom(StartState {
             game_state: initial_state,
-            input_mapping: None,
             session_id,
         }))
     }
@@ -155,12 +158,13 @@ impl Netplay<Disconnected> {
 }
 
 impl Netplay<ConnectingState> {
-    pub fn cancel(self) -> Netplay<Disconnected> {
+    pub fn cancel(self) -> Netplay<()> {
         log::debug!("Connection cancelled by user");
-        Netplay::from(Disconnected {}, self)
+        self.disconnect()
     }
 
     fn advance(mut self) -> NetplayState {
+        //log::trace!("Advancing Netplay<ConnectingState>");
         self.state = self.state.advance();
         match self.state {
             ConnectingState::Connected(connected) => {
@@ -209,11 +213,14 @@ impl Netplay<Connected> {
     }
 
     fn advance(mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> NetplayState {
-        if let Some(input_mapping) = self.state.netplay_session.input_mapping.clone() {
+        //log::trace!("Advancing Netplay<Connected>");
+        if let Some(joypad_mapping) =
+            &mut self.state.netplay_session.game_state.joypad_mapping.clone()
+        {
             if self
                 .state
                 .netplay_session
-                .advance(inputs, &input_mapping)
+                .advance(inputs, joypad_mapping)
                 .is_err()
             {
                 //TODO: Popup/info about the error? Or perhaps put the reason for the resume in the resume state below?
@@ -223,18 +230,20 @@ impl Netplay<Connected> {
             }
         } else {
             //TODO: Actual input mapping..
-            self.state.netplay_session.input_mapping = Some(InputMapping { ids: [0, 1] });
+            self.state.netplay_session.game_state.joypad_mapping =
+                Some(if self.state.netplay_session.get_local_player_idx() == 0 {
+                    JoypadMapping::P1
+                } else {
+                    JoypadMapping::P2
+                });
             NetplayState::Connected(self)
         }
-    }
-    pub fn disconnect(self) -> Netplay<Disconnected> {
-        log::debug!("Netplay disconnected");
-        Netplay::from(Disconnected {}, self)
     }
 }
 
 impl Netplay<Resuming> {
     fn advance(mut self) -> NetplayState {
+        //log::trace!("Advancing Netplay<Resuming>");
         self.state.attempt1 = self.state.attempt1.advance();
         self.state.attempt2 = self.state.attempt2.advance();
 
@@ -261,15 +270,14 @@ impl Netplay<Resuming> {
         }
     }
 
-    pub fn cancel(self) -> Netplay<Disconnected> {
+    pub fn cancel(self) -> Netplay<()> {
         log::debug!("Resume cancelled by user");
-        Netplay::from(Disconnected {}, self)
+        self.disconnect()
     }
 }
 
 impl Netplay<Failed> {
-    pub fn resume(self) -> Netplay<Disconnected> {
-        log::debug!("Connection cancelled by user");
-        Netplay::from(Disconnected {}, self)
+    pub fn restart(self) -> Netplay<()> {
+        self.disconnect()
     }
 }

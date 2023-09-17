@@ -3,7 +3,7 @@ use matchbox_socket::PeerId;
 
 use crate::{input::JoypadInput, nes_state::NesStateHandler, settings::MAX_PLAYERS, Fps, FPS};
 
-use super::{connecting_state::StartMethod, InputMapping, NetplayNesState};
+use super::{connecting_state::StartMethod, JoypadMapping, NetplayNesState};
 
 #[derive(Debug)]
 pub struct GGRSConfig;
@@ -14,7 +14,6 @@ impl Config for GGRSConfig {
 }
 
 pub struct NetplaySession {
-    pub input_mapping: Option<InputMapping>,
     pub p2p_session: P2PSession<GGRSConfig>,
     pub game_state: NetplayNesState,
     pub last_handled_frame: i32,
@@ -37,7 +36,6 @@ impl NetplaySession {
         };
 
         Self {
-            input_mapping: start_state.input_mapping,
             p2p_session,
             game_state: start_state.game_state.clone(),
             last_confirmed_game_states: [
@@ -54,11 +52,21 @@ impl NetplaySession {
         }
     }
 
+    pub fn get_local_player_idx(&self) -> usize {
+        //There should be only one.
+        *self
+            .p2p_session
+            .local_player_handles()
+            .first()
+            .unwrap_or(&0)
+    }
+
     pub fn advance(
         &mut self,
         inputs: [JoypadInput; MAX_PLAYERS],
-        input_mapping: &InputMapping,
+        joypad_mapping: &JoypadMapping,
     ) -> anyhow::Result<()> {
+        let local_player_idx = self.get_local_player_idx();
         let sess = &mut self.p2p_session;
         sess.poll_remote_clients();
 
@@ -69,10 +77,8 @@ impl NetplaySession {
         }
 
         for handle in sess.local_player_handles() {
-            let local_input = 0;
-            sess.add_local_input(handle, inputs[input_mapping.map(local_input)].0)?;
+            sess.add_local_input(handle, inputs[0].0)?;
         }
-
         match sess.advance_frame() {
             Ok(requests) => {
                 for request in requests {
@@ -86,8 +92,10 @@ impl NetplaySession {
                             cell.save(frame, Some(self.game_state.clone()), None);
                         }
                         GGRSRequest::AdvanceFrame { inputs } => {
-                            self.game_state
-                                .advance([JoypadInput(inputs[0].0), JoypadInput(inputs[1].0)]);
+                            self.game_state.advance(joypad_mapping.map(
+                                [JoypadInput(inputs[0].0), JoypadInput(inputs[1].0)],
+                                local_player_idx,
+                            ));
                             self.game_state.frame += 1;
 
                             if self.last_handled_frame >= self.game_state.frame {
