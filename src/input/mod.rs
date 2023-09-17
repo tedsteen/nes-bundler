@@ -67,29 +67,26 @@ where
         }
     }
 
-    fn insert_if_mapped(
-        buttons: &mut HashSet<JoypadButton>,
-        mapping: &Option<KeyType>,
-        a_key: &KeyType,
-        button: JoypadButton,
-    ) {
-        if let Some(key) = mapping {
-            if a_key.eq(key) {
-                buttons.insert(button);
-            }
-        }
-    }
     fn reverse_lookup(&self, key: &KeyType) -> HashSet<JoypadButton> {
-        let mut buttons = HashSet::new();
-        JoypadMapping::insert_if_mapped(&mut buttons, &self.up, key, JoypadButton::Up);
-        JoypadMapping::insert_if_mapped(&mut buttons, &self.down, key, JoypadButton::Down);
-        JoypadMapping::insert_if_mapped(&mut buttons, &self.left, key, JoypadButton::Left);
-        JoypadMapping::insert_if_mapped(&mut buttons, &self.right, key, JoypadButton::Right);
-        JoypadMapping::insert_if_mapped(&mut buttons, &self.start, key, JoypadButton::Start);
-        JoypadMapping::insert_if_mapped(&mut buttons, &self.select, key, JoypadButton::Select);
-        JoypadMapping::insert_if_mapped(&mut buttons, &self.b, key, JoypadButton::B);
-        JoypadMapping::insert_if_mapped(&mut buttons, &self.a, key, JoypadButton::A);
-        buttons
+        [
+            (JoypadButton::Up, &self.up),
+            (JoypadButton::Down, &self.down),
+            (JoypadButton::Left, &self.left),
+            (JoypadButton::Right, &self.right),
+            (JoypadButton::Start, &self.start),
+            (JoypadButton::Select, &self.select),
+            (JoypadButton::B, &self.b),
+            (JoypadButton::A, &self.a),
+        ]
+        .into_iter()
+        .fold(HashSet::new(), |mut acc, (joypad_button, mapping)| {
+            if let Some(a_key) = mapping {
+                if key == a_key {
+                    acc.insert(joypad_button);
+                }
+            }
+            acc
+        })
     }
 
     fn calculate_state(&self, keys: &HashSet<KeyType>) -> JoypadInput {
