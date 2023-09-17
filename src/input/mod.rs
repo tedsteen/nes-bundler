@@ -6,7 +6,6 @@ use self::{
     settings::InputConfigurationRef,
 };
 use crate::settings::{gui::GuiEvent, Settings, MAX_PLAYERS};
-use sdl2::Sdl;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, fmt::Debug, ops::Deref};
 
@@ -151,10 +150,11 @@ pub struct Inputs {
 
 impl Inputs {
     pub fn new(
-        sdl_context: &Sdl,
+        game_controller_subsystem: sdl2::GameControllerSubsystem,
         default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
     ) -> Self {
-        let gamepads: Option<Box<dyn Gamepads>> = match Sdl2Gamepads::new(sdl_context) {
+        let gamepads: Option<Box<dyn Gamepads>> = match Sdl2Gamepads::new(game_controller_subsystem)
+        {
             Ok(gamepads) => Some(Box::new(gamepads)),
             Err(e) => {
                 log::error!("Failed to initialize gamepads: {:?}", e);

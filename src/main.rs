@@ -243,7 +243,7 @@ fn initialise() -> Result<
     let nes_state = netplay::NetplayStateHandler::new(nes_state, &bundle, &mut settings.netplay_id);
 
     let inputs = Inputs::new(
-        &sdl_context,
+        sdl_context.game_controller().map_err(anyhow::Error::msg)?,
         bundle.config.default_settings.input.selected.clone(),
     );
     let sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
