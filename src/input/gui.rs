@@ -120,9 +120,8 @@ impl GuiComponent for Inputs {
         if !ui_visible {
             return;
         }
-
         Window::new(name)
-            //.open(&mut gui.is_open)
+            //.open(&mut self.gui_is_open)
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {

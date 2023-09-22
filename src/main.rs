@@ -295,7 +295,7 @@ impl Game {
     fn apply_gui_event(&mut self, gui_event: GuiEvent) {
         self.gui.handle_events(
             &gui_event,
-            vec![
+            &mut [
                 #[cfg(feature = "debug")]
                 Some(&mut self.debug),
                 Some(&mut self.audio),
@@ -312,7 +312,7 @@ impl Game {
 
         self.gui.ui(
             self.gl_window.window(),
-            vec![
+            &mut [
                 #[cfg(feature = "debug")]
                 Some(&mut self.debug),
                 Some(&mut self.audio),

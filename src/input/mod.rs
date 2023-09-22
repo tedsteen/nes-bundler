@@ -144,8 +144,8 @@ pub struct Inputs {
     default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
 
     //Gui
-    mapping_request: Option<MapRequest>,
     gui_is_open: bool,
+    mapping_request: Option<MapRequest>,
 }
 
 impl Inputs {
@@ -169,9 +169,8 @@ impl Inputs {
             joypads: [JoypadInput(0), JoypadInput(0)],
             default_input_configurations,
 
-            //Gui
-            mapping_request: None,
             gui_is_open: true,
+            mapping_request: None,
         }
     }
 
