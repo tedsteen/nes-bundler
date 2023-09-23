@@ -67,22 +67,22 @@ fn main() {
 
 fn run(
     mut game_loop: GameLoop<Game, Time>,
-    event_loop: winit::event_loop::EventLoop<()>,
+    winit_event_loop: winit::event_loop::EventLoop<()>,
     mut sdl_event_pump: EventPump,
 ) -> ! {
-    event_loop.run(move |event, _, control_flow| {
+    winit_event_loop.run(move |winit_event, _, control_flow| {
         if log::max_level() == log::Level::Trace && Time::now().sub(&game_loop.last_stats) >= 1.0 {
             let (ups, rps, ..) = game_loop.get_stats();
             log::trace!("UPS: {:?}, RPS: {:?}", ups, rps);
         }
 
-        let mut events: Vec<GuiEvent> = sdl_event_pump
+        let mut sdl_events: Vec<GuiEvent> = sdl_event_pump
             .poll_iter()
             .filter_map(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad))
             .collect();
         let game = &mut game_loop.game;
 
-        match &event {
+        match &winit_event {
             winit::event::Event::WindowEvent { event, .. } => {
                 use winit::event::WindowEvent;
                 if matches!(event, WindowEvent::CloseRequested | WindowEvent::Destroyed) {
@@ -101,7 +101,7 @@ fn run(
 
                 if !game.gui.on_event(event) {
                     if let Some(winit_gui_event) = &event.to_gui_event() {
-                        events.push(winit_gui_event.clone());
+                        sdl_events.push(winit_gui_event.clone());
                     }
                 }
             }
@@ -112,7 +112,7 @@ fn run(
             _ => {}
         }
 
-        for event in events {
+        for event in sdl_events {
             let consumed = match &event {
                 settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(key_code, modifiers)) => {
                     let settings = &mut game.settings;
@@ -175,7 +175,7 @@ fn run(
                 g.set_updates_per_second(fps);
             },
             |g| {
-                if let winit::event::Event::RedrawEventsCleared = &event {
+                if let winit::event::Event::RedrawEventsCleared = &winit_event {
                     let game = &mut g.game;
                     if game.run_gui() {
                         game.settings.save();
