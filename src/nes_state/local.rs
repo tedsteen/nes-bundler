@@ -24,7 +24,7 @@ impl DerefMut for LocalNesState {
 impl Clone for LocalNesState {
     fn clone(&self) -> Self {
         let data = &mut self.save();
-        let mut clone = Self(rusticnes_core::nes::NesState::new(self.0.mapper.clone()));
+        let mut clone = Self(rusticnes_core::nes::NesState::new(self.mapper.clone()));
         clone.load(data);
         clone
     }
@@ -32,8 +32,8 @@ impl Clone for LocalNesState {
 
 impl NesStateHandler for LocalNesState {
     fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps {
-        self.p1_input = inputs[0].0;
-        self.p2_input = inputs[1].0;
+        self.p1_input = *inputs[0];
+        self.p2_input = *inputs[1];
         self.run_until_vblank();
         FPS
     }

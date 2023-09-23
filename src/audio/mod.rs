@@ -4,15 +4,20 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use sdl2::audio::{AudioQueue, AudioSpec, AudioSpecDesired};
 use sdl2::{AudioSubsystem, Sdl};
+use serde::{Deserialize, Serialize};
 
 use crate::settings::Settings;
 
-use self::settings::AudioSettings;
-
 pub mod gui;
-pub mod settings;
 
 type SampleFormat = i16;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
+pub struct AudioSettings {
+    pub latency: u8,
+    pub volume: u8,
+    pub output_device: Option<String>,
+}
 
 pub struct Stream {
     output_device_name: Option<String>,

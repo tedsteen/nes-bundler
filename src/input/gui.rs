@@ -1,22 +1,22 @@
 use crate::{
-    input::{InputId, Inputs, JoypadButton, JoypadInput},
+    input::{Inputs, JoypadButton, JoypadInput},
     settings::{
         gui::{GuiComponent, GuiEvent},
         Settings,
     },
 };
-use egui::{Button, Color32, Context, Grid, Label, RichText, Ui, Window};
-use std::collections::BTreeMap;
+use egui::{Color32, Context, Grid, RichText, Ui, Window};
 
 use super::{settings::InputConfigurationRef, MapRequest};
 
 impl Inputs {
     fn key_map_ui(
-        &mut self,
         ui: &mut Ui,
-        available_configurations: &BTreeMap<InputId, InputConfigurationRef>,
+        joypad_input: JoypadInput,
+        available_configurations: &[InputConfigurationRef],
         selected_configuration: &mut InputConfigurationRef,
         player: usize,
+        mapping_request: &mut Option<MapRequest>,
     ) {
         ui.label(format!("Player {}", player + 1));
         let selected_text = selected_configuration.borrow().name.to_string();
@@ -24,15 +24,7 @@ impl Inputs {
             .width(160.0)
             .selected_text(selected_text)
             .show_ui(ui, |ui| {
-                let mut sorted_configurations: Vec<&InputConfigurationRef> =
-                    available_configurations
-                        .values()
-                        .filter(|e| self.is_connected(&e.borrow()))
-                        .collect();
-
-                sorted_configurations.sort_by(|a, b| a.borrow().id.cmp(&b.borrow().id));
-
-                for input_configuration in sorted_configurations {
+                for input_configuration in available_configurations {
                     ui.selectable_value(
                         selected_configuration,
                         input_configuration.clone(),
@@ -42,7 +34,6 @@ impl Inputs {
             });
 
         let input_configuration = selected_configuration;
-        let joypad_input = self.get_joypad(player);
         Grid::new(format!("joypadmap_grid_{}", player))
             .num_columns(2)
             .striped(true)
@@ -52,7 +43,7 @@ impl Inputs {
                     .iter()
                     .for_each(|&button| {
                         Self::button_map_ui(
-                            &mut self.mapping_request,
+                            mapping_request,
                             ui,
                             input_configuration,
                             joypad_input,
@@ -73,16 +64,14 @@ impl Inputs {
         if joypad_input.is_pressed(button) {
             text = text.color(Color32::from_rgb(255, 255, 255));
         }
-        ui.add(Label::new(text));
+        ui.label(text);
         match map_request {
             Some(MapRequest {
                 input_configuration: map_conf,
                 button: b,
             }) if map_conf == input_configuration && *b == button => {
                 if ui
-                    .add(Button::new(
-                        RichText::new("Cancel").color(Color32::from_rgb(255, 0, 0)),
-                    ))
+                    .button(RichText::new("Cancel").color(Color32::from_rgb(255, 0, 0)))
                     .clicked()
                 {
                     *map_request = None;
@@ -120,28 +109,42 @@ impl GuiComponent for Inputs {
         if !ui_visible {
             return;
         }
+        let input_settings = &mut settings.input;
+        let available_configurations = &mut input_settings
+            .configurations
+            .values()
+            .filter(|e| self.is_connected(&e.borrow()))
+            .cloned()
+            .collect::<Vec<InputConfigurationRef>>();
 
+        available_configurations.sort_by(|a, b| a.borrow().id.cmp(&b.borrow().id));
+
+        let joypad_0 = self.get_joypad(0);
+        let joypad_1 = self.get_joypad(1);
         Window::new(name)
-            //.open(&mut gui.is_open)
+            .open(&mut self.gui_is_open)
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
-                let input_settings = &mut settings.input;
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
-                        self.key_map_ui(
+                        Self::key_map_ui(
                             ui,
-                            &input_settings.configurations,
+                            joypad_0,
+                            available_configurations,
                             &mut input_settings.selected[0],
                             0,
+                            &mut self.mapping_request,
                         );
                     });
                     ui.vertical(|ui| {
-                        self.key_map_ui(
+                        Self::key_map_ui(
                             ui,
-                            &input_settings.configurations,
+                            joypad_1,
+                            available_configurations,
                             &mut input_settings.selected[1],
                             1,
+                            &mut self.mapping_request,
                         );
                     });
                 });

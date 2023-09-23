@@ -214,15 +214,10 @@ impl Netplay<Connected> {
 
     fn advance(mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> NetplayState {
         //log::trace!("Advancing Netplay<Connected>");
-        if let Some(joypad_mapping) =
-            &mut self.state.netplay_session.game_state.joypad_mapping.clone()
-        {
-            if self
-                .state
-                .netplay_session
-                .advance(inputs, joypad_mapping)
-                .is_err()
-            {
+        let netplay_session = &mut self.state.netplay_session;
+
+        if let Some(joypad_mapping) = &mut netplay_session.game_state.joypad_mapping.clone() {
+            if netplay_session.advance(inputs, joypad_mapping).is_err() {
                 //TODO: Popup/info about the error? Or perhaps put the reason for the resume in the resume state below?
                 NetplayState::Resuming(self.resume())
             } else {
@@ -230,8 +225,8 @@ impl Netplay<Connected> {
             }
         } else {
             //TODO: Actual input mapping..
-            self.state.netplay_session.game_state.joypad_mapping =
-                Some(if self.state.netplay_session.get_local_player_idx() == 0 {
+            netplay_session.game_state.joypad_mapping =
+                Some(if netplay_session.get_local_player_idx() == 0 {
                     JoypadMapping::P1
                 } else {
                     JoypadMapping::P2

@@ -36,37 +36,34 @@ pub struct Gui {
 
 impl Gui {
     pub fn new(egui_glow: egui_glow::EguiGlow) -> Self {
-        let no_image = ImageData::Color(ColorImage::new([0, 0], Color32::TRANSPARENT));
-
         let nes_texture_options = TextureOptions {
             magnification: egui::TextureFilter::Nearest,
             minification: egui::TextureFilter::Nearest,
         };
 
-        let nes_texture = egui_glow.egui_ctx.load_texture(
-            "nes",
-            ImageData::Color(ColorImage::new(
-                [WIDTH as usize, HEIGHT as usize],
-                Color32::BLACK,
-            )),
-            nes_texture_options,
-        );
         Self {
             visible: true,
+            nes_texture: egui_glow.egui_ctx.load_texture(
+                "nes",
+                ImageData::Color(ColorImage::new(
+                    [WIDTH as usize, HEIGHT as usize],
+                    Color32::BLACK,
+                )),
+                nes_texture_options,
+            ),
             egui_glow,
-            nes_texture,
             nes_texture_options,
-            no_image,
+            no_image: ImageData::Color(ColorImage::new([0, 0], Color32::TRANSPARENT)),
         }
     }
 
     pub fn handle_events(
         &mut self,
         event: &GuiEvent,
-        guis: Vec<Option<&mut dyn GuiComponent>>,
+        guis: &mut [Option<&mut dyn GuiComponent>],
         settings: &mut Settings,
     ) {
-        for gui in guis.into_iter().flatten() {
+        for gui in guis.iter_mut().flatten() {
             gui.event(event, settings);
         }
     }
@@ -74,17 +71,15 @@ impl Gui {
     pub fn ui(
         &mut self,
         window: &winit::window::Window,
-        guis: Vec<Option<&mut dyn GuiComponent>>,
+        guis: &mut [Option<&mut dyn GuiComponent>],
         settings: &mut Settings,
     ) {
-        let texture_handle = &self.nes_texture;
-        let mut guis = guis.into_iter().flatten();
-
         self.egui_glow.run(window, |ctx| {
             egui::Area::new("game_area")
-                .fixed_pos(egui::Pos2::new(0.0, 0.0))
+                .fixed_pos([0.0, 0.0])
                 .order(Order::Background)
                 .show(ctx, |ui| {
+                    let texture_handle = &self.nes_texture;
                     if let Some(t) = ctx.tex_manager().read().meta(texture_handle.id()) {
                         if t.size[0] != 0 {
                             let texture_width = WIDTH as f32;
@@ -102,22 +97,19 @@ impl Gui {
                             let scaled_width = texture_width * scale;
                             let scaled_height = texture_height * scale;
                             ui.centered_and_justified(|ui| {
-                                ui.add(egui::Image::new(
-                                    texture_handle,
-                                    [scaled_width, scaled_height],
-                                ));
+                                ui.image(texture_handle, [scaled_width, scaled_height]);
                             });
                         }
                     }
                 });
             egui::Area::new("window_area")
-                .fixed_pos(egui::Pos2::new(0.0, 0.0))
+                .fixed_pos([0.0, 0.0])
                 .show(ctx, |ui| {
                     if self.visible {
                         egui::TopBottomPanel::top("menubar_container").show_inside(ui, |ui| {
                             egui::menu::bar(ui, |ui| {
                                 ui.menu_button("Settings", |ui| {
-                                    for gui in &mut guis {
+                                    for gui in guis.iter_mut().flatten() {
                                         if let Some(name) = gui.name() {
                                             if ui.button(name).clicked() {
                                                 *gui.open() = !*gui.open();
@@ -129,7 +121,7 @@ impl Gui {
                             });
                         });
                     }
-                    for gui in &mut guis {
+                    for gui in guis.iter_mut().flatten() {
                         if let Some(name) = gui.name() {
                             gui.ui(ctx, self.visible, name, settings);
                         }

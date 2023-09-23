@@ -6,9 +6,8 @@ use self::{
     settings::InputConfigurationRef,
 };
 use crate::settings::{gui::GuiEvent, Settings, MAX_PLAYERS};
-use sdl2::Sdl;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, fmt::Debug};
+use std::{collections::HashSet, fmt::Debug, ops::Deref};
 
 pub mod buttons;
 pub mod gamepad;
@@ -67,29 +66,26 @@ where
         }
     }
 
-    fn insert_if_mapped(
-        buttons: &mut HashSet<JoypadButton>,
-        mapping: &Option<KeyType>,
-        a_key: &KeyType,
-        button: JoypadButton,
-    ) {
-        if let Some(key) = mapping {
-            if a_key.eq(key) {
-                buttons.insert(button);
-            }
-        }
-    }
     fn reverse_lookup(&self, key: &KeyType) -> HashSet<JoypadButton> {
-        let mut buttons = HashSet::new();
-        JoypadMapping::insert_if_mapped(&mut buttons, &self.up, key, JoypadButton::Up);
-        JoypadMapping::insert_if_mapped(&mut buttons, &self.down, key, JoypadButton::Down);
-        JoypadMapping::insert_if_mapped(&mut buttons, &self.left, key, JoypadButton::Left);
-        JoypadMapping::insert_if_mapped(&mut buttons, &self.right, key, JoypadButton::Right);
-        JoypadMapping::insert_if_mapped(&mut buttons, &self.start, key, JoypadButton::Start);
-        JoypadMapping::insert_if_mapped(&mut buttons, &self.select, key, JoypadButton::Select);
-        JoypadMapping::insert_if_mapped(&mut buttons, &self.b, key, JoypadButton::B);
-        JoypadMapping::insert_if_mapped(&mut buttons, &self.a, key, JoypadButton::A);
-        buttons
+        [
+            (JoypadButton::Up, &self.up),
+            (JoypadButton::Down, &self.down),
+            (JoypadButton::Left, &self.left),
+            (JoypadButton::Right, &self.right),
+            (JoypadButton::Start, &self.start),
+            (JoypadButton::Select, &self.select),
+            (JoypadButton::B, &self.b),
+            (JoypadButton::A, &self.a),
+        ]
+        .into_iter()
+        .fold(HashSet::new(), |mut acc, (joypad_button, mapping)| {
+            if let Some(a_key) = mapping {
+                if key == a_key {
+                    acc.insert(joypad_button);
+                }
+            }
+            acc
+        })
     }
 
     fn calculate_state(&self, keys: &HashSet<KeyType>) -> JoypadInput {
@@ -105,9 +101,17 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct JoypadInput(pub u8);
 
+impl Deref for JoypadInput {
+    type Target = u8;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl JoypadInput {
     pub fn is_pressed(&self, button: JoypadButton) -> bool {
-        self.0 & (button as u8) != 0
+        self.deref() & (button as u8) != 0
     }
 }
 
@@ -140,16 +144,17 @@ pub struct Inputs {
     default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
 
     //Gui
-    mapping_request: Option<MapRequest>,
     gui_is_open: bool,
+    mapping_request: Option<MapRequest>,
 }
 
 impl Inputs {
     pub fn new(
-        sdl_context: &Sdl,
+        game_controller_subsystem: sdl2::GameControllerSubsystem,
         default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
     ) -> Self {
-        let gamepads: Option<Box<dyn Gamepads>> = match Sdl2Gamepads::new(sdl_context) {
+        let gamepads: Option<Box<dyn Gamepads>> = match Sdl2Gamepads::new(game_controller_subsystem)
+        {
             Ok(gamepads) => Some(Box::new(gamepads)),
             Err(e) => {
                 log::error!("Failed to initialize gamepads: {:?}", e);
@@ -164,9 +169,8 @@ impl Inputs {
             joypads: [JoypadInput(0), JoypadInput(0)],
             default_input_configurations,
 
-            //Gui
-            mapping_request: None,
             gui_is_open: true,
+            mapping_request: None,
         }
     }
 
@@ -228,11 +232,7 @@ impl Inputs {
         }
     }
 
-    pub fn remap_configuration(
-        &mut self,
-        //input_configuration: &InputConfigurationRef,
-        //button: &JoypadButton,
-    ) {
+    pub fn remap_configuration(&mut self) {
         let mut remapped = false;
         if let Some(map_request) = &mut self.mapping_request {
             let input_configuration = &map_request.input_configuration;

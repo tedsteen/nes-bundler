@@ -6,7 +6,6 @@ use crate::input::{self, InputConfigurationKind};
 use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
-use sdl2::Sdl;
 use sdl2::{controller::GameController, GameControllerSubsystem};
 
 use super::gamepad::{GamepadEvent, GamepadState, Gamepads, JoypadGamepadMapping, ToGamepadEvent};
@@ -106,10 +105,7 @@ impl Gamepads for Sdl2Gamepads {
     }
 }
 impl Sdl2Gamepads {
-    pub fn new(sdl_context: &Sdl) -> Result<Self> {
-        let game_controller_subsystem =
-            sdl_context.game_controller().map_err(anyhow::Error::msg)?;
-
+    pub fn new(game_controller_subsystem: GameControllerSubsystem) -> Result<Self> {
         Ok(Sdl2Gamepads {
             game_controller_subsystem,
             all: HashMap::new(),
