@@ -81,7 +81,7 @@ impl Gui {
 
         self.egui_glow.run(window, |ctx| {
             egui::Area::new("game_area")
-                .fixed_pos(egui::Pos2::new(0.0, 0.0))
+                .fixed_pos([0.0, 0.0])
                 .order(Order::Background)
                 .show(ctx, |ui| {
                     if let Some(t) = ctx.tex_manager().read().meta(texture_handle.id()) {
@@ -101,16 +101,13 @@ impl Gui {
                             let scaled_width = texture_width * scale;
                             let scaled_height = texture_height * scale;
                             ui.centered_and_justified(|ui| {
-                                ui.add(egui::Image::new(
-                                    texture_handle,
-                                    [scaled_width, scaled_height],
-                                ));
+                                ui.image(texture_handle, [scaled_width, scaled_height]);
                             });
                         }
                     }
                 });
             egui::Area::new("window_area")
-                .fixed_pos(egui::Pos2::new(0.0, 0.0))
+                .fixed_pos([0.0, 0.0])
                 .show(ctx, |ui| {
                     if self.visible {
                         egui::TopBottomPanel::top("menubar_container").show_inside(ui, |ui| {

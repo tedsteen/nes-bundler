@@ -5,7 +5,7 @@ use crate::{
         Settings,
     },
 };
-use egui::{Button, Color32, Context, Grid, Label, RichText, Ui, Window};
+use egui::{Color32, Context, Grid, RichText, Ui, Window};
 
 use super::{settings::InputConfigurationRef, MapRequest};
 
@@ -64,16 +64,14 @@ impl Inputs {
         if joypad_input.is_pressed(button) {
             text = text.color(Color32::from_rgb(255, 255, 255));
         }
-        ui.add(Label::new(text));
+        ui.label(text);
         match map_request {
             Some(MapRequest {
                 input_configuration: map_conf,
                 button: b,
             }) if map_conf == input_configuration && *b == button => {
                 if ui
-                    .add(Button::new(
-                        RichText::new("Cancel").color(Color32::from_rgb(255, 0, 0)),
-                    ))
+                    .button(RichText::new("Cancel").color(Color32::from_rgb(255, 0, 0)))
                     .clicked()
                 {
                     *map_request = None;

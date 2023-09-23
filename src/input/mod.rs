@@ -232,11 +232,7 @@ impl Inputs {
         }
     }
 
-    pub fn remap_configuration(
-        &mut self,
-        //input_configuration: &InputConfigurationRef,
-        //button: &JoypadButton,
-    ) {
+    pub fn remap_configuration(&mut self) {
         let mut remapped = false;
         if let Some(map_request) = &mut self.mapping_request {
             let input_configuration = &map_request.input_configuration;
