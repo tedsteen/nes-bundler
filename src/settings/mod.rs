@@ -25,8 +25,8 @@ pub struct Settings {
 impl Settings {
     pub fn new(default_settings: Settings) -> Self {
         let mut settings = Settings::load();
-        let default_selected = default_settings.clone().input.selected;
         if let Ok(settings) = &mut settings {
+            let default_selected = default_settings.clone().input.selected;
             //Make sure no gamepads are selected after loading settings (they will be autoselected later if they are connected)
             if let InputConfigurationKind::Gamepad(_) =
                 &settings.input.selected[0].clone().borrow().kind

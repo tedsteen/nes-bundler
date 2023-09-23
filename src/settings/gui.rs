@@ -36,27 +36,24 @@ pub struct Gui {
 
 impl Gui {
     pub fn new(egui_glow: egui_glow::EguiGlow) -> Self {
-        let no_image = ImageData::Color(ColorImage::new([0, 0], Color32::TRANSPARENT));
-
         let nes_texture_options = TextureOptions {
             magnification: egui::TextureFilter::Nearest,
             minification: egui::TextureFilter::Nearest,
         };
 
-        let nes_texture = egui_glow.egui_ctx.load_texture(
-            "nes",
-            ImageData::Color(ColorImage::new(
-                [WIDTH as usize, HEIGHT as usize],
-                Color32::BLACK,
-            )),
-            nes_texture_options,
-        );
         Self {
             visible: true,
+            nes_texture: egui_glow.egui_ctx.load_texture(
+                "nes",
+                ImageData::Color(ColorImage::new(
+                    [WIDTH as usize, HEIGHT as usize],
+                    Color32::BLACK,
+                )),
+                nes_texture_options,
+            ),
             egui_glow,
-            nes_texture,
             nes_texture_options,
-            no_image,
+            no_image: ImageData::Color(ColorImage::new([0, 0], Color32::TRANSPARENT)),
         }
     }
 
@@ -77,13 +74,12 @@ impl Gui {
         guis: &mut [Option<&mut dyn GuiComponent>],
         settings: &mut Settings,
     ) {
-        let texture_handle = &self.nes_texture;
-
         self.egui_glow.run(window, |ctx| {
             egui::Area::new("game_area")
                 .fixed_pos([0.0, 0.0])
                 .order(Order::Background)
                 .show(ctx, |ui| {
+                    let texture_handle = &self.nes_texture;
                     if let Some(t) = ctx.tex_manager().read().meta(texture_handle.id()) {
                         if t.size[0] != 0 {
                             let texture_width = WIDTH as f32;

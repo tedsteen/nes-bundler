@@ -24,7 +24,7 @@ use input::Inputs;
 use nes_state::start_nes;
 use palette::NTSC_PAL;
 
-use sdl2::{EventPump, Sdl};
+use sdl2::EventPump;
 use settings::Settings;
 
 mod audio;
@@ -56,8 +56,8 @@ fn main() {
 
     log::info!("nes-bundler starting!");
     match initialise() {
-        Ok((game_loop, event_loop, sdl_event_pump)) => {
-            run(game_loop, event_loop, sdl_event_pump);
+        Ok((game_loop, event_loop, sdl_event_pump, gl_window)) => {
+            run(game_loop, event_loop, sdl_event_pump, gl_window);
         }
         Err(e) => {
             log::error!("nes-bundler failed to start :(\n{:?}", e);
@@ -69,6 +69,7 @@ fn run(
     mut game_loop: GameLoop<Game, Time>,
     winit_event_loop: winit::event_loop::EventLoop<()>,
     mut sdl_event_pump: EventPump,
+    mut gl_window: GlutinWindowContext,
 ) -> ! {
     winit_event_loop.run(move |winit_event, _, control_flow| {
         if log::max_level() == log::Level::Trace && Time::now().sub(&game_loop.last_stats) >= 1.0 {
@@ -80,8 +81,7 @@ fn run(
             .poll_iter()
             .filter_map(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad))
             .collect();
-        let game = &mut game_loop.game;
-
+        let gui = &mut game_loop.game.gui;
         match &winit_event {
             winit::event::Event::WindowEvent { event, .. } => {
                 use winit::event::WindowEvent;
@@ -89,7 +89,6 @@ fn run(
                     *control_flow = winit::event_loop::ControlFlow::Exit;
                 }
 
-                let gl_window = &mut game.gl_window;
                 if let winit::event::WindowEvent::Resized(physical_size) = &event {
                     gl_window.resize(*physical_size);
                 } else if let winit::event::WindowEvent::ScaleFactorChanged {
@@ -99,35 +98,37 @@ fn run(
                     gl_window.resize(**new_inner_size);
                 }
 
-                if !game.gui.on_event(event) {
+                if !gui.on_event(event) {
                     if let Some(winit_gui_event) = &event.to_gui_event() {
                         sdl_events.push(winit_gui_event.clone());
                     }
                 }
             }
             winit::event::Event::LoopDestroyed => {
-                game.gui.destroy();
+                gui.destroy();
                 return;
             }
             _ => {}
         }
 
         for event in sdl_events {
+            let game = &mut game_loop.game;
             let consumed = match &event {
                 settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(key_code, modifiers)) => {
                     let settings = &mut game.settings;
+                    let nes_state = &mut game.nes_state;
 
                     use crate::input::keys::KeyCode::*;
                     match key_code {
                         F1 => {
-                            settings.last_save_state = Some(b64.encode(game.nes_state.save()));
+                            settings.last_save_state = Some(b64.encode(nes_state.save()));
                             settings.save();
                             true
                         }
                         F2 => {
                             if let Some(save_state) = &settings.last_save_state {
                                 if let Ok(buf) = &mut b64.decode(save_state) {
-                                    game.nes_state.load(buf);
+                                    nes_state.load(buf);
                                 }
                             }
                             true
@@ -137,8 +138,7 @@ fn run(
                             true
                         }
 
-                        key_code => game
-                            .gl_window
+                        key_code => gl_window
                             .window_mut()
                             .check_and_set_fullscreen(modifiers, key_code),
                     }
@@ -158,8 +158,8 @@ fn run(
         }
 
         game_loop.next_frame(
-            |g| {
-                let game = &mut g.game;
+            |game_loop| {
+                let game = &mut game_loop.game;
 
                 #[allow(unused_mut)] //debug feature needs this
                 let mut fps = game.advance();
@@ -172,20 +172,19 @@ fn run(
                 game.draw_frame();
                 game.push_audio();
 
-                g.set_updates_per_second(fps);
+                game_loop.set_updates_per_second(fps);
             },
-            |g| {
+            |game_loop| {
                 if let winit::event::Event::RedrawEventsCleared = &winit_event {
-                    let game = &mut g.game;
-                    if game.run_gui() {
+                    let game = &mut game_loop.game;
+                    if game.run_gui(gl_window.window()) {
                         game.settings.save();
                     }
 
-                    let gl_window = &game.gl_window;
                     unsafe {
                         use glow::HasContext as _;
                         //gl.clear_color(clear_colour[0], clear_colour[1], clear_colour[2], 1.0);
-                        game.gl_window.glow_context.clear(glow::COLOR_BUFFER_BIT);
+                        gl_window.glow_context.clear(glow::COLOR_BUFFER_BIT);
                     }
 
                     // draw things behind egui here
@@ -207,11 +206,11 @@ fn initialise() -> Result<
         GameLoop<Game, Time>,
         winit::event_loop::EventLoop<()>,
         EventPump,
+        GlutinWindowContext,
     ),
     anyhow::Error,
 > {
     sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
-    let sdl_context: Sdl = sdl2::init().map_err(anyhow::Error::msg)?;
     let bundle = Bundle::load()?;
     #[cfg(feature = "netplay")]
     if std::env::args()
@@ -237,34 +236,35 @@ fn initialise() -> Result<
     #[allow(unused_mut)] //Needed by the netplay feature
     let mut settings = Settings::new(bundle.config.default_settings.clone());
 
+    let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
     let audio = Audio::new(&sdl_context, &settings)?;
     let nes_state = start_nes(bundle.rom.clone(), audio.stream.get_sample_rate() as u64)?;
     #[cfg(feature = "netplay")]
     let nes_state = netplay::NetplayStateHandler::new(nes_state, &bundle, &mut settings.netplay_id);
 
-    let inputs = Inputs::new(
-        sdl_context.game_controller().map_err(anyhow::Error::msg)?,
-        bundle.config.default_settings.input.selected.clone(),
-    );
-    let sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
-    let game_loop: GameLoop<Game, Time> = GameLoop::new(
-        Game::new(
-            Box::new(nes_state),
-            gl_window,
-            Gui::new(egui_glow),
-            settings,
-            audio,
-            inputs,
+    Ok((
+        GameLoop::new(
+            Game::new(
+                Box::new(nes_state),
+                Gui::new(egui_glow),
+                settings,
+                audio,
+                Inputs::new(
+                    sdl_context.game_controller().map_err(anyhow::Error::msg)?,
+                    bundle.config.default_settings.input.selected.clone(),
+                ),
+            ),
+            FPS,
+            0.08,
         ),
-        FPS,
-        0.08,
-    );
-    Ok((game_loop, event_loop, sdl_event_pump))
+        event_loop,
+        sdl_context.event_pump().map_err(anyhow::Error::msg)?,
+        gl_window,
+    ))
 }
 
 struct Game {
     nes_state: Box<dyn NesStateHandler>,
-    gl_window: GlutinWindowContext,
     gui: Gui,
     settings: Settings,
     #[cfg(feature = "debug")]
@@ -275,7 +275,6 @@ struct Game {
 impl Game {
     pub fn new(
         nes_state: Box<dyn NesStateHandler>,
-        gl_window: GlutinWindowContext,
         gui: Gui,
         settings: Settings,
         audio: Audio,
@@ -283,7 +282,6 @@ impl Game {
     ) -> Self {
         Self {
             nes_state,
-            gl_window,
             gui,
             inputs,
             settings,
@@ -306,12 +304,12 @@ impl Game {
         )
     }
 
-    fn run_gui(&mut self) -> bool {
+    fn run_gui(&mut self, window: &winit::window::Window) -> bool {
         let settings_hash_before = self.settings.get_hash();
         self.audio.sync_audio_devices(&mut self.settings.audio);
 
         self.gui.ui(
-            self.gl_window.window(),
+            window,
             &mut [
                 #[cfg(feature = "debug")]
                 Some(&mut self.debug),
