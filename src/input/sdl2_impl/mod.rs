@@ -105,6 +105,10 @@ impl Gamepads for Sdl2Gamepads {
     }
 }
 impl Sdl2Gamepads {
+    fn to_gamepad_id(id: &InputId) -> String {
+        format!("01-gamepad-{}", id)
+    }
+
     pub fn new(game_controller_subsystem: GameControllerSubsystem) -> Result<Self> {
         Ok(Sdl2Gamepads {
             game_controller_subsystem,
@@ -113,7 +117,7 @@ impl Sdl2Gamepads {
     }
 
     fn get_gamepad(&mut self, id: InputId) -> Option<&mut Box<dyn GamepadState>> {
-        self.all.get_mut(&id)
+        self.all.get_mut(&Self::to_gamepad_id(&id))
     }
 
     fn setup_gamepad_config(
@@ -139,7 +143,7 @@ impl Sdl2Gamepads {
             })
         {
             let instance_id = found_controller.instance_id().to_input_id();
-            let gamepad_id = format!("01-gamepad-{}", instance_id);
+            let gamepad_id = Self::to_gamepad_id(&instance_id);
             self.all.insert(
                 gamepad_id.clone(),
                 Box::new(Sdl2GamepadState::new(found_controller)),
