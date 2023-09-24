@@ -138,7 +138,8 @@ impl Sdl2Gamepads {
                 }
             })
         {
-            let gamepad_id = found_controller.instance_id().to_input_id();
+            let instance_id = found_controller.instance_id().to_input_id();
+            let gamepad_id = format!("01-gamepad-{}", instance_id);
             self.all.insert(
                 gamepad_id.clone(),
                 Box::new(Sdl2GamepadState::new(found_controller)),
@@ -147,7 +148,7 @@ impl Sdl2Gamepads {
             let conf = input_settings.get_or_create_config(
                 gamepad_id.clone(),
                 input::InputConfiguration {
-                    name: format!("Gamepad {}", gamepad_id),
+                    name: format!("🎮 Gamepad {}", instance_id),
                     id: gamepad_id,
                     kind: InputConfigurationKind::Gamepad(input_settings.default_gamepad_mapping),
                 },
