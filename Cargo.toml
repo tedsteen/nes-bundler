@@ -6,8 +6,8 @@ edition = "2021"
 publish = false
 
 [features]
-default = []
-#default = ["netplay", "debug", "zip-bundle"]
+#default = []
+default = ["netplay", "debug"]
 
 netplay = ["matchbox_socket", "tokio", "ggrs", "futures-timer", "futures", "uuid", "reqwest", "md5"]
 zip-bundle = ["rfd", "zip"]
@@ -17,8 +17,8 @@ debug = []
 strip = true
 # TODO: Look deeper into https://github.com/johnthagen/min-sized-rust
 # opt-level = "z"
-lto = true
-codegen-units = 1
+# lto = true
+# codegen-units = 1
 # panic = "abort"
 
 [dependencies]
@@ -60,3 +60,8 @@ futures = {version = "0.3", optional = true }
 uuid = { version = "1", features = [ "v4" ], optional = true }
 reqwest = { version = "0.11", features = ["json"], optional = true }
 md5 = { version = "0.7", optional = true }
+
+cxx = "1"
+
+[build-dependencies]
+cxx-build = "1"

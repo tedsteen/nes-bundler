@@ -7,8 +7,12 @@ use sdl2::{AudioSubsystem, Sdl};
 use serde::{Deserialize, Serialize};
 
 use crate::settings::Settings;
+use crate::{Fps, FPS};
+
+use self::stretch::Stretch;
 
 pub mod gui;
+mod stretch;
 
 type SampleFormat = i16;
 
@@ -22,6 +26,7 @@ pub struct AudioSettings {
 pub struct Stream {
     output_device_name: Option<String>,
     output_device: AudioQueue<i16>,
+    stretch: Stretch<1>,
     pub(crate) volume: f32,
 }
 
@@ -52,6 +57,7 @@ impl Stream {
                 &audio_settings.output_device,
                 audio_settings.latency,
             )?,
+            stretch: Stretch::new(),
             volume: audio_settings.volume as f32 / 100.0,
         })
     }
@@ -77,6 +83,7 @@ impl Stream {
                 ))
             },
         };
+
         let output_device = audio_subsystem
             .open_queue::<i16, _>(output_device.as_deref(), &desired_spec)
             .or_else(|_| audio_subsystem.open_queue::<i16, _>(None, &desired_spec))
@@ -114,11 +121,49 @@ impl Stream {
         Some(1..=50)
     }
 
-    pub(crate) fn push_samples(&mut self, samples: &[SampleFormat]) {
+    pub(crate) fn push_samples(&mut self, samples: &[SampleFormat], fps_hint: Fps) {
+        //Set volume
+        let samples = &mut samples
+            .iter()
+            .map(|s| *s as f32 * self.volume)
+            .collect::<Vec<f32>>();
+
+        let mut stretch_amount = FPS as f32 / fps_hint as f32;
+
+        let samples_per_frame = (self.output_device.spec().freq as f32 / fps_hint as f32)
+            + self.output_device.spec().samples as f32;
+
+        //Why 3.5? I don't know, but it works
+        let sdl_max_buffer_size = samples_per_frame * 3.5;
+        let buffer_len = self.output_device.size() + samples.len() as u32;
+        if buffer_len as f32 > sdl_max_buffer_size {
+            let stretch_multiplier = (sdl_max_buffer_size / buffer_len as f32) * 1.0;
+            log::debug!(
+                "audio buffer too big: {:?} multiplier={:?}",
+                buffer_len,
+                stretch_multiplier
+            );
+            stretch_amount *= stretch_multiplier.max(0.01);
+        }
+        let input_length = samples.len();
+        let output_length = (input_length as f32 * stretch_amount) as usize;
+        if stretch_amount != 1.0 {
+            log::trace!(
+                "stretching: amount={:?}% latency={:?} sdl_buffer_len={:?} input_length={:?} output_length={:?}",
+                stretch_amount * 100.0,
+                self.output_device.spec().samples,
+                buffer_len,
+                input_length,
+                output_length
+            );
+        }
+
+        let output_buffer = self.stretch.process(&mut [samples], output_length);
+
         if let Err(e) = self.output_device.queue_audio(
-            &samples
+            &output_buffer[0]
                 .iter()
-                .map(|s| (*s as f32 * self.volume) as i16)
+                .map(|s| *s as i16)
                 .collect::<Vec<i16>>(),
         ) {
             log::warn!("Failed to queue audio: {:?}", e);

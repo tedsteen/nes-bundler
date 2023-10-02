@@ -170,13 +170,12 @@ fn run(
 
                 // No need to update graphics or audio more than once per update
                 game.draw_frame();
-                game.push_audio();
-
+                game.push_audio(fps);
                 game_loop.set_updates_per_second(fps);
             },
             |game_loop| {
+                let game = &mut game_loop.game;
                 if let winit::event::Event::RedrawEventsCleared = &winit_event {
-                    let game = &mut game_loop.game;
                     if game.run_gui(gl_window.window()) {
                         game.settings.save();
                     }
@@ -347,10 +346,10 @@ impl Game {
         self.gui.update_nes_texture(new_image_data);
     }
 
-    fn push_audio(&mut self) {
+    fn push_audio(&mut self, fps_hint: Fps) {
         self.audio
             .stream
-            .push_samples(self.nes_state.consume_samples().as_slice());
+            .push_samples(&self.nes_state.consume_samples(), fps_hint);
     }
 }
 

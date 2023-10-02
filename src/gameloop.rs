@@ -30,7 +30,6 @@ pub struct GameLoop<G, T: TimeTrait> {
     last_frame_time: f64,
     running_time: f64,
     accumulated_time: f64,
-    blending_factor: f64,
     previous_instant: T,
     current_instant: T,
 }
@@ -51,7 +50,6 @@ impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
 
             running_time: 0.0,
             accumulated_time: 0.0,
-            blending_factor: 0.0,
             previous_instant: T::now(),
             current_instant: T::now(),
             last_frame_time: 0.0,
@@ -97,8 +95,6 @@ impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
                 .retain(|e| g.current_instant.sub(e) <= SAMPLE_WINDOW);
         }
 
-        g.blending_factor = g.accumulated_time / g.fixed_time_step;
-
         render(g);
 
         g.renders.push(g.current_instant);
@@ -108,7 +104,9 @@ impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
     }
 
     pub fn set_updates_per_second(&mut self, new_updates_per_second: u32) {
-        self.updates_per_second = new_updates_per_second;
-        self.fixed_time_step = 1.0 / new_updates_per_second as f64;
+        if self.updates_per_second != new_updates_per_second {
+            self.updates_per_second = new_updates_per_second;
+            self.fixed_time_step = 1.0 / new_updates_per_second as f64;
+        }
     }
 }
