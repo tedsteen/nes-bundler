@@ -5,6 +5,8 @@ pub trait TimeTrait: Copy {
 
 use std::{fmt::Debug, time::Instant};
 
+use crate::Fps;
+
 #[derive(Debug, Copy, Clone)]
 pub struct Time(Instant);
 
@@ -20,7 +22,7 @@ impl TimeTrait for Time {
 
 pub struct GameLoop<G, T: TimeTrait> {
     pub game: G,
-    pub updates_per_second: u32,
+    pub updates_per_second: Fps,
     pub max_frame_time: f64,
 
     fixed_time_step: f64,
@@ -36,7 +38,7 @@ pub struct GameLoop<G, T: TimeTrait> {
 const SAMPLE_WINDOW: f64 = 1.0;
 
 impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
-    pub fn new(game: G, updates_per_second: u32, max_frame_time: f64) -> Self {
+    pub fn new(game: G, updates_per_second: Fps, max_frame_time: f64) -> Self {
         Self {
             game,
             updates_per_second,
@@ -103,7 +105,7 @@ impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
         g.previous_instant = g.current_instant;
     }
 
-    pub fn set_updates_per_second(&mut self, new_updates_per_second: u32) {
+    pub fn set_updates_per_second(&mut self, new_updates_per_second: Fps) {
         if self.updates_per_second != new_updates_per_second {
             self.updates_per_second = new_updates_per_second;
             self.fixed_time_step = 1.0 / new_updates_per_second as f64;

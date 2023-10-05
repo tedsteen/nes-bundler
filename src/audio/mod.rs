@@ -128,9 +128,9 @@ impl Stream {
             .map(|s| *s as f32 * self.volume)
             .collect::<Vec<f32>>();
 
-        let mut stretch_amount = FPS as f32 / fps_hint as f32;
+        let mut stretch_amount = FPS / fps_hint;
 
-        let samples_per_frame = (self.output_device.spec().freq as f32 / fps_hint as f32)
+        let samples_per_frame = (self.output_device.spec().freq as f32 / fps_hint)
             + self.output_device.spec().samples as f32;
 
         //Why 3.5? I don't know, but it works

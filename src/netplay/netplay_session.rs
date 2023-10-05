@@ -128,7 +128,7 @@ impl NetplaySession {
         }
 
         if sess.frames_ahead() > 0 {
-            self.requested_fps = (FPS as f32 * 0.9) as u32;
+            self.requested_fps = FPS * 0.9;
         } else {
             self.requested_fps = FPS
         }

@@ -43,7 +43,7 @@ impl GuiComponent for Debug {
                         .show(ui, |ui| {
                             ui.checkbox(&mut self.override_fps, "Override FPS");
                             if self.override_fps {
-                                ui.add(Slider::new(&mut self.fps, 1..=120).suffix("FPS"));
+                                ui.add(Slider::new(&mut self.fps, 0.5..=180.0).suffix("FPS"));
                             }
                             ui.end_row();
                         });

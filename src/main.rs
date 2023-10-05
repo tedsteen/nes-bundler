@@ -40,8 +40,8 @@ mod palette;
 mod settings;
 mod window;
 
-type Fps = u32;
-const FPS: Fps = 60;
+type Fps = f32;
+const FPS: Fps = 60.0;
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
 const ZOOM: u8 = 3;

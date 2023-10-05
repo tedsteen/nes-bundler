@@ -45,7 +45,7 @@ impl<const CHANNELS: usize> Stretch<CHANNELS> {
     pub fn new() -> Self {
         Self {
             inner: ffi::signalsmith_stretch_new(CHANNELS as i32, 44100.0),
-            output_buffer: vec![0 as SampleFormat; 4096 * 20],
+            output_buffer: vec![0 as SampleFormat; 4096 * 40],
         }
     }
     const EMPTY_BUFFER: [&'static [SampleFormat]; CHANNELS] = [&[0 as SampleFormat]; CHANNELS];
