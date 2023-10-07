@@ -10,11 +10,15 @@ use crate::{
 use self::local::LocalNesState;
 
 pub mod local;
+#[derive(Clone)]
+pub struct FrameData {
+    pub video: Vec<u16>,
+    pub audio: Vec<i16>,
+    pub fps: Fps,
+}
 
 pub trait NesStateHandler {
-    fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps;
-    fn consume_samples(&mut self) -> Vec<i16>;
-    fn get_frame(&self) -> Option<Vec<u16>>;
+    fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Option<FrameData>;
     fn save(&self) -> Vec<u8>;
     fn load(&mut self, data: &mut Vec<u8>);
     fn get_gui(&mut self) -> Option<&mut dyn GuiComponent>;

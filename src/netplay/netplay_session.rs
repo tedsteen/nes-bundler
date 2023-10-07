@@ -1,7 +1,12 @@
 use ggrs::{Config, GGRSRequest, P2PSession};
 use matchbox_socket::PeerId;
 
-use crate::{input::JoypadInput, nes_state::NesStateHandler, settings::MAX_PLAYERS, Fps, FPS};
+use crate::{
+    input::JoypadInput,
+    nes_state::{FrameData, NesStateHandler},
+    settings::MAX_PLAYERS,
+    FPS,
+};
 
 use super::{connecting_state::StartMethod, JoypadMapping, NetplayNesState};
 
@@ -20,7 +25,7 @@ pub struct NetplaySession {
     pub last_confirmed_game_states: [NetplayNesState; 2],
     #[cfg(feature = "debug")]
     pub stats: [super::stats::NetplayStats; MAX_PLAYERS],
-    pub requested_fps: Fps,
+    last_frame_data: Option<FrameData>,
 }
 
 impl NetplaySession {
@@ -43,7 +48,7 @@ impl NetplaySession {
                 super::stats::NetplayStats::new(),
                 super::stats::NetplayStats::new(),
             ],
-            requested_fps: FPS,
+            last_frame_data: None,
         }
     }
 
@@ -60,7 +65,7 @@ impl NetplaySession {
         &mut self,
         inputs: [JoypadInput; MAX_PLAYERS],
         joypad_mapping: &JoypadMapping,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Option<FrameData>> {
         let local_player_idx = self.get_local_player_idx();
         let sess = &mut self.p2p_session;
         sess.poll_remote_clients();
@@ -74,6 +79,7 @@ impl NetplaySession {
         for handle in sess.local_player_handles() {
             sess.add_local_input(handle, *inputs[0])?;
         }
+
         match sess.advance_frame() {
             Ok(requests) => {
                 for request in requests {
@@ -87,17 +93,17 @@ impl NetplaySession {
                             cell.save(frame, Some(self.game_state.clone()), None);
                         }
                         GGRSRequest::AdvanceFrame { inputs } => {
-                            self.game_state.advance(joypad_mapping.map(
+                            let this_frame_data = self.game_state.advance(joypad_mapping.map(
                                 [JoypadInput(inputs[0].0), JoypadInput(inputs[1].0)],
                                 local_player_idx,
                             ));
-                            self.game_state.frame += 1;
 
-                            if self.last_handled_frame >= self.game_state.frame {
+                            if self.game_state.frame <= self.last_handled_frame {
                                 //This is a replay
                                 // Discard the samples for this frame since it's a replay from ggrs. Audio has already been produced and pushed for it.
                                 self.game_state.apu.consume_samples();
                             } else {
+                                self.last_frame_data = this_frame_data;
                                 //This is not a replay
                                 self.last_handled_frame = self.game_state.frame;
                                 if self.game_state.frame % (sess.max_prediction() * 2) as i32 == 0 {
@@ -107,6 +113,8 @@ impl NetplaySession {
                                     ];
                                 }
                             }
+
+                            self.game_state.frame += 1;
                         }
                     }
                 }
@@ -125,13 +133,25 @@ impl NetplaySession {
                     }
                 }
             }
-        }
+        };
 
         if sess.frames_ahead() > 0 {
-            self.requested_fps = FPS * 0.9;
-        } else {
-            self.requested_fps = FPS
+            if let Some(frame_data) = &mut self.last_frame_data {
+                let percentage = sess.frames_ahead() as f32 / sess.max_prediction() as f32;
+                //https://www.desmos.com/calculator/uqhv6bvasr
+                let factor = (0.9 - percentage.powi(3)).max(0.3);
+                frame_data.fps = FPS * factor;
+            }
         }
-        Ok(())
+        let res = Ok(self.last_frame_data.clone());
+
+        //In case the last frame is repeated multiple times, make sure to fade out the audio to avoid a screetching sound.
+        if let Some(last_frame_data) = &mut self.last_frame_data {
+            last_frame_data
+                .audio
+                .iter_mut()
+                .for_each(|s| *s = (*s as f32 * 0.9) as i16);
+        }
+        res
     }
 }

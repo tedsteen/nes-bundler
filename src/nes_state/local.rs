@@ -1,8 +1,8 @@
-use super::NesStateHandler;
+use super::{FrameData, NesStateHandler};
 use crate::{
     input::JoypadInput,
     settings::{gui::GuiComponent, MAX_PLAYERS},
-    Fps, FPS,
+    FPS,
 };
 use std::ops::{Deref, DerefMut};
 
@@ -31,11 +31,15 @@ impl Clone for LocalNesState {
 }
 
 impl NesStateHandler for LocalNesState {
-    fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps {
+    fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Option<FrameData> {
         self.p1_input = *inputs[0];
         self.p2_input = *inputs[1];
         self.run_until_vblank();
-        FPS
+        Some(FrameData {
+            video: self.ppu.screen.clone(),
+            audio: self.apu.consume_samples(),
+            fps: FPS,
+        })
     }
 
     fn save(&self) -> Vec<u8> {
@@ -45,13 +49,6 @@ impl NesStateHandler for LocalNesState {
         self.load_state(data);
     }
 
-    fn consume_samples(&mut self) -> Vec<i16> {
-        self.apu.consume_samples()
-    }
-
-    fn get_frame(&self) -> Option<Vec<u16>> {
-        Some(self.ppu.screen.clone())
-    }
     fn get_gui(&mut self) -> Option<&mut dyn GuiComponent> {
         None
     }

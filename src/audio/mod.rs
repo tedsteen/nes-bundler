@@ -138,8 +138,16 @@ impl Stream {
         let buffer_len = self.output_device.size() + samples.len() as u32;
         if buffer_len as f32 > sdl_max_buffer_size {
             let stretch_multiplier = (sdl_max_buffer_size / buffer_len as f32) * 1.0;
-            log::debug!(
+            log::trace!(
                 "audio buffer too big: {:?} multiplier={:?}",
+                buffer_len,
+                stretch_multiplier
+            );
+            stretch_amount *= stretch_multiplier.max(0.01);
+        } else if buffer_len as f32 <= samples_per_frame {
+            let stretch_multiplier = (samples_per_frame / buffer_len as f32) * 1.0;
+            log::trace!(
+                "audio buffer too small: {:?} multiplier={:?}",
                 buffer_len,
                 stretch_multiplier
             );

@@ -18,7 +18,7 @@ pub struct Debug {
 impl Debug {
     pub(crate) fn new() -> Self {
         Self {
-            gui_is_open: false,
+            gui_is_open: true,
             override_fps: false,
             fps: FPS,
         }

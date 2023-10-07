@@ -54,12 +54,16 @@ impl<const CHANNELS: usize> Stretch<CHANNELS> {
     pub fn process(
         &mut self,
         inputs: &mut [&mut [SampleFormat]; CHANNELS],
-        output_length: usize,
+        mut output_length: usize,
     ) -> [&[SampleFormat]; CHANNELS] {
         //let inputs = &mut inputs[0];
         let input_length: usize = inputs[0].len() / CHANNELS;
         if output_length < 1 {
             return Self::EMPTY_BUFFER;
+        }
+        if output_length > self.output_buffer.len() {
+            log::error!("Could not stretch to full length since output buffer is too small. output_length={} output_buffer.len()={}", output_length, self.output_buffer.len());
+            output_length = self.output_buffer.len();
         }
         let outputs = &mut self.output_buffer[0..output_length];
 
