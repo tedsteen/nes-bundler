@@ -60,7 +60,6 @@ pub struct NetplayBuildConfiguration {
 
 pub struct NetplayStateHandler {
     netplay: Option<NetplayState>,
-    nes_state: LocalNesState,
 
     //Gui
     gui_is_open: bool,
@@ -99,27 +98,15 @@ impl NesStateHandler for NetplayStateHandler {
         }
     }
 
-    fn save(&self) -> Vec<u8> {
-        if let NetplayState::Connected(netplay_connected) = &self.netplay.as_ref().unwrap() {
-            //TODO: what to do when saving during netplay?
-            netplay_connected.state.netplay_session.game_state.save()
-        } else {
-            self.nes_state.save()
-        }
+    fn save(&self) -> Option<Vec<u8>> {
+        //Saving is not supported in netplay
+        None
     }
 
-    fn load(&mut self, data: &mut Vec<u8>) {
-        if let NetplayState::Connected(netplay_connected) = &mut self.netplay.as_mut().unwrap() {
-            //TODO: what to do when loading during netplay?
-            netplay_connected
-                .state
-                .netplay_session
-                .game_state
-                .load(data);
-        } else {
-            self.nes_state.load(data);
-        }
+    fn load(&mut self, _data: &mut Vec<u8>) {
+        //Loading is not supported in netplay
     }
+
     fn get_gui(&mut self) -> Option<&mut dyn crate::settings::gui::GuiComponent> {
         Some(self)
     }
@@ -140,7 +127,6 @@ impl NetplayStateHandler {
                     joypad_mapping: None,
                 },
             ))),
-            nes_state,
             gui_is_open: true,
             room_name: netplay_build_config.default_room_name.clone(),
         }

@@ -23,9 +23,10 @@ impl DerefMut for LocalNesState {
 
 impl Clone for LocalNesState {
     fn clone(&self) -> Self {
-        let data = &mut self.save();
         let mut clone = Self(rusticnes_core::nes::NesState::new(self.mapper.clone()));
-        clone.load(data);
+        if let Some(data) = &mut self.save() {
+            clone.load(data);
+        }
         clone
     }
 }
@@ -42,8 +43,8 @@ impl NesStateHandler for LocalNesState {
         })
     }
 
-    fn save(&self) -> Vec<u8> {
-        self.save_state()
+    fn save(&self) -> Option<Vec<u8>> {
+        Some(self.save_state())
     }
     fn load(&mut self, data: &mut Vec<u8>) {
         self.load_state(data);

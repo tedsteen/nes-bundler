@@ -121,8 +121,11 @@ fn run(
                     use crate::input::keys::KeyCode::*;
                     match key_code {
                         F1 => {
-                            settings.last_save_state = Some(b64.encode(nes_state.save()));
-                            settings.save();
+                            if let Some(save_state) = nes_state.save() {
+                                settings.last_save_state = Some(b64.encode(save_state));
+                                settings.save();
+                            }
+                            
                             true
                         }
                         F2 => {

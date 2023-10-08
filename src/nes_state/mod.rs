@@ -19,7 +19,7 @@ pub struct FrameData {
 
 pub trait NesStateHandler {
     fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Option<FrameData>;
-    fn save(&self) -> Vec<u8>;
+    fn save(&self) -> Option<Vec<u8>>;
     fn load(&mut self, data: &mut Vec<u8>);
     fn get_gui(&mut self) -> Option<&mut dyn GuiComponent>;
 }
