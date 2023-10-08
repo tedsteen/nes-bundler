@@ -5,6 +5,8 @@ pub trait TimeTrait: Copy {
 
 use std::{fmt::Debug, time::Instant};
 
+use crate::Fps;
+
 #[derive(Debug, Copy, Clone)]
 pub struct Time(Instant);
 
@@ -20,7 +22,7 @@ impl TimeTrait for Time {
 
 pub struct GameLoop<G, T: TimeTrait> {
     pub game: G,
-    pub updates_per_second: u32,
+    pub updates_per_second: Fps,
     pub max_frame_time: f64,
 
     fixed_time_step: f64,
@@ -30,14 +32,13 @@ pub struct GameLoop<G, T: TimeTrait> {
     last_frame_time: f64,
     running_time: f64,
     accumulated_time: f64,
-    blending_factor: f64,
     previous_instant: T,
     current_instant: T,
 }
 const SAMPLE_WINDOW: f64 = 1.0;
 
 impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
-    pub fn new(game: G, updates_per_second: u32, max_frame_time: f64) -> Self {
+    pub fn new(game: G, updates_per_second: Fps, max_frame_time: f64) -> Self {
         Self {
             game,
             updates_per_second,
@@ -51,7 +52,6 @@ impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
 
             running_time: 0.0,
             accumulated_time: 0.0,
-            blending_factor: 0.0,
             previous_instant: T::now(),
             current_instant: T::now(),
             last_frame_time: 0.0,
@@ -97,8 +97,6 @@ impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
                 .retain(|e| g.current_instant.sub(e) <= SAMPLE_WINDOW);
         }
 
-        g.blending_factor = g.accumulated_time / g.fixed_time_step;
-
         render(g);
 
         g.renders.push(g.current_instant);
@@ -107,8 +105,10 @@ impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
         g.previous_instant = g.current_instant;
     }
 
-    pub fn set_updates_per_second(&mut self, new_updates_per_second: u32) {
-        self.updates_per_second = new_updates_per_second;
-        self.fixed_time_step = 1.0 / new_updates_per_second as f64;
+    pub fn set_updates_per_second(&mut self, new_updates_per_second: Fps) {
+        if self.updates_per_second != new_updates_per_second {
+            self.updates_per_second = new_updates_per_second;
+            self.fixed_time_step = 1.0 / new_updates_per_second as f64;
+        }
     }
 }

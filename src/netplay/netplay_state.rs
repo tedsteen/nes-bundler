@@ -4,7 +4,7 @@ use md5::Digest;
 use tokio::runtime::{Builder, Runtime};
 use uuid::Uuid;
 
-use crate::{input::JoypadInput, settings::MAX_PLAYERS};
+use crate::{input::JoypadInput, nes_state::FrameData, settings::MAX_PLAYERS};
 
 use super::{
     netplay_session::NetplaySession, ConnectingState, JoypadMapping, NetplayBuildConfiguration,
@@ -24,13 +24,13 @@ pub struct Failed {
 }
 
 impl NetplayState {
-    pub fn advance(self, inputs: [JoypadInput; MAX_PLAYERS]) -> Self {
+    pub fn advance(self, inputs: [JoypadInput; MAX_PLAYERS]) -> (Self, Option<FrameData>) {
         use NetplayState::*;
         match self {
-            Connecting(netplay) => netplay.advance(),
+            Connecting(netplay) => (netplay.advance(), None),
             Connected(netplay) => netplay.advance(inputs),
-            Resuming(netplay) => netplay.advance(),
-            Failed(_) | NetplayState::Disconnected(_) => self,
+            Resuming(netplay) => (netplay.advance(), None),
+            Failed(_) | NetplayState::Disconnected(_) => (self, None),
         }
     }
 }
@@ -212,16 +212,18 @@ impl Netplay<Connected> {
         Netplay::from(Resuming::new(&mut self), self)
     }
 
-    fn advance(mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> NetplayState {
+    fn advance(mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> (NetplayState, Option<FrameData>) {
         //log::trace!("Advancing Netplay<Connected>");
         let netplay_session = &mut self.state.netplay_session;
 
         if let Some(joypad_mapping) = &mut netplay_session.game_state.joypad_mapping.clone() {
-            if netplay_session.advance(inputs, joypad_mapping).is_err() {
-                //TODO: Popup/info about the error? Or perhaps put the reason for the resume in the resume state below?
-                NetplayState::Resuming(self.resume())
-            } else {
-                NetplayState::Connected(self)
+            match netplay_session.advance(inputs, joypad_mapping) {
+                Ok(frame_data) => (NetplayState::Connected(self), frame_data),
+                Err(e) => {
+                    log::error!("Resuming due to error: {:?}", e);
+                    //TODO: Popup/info about the error? Or perhaps put the reason for the resume in the resume state below?
+                    (NetplayState::Resuming(self.resume()), None)
+                }
             }
         } else {
             //TODO: Actual input mapping..
@@ -231,7 +233,7 @@ impl Netplay<Connected> {
                 } else {
                     JoypadMapping::P2
                 });
-            NetplayState::Connected(self)
+            (NetplayState::Connected(self), None)
         }
     }
 }

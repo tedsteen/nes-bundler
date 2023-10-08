@@ -2,9 +2,9 @@ use std::ops::{Deref, DerefMut};
 
 use crate::{
     input::JoypadInput,
-    nes_state::{local::LocalNesState, NesStateHandler},
+    nes_state::{local::LocalNesState, FrameData, NesStateHandler},
     settings::MAX_PLAYERS,
-    Bundle, Fps, FPS,
+    Bundle,
 };
 use serde::Deserialize;
 
@@ -88,44 +88,14 @@ impl DerefMut for NetplayNesState {
 }
 
 impl NesStateHandler for NetplayStateHandler {
-    fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Fps {
-        self.netplay = self.netplay.take().map(|netplay| netplay.advance(inputs));
-
-        if let Some(netplay) = &self.netplay {
-            match &netplay {
-                NetplayState::Connected(netplay_connected) => {
-                    netplay_connected.state.netplay_session.requested_fps
-                }
-                NetplayState::Disconnected(_) => self.nes_state.advance(inputs),
-                _ => FPS,
-            }
+    fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Option<FrameData> {
+        if let Some((new_state, frame_data)) =
+            self.netplay.take().map(|netplay| netplay.advance(inputs))
+        {
+            self.netplay = Some(new_state);
+            frame_data
         } else {
-            FPS
-        }
-    }
-
-    fn consume_samples(&mut self) -> Vec<i16> {
-        match &mut self.netplay.as_mut().unwrap() {
-            NetplayState::Connected(netplay_connected) => netplay_connected
-                .state
-                .netplay_session
-                .game_state
-                .consume_samples(),
-            NetplayState::Disconnected(_) => self.nes_state.consume_samples(),
-            _ => vec![],
-        }
-    }
-
-    fn get_frame(&self) -> Option<Vec<u16>> {
-        match &self.netplay.as_ref().unwrap() {
-            NetplayState::Connected(netplay_connected) => netplay_connected
-                .state
-                .netplay_session
-                .game_state
-                .get_frame()
-                .clone(),
-            NetplayState::Disconnected(_) => self.nes_state.get_frame(),
-            _ => None,
+            None
         }
     }
 

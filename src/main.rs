@@ -21,7 +21,7 @@ use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
 use base64::Engine;
 
 use input::Inputs;
-use nes_state::start_nes;
+use nes_state::{start_nes, FrameData};
 use palette::NTSC_PAL;
 
 use sdl2::EventPump;
@@ -40,8 +40,8 @@ mod palette;
 mod settings;
 mod window;
 
-type Fps = u32;
-const FPS: Fps = 60;
+type Fps = f32;
+const FPS: Fps = 60.0;
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
 const ZOOM: u8 = 3;
@@ -160,23 +160,24 @@ fn run(
         game_loop.next_frame(
             |game_loop| {
                 let game = &mut game_loop.game;
-
                 #[allow(unused_mut)] //debug feature needs this
-                let mut fps = game.advance();
-                #[cfg(feature = "debug")]
-                if game.debug.override_fps {
-                    fps = game.debug.fps;
+                if let Some(frame_data) = game.advance() {
+                    let mut fps = frame_data.fps;
+                    #[cfg(feature = "debug")]
+                    if game.debug.override_fps {
+                        fps = game.debug.fps;
+                    }
+
+                    game.draw_frame(Some(&frame_data.video));
+                    game.push_audio(&frame_data.audio, fps);
+                    game_loop.set_updates_per_second(fps);
+                } else {
+                    game.draw_frame(None);
                 }
-
-                // No need to update graphics or audio more than once per update
-                game.draw_frame();
-                game.push_audio();
-
-                game_loop.set_updates_per_second(fps);
             },
             |game_loop| {
+                let game = &mut game_loop.game;
                 if let winit::event::Event::RedrawEventsCleared = &winit_event {
-                    let game = &mut game_loop.game;
                     if game.run_gui(gl_window.window()) {
                         game.settings.save();
                     }
@@ -322,13 +323,13 @@ impl Game {
         settings_hash_before != self.settings.get_hash()
     }
 
-    pub fn advance(&mut self) -> Fps {
+    pub fn advance(&mut self) -> Option<FrameData> {
         self.nes_state
             .advance([self.inputs.get_joypad(0), self.inputs.get_joypad(1)])
     }
 
-    pub fn draw_frame(&mut self) {
-        let new_image_data = self.nes_state.get_frame().map(|frame| {
+    pub fn draw_frame(&mut self, video_data: Option<&[u16]>) {
+        let new_image_data = video_data.map(|frame| {
             let mut image_data = ImageData::Color(ColorImage::new(
                 [WIDTH as usize, HEIGHT as usize],
                 Color32::BLACK,
@@ -347,10 +348,8 @@ impl Game {
         self.gui.update_nes_texture(new_image_data);
     }
 
-    fn push_audio(&mut self) {
-        self.audio
-            .stream
-            .push_samples(self.nes_state.consume_samples().as_slice());
+    fn push_audio(&mut self, samples: &[i16], fps_hint: Fps) {
+        self.audio.stream.push_samples(samples, fps_hint);
     }
 }
 

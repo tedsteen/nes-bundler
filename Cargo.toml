@@ -60,3 +60,8 @@ futures = {version = "0.3", optional = true }
 uuid = { version = "1", features = [ "v4" ], optional = true }
 reqwest = { version = "0.11", features = ["json"], optional = true }
 md5 = { version = "0.7", optional = true }
+
+cxx = "1"
+
+[build-dependencies]
+cxx-build = "1"
