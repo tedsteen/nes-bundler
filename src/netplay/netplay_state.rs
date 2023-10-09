@@ -8,7 +8,7 @@ use crate::{input::JoypadInput, nes_state::{FrameData, local::LocalNesState, Nes
 
 use super::{
     netplay_session::NetplaySession, ConnectingState, JoypadMapping, NetplayBuildConfiguration,
-    NetplayNesState, StartMethod, StartState,
+    StartMethod, StartState,
 };
 
 pub enum NetplayState {
@@ -41,7 +41,7 @@ pub struct Netplay<S> {
     pub config: NetplayBuildConfiguration,
     pub netplay_id: String,
     pub rom_hash: Digest,
-    pub initial_game_state: NetplayNesState,
+    start_nes: Box<dyn Fn() -> LocalNesState>,
     pub state: S,
 }
 
@@ -52,7 +52,7 @@ impl<T> Netplay<T> {
             config: other.config,
             netplay_id: other.netplay_id,
             rom_hash: other.rom_hash,
-            initial_game_state: other.initial_game_state,
+            start_nes: other.start_nes,
             state,
         }
     }
@@ -63,7 +63,7 @@ impl<T> Netplay<T> {
             self.config,
             &mut Some(self.netplay_id),
             self.rom_hash,
-            self.initial_game_state,
+            self.start_nes,
         )
     }
 }
@@ -106,7 +106,7 @@ impl Netplay<LocalNesState> {
         config: NetplayBuildConfiguration,
         netplay_id: &mut Option<String>,
         rom_hash: Digest,
-        initial_game_state: NetplayNesState,
+        start_nes: Box<dyn Fn() -> LocalNesState>,
     ) -> Self {
         Self {
             rt: Rc::new(
@@ -121,17 +121,17 @@ impl Netplay<LocalNesState> {
                 .get_or_insert_with(|| Uuid::new_v4().to_string())
                 .to_string(),
             rom_hash,
-            state: initial_game_state.nes_state.clone(),
-            initial_game_state,
+            state: start_nes(),
+            start_nes,
         }
     }
 
     pub fn join_by_name(self, room_name: &str) -> NetplayState {
-        let initial_state = self.initial_game_state.clone();
         let session_id = format!("{}_{:x}", room_name, self.rom_hash);
+        let nes_state = (self.start_nes)();
         self.join(StartMethod::Join(
             StartState {
-                game_state: initial_state,
+                game_state: super::NetplayNesState::new(nes_state),
                 session_id,
             },
             room_name.to_string(),
@@ -139,12 +139,12 @@ impl Netplay<LocalNesState> {
     }
 
     pub fn match_with_random(self) -> NetplayState {
-        let initial_state = self.initial_game_state.clone();
         // TODO: When resuming using this session id there might be collisions, but it's unlikely.
         //       Should be fixed though.
         let session_id = format!("{:x}", self.rom_hash);
+        let nes_state = (self.start_nes)();
         self.join(StartMethod::MatchWithRandom(StartState {
-            game_state: initial_state,
+            game_state: super::NetplayNesState::new(nes_state),
             session_id,
         }))
     }
@@ -179,7 +179,7 @@ impl Netplay<ConnectingState> {
                     config: self.config,
                     netplay_id: self.netplay_id,
                     rom_hash: self.rom_hash,
-                    initial_game_state: self.initial_game_state,
+                    start_nes: self.start_nes,
                     state: Connected {
                         netplay_session: connected.state,
                         session_id: match connected.start_method {
@@ -195,7 +195,7 @@ impl Netplay<ConnectingState> {
                 config: self.config,
                 netplay_id: self.netplay_id,
                 rom_hash: self.rom_hash,
-                initial_game_state: self.initial_game_state,
+                start_nes: self.start_nes,
                 state: Failed { reason },
             }),
             _ => NetplayState::Connecting(self),
@@ -255,7 +255,7 @@ impl Netplay<Resuming> {
                 config: self.config,
                 netplay_id: self.netplay_id,
                 rom_hash: self.rom_hash,
-                initial_game_state: self.initial_game_state,
+                start_nes: self.start_nes,
                 state: self.state.attempt1,
             })
         } else if let ConnectingState::Connected(_) = &self.state.attempt2 {
@@ -264,7 +264,7 @@ impl Netplay<Resuming> {
                 config: self.config,
                 netplay_id: self.netplay_id,
                 rom_hash: self.rom_hash,
-                initial_game_state: self.initial_game_state,
+                start_nes: self.start_nes,
                 state: self.state.attempt2,
             })
         } else {

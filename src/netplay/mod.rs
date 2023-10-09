@@ -73,6 +73,16 @@ pub struct NetplayNesState {
     joypad_mapping: Option<JoypadMapping>,
 }
 
+impl NetplayNesState {
+    fn new(nes_state: LocalNesState) -> Self {
+        Self {
+            nes_state,
+            frame: 0,
+            joypad_mapping: None,
+        }
+    }
+}
+
 impl Deref for NetplayNesState {
     type Target = LocalNesState;
     fn deref(&self) -> &LocalNesState {
@@ -113,7 +123,7 @@ impl NesStateHandler for NetplayStateHandler {
 }
 
 impl NetplayStateHandler {
-    pub fn new(nes_state: LocalNesState, bundle: &Bundle, netplay_id: &mut Option<String>) -> Self {
+    pub fn new(start_nes: Box<dyn Fn() -> LocalNesState>, bundle: &Bundle, netplay_id: &mut Option<String>) -> Self {
         let netplay_build_config = &bundle.config.netplay;
 
         NetplayStateHandler {
@@ -121,11 +131,7 @@ impl NetplayStateHandler {
                 netplay_build_config.clone(),
                 netplay_id,
                 md5::compute(&bundle.rom),
-                NetplayNesState {
-                    nes_state: nes_state.clone(),
-                    frame: 0,
-                    joypad_mapping: None,
-                },
+                start_nes,
             ))),
             gui_is_open: true,
             room_name: netplay_build_config.default_room_name.clone(),

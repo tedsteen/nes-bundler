@@ -2,7 +2,7 @@ fn main() {
     println!("cargo:rerun-if-changed=config/config.yaml");
     println!("cargo:rerun-if-changed=config/rom.nes");
 
-    println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch/**");
+    println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch/signalsmith-stretch.h");
     println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch-wrapper.hpp");
     println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch-wrapper.cpp");
     println!("cargo:rerun-if-changed=src/audio/stretch/mod.rs");

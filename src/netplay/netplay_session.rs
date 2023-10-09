@@ -30,18 +30,18 @@ pub struct NetplaySession {
 
 impl NetplaySession {
     pub fn new(start_method: StartMethod, p2p_session: P2PSession<GGRSConfig>) -> Self {
-        let mut initial_game_state = match &start_method {
+        let mut game_state = match &start_method {
             StartMethod::Join(start_state, _)
             | StartMethod::Resume(start_state)
             | StartMethod::MatchWithRandom(start_state) => start_state.clone().game_state,
         };
         //Start counting from 0 to be in sync with ggrs frame counter.
-        initial_game_state.frame = 0;
+        game_state.frame = 0;
 
         Self {
             p2p_session,
-            game_state: initial_game_state.clone(),
-            last_confirmed_game_states: [initial_game_state.clone(), initial_game_state],
+            game_state: game_state.clone(),
+            last_confirmed_game_states: [game_state.clone(), game_state],
             last_handled_frame: -1,
             #[cfg(feature = "debug")]
             stats: [

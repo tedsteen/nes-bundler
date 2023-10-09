@@ -113,10 +113,6 @@ impl Stream {
         }
     }
 
-    pub fn get_sample_rate(&self) -> u32 {
-        self.output_device.spec().freq as u32
-    }
-
     pub fn get_supported_latency(&self) -> Option<RangeInclusive<u8>> {
         Some(1..=50)
     }
