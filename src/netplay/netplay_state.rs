@@ -4,15 +4,15 @@ use md5::Digest;
 use tokio::runtime::{Builder, Runtime};
 use uuid::Uuid;
 
-use crate::{input::JoypadInput, nes_state::FrameData, settings::MAX_PLAYERS};
+use crate::{input::JoypadInput, nes_state::{FrameData, local::LocalNesState, NesStateHandler}, settings::MAX_PLAYERS};
 
 use super::{
     netplay_session::NetplaySession, ConnectingState, JoypadMapping, NetplayBuildConfiguration,
-    NetplayNesState, StartMethod, StartState,
+    StartMethod, StartState,
 };
 
 pub enum NetplayState {
-    Disconnected(Netplay<()>),
+    Disconnected(Netplay<LocalNesState>),
     Connecting(Netplay<ConnectingState>),
     Connected(Netplay<Connected>),
     Resuming(Netplay<Resuming>),
@@ -27,10 +27,11 @@ impl NetplayState {
     pub fn advance(self, inputs: [JoypadInput; MAX_PLAYERS]) -> (Self, Option<FrameData>) {
         use NetplayState::*;
         match self {
-            Connecting(netplay) => (netplay.advance(), None),
+            Connecting(netplay) => netplay.advance(),
             Connected(netplay) => netplay.advance(inputs),
-            Resuming(netplay) => (netplay.advance(), None),
-            Failed(_) | NetplayState::Disconnected(_) => (self, None),
+            Resuming(netplay) => netplay.advance(),
+            Disconnected(netplay) => netplay.advance(inputs),
+            Failed(netplay) => netplay.advance(),
         }
     }
 }
@@ -40,7 +41,7 @@ pub struct Netplay<S> {
     pub config: NetplayBuildConfiguration,
     pub netplay_id: String,
     pub rom_hash: Digest,
-    pub initial_game_state: NetplayNesState,
+    start_nes: Box<dyn Fn() -> LocalNesState>,
     pub state: S,
 }
 
@@ -51,18 +52,18 @@ impl<T> Netplay<T> {
             config: other.config,
             netplay_id: other.netplay_id,
             rom_hash: other.rom_hash,
-            initial_game_state: other.initial_game_state,
+            start_nes: other.start_nes,
             state,
         }
     }
 
-    pub fn disconnect(self) -> Netplay<()> {
+    pub fn disconnect(self) -> Netplay<LocalNesState> {
         log::debug!("Disconnecting");
         Netplay::new(
             self.config,
             &mut Some(self.netplay_id),
             self.rom_hash,
-            self.initial_game_state,
+            self.start_nes,
         )
     }
 }
@@ -100,12 +101,12 @@ impl Resuming {
     }
 }
 
-impl Netplay<()> {
+impl Netplay<LocalNesState> {
     pub fn new(
         config: NetplayBuildConfiguration,
         netplay_id: &mut Option<String>,
         rom_hash: Digest,
-        initial_game_state: NetplayNesState,
+        start_nes: Box<dyn Fn() -> LocalNesState>,
     ) -> Self {
         Self {
             rt: Rc::new(
@@ -120,17 +121,17 @@ impl Netplay<()> {
                 .get_or_insert_with(|| Uuid::new_v4().to_string())
                 .to_string(),
             rom_hash,
-            initial_game_state,
-            state: (),
+            state: start_nes(),
+            start_nes,
         }
     }
 
     pub fn join_by_name(self, room_name: &str) -> NetplayState {
-        let initial_state = self.initial_game_state.clone();
         let session_id = format!("{}_{:x}", room_name, self.rom_hash);
+        let nes_state = (self.start_nes)();
         self.join(StartMethod::Join(
             StartState {
-                game_state: initial_state,
+                game_state: super::NetplayNesState::new(nes_state),
                 session_id,
             },
             room_name.to_string(),
@@ -138,12 +139,12 @@ impl Netplay<()> {
     }
 
     pub fn match_with_random(self) -> NetplayState {
-        let initial_state = self.initial_game_state.clone();
         // TODO: When resuming using this session id there might be collisions, but it's unlikely.
         //       Should be fixed though.
         let session_id = format!("{:x}", self.rom_hash);
+        let nes_state = (self.start_nes)();
         self.join(StartMethod::MatchWithRandom(StartState {
-            game_state: initial_state,
+            game_state: super::NetplayNesState::new(nes_state),
             session_id,
         }))
     }
@@ -155,18 +156,22 @@ impl Netplay<()> {
             self,
         ))
     }
+    fn advance(mut self, inputs: [JoypadInput; 2]) -> (NetplayState, Option<FrameData>) {
+        let frame_data = self.state.advance(inputs);
+        (NetplayState::Disconnected(self), frame_data)
+    }
 }
 
 impl Netplay<ConnectingState> {
-    pub fn cancel(self) -> Netplay<()> {
+    pub fn cancel(self) -> Netplay<LocalNesState> {
         log::debug!("Connection cancelled by user");
         self.disconnect()
     }
 
-    fn advance(mut self) -> NetplayState {
+    fn advance(mut self) -> (NetplayState, Option<FrameData>) {
         //log::trace!("Advancing Netplay<ConnectingState>");
         self.state = self.state.advance();
-        match self.state {
+        (match self.state {
             ConnectingState::Connected(connected) => {
                 log::debug!("Connected! Starting netplay session");
                 NetplayState::Connected(Netplay {
@@ -174,7 +179,7 @@ impl Netplay<ConnectingState> {
                     config: self.config,
                     netplay_id: self.netplay_id,
                     rom_hash: self.rom_hash,
-                    initial_game_state: self.initial_game_state,
+                    start_nes: self.start_nes,
                     state: Connected {
                         netplay_session: connected.state,
                         session_id: match connected.start_method {
@@ -190,11 +195,11 @@ impl Netplay<ConnectingState> {
                 config: self.config,
                 netplay_id: self.netplay_id,
                 rom_hash: self.rom_hash,
-                initial_game_state: self.initial_game_state,
+                start_nes: self.start_nes,
                 state: Failed { reason },
             }),
             _ => NetplayState::Connecting(self),
-        }
+        }, None)
     }
 }
 
@@ -239,42 +244,46 @@ impl Netplay<Connected> {
 }
 
 impl Netplay<Resuming> {
-    fn advance(mut self) -> NetplayState {
+    fn advance(mut self) -> (NetplayState, Option<FrameData>) {
         //log::trace!("Advancing Netplay<Resuming>");
         self.state.attempt1 = self.state.attempt1.advance();
         self.state.attempt2 = self.state.attempt2.advance();
 
-        if let ConnectingState::Connected(_) = &self.state.attempt1 {
+        (if let ConnectingState::Connected(_) = &self.state.attempt1 {
             NetplayState::Connecting(Netplay {
                 rt: self.rt,
                 config: self.config,
                 netplay_id: self.netplay_id,
                 rom_hash: self.rom_hash,
-                initial_game_state: self.initial_game_state,
+                start_nes: self.start_nes,
                 state: self.state.attempt1,
             })
         } else if let ConnectingState::Connected(_) = &self.state.attempt2 {
-            return NetplayState::Connecting(Netplay {
+            NetplayState::Connecting(Netplay {
                 rt: self.rt,
                 config: self.config,
                 netplay_id: self.netplay_id,
                 rom_hash: self.rom_hash,
-                initial_game_state: self.initial_game_state,
+                start_nes: self.start_nes,
                 state: self.state.attempt2,
-            });
+            })
         } else {
             NetplayState::Resuming(self)
-        }
+        }, None)
     }
 
-    pub fn cancel(self) -> Netplay<()> {
+    pub fn cancel(self) -> Netplay<LocalNesState> {
         log::debug!("Resume cancelled by user");
         self.disconnect()
     }
 }
 
 impl Netplay<Failed> {
-    pub fn restart(self) -> Netplay<()> {
+    pub fn restart(self) -> Netplay<LocalNesState> {
         self.disconnect()
+    }
+
+    fn advance(self) -> (NetplayState, Option<FrameData>) {
+        (NetplayState::Failed(self), None)
     }
 }

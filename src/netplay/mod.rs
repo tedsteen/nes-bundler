@@ -60,7 +60,6 @@ pub struct NetplayBuildConfiguration {
 
 pub struct NetplayStateHandler {
     netplay: Option<NetplayState>,
-    nes_state: LocalNesState,
 
     //Gui
     gui_is_open: bool,
@@ -72,6 +71,16 @@ pub struct NetplayNesState {
     nes_state: LocalNesState,
     frame: i32,
     joypad_mapping: Option<JoypadMapping>,
+}
+
+impl NetplayNesState {
+    fn new(nes_state: LocalNesState) -> Self {
+        Self {
+            nes_state,
+            frame: 0,
+            joypad_mapping: None,
+        }
+    }
 }
 
 impl Deref for NetplayNesState {
@@ -99,34 +108,22 @@ impl NesStateHandler for NetplayStateHandler {
         }
     }
 
-    fn save(&self) -> Vec<u8> {
-        if let NetplayState::Connected(netplay_connected) = &self.netplay.as_ref().unwrap() {
-            //TODO: what to do when saving during netplay?
-            netplay_connected.state.netplay_session.game_state.save()
-        } else {
-            self.nes_state.save()
-        }
+    fn save(&self) -> Option<Vec<u8>> {
+        //Saving is not supported in netplay
+        None
     }
 
-    fn load(&mut self, data: &mut Vec<u8>) {
-        if let NetplayState::Connected(netplay_connected) = &mut self.netplay.as_mut().unwrap() {
-            //TODO: what to do when loading during netplay?
-            netplay_connected
-                .state
-                .netplay_session
-                .game_state
-                .load(data);
-        } else {
-            self.nes_state.load(data);
-        }
+    fn load(&mut self, _data: &mut Vec<u8>) {
+        //Loading is not supported in netplay
     }
+
     fn get_gui(&mut self) -> Option<&mut dyn crate::settings::gui::GuiComponent> {
         Some(self)
     }
 }
 
 impl NetplayStateHandler {
-    pub fn new(nes_state: LocalNesState, bundle: &Bundle, netplay_id: &mut Option<String>) -> Self {
+    pub fn new(start_nes: Box<dyn Fn() -> LocalNesState>, bundle: &Bundle, netplay_id: &mut Option<String>) -> Self {
         let netplay_build_config = &bundle.config.netplay;
 
         NetplayStateHandler {
@@ -134,13 +131,8 @@ impl NetplayStateHandler {
                 netplay_build_config.clone(),
                 netplay_id,
                 md5::compute(&bundle.rom),
-                NetplayNesState {
-                    nes_state: nes_state.clone(),
-                    frame: 0,
-                    joypad_mapping: None,
-                },
+                start_nes,
             ))),
-            nes_state,
             gui_is_open: true,
             room_name: netplay_build_config.default_room_name.clone(),
         }

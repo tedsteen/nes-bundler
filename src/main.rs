@@ -21,7 +21,8 @@ use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
 use base64::Engine;
 
 use input::Inputs;
-use nes_state::{start_nes, FrameData};
+use nes_state::local::LocalNesState;
+use nes_state::{start_nes, FrameData, get_mapper};
 use palette::NTSC_PAL;
 
 use sdl2::EventPump;
@@ -121,8 +122,11 @@ fn run(
                     use crate::input::keys::KeyCode::*;
                     match key_code {
                         F1 => {
-                            settings.last_save_state = Some(b64.encode(nes_state.save()));
-                            settings.save();
+                            if let Some(save_state) = nes_state.save() {
+                                settings.last_save_state = Some(b64.encode(save_state));
+                                settings.save();
+                            }
+                            
                             true
                         }
                         F2 => {
@@ -160,13 +164,12 @@ fn run(
         game_loop.next_frame(
             |game_loop| {
                 let game = &mut game_loop.game;
-                #[allow(unused_mut)] //debug feature needs this
                 if let Some(frame_data) = game.advance() {
-                    let mut fps = frame_data.fps;
+                    let fps = frame_data.fps;
                     #[cfg(feature = "debug")]
-                    if game.debug.override_fps {
-                        fps = game.debug.fps;
-                    }
+                    let fps = if game.debug.override_fps {
+                        game.debug.fps
+                    } else { fps };
 
                     game.draw_frame(Some(&frame_data.video));
                     game.push_audio(&frame_data.audio, fps);
@@ -239,14 +242,22 @@ fn initialise() -> Result<
 
     let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
     let audio = Audio::new(&sdl_context, &settings)?;
-    let nes_state = start_nes(bundle.rom.clone(), audio.stream.get_sample_rate() as u64)?;
+    let mapper = get_mapper(&bundle)?;
+
+    let start_new_nes = move || -> LocalNesState {
+        start_nes(mapper.clone())
+    };
+
     #[cfg(feature = "netplay")]
-    let nes_state = netplay::NetplayStateHandler::new(nes_state, &bundle, &mut settings.netplay_id);
+    #[allow(unused_mut)] //Bug, it needs to be mut
+    let mut start_new_nes = || -> netplay::NetplayStateHandler {
+        netplay::NetplayStateHandler::new(Box::new(start_new_nes), &bundle, &mut settings.netplay_id)
+    };
 
     Ok((
         GameLoop::new(
             Game::new(
-                Box::new(nes_state),
+                Box::new(start_new_nes()),
                 Gui::new(egui_glow),
                 settings,
                 audio,
