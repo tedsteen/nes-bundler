@@ -164,13 +164,12 @@ fn run(
         game_loop.next_frame(
             |game_loop| {
                 let game = &mut game_loop.game;
-                #[allow(unused_mut)] //debug feature needs this
                 if let Some(frame_data) = game.advance() {
-                    let mut fps = frame_data.fps;
+                    let fps = frame_data.fps;
                     #[cfg(feature = "debug")]
-                    if game.debug.override_fps {
-                        fps = game.debug.fps;
-                    }
+                    let fps = if game.debug.override_fps {
+                        game.debug.fps
+                    } else { fps };
 
                     game.draw_frame(Some(&frame_data.video));
                     game.push_audio(&frame_data.audio, fps);
@@ -250,7 +249,7 @@ fn initialise() -> Result<
     };
 
     #[cfg(feature = "netplay")]
-    #[allow(unused_mut)] //Bug, I had to make it mut
+    #[allow(unused_mut)] //Bug, it needs to be mut
     let mut start_new_nes = || -> netplay::NetplayStateHandler {
         netplay::NetplayStateHandler::new(Box::new(start_new_nes), &bundle, &mut settings.netplay_id)
     };
