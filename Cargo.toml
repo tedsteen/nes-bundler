@@ -52,9 +52,9 @@ rfd = { version = "0.12", optional = true }
 zip = { version = "0.6", default-features = false, features = ["deflate"], optional = true }
 
 # Netplay deps
-matchbox_socket = { git="https://github.com/tedsteen/matchbox", branch="fix-auth", features = ["ggrs"], optional = true }
+matchbox_socket = { version="0.8", features = ["ggrs"], optional = true }
 futures-timer = { version = "3", features = ["wasm-bindgen"], optional = true }
-ggrs = { version = "0.9", optional = true }
+ggrs = { version = "0.10", optional = true }
 tokio = { version = "1", features = ["rt"], optional = true }
 futures = {version = "0.3", optional = true }
 uuid = { version = "1", features = [ "v4" ], optional = true }
