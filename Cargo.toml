@@ -29,10 +29,11 @@ serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 bitflags = "2"
 
-egui = { version = "0.22", default-features = false, features = [
+egui = { version = "0.23", default-features = false, features = [
   "bytemuck", "default_fonts"
 ] }
-egui_glow = { version = "0.22", features = ["winit", "links"] }
+egui_plot = "0.23"
+egui_glow = { version = "0.23", features = ["winit", "links"] }
 glow = "0.12"
 winit = "0.28"
 glutin-winit = "0.3"
@@ -52,9 +53,9 @@ rfd = { version = "0.12", optional = true }
 zip = { version = "0.6", default-features = false, features = ["deflate"], optional = true }
 
 # Netplay deps
-matchbox_socket = { git="https://github.com/tedsteen/matchbox", branch="fix-auth", features = ["ggrs"], optional = true }
+matchbox_socket = { version="0.8", features = ["ggrs"], optional = true }
 futures-timer = { version = "3", features = ["wasm-bindgen"], optional = true }
-ggrs = { version = "0.9", optional = true }
+ggrs = { version = "0.10", optional = true }
 tokio = { version = "1", features = ["rt"], optional = true }
 futures = {version = "0.3", optional = true }
 uuid = { version = "1", features = [ "v4" ], optional = true }

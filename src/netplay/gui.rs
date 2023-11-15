@@ -18,7 +18,7 @@ impl NetplayStateHandler {
     fn stats_ui(ui: &mut egui::Ui, stats: &super::stats::NetplayStats, player: usize) {
         if !stats.get_ping().is_empty() {
             ui.label(format!("Player {player}"));
-            use egui::plot::{Line, Plot};
+            use egui_plot::{Line, Plot};
 
             Plot::new(format!("stats_plot_{player}"))
                 .label_formatter(|name, value| {
@@ -29,8 +29,8 @@ impl NetplayStateHandler {
                     }
                 })
                 .legend(
-                    egui::plot::Legend::default()
-                        .position(egui::plot::Corner::LeftTop)
+                    egui_plot::Legend::default()
+                        .position(egui_plot::Corner::LeftTop)
                         .text_style(egui::TextStyle::Small),
                 )
                 .view_aspect(2.0)
@@ -43,7 +43,7 @@ impl NetplayStateHandler {
                                 .get_ping()
                                 .iter()
                                 .map(|i| [i.duration.as_millis() as f64, i.stat.ping as f64])
-                                .collect::<egui::plot::PlotPoints>(),
+                                .collect::<egui_plot::PlotPoints>(),
                         )
                         .name("Ping"),
                     );
@@ -59,7 +59,7 @@ impl NetplayStateHandler {
                                         i.stat.local_frames_behind as f64,
                                     ]
                                 })
-                                .collect::<egui::plot::PlotPoints>(),
+                                .collect::<egui_plot::PlotPoints>(),
                         )
                         .name("Behind (local)"),
                     );
@@ -75,7 +75,7 @@ impl NetplayStateHandler {
                                         i.stat.remote_frames_behind as f64,
                                     ]
                                 })
-                                .collect::<egui::plot::PlotPoints>(),
+                                .collect::<egui_plot::PlotPoints>(),
                         )
                         .name("Behind (remote)"),
                     );

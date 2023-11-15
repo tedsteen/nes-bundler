@@ -339,10 +339,11 @@ impl Connecting<PeeringState> {
             let ggrs_config = self.state.ggrs_config.clone();
             let mut sess_build = SessionBuilder::<GGRSConfig>::new()
                 .with_num_players(MAX_PLAYERS)
-                .with_max_prediction_window(ggrs_config.max_prediction)
                 .with_input_delay(ggrs_config.input_delay)
                 .with_fps(FPS as usize)
-                .expect("Could not start session");
+                .unwrap()
+                .with_max_prediction_window(ggrs_config.max_prediction)
+                .expect("Could not create ggrs session");
 
             for (i, player) in players.into_iter().enumerate() {
                 sess_build = sess_build

@@ -14,7 +14,7 @@ use crate::{
 };
 use anyhow::Result;
 use audio::Audio;
-use egui::{Color32, ColorImage, ImageData};
+use egui::{ColorImage, ImageData};
 use gameloop::{GameLoop, Time};
 
 use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
@@ -341,19 +341,12 @@ impl Game {
 
     pub fn draw_frame(&mut self, video_data: Option<&[u16]>) {
         let new_image_data = video_data.map(|frame| {
-            let mut image_data = ImageData::Color(ColorImage::new(
-                [WIDTH as usize, HEIGHT as usize],
-                Color32::BLACK,
-            ));
-            if let ImageData::Color(color_data) = &mut image_data {
-                for (i, pixel) in color_data.pixels.iter_mut().enumerate() {
-                    let palette_index = frame[i] as usize * 4;
-                    let color = &NTSC_PAL[palette_index..palette_index + 4];
-                    *pixel =
-                        Color32::from_rgba_premultiplied(color[0], color[1], color[2], color[3]);
-                }
-            }
-            image_data
+            let pixels = frame.iter().flat_map(|&palette_index| {
+                let palette_index = palette_index as usize * 4;
+                let rgba: [u8; 4] = NTSC_PAL[palette_index..palette_index+4].try_into().unwrap();
+                rgba
+            }).collect::<Vec<u8>>();
+            ImageData::Color(ColorImage::from_rgba_premultiplied([WIDTH as usize, HEIGHT as usize], &pixels).into())
         });
 
         self.gui.update_nes_texture(new_image_data);

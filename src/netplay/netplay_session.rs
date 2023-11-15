@@ -1,4 +1,4 @@
-use ggrs::{Config, GGRSRequest, P2PSession};
+use ggrs::{Config, GgrsRequest, P2PSession};
 use matchbox_socket::PeerId;
 
 use crate::{
@@ -71,7 +71,7 @@ impl NetplaySession {
         sess.poll_remote_clients();
 
         for event in sess.events() {
-            if let ggrs::GGRSEvent::Disconnected { addr } = event {
+            if let ggrs::GgrsEvent::Disconnected { addr } = event {
                 return Err(anyhow::anyhow!("Lost peer {:?}", addr));
             }
         }
@@ -84,15 +84,15 @@ impl NetplaySession {
             Ok(requests) => {
                 for request in requests {
                     match request {
-                        GGRSRequest::LoadGameState { cell, frame } => {
+                        GgrsRequest::LoadGameState { cell, frame } => {
                             log::debug!("Loading (frame {:?})", frame);
                             self.game_state = cell.load().expect("No data found.");
                         }
-                        GGRSRequest::SaveGameState { cell, frame } => {
+                        GgrsRequest::SaveGameState { cell, frame } => {
                             assert_eq!(self.game_state.frame, frame);
                             cell.save(frame, Some(self.game_state.clone()), None);
                         }
-                        GGRSRequest::AdvanceFrame { inputs } => {
+                        GgrsRequest::AdvanceFrame { inputs } => {
                             let this_frame_data = self.game_state.advance(joypad_mapping.map(
                                 [JoypadInput(inputs[0].0), JoypadInput(inputs[1].0)],
                                 local_player_idx,

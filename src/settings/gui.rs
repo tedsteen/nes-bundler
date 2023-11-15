@@ -1,6 +1,6 @@
 use egui::{
     epaint::ImageDelta, Color32, ColorImage, Context, ImageData, Order, TextureHandle,
-    TextureOptions,
+    TextureOptions, Image,
 };
 
 use crate::{
@@ -48,12 +48,12 @@ impl Gui {
                 ImageData::Color(ColorImage::new(
                     [WIDTH as usize, HEIGHT as usize],
                     Color32::BLACK,
-                )),
+                ).into()),
                 nes_texture_options,
             ),
             egui_glow,
             nes_texture_options,
-            no_image: ImageData::Color(ColorImage::new([0, 0], Color32::TRANSPARENT)),
+            no_image: ImageData::Color(ColorImage::new([0, 0], Color32::TRANSPARENT).into()),
         }
     }
 
@@ -82,22 +82,8 @@ impl Gui {
                     let texture_handle = &self.nes_texture;
                     if let Some(t) = ctx.tex_manager().read().meta(texture_handle.id()) {
                         if t.size[0] != 0 {
-                            let texture_width = WIDTH as f32;
-                            let texture_height = HEIGHT as f32;
-
-                            let screen_width = ui.available_size().x;
-                            let screen_height = ui.available_size().y;
-
-                            let width_ratio = (screen_width / texture_width).max(1.0);
-                            let height_ratio = (screen_height / texture_height).max(1.0);
-
-                            // Get smallest scale size
-                            let scale = width_ratio.clamp(1.0, height_ratio);
-
-                            let scaled_width = texture_width * scale;
-                            let scaled_height = texture_height * scale;
                             ui.centered_and_justified(|ui| {
-                                ui.image(texture_handle, [scaled_width, scaled_height]);
+                                ui.add(Image::new(texture_handle).shrink_to_fit());
                             });
                         }
                     }
