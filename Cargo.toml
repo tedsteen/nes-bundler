@@ -29,15 +29,15 @@ serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 bitflags = "2"
 
-egui = { version = "0.23", default-features = false, features = [
+egui = { version = "0.25", default-features = false, features = [
   "bytemuck", "default_fonts"
 ] }
-egui_plot = "0.23"
-egui_glow = { version = "0.23", features = ["winit", "links"] }
-glow = "0.12"
-winit = "0.28"
-glutin-winit = "0.3"
-glutin="0.30"
+egui_plot = "0.25"
+egui_glow = { version = "0.25", features = ["winit", "links"] }
+glow = "0.13"
+winit = "0.29"
+glutin-winit = "0.4"
+glutin="0.31"
 raw-window-handle = "0.5"
 
 #sdl2 = { version="0.35", features = ["bundled", "static-link"] }

@@ -1,68 +1,173 @@
-use winit::event::WindowEvent;
+use winit::{event::{WindowEvent, KeyEvent}, keyboard::PhysicalKey};
 
 use crate::{
-    input::{
-        keys::{Modifiers, ToGuiKeyCode, ToGuiMod},
-        KeyEvent,
-    },
+    input::keys::{Modifiers, ToGuiKeyCode, ToGuiMod},
     settings::gui::{GuiEvent, ToGuiEvent},
 };
-impl ToGuiKeyCode for winit::event::VirtualKeyCode {
+impl ToGuiKeyCode for winit::keyboard::KeyCode {
     fn to_gui_key_code(&self) -> Option<crate::input::keys::KeyCode> {
         use crate::input::keys::KeyCode;
-        use winit::event::VirtualKeyCode::*;
+        use winit::keyboard::KeyCode::*;
         match self {
-            // The '1' key over the letters.
-            Key1 => Some(KeyCode::Key1),
-            // The '2' key over the letters.
-            Key2 => Some(KeyCode::Key2),
-            // The '3' key over the letters.
-            Key3 => Some(KeyCode::Key3),
-            // The '4' key over the letters.
-            Key4 => Some(KeyCode::Key4),
-            // The '5' key over the letters.
-            Key5 => Some(KeyCode::Key5),
-            // The '6' key over the letters.
-            Key6 => Some(KeyCode::Key6),
-            // The '7' key over the letters.
-            Key7 => Some(KeyCode::Key7),
-            // The '8' key over the letters.
-            Key8 => Some(KeyCode::Key8),
-            // The '9' key over the letters.
-            Key9 => Some(KeyCode::Key9),
-            // The '0' key over the 'O' and 'P' keys.
-            Key0 => Some(KeyCode::Key0),
-
-            A => Some(KeyCode::A),
-            B => Some(KeyCode::B),
-            C => Some(KeyCode::C),
-            D => Some(KeyCode::D),
-            E => Some(KeyCode::E),
-            F => Some(KeyCode::F),
-            G => Some(KeyCode::G),
-            H => Some(KeyCode::H),
-            I => Some(KeyCode::I),
-            J => Some(KeyCode::J),
-            K => Some(KeyCode::K),
-            L => Some(KeyCode::L),
-            M => Some(KeyCode::M),
-            N => Some(KeyCode::N),
-            O => Some(KeyCode::O),
-            P => Some(KeyCode::P),
-            Q => Some(KeyCode::Q),
-            R => Some(KeyCode::R),
-            S => Some(KeyCode::S),
-            T => Some(KeyCode::T),
-            U => Some(KeyCode::U),
-            V => Some(KeyCode::V),
-            W => Some(KeyCode::W),
-            X => Some(KeyCode::X),
-            Y => Some(KeyCode::Y),
-            Z => Some(KeyCode::Z),
-
-            // The Escape key, next to F1.
+            Backquote => Some(KeyCode::Backquote),
+            Backslash => Some(KeyCode::Backslash),
+            BracketLeft => Some(KeyCode::BracketLeft),
+            BracketRight => Some(KeyCode::BracketRight),
+            Comma => Some(KeyCode::Comma),
+            Digit0 => Some(KeyCode::Digit0),
+            Digit1 => Some(KeyCode::Digit1),
+            Digit2 => Some(KeyCode::Digit2),
+            Digit3 => Some(KeyCode::Digit3),
+            Digit4 => Some(KeyCode::Digit4),
+            Digit5 => Some(KeyCode::Digit5),
+            Digit6 => Some(KeyCode::Digit6),
+            Digit7 => Some(KeyCode::Digit7),
+            Digit8 => Some(KeyCode::Digit8),
+            Digit9 => Some(KeyCode::Digit9),
+            Equal => Some(KeyCode::Equal),
+            IntlBackslash => Some(KeyCode::IntlBackslash),
+            IntlRo => Some(KeyCode::IntlRo),
+            IntlYen => Some(KeyCode::IntlYen),
+            KeyA => Some(KeyCode::KeyA),
+            KeyB => Some(KeyCode::KeyB),
+            KeyC => Some(KeyCode::KeyC),
+            KeyD => Some(KeyCode::KeyD),
+            KeyE => Some(KeyCode::KeyE),
+            KeyF => Some(KeyCode::KeyF),
+            KeyG => Some(KeyCode::KeyG),
+            KeyH => Some(KeyCode::KeyH),
+            KeyI => Some(KeyCode::KeyI),
+            KeyJ => Some(KeyCode::KeyJ),
+            KeyK => Some(KeyCode::KeyK),
+            KeyL => Some(KeyCode::KeyL),
+            KeyM => Some(KeyCode::KeyM),
+            KeyN => Some(KeyCode::KeyN),
+            KeyO => Some(KeyCode::KeyO),
+            KeyP => Some(KeyCode::KeyP),
+            KeyQ => Some(KeyCode::KeyQ),
+            KeyR => Some(KeyCode::KeyR),
+            KeyS => Some(KeyCode::KeyS),
+            KeyT => Some(KeyCode::KeyT),
+            KeyU => Some(KeyCode::KeyU),
+            KeyV => Some(KeyCode::KeyV),
+            KeyW => Some(KeyCode::KeyW),
+            KeyX => Some(KeyCode::KeyX),
+            KeyY => Some(KeyCode::KeyY),
+            KeyZ => Some(KeyCode::KeyZ),
+            Minus => Some(KeyCode::Minus),
+            Period => Some(KeyCode::Period),
+            Quote => Some(KeyCode::Quote),
+            Semicolon => Some(KeyCode::Semicolon),
+            Slash => Some(KeyCode::Slash),
+            AltLeft => Some(KeyCode::AltLeft),
+            AltRight => Some(KeyCode::AltRight),
+            Backspace => Some(KeyCode::Backspace),
+            CapsLock => Some(KeyCode::CapsLock),
+            ContextMenu => Some(KeyCode::ContextMenu),
+            ControlLeft => Some(KeyCode::ControlLeft),
+            ControlRight => Some(KeyCode::ControlRight),
+            Enter => Some(KeyCode::Enter),
+            SuperLeft => Some(KeyCode::SuperLeft),
+            SuperRight => Some(KeyCode::SuperRight),
+            ShiftLeft => Some(KeyCode::ShiftLeft),
+            ShiftRight => Some(KeyCode::ShiftRight),
+            Space => Some(KeyCode::Space),
+            Tab => Some(KeyCode::Tab),
+            Convert => Some(KeyCode::Convert),
+            KanaMode => Some(KeyCode::KanaMode),
+            Lang1 => Some(KeyCode::Lang1),
+            Lang2 => Some(KeyCode::Lang2),
+            Lang3 => Some(KeyCode::Lang3),
+            Lang4 => Some(KeyCode::Lang4),
+            Lang5 => Some(KeyCode::Lang5),
+            NonConvert => Some(KeyCode::NonConvert),
+            Delete => Some(KeyCode::Delete),
+            End => Some(KeyCode::End),
+            Help => Some(KeyCode::Help),
+            Home => Some(KeyCode::Home),
+            Insert => Some(KeyCode::Insert),
+            PageDown => Some(KeyCode::PageDown),
+            PageUp => Some(KeyCode::PageUp),
+            ArrowDown => Some(KeyCode::ArrowDown),
+            ArrowLeft => Some(KeyCode::ArrowLeft),
+            ArrowRight => Some(KeyCode::ArrowRight),
+            ArrowUp => Some(KeyCode::ArrowUp),
+            NumLock => Some(KeyCode::NumLock),
+            Numpad0 => Some(KeyCode::Numpad0),
+            Numpad1 => Some(KeyCode::Numpad1),
+            Numpad2 => Some(KeyCode::Numpad2),
+            Numpad3 => Some(KeyCode::Numpad3),
+            Numpad4 => Some(KeyCode::Numpad4),
+            Numpad5 => Some(KeyCode::Numpad5),
+            Numpad6 => Some(KeyCode::Numpad6),
+            Numpad7 => Some(KeyCode::Numpad7),
+            Numpad8 => Some(KeyCode::Numpad8),
+            Numpad9 => Some(KeyCode::Numpad9),
+            NumpadAdd => Some(KeyCode::NumpadAdd),
+            NumpadBackspace => Some(KeyCode::NumpadBackspace),
+            NumpadClear => Some(KeyCode::NumpadClear),
+            NumpadClearEntry => Some(KeyCode::NumpadClearEntry),
+            NumpadComma => Some(KeyCode::NumpadComma),
+            NumpadDecimal => Some(KeyCode::NumpadDecimal),
+            NumpadDivide => Some(KeyCode::NumpadDivide),
+            NumpadEnter => Some(KeyCode::NumpadEnter),
+            NumpadEqual => Some(KeyCode::NumpadEqual),
+            NumpadHash => Some(KeyCode::NumpadHash),
+            NumpadMemoryAdd => Some(KeyCode::NumpadMemoryAdd),
+            NumpadMemoryClear => Some(KeyCode::NumpadMemoryClear),
+            NumpadMemoryRecall => Some(KeyCode::NumpadMemoryRecall),
+            NumpadMemoryStore => Some(KeyCode::NumpadMemoryStore),
+            NumpadMemorySubtract => Some(KeyCode::NumpadMemorySubtract),
+            NumpadMultiply => Some(KeyCode::NumpadMultiply),
+            NumpadParenLeft => Some(KeyCode::NumpadParenLeft),
+            NumpadParenRight => Some(KeyCode::NumpadParenRight),
+            NumpadStar => Some(KeyCode::NumpadStar),
+            NumpadSubtract => Some(KeyCode::NumpadSubtract),
             Escape => Some(KeyCode::Escape),
-
+            Fn => Some(KeyCode::Fn),
+            FnLock => Some(KeyCode::FnLock),
+            PrintScreen => Some(KeyCode::PrintScreen),
+            ScrollLock => Some(KeyCode::ScrollLock),
+            Pause => Some(KeyCode::Pause),
+            BrowserBack => Some(KeyCode::BrowserBack),
+            BrowserFavorites => Some(KeyCode::BrowserFavorites),
+            BrowserForward => Some(KeyCode::BrowserForward),
+            BrowserHome => Some(KeyCode::BrowserHome),
+            BrowserRefresh => Some(KeyCode::BrowserRefresh),
+            BrowserSearch => Some(KeyCode::BrowserSearch),
+            BrowserStop => Some(KeyCode::BrowserStop),
+            Eject => Some(KeyCode::Eject),
+            LaunchApp1 => Some(KeyCode::LaunchApp1),
+            LaunchApp2 => Some(KeyCode::LaunchApp2),
+            LaunchMail => Some(KeyCode::LaunchMail),
+            MediaPlayPause => Some(KeyCode::MediaPlayPause),
+            MediaSelect => Some(KeyCode::MediaSelect),
+            MediaStop => Some(KeyCode::MediaStop),
+            MediaTrackNext => Some(KeyCode::MediaTrackNext),
+            MediaTrackPrevious => Some(KeyCode::MediaTrackPrevious),
+            Power => Some(KeyCode::Power),
+            Sleep => Some(KeyCode::Sleep),
+            AudioVolumeDown => Some(KeyCode::AudioVolumeDown),
+            AudioVolumeMute => Some(KeyCode::AudioVolumeMute),
+            AudioVolumeUp => Some(KeyCode::AudioVolumeUp),
+            WakeUp => Some(KeyCode::WakeUp),
+            Meta => Some(KeyCode::Meta),
+            Hyper => Some(KeyCode::Hyper),
+            Turbo => Some(KeyCode::Turbo),
+            Abort => Some(KeyCode::Abort),
+            Resume => Some(KeyCode::Resume),
+            Suspend => Some(KeyCode::Suspend),
+            Again => Some(KeyCode::Again),
+            Copy => Some(KeyCode::Copy),
+            Cut => Some(KeyCode::Cut),
+            Find => Some(KeyCode::Find),
+            Open => Some(KeyCode::Open),
+            Paste => Some(KeyCode::Paste),
+            Props => Some(KeyCode::Props),
+            Select => Some(KeyCode::Select),
+            Undo => Some(KeyCode::Undo),
+            Hiragana => Some(KeyCode::Hiragana),
+            Katakana => Some(KeyCode::Katakana),
             F1 => Some(KeyCode::F1),
             F2 => Some(KeyCode::F2),
             F3 => Some(KeyCode::F3),
@@ -87,155 +192,47 @@ impl ToGuiKeyCode for winit::event::VirtualKeyCode {
             F22 => Some(KeyCode::F22),
             F23 => Some(KeyCode::F23),
             F24 => Some(KeyCode::F24),
-
-            // Print Screen/SysRq.
-            Snapshot => Some(KeyCode::Snapshot),
-            // Scroll Lock.
-            Scroll => Some(KeyCode::Scroll),
-            // Pause/Break key, next to Scroll lock.
-            Pause => Some(KeyCode::Pause),
-
-            // `Insert`, next to Backspace.
-            Insert => Some(KeyCode::Insert),
-            Home => Some(KeyCode::Home),
-            Delete => Some(KeyCode::Delete),
-            End => Some(KeyCode::End),
-            PageDown => Some(KeyCode::PageDown),
-            PageUp => Some(KeyCode::PageUp),
-
-            Left => Some(KeyCode::Left),
-            Up => Some(KeyCode::Up),
-            Right => Some(KeyCode::Right),
-            Down => Some(KeyCode::Down),
-
-            // The Backspace key, right over Enter.
-            Back => Some(KeyCode::Back),
-            // The Enter key.
-            Return => Some(KeyCode::Return),
-            // The space bar.
-            Space => Some(KeyCode::Space),
-
-            // The "Compose" key on Linux.
-            Compose => Some(KeyCode::Compose),
-
-            Caret => Some(KeyCode::Caret),
-
-            Numlock => Some(KeyCode::Numlock),
-            Numpad0 => Some(KeyCode::Numpad0),
-            Numpad1 => Some(KeyCode::Numpad1),
-            Numpad2 => Some(KeyCode::Numpad2),
-            Numpad3 => Some(KeyCode::Numpad3),
-            Numpad4 => Some(KeyCode::Numpad4),
-            Numpad5 => Some(KeyCode::Numpad5),
-            Numpad6 => Some(KeyCode::Numpad6),
-            Numpad7 => Some(KeyCode::Numpad7),
-            Numpad8 => Some(KeyCode::Numpad8),
-            Numpad9 => Some(KeyCode::Numpad9),
-            NumpadAdd => Some(KeyCode::NumpadAdd),
-            NumpadDivide => Some(KeyCode::NumpadDivide),
-            NumpadDecimal => Some(KeyCode::NumpadDecimal),
-            NumpadComma => Some(KeyCode::NumpadComma),
-            NumpadEnter => Some(KeyCode::NumpadEnter),
-            NumpadEquals => Some(KeyCode::NumpadEquals),
-            NumpadMultiply => Some(KeyCode::NumpadMultiply),
-            NumpadSubtract => Some(KeyCode::NumpadSubtract),
-
-            AbntC1 => Some(KeyCode::AbntC1),
-            AbntC2 => Some(KeyCode::AbntC2),
-            Apostrophe => Some(KeyCode::Apostrophe),
-            Apps => Some(KeyCode::Apps),
-            Asterisk => Some(KeyCode::Asterisk),
-            At => Some(KeyCode::At),
-            Ax => Some(KeyCode::Ax),
-            Backslash => Some(KeyCode::Backslash),
-            Calculator => Some(KeyCode::Calculator),
-            Capital => Some(KeyCode::Capital),
-            Colon => Some(KeyCode::Colon),
-            Comma => Some(KeyCode::Comma),
-            Convert => Some(KeyCode::Convert),
-            Equals => Some(KeyCode::Equals),
-            Grave => Some(KeyCode::Grave),
-            Kana => Some(KeyCode::Kana),
-            Kanji => Some(KeyCode::Kanji),
-            LAlt => Some(KeyCode::LAlt),
-            LBracket => Some(KeyCode::LBracket),
-            LControl => Some(KeyCode::LControl),
-            LShift => Some(KeyCode::LShift),
-            LWin => Some(KeyCode::LWin),
-            Mail => Some(KeyCode::Mail),
-            MediaSelect => Some(KeyCode::MediaSelect),
-            MediaStop => Some(KeyCode::MediaStop),
-            Minus => Some(KeyCode::Minus),
-            Mute => Some(KeyCode::Mute),
-            MyComputer => Some(KeyCode::MyComputer),
-            // also called "Next"
-            NavigateForward => Some(KeyCode::NavigateForward),
-            // also called "Prior"
-            NavigateBackward => Some(KeyCode::NavigateBackward),
-            NextTrack => Some(KeyCode::NextTrack),
-            NoConvert => Some(KeyCode::NoConvert),
-            OEM102 => Some(KeyCode::OEM102),
-            Period => Some(KeyCode::Period),
-            PlayPause => Some(KeyCode::PlayPause),
-            Plus => Some(KeyCode::Plus),
-            Power => Some(KeyCode::Power),
-            PrevTrack => Some(KeyCode::PrevTrack),
-            RAlt => Some(KeyCode::RAlt),
-            RBracket => Some(KeyCode::RBracket),
-            RControl => Some(KeyCode::RControl),
-            RShift => Some(KeyCode::RShift),
-            RWin => Some(KeyCode::RWin),
-            Semicolon => Some(KeyCode::Semicolon),
-            Slash => Some(KeyCode::Slash),
-            Sleep => Some(KeyCode::Sleep),
-            Stop => Some(KeyCode::Stop),
-            Sysrq => Some(KeyCode::Sysrq),
-            Tab => Some(KeyCode::Tab),
-            Underline => Some(KeyCode::Underline),
-            Unlabeled => Some(KeyCode::Unlabeled),
-            VolumeDown => Some(KeyCode::VolumeDown),
-            VolumeUp => Some(KeyCode::VolumeUp),
-            Wake => Some(KeyCode::Wake),
-            WebBack => Some(KeyCode::WebBack),
-            WebFavorites => Some(KeyCode::WebFavorites),
-            WebForward => Some(KeyCode::WebForward),
-            WebHome => Some(KeyCode::WebHome),
-            WebRefresh => Some(KeyCode::WebRefresh),
-            WebSearch => Some(KeyCode::WebSearch),
-            WebStop => Some(KeyCode::WebStop),
-            Yen => Some(KeyCode::Yen),
-            Copy => Some(KeyCode::Copy),
-            Paste => Some(KeyCode::Paste),
-            Cut => Some(KeyCode::Cut),
+            F25 => Some(KeyCode::F25),
+            F26 => Some(KeyCode::F26),
+            F27 => Some(KeyCode::F27),
+            F28 => Some(KeyCode::F28),
+            F29 => Some(KeyCode::F29),
+            F30 => Some(KeyCode::F30),
+            F31 => Some(KeyCode::F31),
+            F32 => Some(KeyCode::F32),
+            F33 => Some(KeyCode::F33),
+            F34 => Some(KeyCode::F34),
+            F35 => Some(KeyCode::F35),
+            _ => None
         }
     }
 }
-impl ToGuiEvent for WindowEvent<'_> {
+impl ToGuiEvent for WindowEvent {
     fn to_gui_event(&self) -> Option<GuiEvent> {
         match self {
-            #[allow(deprecated)] //We'll deal with this when we have to
+            
+            winit::event::WindowEvent::ModifiersChanged(modifiers) => {
+                modifiers.state().to_gui_mod().map(|m| GuiEvent::Keyboard(crate::input::KeyEvent::ModifiersChanged(m)))
+            }
+
             winit::event::WindowEvent::KeyboardInput {
-                input:
-                    winit::event::KeyboardInput {
-                        state,
-                        virtual_keycode: Some(keycode),
-                        modifiers,
-                        ..
+                event:  KeyEvent {
+                    physical_key: PhysicalKey::Code(key_code),
+                    state,
+                    
+                    ..
                     },
                 ..
             } => {
-                let gui_key_code = keycode.to_gui_key_code();
-                if let Some(gui_key_code) = gui_key_code {
+                if let Some(gui_key_code) = key_code.to_gui_key_code() {
                     use winit::event::ElementState::*;
 
                     Some(GuiEvent::Keyboard(match state {
-                        Pressed => KeyEvent::Pressed(
+                        Pressed => crate::input::KeyEvent::Pressed(
                             gui_key_code,
-                            modifiers.to_gui_mod().unwrap_or_default(),
                         ),
-                        Released => KeyEvent::Released(
+                        Released => crate::input::KeyEvent::Released(
                             gui_key_code,
-                            modifiers.to_gui_mod().unwrap_or_default(),
                         ),
                     }))
                 } else {
@@ -247,7 +244,7 @@ impl ToGuiEvent for WindowEvent<'_> {
     }
 }
 
-impl ToGuiMod for winit::event::ModifiersState {
+impl ToGuiMod for winit::keyboard::ModifiersState {
     fn to_gui_mod(&self) -> Option<Modifiers> {
         Modifiers::from_bits(self.bits())
     }

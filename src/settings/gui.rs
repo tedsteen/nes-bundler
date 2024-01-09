@@ -130,8 +130,8 @@ impl Gui {
         );
     }
 
-    pub(crate) fn on_event(&mut self, event: &winit::event::WindowEvent<'_>) -> bool {
-        self.egui_glow.on_event(event).consumed
+    pub(crate) fn on_event(&mut self, window: &winit::window::Window, event: &winit::event::WindowEvent) -> bool {
+        self.egui_glow.on_window_event(window, event).consumed
     }
     pub fn destroy(&mut self) {
         self.egui_glow.destroy();

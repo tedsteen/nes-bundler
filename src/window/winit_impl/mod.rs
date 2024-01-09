@@ -14,12 +14,12 @@ impl Fullscreen for winit::window::Window {
 
         #[cfg(target_os = "macos")]
         if key_mod.contains(Modifiers::LOGO)
-            && (key_code == KeyCode::F || key_code == KeyCode::Return)
+            && (key_code == KeyCode::KeyF || key_code == KeyCode::Enter)
         {
             use winit::platform::macos::WindowExtMacOS;
             if window.simple_fullscreen() {
                 window.set_simple_fullscreen(false);
-                window.set_inner_size(LogicalSize::new(
+                let _ = window.request_inner_size(LogicalSize::new(
                     crate::DEFAULT_WINDOW_SIZE.0,
                     crate::DEFAULT_WINDOW_SIZE.1,
                 ));
@@ -30,12 +30,12 @@ impl Fullscreen for winit::window::Window {
         }
 
         #[cfg(not(target_os = "macos"))]
-        if (key_mod.contains(Modifiers::ALT) && key_code == KeyCode::Return)
+        if (key_mod.contains(Modifiers::ALT) && key_code == KeyCode::Enter)
             || key_code == KeyCode::F11
         {
             if window.fullscreen().is_some() {
                 window.set_fullscreen(None);
-                window.set_inner_size(LogicalSize::new(
+                let _ = window.request_inner_size(LogicalSize::new(
                     crate::DEFAULT_WINDOW_SIZE.0,
                     crate::DEFAULT_WINDOW_SIZE.1,
                 ));
