@@ -35,7 +35,7 @@ impl Fullscreen for winit::window::Window {
         {
             if window.fullscreen().is_some() {
                 window.set_fullscreen(None);
-                window.set_inner_size(LogicalSize::new(
+                let _ = window.request_inner_size(LogicalSize::new(
                     crate::DEFAULT_WINDOW_SIZE.0,
                     crate::DEFAULT_WINDOW_SIZE.1,
                 ));
