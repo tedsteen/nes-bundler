@@ -2,6 +2,7 @@ use std::{num::NonZeroU32, sync::Arc};
 
 use anyhow::Result;
 use egui::NumExt;
+use raw_window_handle::HasRawWindowHandle;
 
 use crate::input::keys::{KeyCode, Modifiers};
 mod winit_impl;
@@ -16,26 +17,38 @@ pub struct GlutinWindowContext {
     gl_surface: glutin::surface::Surface<glutin::surface::WindowSurface>,
     pub glow_context: Arc<glow::Context>,
 }
+pub struct Size {
+    pub width: f64,
+    pub height: f64,
+}
+impl Size {
+    pub(crate) fn new(width: f64, height: f64) -> Size {
+        Self { width, height }
+    }
+}
 
+impl From<Size> for winit::dpi::Size {
+    fn from(val: Size) -> Self {
+        winit::dpi::Size::Logical(winit::dpi::LogicalSize { width: val.width, height: val.height})
+    }
+} 
 impl GlutinWindowContext {
     // refactor this function to use `glutin-winit` crate eventually.
     // preferably add android support at the same time.
-    #[allow(unsafe_code)]
-    pub unsafe fn new(
+    pub fn new(
         title: &str,
-        width: f32,
-        height: f32,
+        inner_size: Size,
+        min_inner_size: Size,
         event_loop: &winit::event_loop::EventLoopWindowTarget<()>,
     ) -> Result<Self> {
-        use glutin::context::NotCurrentGlContextSurfaceAccessor;
         use glutin::display::GetGlDisplay;
         use glutin::display::GlDisplay;
         use glutin::prelude::GlSurface;
-        use raw_window_handle::HasRawWindowHandle;
         let winit_window_builder = winit::window::WindowBuilder::new()
             .with_resizable(true)
             //.with_disallow_hidpi(true)
-            .with_inner_size(winit::dpi::LogicalSize { width, height })
+            .with_inner_size(inner_size)
+            .with_min_inner_size(min_inner_size)
             .with_title(title)
             .with_visible(true);
 
@@ -48,7 +61,7 @@ impl GlutinWindowContext {
         log::debug!("trying to get gl_config");
         let (mut window, gl_config) =
             glutin_winit::DisplayBuilder::new() // let glutin-winit helper crate handle the complex parts of opengl context creation
-                .with_preference(glutin_winit::ApiPrefence::FallbackEgl) // https://github.com/emilk/egui/issues/2520#issuecomment-1367841150
+                .with_preference(glutin_winit::ApiPreference::FallbackEgl) // https://github.com/emilk/egui/issues/2520#issuecomment-1367841150
                 .with_window_builder(Some(winit_window_builder.clone()))
                 .build(
                     event_loop,
@@ -104,23 +117,23 @@ impl GlutinWindowContext {
         let gl_surface =
             unsafe { gl_display.create_window_surface(&gl_config, &surface_attributes)? };
         log::debug!("surface created successfully: {gl_surface:?}.making context current");
-        let gl_context = not_current_gl_context.make_current(&gl_surface)?;
+        let gl_context = glutin::context::NotCurrentGlContext::make_current(not_current_gl_context, &gl_surface)?;
 
         gl_surface.set_swap_interval(
             &gl_context,
             glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap()),
         )?;
-
-        Ok(GlutinWindowContext {
-            window,
-            gl_context,
-            glow_context: Arc::new(glow::Context::from_loader_function(|s| {
-                let s = std::ffi::CString::new(s)
-                    .expect("failed to construct C string from string for gl proc address");
-                gl_display.get_proc_address(&s)
-            })),
-            gl_surface,
-        })
+        #[allow(clippy::arc_with_non_send_sync)]
+            Ok(GlutinWindowContext {
+                window,
+                gl_context,
+                glow_context: Arc::new(unsafe { glow::Context::from_loader_function(|s| {
+                    let s = std::ffi::CString::new(s)
+                        .expect("failed to construct C string from string for gl proc address");
+                    gl_display.get_proc_address(&s)
+                })}),
+                gl_surface,
+            })
     }
 
     pub fn window(&self) -> &winit::window::Window {
@@ -152,9 +165,9 @@ impl GlutinWindowContext {
 
 pub fn create_display(
     title: &str,
-    width: u32,
-    height: u32,
+    inner_size: Size,
+    min_inner_size: Size,
     event_loop: &winit::event_loop::EventLoopWindowTarget<()>,
 ) -> Result<GlutinWindowContext> {
-    unsafe { GlutinWindowContext::new(title, width as f32, height as f32, event_loop) }
+    GlutinWindowContext::new(title, inner_size, min_inner_size, event_loop)
 }

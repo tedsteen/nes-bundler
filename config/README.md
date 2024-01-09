@@ -31,26 +31,26 @@ default_settings:
                 id: 00-keyboard-1
                 name: "⌨ Keyboard 1"
                 kind: !Keyboard
-                    up: Up
-                    down: Down
-                    left: Left
-                    right: Right
-                    start: Return
-                    select: RShift
-                    b: Key1
-                    a: Key2
+                    up: ArrowUp
+                    down: ArrowDown
+                    left: ArrowLeft
+                    right: ArrowRight
+                    start: Enter
+                    select: ShiftRight
+                    b: Digit1
+                    a: Digit2
             00-keyboard-2:
                 id: 00-keyboard-2
                 name: "⌨ Keyboard 2"
                 kind: !Keyboard
-                    up: W
-                    down: S
-                    left: A
-                    right: D
-                    start: Key9
-                    select: Key0
-                    b: LAlt
-                    a: LControl
+                    up: KeyW
+                    down: KeyS
+                    left: KeyA
+                    right: KeyD
+                    start: Digit9
+                    select: Digit0
+                    b: AltLeft
+                    a: ControlLeft
             01-gamepad-0:
                 id: 01-gamepad-0
                 name: "🎮 Gamepad"

@@ -21,12 +21,14 @@ use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
 use base64::Engine;
 
 use input::Inputs;
+use input::keys::Modifiers;
 use nes_state::local::LocalNesState;
 use nes_state::{start_nes, FrameData, get_mapper};
 use palette::NTSC_PAL;
 
 use sdl2::EventPump;
 use settings::Settings;
+use window::Size;
 
 mod audio;
 mod bundle;
@@ -58,7 +60,7 @@ fn main() {
     log::info!("nes-bundler starting!");
     match initialise() {
         Ok((game_loop, event_loop, sdl_event_pump, gl_window)) => {
-            run(game_loop, event_loop, sdl_event_pump, gl_window);
+            run(game_loop, event_loop, sdl_event_pump, gl_window).expect("Could not run the winit event loop");
         }
         Err(e) => {
             log::error!("nes-bundler failed to start :(\n{:?}", e);
@@ -71,8 +73,10 @@ fn run(
     winit_event_loop: winit::event_loop::EventLoop<()>,
     mut sdl_event_pump: EventPump,
     mut gl_window: GlutinWindowContext,
-) -> ! {
-    winit_event_loop.run(move |winit_event, _, control_flow| {
+) -> std::result::Result<(), winit::error::EventLoopError> {
+    let mut modifiers = Modifiers::empty();
+
+    winit_event_loop.run(move |winit_event, control_flow| {
         if log::max_level() == log::Level::Trace && Time::now().sub(&game_loop.last_stats) >= 1.0 {
             let (ups, rps, ..) = game_loop.get_stats();
             log::trace!("UPS: {:?}, RPS: {:?}", ups, rps);
@@ -87,25 +91,21 @@ fn run(
             winit::event::Event::WindowEvent { event, .. } => {
                 use winit::event::WindowEvent;
                 if matches!(event, WindowEvent::CloseRequested | WindowEvent::Destroyed) {
-                    *control_flow = winit::event_loop::ControlFlow::Exit;
+                    //*control_flow = winit::event_loop::ControlFlow::Exit;
+                    control_flow.exit();
                 }
 
                 if let winit::event::WindowEvent::Resized(physical_size) = &event {
                     gl_window.resize(*physical_size);
-                } else if let winit::event::WindowEvent::ScaleFactorChanged {
-                    new_inner_size, ..
-                } = &event
-                {
-                    gl_window.resize(**new_inner_size);
                 }
 
-                if !gui.on_event(event) {
+                if !gui.on_event(gl_window.window(), event) {
                     if let Some(winit_gui_event) = &event.to_gui_event() {
                         sdl_events.push(winit_gui_event.clone());
                     }
                 }
             }
-            winit::event::Event::LoopDestroyed => {
+            winit::event::Event::LoopExiting => {
                 gui.destroy();
                 return;
             }
@@ -115,7 +115,11 @@ fn run(
         for event in sdl_events {
             let game = &mut game_loop.game;
             let consumed = match &event {
-                settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(key_code, modifiers)) => {
+                &settings::gui::GuiEvent::Keyboard(KeyEvent::ModifiersChanged(new_modifiers)) => {
+                    modifiers = new_modifiers;
+                    false
+                }
+                settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(key_code)) => {
                     let settings = &mut game.settings;
                     let nes_state = &mut game.nes_state;
 
@@ -144,7 +148,7 @@ fn run(
 
                         key_code => gl_window
                             .window_mut()
-                            .check_and_set_fullscreen(modifiers, key_code),
+                            .check_and_set_fullscreen(&modifiers, key_code),
                     }
                 }
                 GuiEvent::Gamepad(input::gamepad::GamepadEvent::ButtonDown {
@@ -180,7 +184,7 @@ fn run(
             },
             |game_loop| {
                 let game = &mut game_loop.game;
-                if let winit::event::Event::RedrawEventsCleared = &winit_event {
+                if let winit::event::Event::AboutToWait = &winit_event {
                     if game.run_gui(gl_window.window()) {
                         game.settings.save();
                     }
@@ -201,6 +205,7 @@ fn run(
                 }
             },
         );
+        gl_window.window().request_redraw();
     })
 }
 
@@ -226,16 +231,19 @@ fn initialise() -> Result<
         }
         std::process::exit(0);
     }
-    let event_loop = winit::event_loop::EventLoopBuilder::with_user_event().build();
+    let event_loop = winit::event_loop::EventLoopBuilder::with_user_event().build().expect("Could not create the event loop");
     let gl_window = create_display(
         &bundle.config.window_title,
-        DEFAULT_WINDOW_SIZE.0,
-        DEFAULT_WINDOW_SIZE.1,
+        Size::new(
+        DEFAULT_WINDOW_SIZE.0 as f64,
+        DEFAULT_WINDOW_SIZE.1  as f64),
+        Size::new(
+            WIDTH as f64,
+            HEIGHT as f64),
         &event_loop,
     )?;
 
-    let egui_glow = egui_glow::EguiGlow::new(&event_loop, gl_window.glow_context.clone(), None);
-    egui_glow.egui_ctx.set_pixels_per_point(gl_window.get_dpi());
+    let egui_glow = egui_glow::EguiGlow::new(&event_loop, gl_window.glow_context.clone(), None, Some(gl_window.get_dpi()));
 
     #[allow(unused_mut)] //Needed by the netplay feature
     let mut settings = Settings::new(bundle.config.default_settings.clone());
