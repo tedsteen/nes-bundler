@@ -124,46 +124,46 @@ impl Stream {
             .map(|s| *s as f32 * self.volume)
             .collect::<Vec<f32>>();
 
-        //let mut stretch_amount = FPS / fps_hint;
-//
-        //let samples_per_frame = (self.output_device.spec().freq as f32 / fps_hint)
-        //    + self.output_device.spec().samples as f32;
-//
-        ////Why 3.5? I don't know, but it works
-        //let sdl_max_buffer_size = samples_per_frame * 3.5;
-        //let buffer_len = self.output_device.size() + samples.len() as u32;
-        //if buffer_len as f32 > sdl_max_buffer_size {
-        //    let stretch_multiplier = (sdl_max_buffer_size / buffer_len as f32) * 1.0;
-        //    log::trace!(
-        //        "audio buffer too big: {:?} multiplier={:?}",
-        //        buffer_len,
-        //        stretch_multiplier
-        //    );
-        //    stretch_amount *= stretch_multiplier.max(0.01);
-        //} else if buffer_len as f32 <= samples_per_frame {
-        //    let stretch_multiplier = (samples_per_frame / buffer_len as f32) * 1.0;
-        //    log::trace!(
-        //        "audio buffer too small: {:?} multiplier={:?}",
-        //        buffer_len,
-        //        stretch_multiplier
-        //    );
-        //    stretch_amount *= stretch_multiplier.max(0.01);
-        //}
-        //let input_length = samples.len();
-        //let output_length = (input_length as f32 * stretch_amount) as usize;
-        //if stretch_amount != 1.0 {
-        //    log::trace!(
-        //        "stretching: amount={:?}% latency={:?} sdl_buffer_len={:?} input_length={:?} output_length={:?}",
-        //        stretch_amount * 100.0,
-        //        self.output_device.spec().samples,
-        //        buffer_len,
-        //        input_length,
-        //        output_length
-        //    );
-        //}
-//
-        //let output_buffer = self.stretch.process(&mut [samples], output_length);
-        let output_buffer = [samples];
+        let mut stretch_amount = FPS / fps_hint;
+
+        let samples_per_frame = (self.output_device.spec().freq as f32 / fps_hint)
+            + self.output_device.spec().samples as f32;
+
+        //Why 3.5? I don't know, but it works
+        let sdl_max_buffer_size = samples_per_frame * 3.5;
+        let buffer_len = self.output_device.size() + samples.len() as u32;
+        if buffer_len as f32 > sdl_max_buffer_size {
+            let stretch_multiplier = (sdl_max_buffer_size / buffer_len as f32) * 1.0;
+            log::trace!(
+                "audio buffer too big: {:?} multiplier={:?}",
+                buffer_len,
+                stretch_multiplier
+            );
+            stretch_amount *= stretch_multiplier.max(0.01);
+        } else if buffer_len as f32 <= samples_per_frame {
+            let stretch_multiplier = (samples_per_frame / buffer_len as f32) * 1.0;
+            log::trace!(
+                "audio buffer too small: {:?} multiplier={:?}",
+                buffer_len,
+                stretch_multiplier
+            );
+            stretch_amount *= stretch_multiplier.max(0.01);
+        }
+        let input_length = samples.len();
+        let output_length = (input_length as f32 * stretch_amount) as usize;
+        if stretch_amount != 1.0 {
+            log::trace!(
+                "stretching: amount={:?}% latency={:?} sdl_buffer_len={:?} input_length={:?} output_length={:?}",
+                stretch_amount * 100.0,
+                self.output_device.spec().samples,
+                buffer_len,
+                input_length,
+                output_length
+            );
+        }
+
+        let output_buffer = self.stretch.process(&mut [samples], output_length);
+
         if let Err(e) = self.output_device.queue_audio(
             &output_buffer[0]
                 .iter()

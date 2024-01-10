@@ -89,6 +89,13 @@ struct SignalsmithStretch {
 	
 	template<class Inputs, class Outputs>
 	void process(Inputs **inputs, int inputSamples, Outputs **outputs, int outputSamples) {
+		// for (int outputIndex = 0; outputIndex < outputSamples; ++outputIndex) {
+		// 	int inputIndex = outputIndex%inputSamples;
+		// 	for (int c = 0; c < channels; ++c) {
+		// 		outputs[c][outputIndex] = inputs[c][inputIndex];
+		// 	}
+		// }
+
 		Sample totalEnergy = 0;
 		for (int c = 0; c < channels; ++c) {
 			auto &&inputChannel = inputs[c];
