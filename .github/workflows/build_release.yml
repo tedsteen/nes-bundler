@@ -21,7 +21,7 @@ jobs:
             target: x86_64-unknown-linux-gnu
           - name: windows
             os: windows-latest
-            target: i686-pc-windows-msvc
+            target: x86_64-pc-windows-msvc
             file-ending: ".exe"
           - name: macos-x86
             os: macos-latest
