@@ -69,7 +69,7 @@ impl Stream {
     ) -> Result<AudioQueue<i16>> {
         let channels = 1;
         let sample_rate = 44100;
-
+        log::debug!("Starting audio output device '{:?}' latency={}, channels={}, sample_rate={}", output_device, latency, channels, sample_rate);
         let desired_spec = AudioSpecDesired {
             freq: Some(sample_rate),
             channels: Some(channels),
@@ -178,7 +178,7 @@ impl Stream {
         if self.output_device_name != output_device_name {
             match Stream::start_output_device(
                 self.output_device.subsystem(),
-                &self.output_device_name,
+                &output_device_name,
                 Stream::frames_to_latency(self.output_device.spec()),
             ) {
                 Ok(new_device) => {
