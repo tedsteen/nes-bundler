@@ -316,8 +316,8 @@ impl Game {
             &mut [
                 #[cfg(feature = "debug")]
                 Some(&mut self.debug),
-                Some(&mut self.audio),
                 Some(&mut self.inputs),
+                Some(&mut self.audio),
                 self.nes_state.get_gui(),
             ],
             &mut self.settings,
@@ -333,8 +333,8 @@ impl Game {
             &mut [
                 #[cfg(feature = "debug")]
                 Some(&mut self.debug),
-                Some(&mut self.audio),
                 Some(&mut self.inputs),
+                Some(&mut self.audio),
                 self.nes_state.get_gui(),
             ],
             &mut self.settings,

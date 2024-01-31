@@ -1,11 +1,11 @@
+use std::time::{Duration, Instant};
+
 use egui::{
-    epaint::ImageDelta, Color32, ColorImage, Context, ImageData, Order, TextureHandle,
-    TextureOptions, Image,
+    epaint::ImageDelta, Align2, Color32, ColorImage, Image, ImageData, Order, RichText, TextureHandle, TextureOptions, Ui, Window
 };
 
 use crate::{
-    input::{gamepad::GamepadEvent, KeyEvent},
-    HEIGHT, WIDTH,
+    input::{gamepad::GamepadEvent, KeyEvent}, DEFAULT_WINDOW_SIZE, HEIGHT, WIDTH
 };
 
 use super::Settings;
@@ -20,13 +20,15 @@ pub enum GuiEvent {
     Gamepad(GamepadEvent),
 }
 pub trait GuiComponent {
-    fn ui(&mut self, ctx: &Context, ui_visible: bool, name: String, settings: &mut Settings);
+    fn ui(&mut self, ui: &mut Ui, settings: &mut Settings);
+    fn messages(&self) -> Vec<String>;
     fn event(&mut self, event: &GuiEvent, settings: &mut Settings);
     fn name(&self) -> Option<String>;
     fn open(&mut self) -> &mut bool;
 }
 
 pub struct Gui {
+    start_time: Instant,
     visible: bool,
     egui_glow: egui_glow::EguiGlow,
     nes_texture: TextureHandle,
@@ -35,6 +37,7 @@ pub struct Gui {
 }
 
 impl Gui {
+    
     pub fn new(egui_glow: egui_glow::EguiGlow) -> Self {
         let nes_texture_options = TextureOptions {
             magnification: egui::TextureFilter::Nearest,
@@ -42,7 +45,8 @@ impl Gui {
         };
 
         Self {
-            visible: true,
+            start_time: Instant::now(),
+            visible: false,
             nes_texture: egui_glow.egui_ctx.load_texture(
                 "nes",
                 ImageData::Color(ColorImage::new(
@@ -88,31 +92,48 @@ impl Gui {
                         }
                     }
                 });
-            egui::Area::new("window_area")
+            egui::Area::new("message_area")
                 .fixed_pos([0.0, 0.0])
+                .order(Order::Middle)
                 .show(ctx, |ui| {
-                    if self.visible {
-                        egui::TopBottomPanel::top("menubar_container").show_inside(ui, |ui| {
-                            egui::menu::bar(ui, |ui| {
-                                ui.menu_button("Settings", |ui| {
-                                    for gui in guis.iter_mut().flatten() {
-                                        if let Some(name) = gui.name() {
-                                            if ui.button(name).clicked() {
-                                                *gui.open() = !*gui.open();
-                                                ui.close_menu();
-                                            };
-                                        }
-                                    }
-                                })
-                            });
-                        });
-                    }
-                    for gui in guis.iter_mut().flatten() {
-                        if let Some(name) = gui.name() {
-                            gui.ui(ctx, self.visible, name, settings);
+                    ui.vertical_centered(|ui| {
+                        ui.add_space(50.0);
+                        for gui in guis.iter_mut().flatten() {
+                            if gui.name().is_some() {
+                                for message in gui.messages() {
+                                    ui.heading(message);
+                                }
+                            }
                         }
+                        if self.start_time.elapsed() < Duration::new(5, 0) {
+                            ui.heading(RichText::new("Press ESC to see settings").heading().strong().background_color(Color32::from_rgba_premultiplied(20, 20, 20, 180)));
+                        }
+                    });
+            });
+            
+            Window::new("Settings")
+            .open(&mut self.visible)
+            .collapsible(false)
+            .resizable(false)
+            .movable(true)
+            .pivot(Align2::CENTER_CENTER)
+            .default_pos([DEFAULT_WINDOW_SIZE.0 as f32 / 2.0, DEFAULT_WINDOW_SIZE.1 as f32 / 2.0])
+            .show(ctx, |ui| {
+                for (idx, gui) in guis.iter_mut().flatten().enumerate() {
+                    if let Some(name) = gui.name() {
+                        if idx != 0 {
+                            ui.separator();
+                        }
+                        
+                        ui.vertical_centered(|ui| {
+                            ui.heading(name);
+                        });
+                        
+                        gui.ui(ui, settings);
+
                     }
-                });
+                }
+            });
         });
     }
 

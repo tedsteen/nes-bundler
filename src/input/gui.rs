@@ -5,7 +5,7 @@ use crate::{
         Settings,
     },
 };
-use egui::{Color32, Context, Grid, RichText, Ui, Window};
+use egui::{Color32, Grid, RichText, Ui};
 
 use super::{settings::InputConfigurationRef, MapRequest};
 
@@ -105,10 +105,7 @@ impl GuiComponent for Inputs {
         self.advance(event, settings);
     }
 
-    fn ui(&mut self, ctx: &Context, ui_visible: bool, name: String, settings: &mut Settings) {
-        if !ui_visible {
-            return;
-        }
+    fn ui(&mut self, ui: &mut Ui, settings: &mut Settings) {
         let input_settings = &mut settings.input;
         let available_configurations = &mut input_settings
             .configurations
@@ -121,34 +118,28 @@ impl GuiComponent for Inputs {
 
         let joypad_0 = self.get_joypad(0);
         let joypad_1 = self.get_joypad(1);
-        Window::new(name)
-            .open(&mut self.gui_is_open)
-            .collapsible(false)
-            .resizable(false)
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        Self::key_map_ui(
-                            ui,
-                            joypad_0,
-                            available_configurations,
-                            &mut input_settings.selected[0],
-                            0,
-                            &mut self.mapping_request,
-                        );
-                    });
-                    ui.vertical(|ui| {
-                        Self::key_map_ui(
-                            ui,
-                            joypad_1,
-                            available_configurations,
-                            &mut input_settings.selected[1],
-                            1,
-                            &mut self.mapping_request,
-                        );
-                    });
-                });
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                Self::key_map_ui(
+                    ui,
+                    joypad_0,
+                    available_configurations,
+                    &mut input_settings.selected[0],
+                    0,
+                    &mut self.mapping_request,
+                );
             });
+            ui.vertical(|ui| {
+                Self::key_map_ui(
+                    ui,
+                    joypad_1,
+                    available_configurations,
+                    &mut input_settings.selected[1],
+                    1,
+                    &mut self.mapping_request,
+                );
+            });
+        });
 
         self.remap_configuration();
     }
@@ -159,5 +150,8 @@ impl GuiComponent for Inputs {
 
     fn open(&mut self) -> &mut bool {
         &mut self.gui_is_open
+    }
+    fn messages(&self) -> Vec<String> {
+        [].to_vec()
     }
 }
