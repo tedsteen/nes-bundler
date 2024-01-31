@@ -1,4 +1,4 @@
-use egui::{Context, Slider, Window};
+use egui::{Slider, Ui};
 
 use crate::{
     settings::{
@@ -26,29 +26,20 @@ impl Debug {
 }
 
 impl GuiComponent for Debug {
-    fn ui(&mut self, ctx: &Context, ui_visible: bool, name: String, _settings: &mut Settings) {
-        if !ui_visible {
-            return;
-        }
-        Window::new(name)
-            .open(&mut self.gui_is_open)
-            .collapsible(false)
-            .resizable(false)
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    egui::Grid::new("debug_grid")
-                        .num_columns(2)
-                        .spacing([10.0, 4.0])
-                        .striped(true)
-                        .show(ui, |ui| {
-                            ui.checkbox(&mut self.override_fps, "Override FPS");
-                            if self.override_fps {
-                                ui.add(Slider::new(&mut self.fps, 0.5..=180.0).suffix("FPS"));
-                            }
-                            ui.end_row();
-                        });
+    fn ui(&mut self, ui: &mut Ui, _settings: &mut Settings) {
+        ui.horizontal(|ui| {
+            egui::Grid::new("debug_grid")
+                .num_columns(2)
+                .spacing([10.0, 4.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    ui.checkbox(&mut self.override_fps, "Override FPS");
+                    if self.override_fps {
+                        ui.add(Slider::new(&mut self.fps, 0.5..=180.0).suffix("FPS"));
+                    }
+                    ui.end_row();
                 });
-            });
+        });
     }
 
     fn name(&self) -> Option<String> {
@@ -60,4 +51,7 @@ impl GuiComponent for Debug {
     }
 
     fn event(&mut self, _event: &GuiEvent, _settings: &mut Settings) {}
+    fn messages(&self) -> Vec<String> {
+        [].to_vec()
+    }
 }
