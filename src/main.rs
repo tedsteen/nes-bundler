@@ -220,6 +220,7 @@ fn initialise() -> Result<
     anyhow::Error,
 > {
     sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
+    let event_loop = winit::event_loop::EventLoopBuilder::with_user_event().build().expect("Could not create the event loop");
     let bundle = Bundle::load()?;
     #[cfg(feature = "netplay")]
     if std::env::args()
@@ -231,7 +232,6 @@ fn initialise() -> Result<
         }
         std::process::exit(0);
     }
-    let event_loop = winit::event_loop::EventLoopBuilder::with_user_event().build().expect("Could not create the event loop");
     let gl_window = create_display(
         &bundle.config.window_title,
         Size::new(
