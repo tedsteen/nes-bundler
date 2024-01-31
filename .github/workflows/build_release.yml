@@ -82,9 +82,6 @@ jobs:
     steps:
       - name: Download binaries
         uses: actions/download-artifact@v4
-        with:
-          name: binaries-${{ matrix.name }}
-
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
