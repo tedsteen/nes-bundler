@@ -11,7 +11,7 @@ default = []
 
 netplay = ["matchbox_socket", "tokio", "ggrs", "futures-timer", "futures", "uuid", "reqwest", "md5"]
 zip-bundle = ["rfd", "zip"]
-debug = []
+debug = ["egui_plot"]
 
 [profile.release]
 strip = true
@@ -32,7 +32,7 @@ bitflags = "2"
 egui = { version = "0.25", default-features = false, features = [
   "bytemuck", "default_fonts"
 ] }
-egui_plot = "0.25"
+egui_plot = { version = "0.25", optional = true }
 egui_glow = { version = "0.25", features = ["winit", "links"] }
 glow = "0.13"
 winit = "0.29"
