@@ -23,7 +23,7 @@ codegen-units = 1
 
 [dependencies]
 log = "0.4"
-env_logger = "0.10"
+env_logger = "0.11"
 anyhow = "1.0"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
@@ -49,7 +49,7 @@ rusticnes-core = { git = "https://github.com/tedsteen/rusticnes-core-for-nes-bun
 base64 = "0.21"
 
 # zip-bundle deps
-rfd = { version = "0.12", optional = true }
+rfd = { version = "0.13", optional = true }
 zip = { version = "0.6", default-features = false, features = ["deflate"], optional = true }
 
 # Netplay deps

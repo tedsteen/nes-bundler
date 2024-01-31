@@ -31,7 +31,7 @@ jobs:
             target: aarch64-apple-darwin
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Install latest rust toolchain
       uses: dtolnay/rust-toolchain@stable
@@ -69,9 +69,9 @@ jobs:
         /usr/bin/codesign --force -s BF7E84BDA9B9A580B3CA909530AC85693BBA287E nes-bundler-${{ matrix.name }}* -v
 
     - name: Upload binaries
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: binaries
+        name: binaries-${{ matrix.name }}
         path: nes-bundler-${{ matrix.name }}*
   
   release:
@@ -81,9 +81,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download binaries
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: binaries
+          name: binaries-${{ matrix.name }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
