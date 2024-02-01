@@ -1,9 +1,8 @@
-use std::collections::VecDeque;
 use std::ops::{Add, RangeInclusive};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use sdl2::audio::{AudioCallback, AudioDevice, AudioSpec, AudioSpecDesired};
+use sdl2::audio::{AudioQueue, AudioSpec, AudioSpecDesired};
 use sdl2::{AudioSubsystem, Sdl};
 use serde::{Deserialize, Serialize};
 
@@ -26,85 +25,14 @@ pub struct AudioSettings {
 
 pub struct Stream {
     output_device_name: Option<String>,
-    audio_interface: AudioInterface,
+    stretch: Stretch<1>,
+    audio_queue: AudioQueue<i16>,
     pub(crate) volume: f32,
-}
-
-use std::sync::mpsc::{self, Receiver, Sender};
-
-struct SoundFrame {
-    buffer: Vec<i16>,
-    fps: Fps,
-}
-
-struct Ted {
-    spec: AudioSpec,
-    rx: Receiver<SoundFrame>,
-    stretch2: Stretch<1>,
-    buffer: VecDeque<i16>,
-}
-impl Ted {
-    fn new(rx: Receiver<SoundFrame>, spec: AudioSpec) -> Self {
-        Self {
-            spec,
-            rx,
-            stretch2: Stretch::new(),
-            buffer: VecDeque::new(),
-        }
-    }
-}
-
-struct AudioInterface {
-    audio_device: AudioDevice<Ted>,
-    tx: Sender<SoundFrame>
-}
-
-impl AudioCallback for Ted {
-    type Channel = i16;
-
-    fn callback(&mut self, samples_out: &mut [Self::Channel]) {
-        let mut new_samples = Vec::new();
-        let mut fps = 0.0;
-        let mut frames = 0;
-        for mut e in self.rx.try_iter() {
-            fps += e.fps;
-            frames += 1;
-            new_samples.append(&mut e.buffer);
-        }
-        let fps = fps / frames as f32;
-
-        let new_len = ((FPS / fps) * new_samples.len() as f32) as usize;
-        let total_len = self.buffer.len() + new_len;
-        let drift = samples_out.len() as isize - total_len as isize;
-
-        let len = if drift > 0 {
-            log::debug!("underrun: {}", drift);
-            new_len + (drift*2) as usize
-            
-        } else if drift < -(self.spec.size as isize * 3) {
-            log::debug!("overrun: {}, {}", drift, self.spec.size);
-            new_len/2
-        } else {
-            //println!("self.buffer.len(): {}", self.buffer.len());
-            new_len
-        };
-
-        for &s in self.stretch2.process(&[&new_samples], len)[0] {
-            self.buffer.push_back(s);
-        }
-        
-        for e in samples_out {
-            if let Some(sample) = self.buffer.pop_front() {
-                *e = sample;
-            }
-        }
-        
-    }
 }
 
 impl Stream {
     pub fn get_available_output_device_names(&self) -> Vec<String> {
-        let subsystem = self.audio_interface.audio_device.subsystem();
+        let subsystem = self.audio_queue.subsystem();
         if let Some(num_devices) = subsystem.num_audio_playback_devices() {
             (0..num_devices)
                 .flat_map(|i| subsystem.audio_playback_device_name(i))
@@ -122,23 +50,19 @@ impl Stream {
         audio_subsystem: &AudioSubsystem,
         audio_settings: &AudioSettings,
     ) -> Result<Self> {
-        let new_audio_device = Stream::new_audio_interface(
-            audio_subsystem,
-            &audio_settings.output_device,
-            audio_settings.latency,
-        )?;
         Ok(Self {
             output_device_name: audio_settings.output_device.clone(),
-            audio_interface: new_audio_device,
+            stretch: Stretch::new(),
+            audio_queue: Stream::new_audio_queue(
+                audio_subsystem,
+                &audio_settings.output_device,
+                audio_settings.latency,
+            )?,
             volume: audio_settings.volume as f32 / 100.0,
         })
     }
-
-    fn new_audio_interface(
-        audio_subsystem: &AudioSubsystem,
-        output_device: &Option<String>,
-        latency: u8,
-    ) -> Result<AudioInterface> {
+    
+    fn new_audio_queue(audio_subsystem: &AudioSubsystem, output_device: &Option<String>, latency: u8) -> Result<AudioQueue<i16>> {
         let channels = 1;
         let sample_rate = 44100;
         log::debug!("Starting audio output device '{:?}' latency={}, channels={}, sample_rate={}", output_device, latency, channels, sample_rate);
@@ -155,12 +79,12 @@ impl Stream {
                 ))
             },
         };
-        let (tx, rx) = mpsc::channel();
-        let audio_device = audio_subsystem.open_playback(None, &desired_spec, |spec| {
-            Ted::new(rx, spec)
-        }).unwrap();
-        audio_device.resume();
-        Ok(AudioInterface { audio_device, tx })
+        let output_device = audio_subsystem
+            .open_queue::<i16, _>(output_device.as_deref(), &desired_spec)
+            .or_else(|_| audio_subsystem.open_queue::<i16, _>(None, &desired_spec))
+            .map_err(anyhow::Error::msg)?;
+        output_device.resume();
+        Ok(output_device)
     }
 
     fn latency_to_frames(latency: u8, channels: u8, sample_rate: u32) -> u16 {
@@ -173,12 +97,12 @@ impl Stream {
     }
 
     pub fn set_latency(&mut self, latency: u8) {
-        if let Ok(new_interface) = Stream::new_audio_interface(
-            self.audio_interface.audio_device.subsystem(),
+        if let Ok(audio_queue) = Stream::new_audio_queue(
+            self.audio_queue.subsystem(),
             &self.output_device_name,
             latency,
         ) {
-            self.audio_interface = new_interface;
+            self.audio_queue = audio_queue;
         } else {
             log::error!("Failed to set audio latency to {}", latency);
         }
@@ -188,26 +112,38 @@ impl Stream {
         Some(1..=50)
     }
 
-    pub(crate) fn push_samples(&mut self, samples: &[SampleFormat], fps_hint: Fps) {
-        //Set volume
-        let samples = samples
-           .iter()
-           .map(|s| (*s as f32 * self.volume) as SampleFormat)
-           .collect::<Vec<SampleFormat>>();
+    pub(crate) fn push_samples(&mut self, new_samples: &[SampleFormat], fps_hint: Fps) {        
+        let new_len = ((FPS / fps_hint) * new_samples.len() as f32) as usize;
+        let queue_size = self.audio_queue.size();
 
-        self.audio_interface.tx.send(SoundFrame { buffer: samples.to_vec(), fps: fps_hint }).unwrap();
+        let len = if queue_size == 0 {
+            log::trace!("underrun");
+            new_len + (self.audio_queue.spec().size*2) as usize
+            
+        } else if queue_size > (self.audio_queue.spec().size * 5) {
+            log::trace!("overrun: {}", queue_size);
+            new_len/2
+        } else {
+            new_len
+        };
+
+        let stretched = self.stretch.process(&[&new_samples], len)[0];
+        //Set volume
+        let samples: Vec<i16> = stretched.iter().map(|s| (*s as f32 * self.volume) as SampleFormat).collect();
+
+        self.audio_queue.queue_audio(&samples).unwrap();
     }
 
     pub(crate) fn set_output_device(&mut self, output_device_name: Option<String>) {
         if self.output_device_name != output_device_name {
-            match Stream::new_audio_interface(
-                self.audio_interface.audio_device.subsystem(),
+            match Stream::new_audio_queue(
+                self.audio_queue.subsystem(),
                 &output_device_name,
-                Stream::frames_to_latency(self.audio_interface.audio_device.spec()),
+                Stream::frames_to_latency(self.audio_queue.spec()),
             ) {
-                Ok(new_interface) => {
+                Ok(audio_queue) => {
                     self.output_device_name = output_device_name;
-                    self.audio_interface = new_interface;
+                    self.audio_queue = audio_queue;
                 }
                 Err(e) => {
                     log::error!("Failed to set audio output device: {:?}", e);
