@@ -1,5 +1,7 @@
 use cxx::UniquePtr;
 
+use super::SampleFormat;
+
 #[cxx::bridge]
 mod ffi {
     unsafe extern "C++" {
@@ -8,9 +10,9 @@ mod ffi {
 
         unsafe fn process(
             self: Pin<&mut SignalsmithStretch>,
-            inputs: *mut *mut f32,
+            inputs: *mut *mut i16,
             input_samples: i32,
-            outputs: *mut *mut f32,
+            outputs: *mut *mut i16,
             output_samples: i32,
         );
 
@@ -20,8 +22,7 @@ mod ffi {
         ) -> UniquePtr<SignalsmithStretch>;
     }
 }
-
-type SampleFormat = f32;
+unsafe impl Send for ffi::SignalsmithStretch {}
 
 pub struct Stretch<const CHANNELS: usize> {
     inner: UniquePtr<ffi::SignalsmithStretch>,
@@ -29,17 +30,18 @@ pub struct Stretch<const CHANNELS: usize> {
 }
 
 impl<const CHANNELS: usize> Stretch<CHANNELS> {
-    fn to_raw(inputs: &mut [&mut [SampleFormat]], size: usize) -> Vec<*mut SampleFormat> {
+    fn to_raw(inputs: &[&[SampleFormat]], size: usize) -> Vec<*mut SampleFormat> {
         inputs
-            .iter_mut()
+            .iter()
             .map(|inner| {
+                #[allow(clippy::iter_cloned_collect)]
                 inner[0..size]
-                    .iter_mut()
-                    .map(|f| *f)
-                    .collect::<Vec<f32>>()
+                    .iter()
+                    .copied()
+                    .collect::<Vec<SampleFormat>>()
                     .as_mut_ptr()
             })
-            .collect::<Vec<*mut f32>>()
+            .collect::<Vec<*mut SampleFormat>>()
     }
 
     pub fn new() -> Self {
@@ -50,10 +52,9 @@ impl<const CHANNELS: usize> Stretch<CHANNELS> {
     }
     const EMPTY_BUFFER: [&'static [SampleFormat]; CHANNELS] = [&[0 as SampleFormat]; CHANNELS];
 
-    //TODO: Why does the input have to be mutable?
     pub fn process(
         &mut self,
-        inputs: &mut [&mut [SampleFormat]; CHANNELS],
+        inputs: &[&[SampleFormat]; CHANNELS],
         mut output_length: usize,
     ) -> [&[SampleFormat]; CHANNELS] {
         //let inputs = &mut inputs[0];
@@ -62,7 +63,7 @@ impl<const CHANNELS: usize> Stretch<CHANNELS> {
             return Self::EMPTY_BUFFER;
         }
         if output_length > self.output_buffer.len() {
-            log::error!("Could not stretch to full length since output buffer is too small. output_length={} output_buffer.len()={}", output_length, self.output_buffer.len());
+            log::warn!("Could not stretch to full length since output buffer is too small. output_length={} output_buffer.len()={}", output_length, self.output_buffer.len());
             output_length = self.output_buffer.len();
         }
         let outputs = &mut self.output_buffer[0..output_length];

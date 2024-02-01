@@ -2,6 +2,7 @@
 std::unique_ptr<SignalsmithStretch> signalsmith_stretch_new(int nChannels, float sampleRate) {
   SignalsmithStretch *instance = new SignalsmithStretch();
   instance->presetCheaper(nChannels, sampleRate);
+  instance->reset();
   return std::unique_ptr<SignalsmithStretch>(instance);
 }
 
