@@ -66,7 +66,7 @@ impl Stream {
         let desired_spec = AudioSpecDesired {
             freq: Some(sample_rate),
             channels: Some(channels),
-            samples: None,
+            samples: Some(512), //TODO: perhaps figure this value out during runtime
         };
         let output_device = audio_subsystem
             .open_queue::<i16, _>(output_device.as_deref(), &desired_spec)
