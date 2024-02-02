@@ -10,7 +10,7 @@ mod ffi {
 
         unsafe fn process(
             self: Pin<&mut SignalsmithStretch>,
-            inputs: *mut *mut i16,
+            inputs: *const *const i16,
             input_samples: i32,
             outputs: *mut *mut i16,
             output_samples: i32,
@@ -30,7 +30,7 @@ pub struct Stretch<const CHANNELS: usize> {
 }
 
 impl<const CHANNELS: usize> Stretch<CHANNELS> {
-    fn to_raw(inputs: &[&[SampleFormat]], size: usize) -> Vec<*mut SampleFormat> {
+    fn to_raw(inputs: &[&[SampleFormat]], size: usize) -> Vec<*const SampleFormat> {
         inputs
             .iter()
             .map(|inner| {
@@ -39,9 +39,9 @@ impl<const CHANNELS: usize> Stretch<CHANNELS> {
                     .iter()
                     .copied()
                     .collect::<Vec<SampleFormat>>()
-                    .as_mut_ptr()
+                    .as_ptr()
             })
-            .collect::<Vec<*mut SampleFormat>>()
+            .collect::<Vec<*const SampleFormat>>()
     }
 
     pub fn new() -> Self {
@@ -73,7 +73,7 @@ impl<const CHANNELS: usize> Stretch<CHANNELS> {
 
         unsafe {
             self.inner.pin_mut().process(
-                Self::to_raw(inputs, input_length).as_mut_ptr(),
+                Self::to_raw(inputs, input_length).as_ptr(),
                 input_length as i32,
                 ffi_outputs,
                 output_length as i32,
