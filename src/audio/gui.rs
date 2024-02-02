@@ -43,20 +43,6 @@ impl GuiComponent for Audio {
                         ui.end_row();
                     }
 
-                    if let Some(latency_range) = self.stream.get_supported_latency() {
-                        ui.label("Latency");
-                        if ui
-                            .add(
-                                Slider::new(&mut audio_settings.latency, latency_range)
-                                    .suffix("ms"),
-                            )
-                            .changed()
-                        {
-                            self.stream.set_latency(audio_settings.latency);
-                        }
-                        ui.end_row();
-                    }
-
                     ui.label("Volume");
                     if ui
                         .add(Slider::new(&mut audio_settings.volume, 0..=100).suffix("%"))
