@@ -65,7 +65,6 @@ impl Stream {
     fn new_audio_queue(audio_subsystem: &AudioSubsystem, output_device: &Option<String>, latency: u8) -> Result<AudioQueue<i16>> {
         let channels = 1;
         let sample_rate = 44100;
-        log::debug!("Starting audio output device '{:?}' latency={}, channels={}, sample_rate={}", output_device, latency, channels, sample_rate);
         let desired_spec = AudioSpecDesired {
             freq: Some(sample_rate),
             channels: Some(channels),
@@ -83,6 +82,9 @@ impl Stream {
             .open_queue::<i16, _>(output_device.as_deref(), &desired_spec)
             .or_else(|_| audio_subsystem.open_queue::<i16, _>(None, &desired_spec))
             .map_err(anyhow::Error::msg)?;
+        
+        log::debug!("Starting audio: {:?}", output_device.spec());
+        
         output_device.resume();
         Ok(output_device)
     }
