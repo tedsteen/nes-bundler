@@ -15,11 +15,6 @@ debug = ["egui_plot"]
 
 [profile.release]
 strip = true
-# TODO: Look deeper into https://github.com/johnthagen/min-sized-rust
-# opt-level = "z"
-lto = true
-codegen-units = 1
-# panic = "abort"
 
 [dependencies]
 log = "0.4"
