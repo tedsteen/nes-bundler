@@ -42,6 +42,7 @@ impl Gui {
         let nes_texture_options = TextureOptions {
             magnification: egui::TextureFilter::Nearest,
             minification: egui::TextureFilter::Nearest,
+            wrap_mode: egui::TextureWrapMode::ClampToEdge,
         };
 
         Self {

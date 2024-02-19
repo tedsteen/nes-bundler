@@ -24,11 +24,11 @@ serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 bitflags = "2"
 
-egui = { version = "0.25", default-features = false, features = [
+egui = { version = "0.26", default-features = false, features = [
   "bytemuck", "default_fonts"
 ] }
-egui_plot = { version = "0.25", optional = true }
-egui_glow = { version = "0.25", features = ["winit", "links"] }
+egui_plot = { version = "0.26", optional = true }
+egui_glow = { version = "0.26", features = ["winit", "links"] }
 glow = "0.13"
 winit = "0.29"
 glutin-winit = "0.4"
