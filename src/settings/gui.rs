@@ -37,7 +37,27 @@ pub struct Gui {
 }
 
 impl Gui {
-    
+    /// Calculates an integer scaling ratio common for X/Y axes (square pixels).
+    pub fn calculate_ratio(area_width: u32, area_height: u32, image_width: u32, image_height: u32) -> u32 {
+        let (area_size, image_size);
+
+        if area_height * image_width < area_width * image_height {
+            area_size = area_height;
+            image_size = image_height;
+        } else {
+            area_size = area_width;
+            image_size = image_width;
+        }
+
+        let mut ratio = area_size / image_size;
+
+        if ratio < 1 {
+            ratio = 1;
+        }
+
+        ratio
+    }
+
     pub fn new(egui_glow: egui_glow::EguiGlow) -> Self {
         let nes_texture_options = TextureOptions {
             magnification: egui::TextureFilter::Nearest,
@@ -87,8 +107,9 @@ impl Gui {
                     let texture_handle = &self.nes_texture;
                     if let Some(t) = ctx.tex_manager().read().meta(texture_handle.id()) {
                         if t.size[0] != 0 {
+                            let ratio = Self::calculate_ratio(ui.available_size().x as u32, ui.available_size().y as u32, WIDTH_SCALED, HEIGHT_SCALED);
                             ui.centered_and_justified(|ui| {
-                                ui.add(Image::new(SizedTexture::new(texture_handle, (WIDTH_SCALED as f32, HEIGHT_SCALED as f32))).shrink_to_fit());
+                                ui.add(Image::new(SizedTexture::new(texture_handle, ((ratio * WIDTH_SCALED) as f32, (ratio * HEIGHT_SCALED) as f32))));
                             });
                         }
                     }

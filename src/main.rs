@@ -243,8 +243,8 @@ fn initialise() -> Result<
         DEFAULT_WINDOW_SIZE.0 as f64,
         DEFAULT_WINDOW_SIZE.1  as f64),
         Size::new(
-            WIDTH as f64,
-            HEIGHT as f64),
+            WIDTH_SCALED as f64,
+            HEIGHT_SCALED as f64),
         &event_loop,
     )?;
 
