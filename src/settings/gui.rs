@@ -1,11 +1,11 @@
 use std::time::{Duration, Instant};
 
 use egui::{
-    epaint::ImageDelta, Align2, Color32, ColorImage, Image, ImageData, Order, RichText, TextureHandle, TextureOptions, Ui, Window
+    epaint::ImageDelta, load::SizedTexture, Align2, Color32, ColorImage, Image, ImageData, Order, RichText, TextureHandle, TextureOptions, Ui, Window
 };
 
 use crate::{
-    input::{gamepad::GamepadEvent, KeyEvent}, DEFAULT_WINDOW_SIZE, HEIGHT, WIDTH
+    input::{gamepad::GamepadEvent, KeyEvent}, DEFAULT_WINDOW_SIZE, HEIGHT, HEIGHT_SCALED, WIDTH, WIDTH_SCALED
 };
 
 use super::Settings;
@@ -87,7 +87,7 @@ impl Gui {
                     if let Some(t) = ctx.tex_manager().read().meta(texture_handle.id()) {
                         if t.size[0] != 0 {
                             ui.centered_and_justified(|ui| {
-                                ui.add(Image::new(texture_handle).shrink_to_fit());
+                                ui.add(Image::new(SizedTexture::new(texture_handle, (WIDTH_SCALED as f32, HEIGHT_SCALED as f32))).shrink_to_fit());
                             });
                         }
                     }
