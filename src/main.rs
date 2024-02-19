@@ -47,11 +47,16 @@ type Fps = f32;
 const FPS: Fps = 60.0;
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 240;
+
+// Rather scale the width to preserve interger scan lines
+const WIDTH_SCALED: u32 = (256.0*(4.0/3.0)) as u32; //1.33333
+const HEIGHT_SCALED: u32 = HEIGHT;
+
 const ZOOM: u8 = 3;
 
 const DEFAULT_WINDOW_SIZE: (u32, u32) = (
-    crate::WIDTH * crate::ZOOM as u32,
-    crate::WIDTH * crate::ZOOM as u32,
+    crate::WIDTH_SCALED * crate::ZOOM as u32,
+    crate::HEIGHT_SCALED * crate::ZOOM as u32,
 );
 
 fn main() {
