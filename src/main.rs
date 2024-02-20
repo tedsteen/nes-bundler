@@ -42,22 +42,14 @@ mod netplay;
 mod palette;
 mod settings;
 mod window;
+mod integer_scaling;
 
 type Fps = f32;
 const FPS: Fps = 60.0;
-const WIDTH: u32 = 256;
-const HEIGHT: u32 = 240;
+const NES_WIDTH: u32 = 256;
+const NES_HEIGHT: u32 = 240;
 
-// Rather scale the width to preserve interger scan lines
-const WIDTH_SCALED: u32 = (256.0*(4.0/3.0)) as u32; //1.33333
-const HEIGHT_SCALED: u32 = HEIGHT;
-
-const ZOOM: u8 = 3;
-
-const DEFAULT_WINDOW_SIZE: (u32, u32) = (
-    crate::WIDTH_SCALED * crate::ZOOM as u32,
-    crate::HEIGHT_SCALED * crate::ZOOM as u32,
-);
+const MINIMUM_WINDOW_SIZE: (u32, u32) = (1024, 720);
 
 fn main() {
     init_logger();
@@ -240,11 +232,11 @@ fn initialise() -> Result<
     let gl_window = create_display(
         &bundle.config.window_title,
         Size::new(
-        DEFAULT_WINDOW_SIZE.0 as f64,
-        DEFAULT_WINDOW_SIZE.1  as f64),
+        MINIMUM_WINDOW_SIZE.0 as f64,
+        MINIMUM_WINDOW_SIZE.1  as f64),
         Size::new(
-            WIDTH as f64,
-            HEIGHT as f64),
+            MINIMUM_WINDOW_SIZE.0 as f64,
+            MINIMUM_WINDOW_SIZE.1 as f64),
         &event_loop,
     )?;
 
@@ -359,7 +351,7 @@ impl Game {
                 let rgba: [u8; 4] = NTSC_PAL[palette_index..palette_index+4].try_into().unwrap();
                 rgba
             }).collect::<Vec<u8>>();
-            ImageData::Color(ColorImage::from_rgba_premultiplied([WIDTH as usize, HEIGHT as usize], &pixels).into())
+            ImageData::Color(ColorImage::from_rgba_premultiplied([NES_WIDTH as usize, NES_HEIGHT as usize], &pixels).into())
         });
 
         self.gui.update_nes_texture(new_image_data);

@@ -20,8 +20,8 @@ impl Fullscreen for winit::window::Window {
             if window.simple_fullscreen() {
                 window.set_simple_fullscreen(false);
                 let _ = window.request_inner_size(LogicalSize::new(
-                    crate::DEFAULT_WINDOW_SIZE.0,
-                    crate::DEFAULT_WINDOW_SIZE.1,
+                    crate::MINIMUM_WINDOW_SIZE.0,
+                    crate::MINIMUM_WINDOW_SIZE.1,
                 ));
             } else {
                 window.set_simple_fullscreen(true);
@@ -36,8 +36,8 @@ impl Fullscreen for winit::window::Window {
             if window.fullscreen().is_some() {
                 window.set_fullscreen(None);
                 let _ = window.request_inner_size(LogicalSize::new(
-                    crate::DEFAULT_WINDOW_SIZE.0,
-                    crate::DEFAULT_WINDOW_SIZE.1,
+                    crate::MINIMUM_WINDOW_SIZE.0,
+                    crate::MINIMUM_WINDOW_SIZE.1,
                 ));
             } else {
                 window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
