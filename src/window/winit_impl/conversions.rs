@@ -1,4 +1,7 @@
-use winit::{event::{WindowEvent, KeyEvent}, keyboard::PhysicalKey};
+use winit::{
+    event::{KeyEvent, WindowEvent},
+    keyboard::PhysicalKey,
+};
 
 use crate::{
     input::keys::{Modifiers, ToGuiKeyCode, ToGuiMod},
@@ -203,24 +206,24 @@ impl ToGuiKeyCode for winit::keyboard::KeyCode {
             F33 => Some(KeyCode::F33),
             F34 => Some(KeyCode::F34),
             F35 => Some(KeyCode::F35),
-            _ => None
+            _ => None,
         }
     }
 }
 impl ToGuiEvent for WindowEvent {
     fn to_gui_event(&self) -> Option<GuiEvent> {
         match self {
-            
-            winit::event::WindowEvent::ModifiersChanged(modifiers) => {
-                modifiers.state().to_gui_mod().map(|m| GuiEvent::Keyboard(crate::input::KeyEvent::ModifiersChanged(m)))
-            }
+            winit::event::WindowEvent::ModifiersChanged(modifiers) => modifiers
+                .state()
+                .to_gui_mod()
+                .map(|m| GuiEvent::Keyboard(crate::input::KeyEvent::ModifiersChanged(m))),
 
             winit::event::WindowEvent::KeyboardInput {
-                event:  KeyEvent {
-                    physical_key: PhysicalKey::Code(key_code),
-                    state,
-                    
-                    ..
+                event:
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(key_code),
+                        state,
+                        ..
                     },
                 ..
             } => {
@@ -228,12 +231,8 @@ impl ToGuiEvent for WindowEvent {
                     use winit::event::ElementState::*;
 
                     Some(GuiEvent::Keyboard(match state {
-                        Pressed => crate::input::KeyEvent::Pressed(
-                            gui_key_code,
-                        ),
-                        Released => crate::input::KeyEvent::Released(
-                            gui_key_code,
-                        ),
+                        Pressed => crate::input::KeyEvent::Pressed(gui_key_code),
+                        Released => crate::input::KeyEvent::Released(gui_key_code),
                     }))
                 } else {
                     None

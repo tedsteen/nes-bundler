@@ -20,10 +20,10 @@ use gameloop::{GameLoop, Time};
 use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
 use base64::Engine;
 
-use input::Inputs;
 use input::keys::Modifiers;
+use input::Inputs;
 use nes_state::local::LocalNesState;
-use nes_state::{start_nes, FrameData, get_mapper};
+use nes_state::{get_mapper, start_nes, FrameData};
 use palette::NTSC_PAL;
 
 use sdl2::EventPump;
@@ -36,13 +36,13 @@ mod bundle;
 mod debug;
 mod gameloop;
 mod input;
+mod integer_scaling;
 mod nes_state;
 #[cfg(feature = "netplay")]
 mod netplay;
 mod palette;
 mod settings;
 mod window;
-mod integer_scaling;
 
 type Fps = f32;
 const FPS: Fps = 60.0;
@@ -57,7 +57,8 @@ fn main() {
     log::info!("nes-bundler starting!");
     match initialise() {
         Ok((game_loop, event_loop, sdl_event_pump, gl_window)) => {
-            run(game_loop, event_loop, sdl_event_pump, gl_window).expect("Could not run the winit event loop");
+            run(game_loop, event_loop, sdl_event_pump, gl_window)
+                .expect("Could not run the winit event loop");
         }
         Err(e) => {
             log::error!("nes-bundler failed to start :(\n{:?}", e);
@@ -127,7 +128,7 @@ fn run(
                                 settings.last_save_state = Some(b64.encode(save_state));
                                 settings.save();
                             }
-                            
+
                             true
                         }
                         F2 => {
@@ -170,7 +171,9 @@ fn run(
                     #[cfg(feature = "debug")]
                     let fps = if game.debug.override_fps {
                         game.debug.fps
-                    } else { fps };
+                    } else {
+                        fps
+                    };
 
                     game.draw_frame(Some(&frame_data.video));
                     game.push_audio(&frame_data.audio, fps);
@@ -217,7 +220,9 @@ fn initialise() -> Result<
     anyhow::Error,
 > {
     sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
-    let event_loop = winit::event_loop::EventLoopBuilder::with_user_event().build().expect("Could not create the event loop");
+    let event_loop = winit::event_loop::EventLoopBuilder::with_user_event()
+        .build()
+        .expect("Could not create the event loop");
     let bundle = Bundle::load()?;
     #[cfg(feature = "netplay")]
     if std::env::args()
@@ -231,16 +236,17 @@ fn initialise() -> Result<
     }
     let gl_window = create_display(
         &bundle.config.window_title,
-        Size::new(
-        MINIMUM_WINDOW_SIZE.0 as f64,
-        MINIMUM_WINDOW_SIZE.1  as f64),
-        Size::new(
-            MINIMUM_WINDOW_SIZE.0 as f64,
-            MINIMUM_WINDOW_SIZE.1 as f64),
+        Size::new(MINIMUM_WINDOW_SIZE.0 as f64, MINIMUM_WINDOW_SIZE.1 as f64),
+        Size::new(MINIMUM_WINDOW_SIZE.0 as f64, MINIMUM_WINDOW_SIZE.1 as f64),
         &event_loop,
     )?;
 
-    let egui_glow = egui_glow::EguiGlow::new(&event_loop, gl_window.glow_context.clone(), None, Some(gl_window.get_dpi()));
+    let egui_glow = egui_glow::EguiGlow::new(
+        &event_loop,
+        gl_window.glow_context.clone(),
+        None,
+        Some(gl_window.get_dpi()),
+    );
 
     #[allow(unused_mut)] //Needed by the netplay feature
     let mut settings = Settings::new(bundle.config.default_settings.clone());
@@ -249,14 +255,16 @@ fn initialise() -> Result<
     let audio = Audio::new(&sdl_context, &settings)?;
     let mapper = get_mapper(&bundle)?;
 
-    let start_new_nes = move || -> LocalNesState {
-        start_nes(mapper.clone())
-    };
+    let start_new_nes = move || -> LocalNesState { start_nes(mapper.clone()) };
 
     #[cfg(feature = "netplay")]
     #[allow(unused_mut)] //Bug, it needs to be mut
     let mut start_new_nes = || -> netplay::NetplayStateHandler {
-        netplay::NetplayStateHandler::new(Box::new(start_new_nes), &bundle, &mut settings.netplay_id)
+        netplay::NetplayStateHandler::new(
+            Box::new(start_new_nes),
+            &bundle,
+            &mut settings.netplay_id,
+        )
     };
 
     Ok((
@@ -346,12 +354,23 @@ impl Game {
 
     pub fn draw_frame(&mut self, video_data: Option<&[u16]>) {
         let new_image_data = video_data.map(|frame| {
-            let pixels = frame.iter().flat_map(|&palette_index| {
-                let palette_index = palette_index as usize * 4;
-                let rgba: [u8; 4] = NTSC_PAL[palette_index..palette_index+4].try_into().unwrap();
-                rgba
-            }).collect::<Vec<u8>>();
-            ImageData::Color(ColorImage::from_rgba_premultiplied([NES_WIDTH as usize, NES_HEIGHT as usize], &pixels).into())
+            let pixels = frame
+                .iter()
+                .flat_map(|&palette_index| {
+                    let palette_index = palette_index as usize * 4;
+                    let rgba: [u8; 4] = NTSC_PAL[palette_index..palette_index + 4]
+                        .try_into()
+                        .unwrap();
+                    rgba
+                })
+                .collect::<Vec<u8>>();
+            ImageData::Color(
+                ColorImage::from_rgba_premultiplied(
+                    [NES_WIDTH as usize, NES_HEIGHT as usize],
+                    &pixels,
+                )
+                .into(),
+            )
         });
 
         self.gui.update_nes_texture(new_image_data);

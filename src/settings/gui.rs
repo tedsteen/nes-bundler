@@ -1,11 +1,14 @@
 use std::time::{Duration, Instant};
 
 use egui::{
-    epaint::ImageDelta, load::SizedTexture, Align2, Color32, ColorImage, Image, ImageData, Order, RichText, TextureHandle, TextureOptions, Ui, Window
+    epaint::ImageDelta, load::SizedTexture, Align2, Color32, ColorImage, Image, ImageData, Order,
+    RichText, TextureHandle, TextureOptions, Ui, Window,
 };
 
 use crate::{
-    input::{gamepad::GamepadEvent, KeyEvent}, integer_scaling::calculate_size_corrected, MINIMUM_WINDOW_SIZE, NES_HEIGHT, NES_WIDTH
+    input::{gamepad::GamepadEvent, KeyEvent},
+    integer_scaling::calculate_size_corrected,
+    MINIMUM_WINDOW_SIZE, NES_HEIGHT, NES_WIDTH,
 };
 
 use super::Settings;
@@ -37,7 +40,6 @@ pub struct Gui {
 }
 
 impl Gui {
-    
     pub fn new(egui_glow: egui_glow::EguiGlow) -> Self {
         let nes_texture_options = TextureOptions {
             magnification: egui::TextureFilter::Nearest,
@@ -50,10 +52,10 @@ impl Gui {
             visible: false,
             nes_texture: egui_glow.egui_ctx.load_texture(
                 "nes",
-                ImageData::Color(ColorImage::new(
-                    [NES_WIDTH as usize, NES_HEIGHT as usize],
-                    Color32::BLACK,
-                ).into()),
+                ImageData::Color(
+                    ColorImage::new([NES_WIDTH as usize, NES_HEIGHT as usize], Color32::BLACK)
+                        .into(),
+                ),
                 nes_texture_options,
             ),
             egui_glow,
@@ -87,9 +89,19 @@ impl Gui {
                     let texture_handle = &self.nes_texture;
                     if let Some(t) = ctx.tex_manager().read().meta(texture_handle.id()) {
                         if t.size[0] != 0 {
-                            let new_size = calculate_size_corrected(ui.available_size().x as u32, ui.available_size().y as u32, NES_WIDTH, NES_HEIGHT, 4.0, 3.0);
+                            let new_size = calculate_size_corrected(
+                                ui.available_size().x as u32,
+                                ui.available_size().y as u32,
+                                NES_WIDTH,
+                                NES_HEIGHT,
+                                4.0,
+                                3.0,
+                            );
                             ui.centered_and_justified(|ui| {
-                                ui.add(Image::new(SizedTexture::new(texture_handle, (new_size.width as f32, new_size.height as f32))));
+                                ui.add(Image::new(SizedTexture::new(
+                                    texture_handle,
+                                    (new_size.width as f32, new_size.height as f32),
+                                )));
                             });
                         }
                     }
@@ -108,34 +120,43 @@ impl Gui {
                             }
                         }
                         if self.start_time.elapsed() < Duration::new(5, 0) {
-                            ui.heading(RichText::new("Press ESC to see settings").heading().strong().background_color(Color32::from_rgba_premultiplied(20, 20, 20, 180)));
+                            ui.heading(
+                                RichText::new("Press ESC to see settings")
+                                    .heading()
+                                    .strong()
+                                    .background_color(Color32::from_rgba_premultiplied(
+                                        20, 20, 20, 180,
+                                    )),
+                            );
                         }
                     });
-            });
-            
-            Window::new("Settings")
-            .open(&mut self.visible)
-            .collapsible(false)
-            .resizable(false)
-            .movable(true)
-            .pivot(Align2::CENTER_CENTER)
-            .default_pos([MINIMUM_WINDOW_SIZE.0 as f32 / 2.0, MINIMUM_WINDOW_SIZE.1 as f32 / 2.0])
-            .show(ctx, |ui| {
-                for (idx, gui) in guis.iter_mut().flatten().enumerate() {
-                    if let Some(name) = gui.name() {
-                        if idx != 0 {
-                            ui.separator();
-                        }
-                        
-                        ui.vertical_centered(|ui| {
-                            ui.heading(name);
-                        });
-                        
-                        gui.ui(ui, settings);
+                });
 
+            Window::new("Settings")
+                .open(&mut self.visible)
+                .collapsible(false)
+                .resizable(false)
+                .movable(true)
+                .pivot(Align2::CENTER_CENTER)
+                .default_pos([
+                    MINIMUM_WINDOW_SIZE.0 as f32 / 2.0,
+                    MINIMUM_WINDOW_SIZE.1 as f32 / 2.0,
+                ])
+                .show(ctx, |ui| {
+                    for (idx, gui) in guis.iter_mut().flatten().enumerate() {
+                        if let Some(name) = gui.name() {
+                            if idx != 0 {
+                                ui.separator();
+                            }
+
+                            ui.vertical_centered(|ui| {
+                                ui.heading(name);
+                            });
+
+                            gui.ui(ui, settings);
+                        }
                     }
-                }
-            });
+                });
         });
     }
 
@@ -153,7 +174,11 @@ impl Gui {
         );
     }
 
-    pub(crate) fn on_event(&mut self, window: &winit::window::Window, event: &winit::event::WindowEvent) -> bool {
+    pub(crate) fn on_event(
+        &mut self,
+        window: &winit::window::Window,
+        event: &winit::event::WindowEvent,
+    ) -> bool {
         self.egui_glow.on_window_event(window, event).consumed
     }
     pub fn destroy(&mut self) {

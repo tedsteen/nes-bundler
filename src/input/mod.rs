@@ -21,7 +21,7 @@ pub mod settings;
 pub enum KeyEvent {
     Pressed(KeyCode),
     Released(KeyCode),
-    ModifiersChanged(Modifiers)
+    ModifiersChanged(Modifiers),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

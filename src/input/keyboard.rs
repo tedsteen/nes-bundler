@@ -17,11 +17,11 @@ impl Keyboards {
         match key_event {
             KeyEvent::Pressed(key) => {
                 self.pressed_keys.insert(*key);
-            },
+            }
             KeyEvent::Released(key) => {
                 self.pressed_keys.remove(key);
-            },
-            _ => ()
+            }
+            _ => (),
         };
     }
 

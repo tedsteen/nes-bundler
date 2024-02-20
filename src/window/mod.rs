@@ -29,9 +29,12 @@ impl Size {
 
 impl From<Size> for winit::dpi::Size {
     fn from(val: Size) -> Self {
-        winit::dpi::Size::Logical(winit::dpi::LogicalSize { width: val.width, height: val.height})
+        winit::dpi::Size::Logical(winit::dpi::LogicalSize {
+            width: val.width,
+            height: val.height,
+        })
     }
-} 
+}
 impl GlutinWindowContext {
     // refactor this function to use `glutin-winit` crate eventually.
     // preferably add android support at the same time.
@@ -117,23 +120,28 @@ impl GlutinWindowContext {
         let gl_surface =
             unsafe { gl_display.create_window_surface(&gl_config, &surface_attributes)? };
         log::debug!("surface created successfully: {gl_surface:?}.making context current");
-        let gl_context = glutin::context::NotCurrentGlContext::make_current(not_current_gl_context, &gl_surface)?;
+        let gl_context = glutin::context::NotCurrentGlContext::make_current(
+            not_current_gl_context,
+            &gl_surface,
+        )?;
 
         gl_surface.set_swap_interval(
             &gl_context,
             glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap()),
         )?;
         #[allow(clippy::arc_with_non_send_sync)]
-            Ok(GlutinWindowContext {
-                window,
-                gl_context,
-                glow_context: Arc::new(unsafe { glow::Context::from_loader_function(|s| {
+        Ok(GlutinWindowContext {
+            window,
+            gl_context,
+            glow_context: Arc::new(unsafe {
+                glow::Context::from_loader_function(|s| {
                     let s = std::ffi::CString::new(s)
                         .expect("failed to construct C string from string for gl proc address");
                     gl_display.get_proc_address(&s)
-                })}),
-                gl_surface,
-            })
+                })
+            }),
+            gl_surface,
+        })
     }
 
     pub fn window(&self) -> &winit::window::Window {
