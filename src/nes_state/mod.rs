@@ -2,9 +2,10 @@ use anyhow::{Context, Result};
 use rusticnes_core::{cartridge::mapper_from_file, mmc::mapper::Mapper};
 
 use crate::{
+    bundle::Bundle,
     input::JoypadInput,
     settings::{gui::GuiComponent, MAX_PLAYERS},
-    Fps, bundle::Bundle,
+    Fps,
 };
 
 use self::local::LocalNesState;

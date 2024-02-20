@@ -37,11 +37,7 @@ impl Stretch {
         }
     }
 
-    pub fn process(
-        &mut self,
-        inputs: &[SampleFormat],
-        output_len: usize,
-    ) -> &[SampleFormat] {
+    pub fn process(&mut self, inputs: &[SampleFormat], output_len: usize) -> &[SampleFormat] {
         let outputs = &mut self.output_buffer[0..output_len];
 
         unsafe {

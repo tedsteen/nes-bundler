@@ -9,7 +9,12 @@ pub struct Size {
 }
 
 /// Calculates an integer scaling ratio common for X/Y axes (square pixels).
-pub fn calculate_ratio(area_width: u32, area_height: u32, image_width: u32, image_height: u32) -> u32 {
+pub fn calculate_ratio(
+    area_width: u32,
+    area_height: u32,
+    image_width: u32,
+    image_height: u32,
+) -> u32 {
     let (area_size, image_size);
 
     if area_height * image_width < area_width * image_height {

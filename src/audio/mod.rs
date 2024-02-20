@@ -52,15 +52,15 @@ impl Stream {
         Ok(Self {
             output_device_name: audio_settings.output_device.clone(),
             stretch: Stretch::new(),
-            audio_queue: Stream::new_audio_queue(
-                audio_subsystem,
-                &audio_settings.output_device,
-            )?,
+            audio_queue: Stream::new_audio_queue(audio_subsystem, &audio_settings.output_device)?,
             volume: audio_settings.volume as f32 / 100.0,
         })
     }
-    
-    fn new_audio_queue(audio_subsystem: &AudioSubsystem, output_device: &Option<String>) -> Result<AudioQueue<i16>> {
+
+    fn new_audio_queue(
+        audio_subsystem: &AudioSubsystem,
+        output_device: &Option<String>,
+    ) -> Result<AudioQueue<i16>> {
         let channels = 1;
         let sample_rate = 44100;
         let desired_spec = AudioSpecDesired {
@@ -73,40 +73,38 @@ impl Stream {
             .or_else(|_| audio_subsystem.open_queue::<i16, _>(None, &desired_spec))
             .map_err(anyhow::Error::msg)?;
         log::debug!("Starting audio: {:?}", output_device.spec());
-        
+
         output_device.resume();
         Ok(output_device)
     }
 
-    pub(crate) fn push_samples(&mut self, new_samples: &[SampleFormat], fps_hint: Fps) {        
+    pub(crate) fn push_samples(&mut self, new_samples: &[SampleFormat], fps_hint: Fps) {
         let new_len = ((FPS / fps_hint) * new_samples.len() as f32) as usize;
         let queue_size = self.audio_queue.size();
 
         let len = if queue_size == 0 {
             log::trace!("underrun");
-            new_len + (self.audio_queue.spec().size*2) as usize
-            
+            new_len + (self.audio_queue.spec().size * 2) as usize
         } else if queue_size > (self.audio_queue.spec().size * 5) {
             log::trace!("overrun: {}", queue_size);
-            new_len/2
+            new_len / 2
         } else {
             new_len
         };
 
-        
         let stretched = self.stretch.process(new_samples, len);
         //Set volume
-        let samples: Vec<i16> = stretched.iter().map(|s| (*s as f32 * self.volume) as SampleFormat).collect();
+        let samples: Vec<i16> = stretched
+            .iter()
+            .map(|s| (*s as f32 * self.volume) as SampleFormat)
+            .collect();
 
         self.audio_queue.queue_audio(&samples).unwrap();
     }
 
     pub(crate) fn set_output_device(&mut self, output_device_name: Option<String>) {
         if self.output_device_name != output_device_name {
-            match Stream::new_audio_queue(
-                self.audio_queue.subsystem(),
-                &output_device_name,
-            ) {
+            match Stream::new_audio_queue(self.audio_queue.subsystem(), &output_device_name) {
                 Ok(audio_queue) => {
                     self.output_device_name = output_device_name;
                     self.audio_queue = audio_queue;

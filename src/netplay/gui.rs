@@ -89,7 +89,7 @@ impl GuiComponent for NetplayStateHandler {
         match &self.netplay {
             Some(NetplayState::Connecting(_)) => Some("Netplay is connecting"),
             Some(NetplayState::Resuming(_)) => Some("Netplay connection lost, trying to reconnect"),
-            _ => None
+            _ => None,
         }
         .iter()
         .map(|message| format!("{message} - see settings for details"))
@@ -203,16 +203,8 @@ impl GuiComponent for NetplayStateHandler {
                 #[cfg(feature = "debug")]
                 let fake_lost_connection_clicked = {
                     ui.collapsing("Stats", |ui| {
-                        Self::stats_ui(
-                            ui,
-                            &netplay_connected.state.netplay_session.stats[0],
-                            0,
-                        );
-                        Self::stats_ui(
-                            ui,
-                            &netplay_connected.state.netplay_session.stats[1],
-                            1,
-                        );
+                        Self::stats_ui(ui, &netplay_connected.state.netplay_session.stats[0], 0);
+                        Self::stats_ui(ui, &netplay_connected.state.netplay_session.stats[1], 1);
                     });
                     ui.button("Fake connection lost").clicked()
                 };

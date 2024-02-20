@@ -123,7 +123,11 @@ impl NesStateHandler for NetplayStateHandler {
 }
 
 impl NetplayStateHandler {
-    pub fn new(start_nes: Box<dyn Fn() -> LocalNesState>, bundle: &Bundle, netplay_id: &mut Option<String>) -> Self {
+    pub fn new(
+        start_nes: Box<dyn Fn() -> LocalNesState>,
+        bundle: &Bundle,
+        netplay_id: &mut Option<String>,
+    ) -> Self {
         let netplay_build_config = &bundle.config.netplay;
 
         NetplayStateHandler {
