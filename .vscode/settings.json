@@ -1,4 +1,5 @@
 {
     "rust-analyzer.checkOnSave.command": "clippy",
-    "hexdump.littleEndian": true
+    "editor.defaultFormatter": "rust-lang.rust-analyzer",
+    "editor.formatOnSave": true
 }
