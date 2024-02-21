@@ -17,6 +17,8 @@ pub trait LoadBundle {
 pub struct Bundle {
     pub config: BuildConfiguration,
     pub rom: Vec<u8>,
+    #[cfg(feature = "netplay")]
+    pub netplay_rom: Vec<u8>,
 }
 #[cfg(feature = "zip-bundle")]
 impl LoadBundle for Bundle {
@@ -77,6 +79,8 @@ impl LoadBundle for Bundle {
         Ok(Bundle {
             config: serde_yaml::from_str(include_str!("../config/config.yaml"))?,
             rom: include_bytes!("../config/rom.nes").to_vec(),
+            #[cfg(feature = "netplay")]
+            netplay_rom: include_bytes!("../config/netplay-rom.nes").to_vec(),
         })
     }
 }

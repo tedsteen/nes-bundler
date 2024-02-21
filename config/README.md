@@ -3,7 +3,9 @@
 In order to build your bundle you need two files.  
 
 * A `config.yaml` containing the build configuration.
-* A `nes.rom` with your game.
+* A `rom.nes` with your game.
+
+NOTE: If you want to use the Netplay feature you need to provide a custom `netplay-rom.nes`. See details below.
 
 ## Build configuration
 
@@ -102,7 +104,10 @@ netplay:
     # This id will be used when querying server configurations (TurnOn).
     #netplay_id: "<some-uuid>"
 ```
-## ROM-file
+## ROM-files
 
-A file named `rom.nes` containing your actual game.  
-You can try it out with the included `demo.nes`.
+A file named `rom.nes` containing your actual game. This will be used when playing local non-netplay games.  
+You can try it out with the included `demo.nes`.  
+
+If you use the netplay feature you also need a file named `netplay-rom.nes`. This will be used when playing netplay games.  
+It enables a different player experience for netplayers, f.ex if in a netplay session you do not want to present the player with the one player option you can bake a ROM that defaults to two players and use that as your `netplay-rom.nes`. If not, just copy the `rom.nes`.

@@ -45,7 +45,8 @@ pub struct Netplay<S> {
     pub config: NetplayBuildConfiguration,
     pub netplay_id: String,
     pub rom_hash: Digest,
-    start_nes: Box<dyn Fn() -> LocalNesState>,
+    start_local_nes: Box<dyn Fn() -> LocalNesState>,
+    start_netplay_nes: Box<dyn Fn() -> LocalNesState>,
     pub state: S,
 }
 
@@ -56,7 +57,8 @@ impl<T> Netplay<T> {
             config: other.config,
             netplay_id: other.netplay_id,
             rom_hash: other.rom_hash,
-            start_nes: other.start_nes,
+            start_local_nes: other.start_local_nes,
+            start_netplay_nes: other.start_netplay_nes,
             state,
         }
     }
@@ -67,7 +69,8 @@ impl<T> Netplay<T> {
             self.config,
             &mut Some(self.netplay_id),
             self.rom_hash,
-            self.start_nes,
+            self.start_local_nes,
+            self.start_netplay_nes,
         )
     }
 }
@@ -110,7 +113,8 @@ impl Netplay<LocalNesState> {
         config: NetplayBuildConfiguration,
         netplay_id: &mut Option<String>,
         rom_hash: Digest,
-        start_nes: Box<dyn Fn() -> LocalNesState>,
+        start_local_nes: Box<dyn Fn() -> LocalNesState>,
+        start_netplay_nes: Box<dyn Fn() -> LocalNesState>,
     ) -> Self {
         Self {
             rt: Rc::new(
@@ -125,14 +129,15 @@ impl Netplay<LocalNesState> {
                 .get_or_insert_with(|| Uuid::new_v4().to_string())
                 .to_string(),
             rom_hash,
-            state: start_nes(),
-            start_nes,
+            state: start_local_nes(),
+            start_local_nes,
+            start_netplay_nes,
         }
     }
 
     pub fn join_by_name(self, room_name: &str) -> NetplayState {
         let session_id = format!("{}_{:x}", room_name, self.rom_hash);
-        let nes_state = (self.start_nes)();
+        let nes_state = (self.start_netplay_nes)();
         self.join(StartMethod::Join(
             StartState {
                 game_state: super::NetplayNesState::new(nes_state),
@@ -146,7 +151,7 @@ impl Netplay<LocalNesState> {
         // TODO: When resuming using this session id there might be collisions, but it's unlikely.
         //       Should be fixed though.
         let session_id = format!("{:x}", self.rom_hash);
-        let nes_state = (self.start_nes)();
+        let nes_state = (self.start_netplay_nes)();
         self.join(StartMethod::MatchWithRandom(StartState {
             game_state: super::NetplayNesState::new(nes_state),
             session_id,
@@ -184,7 +189,8 @@ impl Netplay<ConnectingState> {
                         config: self.config,
                         netplay_id: self.netplay_id,
                         rom_hash: self.rom_hash,
-                        start_nes: self.start_nes,
+                        start_local_nes: self.start_local_nes,
+                        start_netplay_nes: self.start_netplay_nes,
                         state: Connected {
                             netplay_session: connected.state,
                             session_id: match connected.start_method {
@@ -200,7 +206,8 @@ impl Netplay<ConnectingState> {
                     config: self.config,
                     netplay_id: self.netplay_id,
                     rom_hash: self.rom_hash,
-                    start_nes: self.start_nes,
+                    start_local_nes: self.start_local_nes,
+                    start_netplay_nes: self.start_netplay_nes,
                     state: Failed { reason },
                 }),
                 _ => NetplayState::Connecting(self),
@@ -263,7 +270,8 @@ impl Netplay<Resuming> {
                     config: self.config,
                     netplay_id: self.netplay_id,
                     rom_hash: self.rom_hash,
-                    start_nes: self.start_nes,
+                    start_local_nes: self.start_local_nes,
+                    start_netplay_nes: self.start_netplay_nes,
                     state: self.state.attempt1,
                 })
             } else if let ConnectingState::Connected(_) = &self.state.attempt2 {
@@ -272,7 +280,8 @@ impl Netplay<Resuming> {
                     config: self.config,
                     netplay_id: self.netplay_id,
                     rom_hash: self.rom_hash,
-                    start_nes: self.start_nes,
+                    start_local_nes: self.start_local_nes,
+                    start_netplay_nes: self.start_netplay_nes,
                     state: self.state.attempt2,
                 })
             } else {
