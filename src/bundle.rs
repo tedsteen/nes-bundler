@@ -38,7 +38,18 @@ impl LoadBundle for Bundle {
                     .context("rom.nes not found in bundle.zip")?,
                 &mut rom,
             )?;
-            Ok(Bundle { config, rom })
+            let mut netplay_rom = Vec::new();
+            std::io::copy(
+                &mut zip
+                    .by_name("netplay-rom.nes")
+                    .context("netplay-rom.nes not found in bundle.zip")?,
+                &mut netplay_rom,
+            )?;
+            Ok(Bundle {
+                config,
+                rom,
+                netplay_rom,
+            })
         } else {
             let folder = rfd::FileDialog::new()
                 .set_title("Files to bundle")
@@ -56,6 +67,11 @@ impl LoadBundle for Bundle {
             let mut rom_file = std::fs::File::open(rom_path)
                 .context(format!("rom.nes not found in {:?}", folder))?;
 
+            let mut netplay_rom_path = folder.clone();
+            netplay_rom_path.push("netplay-rom.nes");
+            let mut netplay_rom_file = std::fs::File::open(netplay_rom_path)
+                .context(format!("netplay-rom.nes not found in {:?}", folder))?;
+
             let mut zip = zip::ZipWriter::new(
                 std::fs::File::create("bundle.zip").context("Could not create bundle.zip")?,
             );
@@ -64,6 +80,9 @@ impl LoadBundle for Bundle {
 
             zip.start_file("rom.nes", Default::default())?;
             std::io::copy(&mut rom_file, &mut zip)?;
+
+            zip.start_file("netplay-rom.nes", Default::default())?;
+            std::io::copy(&mut netplay_rom_file, &mut zip)?;
 
             zip.finish()?;
 
