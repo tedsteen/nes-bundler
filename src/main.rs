@@ -12,7 +12,7 @@ use crate::{
     input::{gamepad::ToGamepadEvent, KeyEvent},
     settings::gui::{Gui, GuiEvent},
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 use audio::Audio;
 use egui::{ColorImage, ImageData};
 use gameloop::{GameLoop, Time};
@@ -23,9 +23,10 @@ use base64::Engine;
 use input::keys::Modifiers;
 use input::Inputs;
 use nes_state::local::LocalNesState;
-use nes_state::{get_mapper, start_nes, FrameData};
+use nes_state::{start_nes, FrameData};
 use palette::NTSC_PAL;
 
+use rusticnes_core::cartridge::mapper_from_file;
 use sdl2::EventPump;
 use settings::Settings;
 use window::Size;
@@ -253,9 +254,16 @@ fn initialise() -> Result<
 
     let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
     let audio = Audio::new(&sdl_context, &settings)?;
-    let mapper = get_mapper(&bundle)?;
+    let rom = bundle.rom.clone();
 
-    let start_new_nes = move || -> LocalNesState { start_nes(mapper.clone()) };
+    let start_new_nes = move || -> LocalNesState {
+        start_nes(
+            mapper_from_file(&rom)
+                .map_err(anyhow::Error::msg)
+                .context("Failed to load ROM")
+                .unwrap(),
+        )
+    };
 
     #[cfg(feature = "netplay")]
     #[allow(unused_mut)] //Bug, it needs to be mut

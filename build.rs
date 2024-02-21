@@ -1,6 +1,7 @@
 fn main() {
     println!("cargo:rerun-if-changed=config/config.yaml");
     println!("cargo:rerun-if-changed=config/rom.nes");
+    println!("cargo:rerun-if-changed=config/netplay-rom.nes");
 
     println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch/signalsmith-stretch.h");
     println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch-wrapper.hpp");

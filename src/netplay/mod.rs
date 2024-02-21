@@ -2,10 +2,12 @@ use std::ops::{Deref, DerefMut};
 
 use crate::{
     input::JoypadInput,
-    nes_state::{local::LocalNesState, FrameData, NesStateHandler},
+    nes_state::{local::LocalNesState, start_nes, FrameData, NesStateHandler},
     settings::MAX_PLAYERS,
     Bundle,
 };
+use anyhow::Context;
+use rusticnes_core::cartridge::mapper_from_file;
 use serde::Deserialize;
 
 use self::{
@@ -124,18 +126,27 @@ impl NesStateHandler for NetplayStateHandler {
 
 impl NetplayStateHandler {
     pub fn new(
-        start_nes: Box<dyn Fn() -> LocalNesState>,
+        start_local_nes: Box<dyn Fn() -> LocalNesState>,
         bundle: &Bundle,
         netplay_id: &mut Option<String>,
     ) -> Self {
         let netplay_build_config = &bundle.config.netplay;
+        let netplay_rom = bundle.netplay_rom.clone();
 
         NetplayStateHandler {
             netplay: Some(NetplayState::Disconnected(Netplay::new(
                 netplay_build_config.clone(),
                 netplay_id,
-                md5::compute(&bundle.rom),
-                start_nes,
+                md5::compute(&netplay_rom),
+                start_local_nes,
+                Box::new(move || -> LocalNesState {
+                    start_nes(
+                        mapper_from_file(&netplay_rom)
+                            .map_err(anyhow::Error::msg)
+                            .context("Failed to load ROM")
+                            .unwrap(),
+                    )
+                }),
             ))),
             gui_is_open: true,
             room_name: netplay_build_config.default_room_name.clone(),
