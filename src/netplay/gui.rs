@@ -98,7 +98,7 @@ impl GuiComponent for NetplayStateHandler {
     fn ui(&mut self, ui: &mut Ui, _settings: &mut Settings) {
         self.netplay = Some(match self.netplay.take().unwrap() {
             NetplayState::Disconnected(netplay_disconnected) => {
-                let mut join_clicked = false;
+                let mut do_join = false;
                 let mut random_clicked = false;
 
                 egui::Grid::new("netplay_grid")
@@ -107,21 +107,37 @@ impl GuiComponent for NetplayStateHandler {
                     .striped(true)
                     .show(ui, |ui| {
                         ui.label("Join a game by name");
-                        ui.add(
+                        let re = ui.add(
                             TextEdit::singleline(&mut self.room_name)
                                 .desired_width(140.0)
                                 .hint_text("Netplay room"),
                         );
-                        join_clicked = ui
+                        let enter_pressed_in_room_input = if re.lost_focus()
+                            && re.ctx.input(|i| i.key_pressed(egui::Key::Enter))
+                        {
+                            if self.room_name.is_empty() {
+                                re.request_focus();
+                                false
+                            } else {
+                                true
+                            }
+                        } else {
+                            false
+                        };
+
+                        let join_btn_clicked = ui
                             .add_enabled(!self.room_name.is_empty(), Button::new("Join"))
                             .on_disabled_hover_text("Which room do you want to join?")
                             .clicked();
+
+                        do_join = join_btn_clicked || enter_pressed_in_room_input;
+
                         ui.end_row();
                         ui.label("or simply");
                         random_clicked = ui.button("Match with a random player").clicked();
                         ui.end_row();
                     });
-                if join_clicked {
+                if do_join {
                     netplay_disconnected.join_by_name(&self.room_name)
                 } else if random_clicked {
                     netplay_disconnected.match_with_random()
