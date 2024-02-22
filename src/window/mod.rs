@@ -49,6 +49,7 @@ impl GlutinWindowContext {
         use glutin::prelude::GlSurface;
         let winit_window_builder = winit::window::WindowBuilder::new()
             .with_resizable(true)
+            //.with_window_icon(Some(Icon::from_rgba(vec![1; 10 * 10 * 4], 10, 10).unwrap()))
             //.with_disallow_hidpi(true)
             .with_inner_size(inner_size)
             .with_min_inner_size(min_inner_size)
@@ -125,10 +126,7 @@ impl GlutinWindowContext {
             &gl_surface,
         )?;
 
-        gl_surface.set_swap_interval(
-            &gl_context,
-            glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap()),
-        )?;
+        gl_surface.set_swap_interval(&gl_context, glutin::surface::SwapInterval::DontWait)?;
         #[allow(clippy::arc_with_non_send_sync)]
         Ok(GlutinWindowContext {
             window,
