@@ -24,7 +24,6 @@ use input::keys::Modifiers;
 use input::Inputs;
 use nes_state::local::LocalNesState;
 use nes_state::{start_nes, FrameData};
-use palette::NTSC_PAL;
 
 use rusticnes_core::cartridge::mapper_from_file;
 use sdl2::EventPump;
@@ -41,7 +40,6 @@ mod integer_scaling;
 mod nes_state;
 #[cfg(feature = "netplay")]
 mod netplay;
-mod palette;
 mod settings;
 mod window;
 
@@ -296,6 +294,8 @@ fn initialise() -> Result<
     ))
 }
 
+static NTSC_PAL: [u8; 64 * 8 * 3] = *include_bytes!("../ntscpalette.pal");
+
 struct Game {
     nes_state: Box<dyn NesStateHandler>,
     gui: Gui,
@@ -365,19 +365,15 @@ impl Game {
             let pixels = frame
                 .iter()
                 .flat_map(|&palette_index| {
-                    let palette_index = palette_index as usize * 4;
-                    let rgba: [u8; 4] = NTSC_PAL[palette_index..palette_index + 4]
+                    let palette_index = palette_index as usize * 3;
+                    let rgba: [u8; 3] = NTSC_PAL[palette_index..palette_index + 3]
                         .try_into()
                         .unwrap();
                     rgba
                 })
                 .collect::<Vec<u8>>();
             ImageData::Color(
-                ColorImage::from_rgba_premultiplied(
-                    [NES_WIDTH as usize, NES_HEIGHT as usize],
-                    &pixels,
-                )
-                .into(),
+                ColorImage::from_rgb([NES_WIDTH as usize, NES_HEIGHT as usize], &pixels).into(),
             )
         });
 
