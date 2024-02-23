@@ -47,9 +47,10 @@ mod window;
 type Fps = f32;
 const FPS: Fps = 60.0;
 const NES_WIDTH: u32 = 256;
+const NES_WIDTH_4_3: u32 = (NES_WIDTH as f32 * (4.0 / 3.0)) as u32;
 const NES_HEIGHT: u32 = 240;
 
-const MINIMUM_WINDOW_SIZE: (u32, u32) = (1024, 720);
+const MINIMUM_INTEGER_SCALING_SIZE: (u32, u32) = (1024, 720);
 
 fn main() {
     init_logger();
@@ -242,8 +243,11 @@ fn initialise() -> Result<
     }
     let gl_window = create_display(
         &bundle.config.window_title,
-        Size::new(MINIMUM_WINDOW_SIZE.0 as f64, MINIMUM_WINDOW_SIZE.1 as f64),
-        Size::new(MINIMUM_WINDOW_SIZE.0 as f64, MINIMUM_WINDOW_SIZE.1 as f64),
+        Size::new(
+            MINIMUM_INTEGER_SCALING_SIZE.0 as f64,
+            MINIMUM_INTEGER_SCALING_SIZE.1 as f64,
+        ),
+        Size::new(NES_WIDTH_4_3 as f64, NES_HEIGHT as f64),
         &event_loop,
     )?;
 
