@@ -2,6 +2,7 @@ use std::{num::NonZeroU32, sync::Arc};
 
 use anyhow::Result;
 use egui::NumExt;
+use glutin::config::ConfigSurfaceTypes;
 use raw_window_handle::HasRawWindowHandle;
 
 use crate::input::keys::{KeyCode, Modifiers};
@@ -60,6 +61,8 @@ impl GlutinWindowContext {
             .prefer_hardware_accelerated(Some(true))
             .with_depth_size(0)
             .with_stencil_size(0)
+            .with_surface_type(ConfigSurfaceTypes::WINDOW)
+            //.with_swap_interval(1, 1)
             .with_transparency(false);
 
         log::debug!("trying to get gl_config");
@@ -126,7 +129,11 @@ impl GlutinWindowContext {
             &gl_surface,
         )?;
 
-        gl_surface.set_swap_interval(&gl_context, glutin::surface::SwapInterval::DontWait)?;
+        gl_surface.set_swap_interval(
+            &gl_context,
+            glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap()),
+        )?;
+
         #[allow(clippy::arc_with_non_send_sync)]
         Ok(GlutinWindowContext {
             window,

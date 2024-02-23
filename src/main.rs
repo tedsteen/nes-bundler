@@ -29,6 +29,7 @@ use rusticnes_core::cartridge::mapper_from_file;
 use sdl2::EventPump;
 use settings::Settings;
 use window::Size;
+use winit::event_loop::ControlFlow;
 
 mod audio;
 mod bundle;
@@ -73,13 +74,16 @@ fn run(
 ) -> std::result::Result<(), winit::error::EventLoopError> {
     let mut modifiers = Modifiers::empty();
 
+    winit_event_loop.set_control_flow(ControlFlow::Poll);
+
     winit_event_loop.run(move |winit_event, control_flow| {
         if log::max_level() == log::Level::Trace && Time::now().sub(&game_loop.last_stats) >= 1.0 {
             let (ups, rps, ..) = game_loop.get_stats();
             log::trace!("UPS: {:?}, RPS: {:?}", ups, rps);
         }
+        let mut should_update = false;
 
-        let mut sdl_events: Vec<GuiEvent> = sdl_event_pump
+        let mut all_events: Vec<GuiEvent> = sdl_event_pump
             .poll_iter()
             .filter_map(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad))
             .collect();
@@ -94,11 +98,12 @@ fn run(
 
                 if let winit::event::WindowEvent::Resized(physical_size) = &event {
                     gl_window.resize(*physical_size);
+                    should_update = true;
                 }
 
                 if !gui.on_event(gl_window.window(), event) {
                     if let Some(winit_gui_event) = &event.to_gui_event() {
-                        sdl_events.push(winit_gui_event.clone());
+                        all_events.push(winit_gui_event.clone());
                     }
                 }
             }
@@ -109,7 +114,7 @@ fn run(
             _ => {}
         }
 
-        for event in sdl_events {
+        for event in all_events {
             let game = &mut game_loop.game;
             let consumed = match &event {
                 &settings::gui::GuiEvent::Keyboard(KeyEvent::ModifiersChanged(new_modifiers)) => {
@@ -161,29 +166,32 @@ fn run(
                 game.apply_gui_event(event);
             }
         }
+        if let winit::event::Event::AboutToWait = &winit_event {
+            should_update = true
+        }
+        if should_update {
+            game_loop.next_frame(
+                |game_loop| {
+                    let game = &mut game_loop.game;
+                    if let Some(frame_data) = game.advance() {
+                        let fps = frame_data.fps;
+                        #[cfg(feature = "debug")]
+                        let fps = if game.debug.override_fps {
+                            game.debug.fps
+                        } else {
+                            fps
+                        };
 
-        game_loop.next_frame(
-            |game_loop| {
-                let game = &mut game_loop.game;
-                if let Some(frame_data) = game.advance() {
-                    let fps = frame_data.fps;
-                    #[cfg(feature = "debug")]
-                    let fps = if game.debug.override_fps {
-                        game.debug.fps
+                        game.draw_frame(Some(&frame_data.video));
+                        game.push_audio(&frame_data.audio, fps);
+                        game_loop.set_updates_per_second(fps);
                     } else {
-                        fps
-                    };
+                        game.draw_frame(None);
+                    }
+                },
+                |game_loop| {
+                    let game = &mut game_loop.game;
 
-                    game.draw_frame(Some(&frame_data.video));
-                    game.push_audio(&frame_data.audio, fps);
-                    game_loop.set_updates_per_second(fps);
-                } else {
-                    game.draw_frame(None);
-                }
-            },
-            |game_loop| {
-                let game = &mut game_loop.game;
-                if let winit::event::Event::AboutToWait = &winit_event {
                     if game.run_gui(gl_window.window()) {
                         game.settings.save();
                     }
@@ -201,10 +209,9 @@ fn run(
                     // draw things on top of egui here
 
                     gl_window.swap_buffers().unwrap();
-                }
-            },
-        );
-        gl_window.window().request_redraw();
+                },
+            );
+        }
     })
 }
 
