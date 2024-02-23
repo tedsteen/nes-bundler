@@ -226,7 +226,6 @@ fn initialise() -> Result<
     ),
     anyhow::Error,
 > {
-    sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
     let event_loop = winit::event_loop::EventLoopBuilder::with_user_event()
         .build()
         .expect("Could not create the event loop");
@@ -260,6 +259,9 @@ fn initialise() -> Result<
 
     #[allow(unused_mut)] //Needed by the netplay feature
     let mut settings = Settings::new(bundle.config.default_settings.clone());
+
+    // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
+    sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
 
     let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
     let audio = Audio::new(&sdl_context, &settings)?;
