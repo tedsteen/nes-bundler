@@ -1,9 +1,9 @@
-name: Release
+name: Build
 
 on:
   push:
 
-jobs:  
+jobs:
   build:
     name: Build ${{ matrix.name }} (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
@@ -52,16 +52,14 @@ jobs:
       run: sudo apt-get update && sudo apt-get -y install libatk1.0-dev libgtk-3-dev libsdl2-dev
 
     - name: Build (with Netplay)
-      run: cargo install --target ${{ matrix.target }} --features "netplay zip-bundle" --path . --root ./out
-
-    - name: Rename
-      run: cp out/bin/nes-bundler${{ matrix.file-ending }} nes-bundler-${{ matrix.name }}-${{ github.ref_name }}${{ matrix.file-ending }}
+      run: |
+        cargo install --target ${{ matrix.target }} --features "netplay zip-bundle" --path . --root ./out
+        cp out/bin/nes-bundler${{ matrix.file-ending }} nes-bundler-${{ matrix.name }}-${{ github.ref_name }}${{ matrix.file-ending }}
     
     - name: Build (without Netplay)
-      run: cargo install --target ${{ matrix.target }} --features "zip-bundle" --path . --root ./out
-
-    - name: Rename
-      run: cp out/bin/nes-bundler${{ matrix.file-ending }} nes-bundler-${{ matrix.name }}-no-netplay-${{ github.ref_name }}${{ matrix.file-ending }}
+      run: |
+        cargo install --target ${{ matrix.target }} --features "zip-bundle" --path . --root ./out
+        cp out/bin/nes-bundler${{ matrix.file-ending }} nes-bundler-${{ matrix.name }}-no-netplay-${{ github.ref_name }}${{ matrix.file-ending }}
 
     - name: Codesign executable
       if: ${{ startsWith(matrix.os, 'macos') }}
