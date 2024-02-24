@@ -674,9 +674,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.0.86"
+version = "1.0.87"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f9fa1897e4325be0d68d48df6aa1a71ac2ed4d27723887e7754192705350730"
+checksum = "3286b845d0fccbdd15af433f61c5970e711987036cb468f437ff6badd70f4e24"
 dependencies = [
  "libc",
 ]
@@ -1838,9 +1838,9 @@ checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 
 [[package]]
 name = "hermit-abi"
-version = "0.3.6"
+version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd5256b483761cd23699d0da46cc6fd2ee3be420bbe6d020ae4a091e70b7e9fd"
+checksum = "379dada1584ad501b383485dd706b8afb7a70fcbc7f4da7d780638a5a6124a60"
 
 [[package]]
 name = "hex"
@@ -2007,16 +2007,16 @@ dependencies = [
 
 [[package]]
 name = "interceptor"
-version = "0.10.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef15e84428e65a87e5a38d13de93286ba71121cdc165ee2eeabab1c7a05623c9"
+checksum = "5927883184e6a819b22d5e4f5f7bc7ca134fde9b2026fbddd8d95249746ba21e"
 dependencies = [
  "async-trait",
  "bytes",
  "log",
  "rand",
  "rtcp",
- "rtp 0.10.0",
+ "rtp 0.9.0",
  "thiserror",
  "tokio",
  "waitgroup",
@@ -4591,9 +4591,9 @@ dependencies = [
 
 [[package]]
 name = "webrtc-srtp"
-version = "0.11.1"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69f1bf5ab6c60ec5e42cacb19ed5dd3d43688b956c1624be1ba19b1192b24904"
+checksum = "c1db1f36c1c81e4b1e531c0b9678ba0c93809e196ce62122d87259bb71c03b9f"
 dependencies = [
  "aead",
  "aes",
@@ -4604,7 +4604,7 @@ dependencies = [
  "hmac",
  "log",
  "rtcp",
- "rtp 0.10.0",
+ "rtp 0.9.0",
  "sha1",
  "subtle",
  "thiserror",
