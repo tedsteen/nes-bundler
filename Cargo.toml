@@ -35,7 +35,8 @@ glutin-winit = "0.4"
 glutin="0.31"
 raw-window-handle = "0.5"
 
-sdl2 = { version="0.36", features = ["bundled", "static-link"] }
+# sdl2 = { version = "0.36", features = ["bundled", "static-link"] }
+sdl2 = { git = "https://github.com/tedsteen/rust-sdl2.git", branch = "rust-sdl2-for-nes-bundler", features = ["bundled", "static-link"] }
 
 rusticnes-core = { git = "https://github.com/tedsteen/rusticnes-core-for-nes-bundler" }
 base64 = "0.21"
