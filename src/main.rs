@@ -76,6 +76,7 @@ fn run(
     let mut modifiers = Modifiers::empty();
 
     winit_event_loop.set_control_flow(ControlFlow::Poll);
+    let mut queued_events: Vec<GuiEvent> = vec![];
 
     winit_event_loop.run(move |winit_event, control_flow| {
         if log::max_level() == log::Level::Trace && Time::now().sub(&game_loop.last_stats) >= 1.0 {
@@ -84,10 +85,13 @@ fn run(
         }
         let mut should_update = false;
 
-        let mut all_events: Vec<GuiEvent> = sdl_event_pump
-            .poll_iter()
-            .filter_map(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad))
-            .collect();
+        queued_events.append(
+            &mut sdl_event_pump
+                .poll_iter()
+                .filter_map(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad))
+                .collect(),
+        );
+
         let gui = &mut game_loop.game.gui;
         match &winit_event {
             winit::event::Event::WindowEvent { event, .. } => {
@@ -107,7 +111,7 @@ fn run(
 
                 if !gui.on_event(gl_window.window(), event) {
                     if let Some(winit_gui_event) = &event.to_gui_event() {
-                        all_events.push(winit_gui_event.clone());
+                        queued_events.push(winit_gui_event.clone());
                     }
                 }
             }
@@ -118,62 +122,67 @@ fn run(
             _ => {}
         }
 
-        for event in all_events {
-            let game = &mut game_loop.game;
-            let consumed = match &event {
-                &settings::gui::GuiEvent::Keyboard(KeyEvent::ModifiersChanged(new_modifiers)) => {
-                    modifiers = new_modifiers;
-                    false
-                }
-                settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(key_code)) => {
-                    let settings = &mut game.settings;
-                    let nes_state = &mut game.nes_state;
-
-                    use crate::input::keys::KeyCode::*;
-                    match key_code {
-                        F1 => {
-                            if let Some(save_state) = nes_state.save() {
-                                settings.last_save_state = Some(b64.encode(save_state));
-                                settings.save();
-                            }
-
-                            true
-                        }
-                        F2 => {
-                            if let Some(save_state) = &settings.last_save_state {
-                                if let Ok(buf) = &mut b64.decode(save_state) {
-                                    nes_state.load(buf);
-                                }
-                            }
-                            true
-                        }
-                        Escape => {
-                            game.gui.toggle_visibility();
-                            true
-                        }
-
-                        key_code => gl_window
-                            .window_mut()
-                            .check_and_set_fullscreen(&modifiers, key_code),
-                    }
-                }
-                GuiEvent::Gamepad(input::gamepad::GamepadEvent::ButtonDown {
-                    button: GamepadButton::Guide,
-                    ..
-                }) => {
-                    game.gui.toggle_visibility();
-                    true
-                }
-                _ => false,
-            };
-            if !consumed {
-                game.apply_gui_event(event);
-            }
-        }
         if let winit::event::Event::AboutToWait = &winit_event {
             should_update = true
         }
+
         if should_update {
+            queued_events.retain_mut(|event| {
+                let game = &mut game_loop.game;
+                let consumed = match event {
+                    &mut settings::gui::GuiEvent::Keyboard(KeyEvent::ModifiersChanged(
+                        new_modifiers,
+                    )) => {
+                        modifiers = new_modifiers;
+                        false
+                    }
+                    settings::gui::GuiEvent::Keyboard(KeyEvent::Pressed(key_code)) => {
+                        let settings = &mut game.settings;
+                        let nes_state = &mut game.nes_state;
+
+                        use crate::input::keys::KeyCode::*;
+                        match key_code {
+                            F1 => {
+                                if let Some(save_state) = nes_state.save() {
+                                    settings.last_save_state = Some(b64.encode(save_state));
+                                    settings.save();
+                                }
+
+                                true
+                            }
+                            F2 => {
+                                if let Some(save_state) = &settings.last_save_state {
+                                    if let Ok(buf) = &mut b64.decode(save_state) {
+                                        nes_state.load(buf);
+                                    }
+                                }
+                                true
+                            }
+                            Escape => {
+                                game.gui.toggle_visibility();
+                                true
+                            }
+
+                            key_code => gl_window
+                                .window_mut()
+                                .check_and_set_fullscreen(&modifiers, key_code),
+                        }
+                    }
+                    GuiEvent::Gamepad(input::gamepad::GamepadEvent::ButtonDown {
+                        button: GamepadButton::Guide,
+                        ..
+                    }) => {
+                        game.gui.toggle_visibility();
+                        true
+                    }
+                    _ => false,
+                };
+                if !consumed {
+                    game.apply_gui_event(event);
+                }
+                false
+            });
+
             game_loop.next_frame(
                 |game_loop| {
                     let game = &mut game_loop.game;
@@ -341,9 +350,9 @@ impl Game {
             audio,
         }
     }
-    fn apply_gui_event(&mut self, gui_event: GuiEvent) {
+    fn apply_gui_event(&mut self, gui_event: &GuiEvent) {
         self.gui.handle_events(
-            &gui_event,
+            gui_event,
             &mut [
                 #[cfg(feature = "debug")]
                 Some(&mut self.debug),
