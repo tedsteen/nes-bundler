@@ -7,8 +7,8 @@ use egui::{
 
 use crate::{
     input::{gamepad::GamepadEvent, KeyEvent},
-    integer_scaling::calculate_size_corrected,
-    MINIMUM_WINDOW_SIZE, NES_HEIGHT, NES_WIDTH,
+    integer_scaling::{calculate_size_corrected, Size},
+    MINIMUM_INTEGER_SCALING_SIZE, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3,
 };
 
 use super::Settings;
@@ -89,14 +89,30 @@ impl Gui {
                     let texture_handle = &self.nes_texture;
                     if let Some(t) = ctx.tex_manager().read().meta(texture_handle.id()) {
                         if t.size[0] != 0 {
-                            let new_size = calculate_size_corrected(
-                                ui.available_size().x as u32,
-                                ui.available_size().y as u32,
-                                NES_WIDTH,
-                                NES_HEIGHT,
-                                4.0,
-                                3.0,
-                            );
+                            let available_size = ui.available_size();
+                            let new_size = if available_size.x
+                                < MINIMUM_INTEGER_SCALING_SIZE.0 as f32
+                                || available_size.y < MINIMUM_INTEGER_SCALING_SIZE.1 as f32
+                            {
+                                let width = NES_WIDTH_4_3;
+                                let ratio_height = available_size.y / NES_HEIGHT as f32;
+                                let ratio_width = available_size.x / width as f32;
+                                let ratio = f32::min(ratio_height, ratio_width);
+                                Size {
+                                    width: (width as f32 * ratio) as u32,
+                                    height: (NES_HEIGHT as f32 * ratio) as u32,
+                                }
+                            } else {
+                                calculate_size_corrected(
+                                    available_size.x as u32,
+                                    available_size.y as u32,
+                                    NES_WIDTH,
+                                    NES_HEIGHT,
+                                    4.0,
+                                    3.0,
+                                )
+                            };
+
                             ui.centered_and_justified(|ui| {
                                 ui.add(Image::new(SizedTexture::new(
                                     texture_handle,
@@ -139,8 +155,8 @@ impl Gui {
                 .movable(true)
                 .pivot(Align2::CENTER_CENTER)
                 .default_pos([
-                    MINIMUM_WINDOW_SIZE.0 as f32 / 2.0,
-                    MINIMUM_WINDOW_SIZE.1 as f32 / 2.0,
+                    MINIMUM_INTEGER_SCALING_SIZE.0 as f32 / 2.0,
+                    MINIMUM_INTEGER_SCALING_SIZE.1 as f32 / 2.0,
                 ])
                 .show(ctx, |ui| {
                     for (idx, gui) in guis.iter_mut().flatten().enumerate() {

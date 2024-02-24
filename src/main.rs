@@ -24,12 +24,12 @@ use input::keys::Modifiers;
 use input::Inputs;
 use nes_state::local::LocalNesState;
 use nes_state::{start_nes, FrameData};
-use palette::NTSC_PAL;
 
 use rusticnes_core::cartridge::mapper_from_file;
 use sdl2::EventPump;
 use settings::Settings;
 use window::Size;
+use winit::event_loop::ControlFlow;
 
 mod audio;
 mod bundle;
@@ -41,16 +41,16 @@ mod integer_scaling;
 mod nes_state;
 #[cfg(feature = "netplay")]
 mod netplay;
-mod palette;
 mod settings;
 mod window;
 
 type Fps = f32;
 const FPS: Fps = 60.0;
 const NES_WIDTH: u32 = 256;
+const NES_WIDTH_4_3: u32 = (NES_WIDTH as f32 * (4.0 / 3.0)) as u32;
 const NES_HEIGHT: u32 = 240;
 
-const MINIMUM_WINDOW_SIZE: (u32, u32) = (1024, 720);
+const MINIMUM_INTEGER_SCALING_SIZE: (u32, u32) = (1024, 720);
 
 fn main() {
     init_logger();
@@ -75,13 +75,16 @@ fn run(
 ) -> std::result::Result<(), winit::error::EventLoopError> {
     let mut modifiers = Modifiers::empty();
 
+    winit_event_loop.set_control_flow(ControlFlow::Poll);
+
     winit_event_loop.run(move |winit_event, control_flow| {
         if log::max_level() == log::Level::Trace && Time::now().sub(&game_loop.last_stats) >= 1.0 {
             let (ups, rps, ..) = game_loop.get_stats();
             log::trace!("UPS: {:?}, RPS: {:?}", ups, rps);
         }
+        let mut should_update = false;
 
-        let mut sdl_events: Vec<GuiEvent> = sdl_event_pump
+        let mut all_events: Vec<GuiEvent> = sdl_event_pump
             .poll_iter()
             .filter_map(|sdl_event| sdl_event.to_gamepad_event().map(GuiEvent::Gamepad))
             .collect();
@@ -96,11 +99,15 @@ fn run(
 
                 if let winit::event::WindowEvent::Resized(physical_size) = &event {
                     gl_window.resize(*physical_size);
+                    should_update = true;
+                }
+                if let winit::event::WindowEvent::Moved(..) = &event {
+                    should_update = true;
                 }
 
                 if !gui.on_event(gl_window.window(), event) {
                     if let Some(winit_gui_event) = &event.to_gui_event() {
-                        sdl_events.push(winit_gui_event.clone());
+                        all_events.push(winit_gui_event.clone());
                     }
                 }
             }
@@ -111,7 +118,7 @@ fn run(
             _ => {}
         }
 
-        for event in sdl_events {
+        for event in all_events {
             let game = &mut game_loop.game;
             let consumed = match &event {
                 &settings::gui::GuiEvent::Keyboard(KeyEvent::ModifiersChanged(new_modifiers)) => {
@@ -163,29 +170,32 @@ fn run(
                 game.apply_gui_event(event);
             }
         }
+        if let winit::event::Event::AboutToWait = &winit_event {
+            should_update = true
+        }
+        if should_update {
+            game_loop.next_frame(
+                |game_loop| {
+                    let game = &mut game_loop.game;
+                    if let Some(frame_data) = game.advance() {
+                        let fps = frame_data.fps;
+                        #[cfg(feature = "debug")]
+                        let fps = if game.debug.override_fps {
+                            game.debug.fps
+                        } else {
+                            fps
+                        };
 
-        game_loop.next_frame(
-            |game_loop| {
-                let game = &mut game_loop.game;
-                if let Some(frame_data) = game.advance() {
-                    let fps = frame_data.fps;
-                    #[cfg(feature = "debug")]
-                    let fps = if game.debug.override_fps {
-                        game.debug.fps
+                        game.draw_frame(Some(&frame_data.video));
+                        game.push_audio(&frame_data.audio, fps);
+                        game_loop.set_updates_per_second(fps);
                     } else {
-                        fps
-                    };
+                        game.draw_frame(None);
+                    }
+                },
+                |game_loop| {
+                    let game = &mut game_loop.game;
 
-                    game.draw_frame(Some(&frame_data.video));
-                    game.push_audio(&frame_data.audio, fps);
-                    game_loop.set_updates_per_second(fps);
-                } else {
-                    game.draw_frame(None);
-                }
-            },
-            |game_loop| {
-                let game = &mut game_loop.game;
-                if let winit::event::Event::AboutToWait = &winit_event {
                     if game.run_gui(gl_window.window()) {
                         game.settings.save();
                     }
@@ -203,10 +213,9 @@ fn run(
                     // draw things on top of egui here
 
                     gl_window.swap_buffers().unwrap();
-                }
-            },
-        );
-        gl_window.window().request_redraw();
+                },
+            );
+        }
     })
 }
 
@@ -220,7 +229,6 @@ fn initialise() -> Result<
     ),
     anyhow::Error,
 > {
-    sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
     let event_loop = winit::event_loop::EventLoopBuilder::with_user_event()
         .build()
         .expect("Could not create the event loop");
@@ -237,8 +245,11 @@ fn initialise() -> Result<
     }
     let gl_window = create_display(
         &bundle.config.window_title,
-        Size::new(MINIMUM_WINDOW_SIZE.0 as f64, MINIMUM_WINDOW_SIZE.1 as f64),
-        Size::new(MINIMUM_WINDOW_SIZE.0 as f64, MINIMUM_WINDOW_SIZE.1 as f64),
+        Size::new(
+            MINIMUM_INTEGER_SCALING_SIZE.0 as f64,
+            MINIMUM_INTEGER_SCALING_SIZE.1 as f64,
+        ),
+        Size::new(NES_WIDTH_4_3 as f64, NES_HEIGHT as f64),
         &event_loop,
     )?;
 
@@ -251,6 +262,11 @@ fn initialise() -> Result<
 
     #[allow(unused_mut)] //Needed by the netplay feature
     let mut settings = Settings::new(bundle.config.default_settings.clone());
+
+    // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
+    sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
+    // TODO: Perhaps do this to fix this issue: https://github.com/libsdl-org/SDL/issues/7896#issuecomment-1616700934
+    //sdl2::hint::set("SDL_JOYSTICK_RAWINPUT", "0");
 
     let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
     let audio = Audio::new(&sdl_context, &settings)?;
@@ -295,6 +311,8 @@ fn initialise() -> Result<
         gl_window,
     ))
 }
+
+static NTSC_PAL: [u8; 64 * 8 * 3] = *include_bytes!("../ntscpalette.pal");
 
 struct Game {
     nes_state: Box<dyn NesStateHandler>,
@@ -365,19 +383,15 @@ impl Game {
             let pixels = frame
                 .iter()
                 .flat_map(|&palette_index| {
-                    let palette_index = palette_index as usize * 4;
-                    let rgba: [u8; 4] = NTSC_PAL[palette_index..palette_index + 4]
+                    let palette_index = palette_index as usize * 3;
+                    let rgba: [u8; 3] = NTSC_PAL[palette_index..palette_index + 3]
                         .try_into()
                         .unwrap();
                     rgba
                 })
                 .collect::<Vec<u8>>();
             ImageData::Color(
-                ColorImage::from_rgba_premultiplied(
-                    [NES_WIDTH as usize, NES_HEIGHT as usize],
-                    &pixels,
-                )
-                .into(),
+                ColorImage::from_rgb([NES_WIDTH as usize, NES_HEIGHT as usize], &pixels).into(),
             )
         });
 
