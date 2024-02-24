@@ -129,10 +129,7 @@ impl GlutinWindowContext {
             &gl_surface,
         )?;
 
-        gl_surface.set_swap_interval(
-            &gl_context,
-            glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap()),
-        )?;
+        gl_surface.set_swap_interval(&gl_context, glutin::surface::SwapInterval::DontWait)?;
 
         #[allow(clippy::arc_with_non_send_sync)]
         Ok(GlutinWindowContext {
