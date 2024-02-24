@@ -101,6 +101,9 @@ fn run(
                     gl_window.resize(*physical_size);
                     should_update = true;
                 }
+                if let winit::event::WindowEvent::Moved(..) = &event {
+                    should_update = true;
+                }
 
                 if !gui.on_event(gl_window.window(), event) {
                     if let Some(winit_gui_event) = &event.to_gui_event() {
@@ -262,6 +265,8 @@ fn initialise() -> Result<
 
     // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
     sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
+    // TODO: Perhaps do this to fix this issue: https://github.com/libsdl-org/SDL/issues/7896#issuecomment-1616700934
+    //sdl2::hint::set("SDL_JOYSTICK_RAWINPUT", "0");
 
     let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
     let audio = Audio::new(&sdl_context, &settings)?;
