@@ -3,3 +3,5 @@ target/**
 settings.yaml
 todo.md
 nes-bundler-log.txt
+wix/main.wxs
+assets/bundle.desktop

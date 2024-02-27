@@ -16,22 +16,22 @@
 <?endif ?>
 
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Codepage="1252" Id="*" Language="1033" Manufacturer="Neovide" Name="Neovide" UpgradeCode="22816C0C-92F8-46F9-BA8D-B2F5F8C8C743" Version="$(var.Version)">
-    <Package Compressed="yes" Description="A no nonsense Neovim GUI written in Rust" Id="*" InstallScope="perMachine" Manufacturer="Neovide" />
+  <Product Codepage="1252" Id="*" Language="1033" Manufacturer="{manufacturer}" Name="{bundle_name}" UpgradeCode="22816C0C-92F8-46F9-BA8D-B2F5F8C8C743" Version="{version}">
+    <Package Compressed="yes" Description="{short_description}" Id="*" InstallScope="perMachine" Manufacturer="{manufacturer}" />
 
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="DesktopFolder" />
       <Directory Id="ProgramMenuFolder" />
       <Directory Id="$(var.PlatformProgramFilesFolder)">
-        <Directory Id="INSTALLDIR" Name="NESBundler">
+        <Directory Id="INSTALLDIR" Name="{bundle_name}">
           <Component Guid="8F0CDDE4-C807-46B4-949C-A96508B04DB2" Id="PathComponent" KeyPath="yes">
             <Environment Action="set" Id="PathEnvironment" Name="PATH" Part="last" Permanent="no" System="yes" Value="[INSTALLDIR]" />
           </Component>
 
-          <Component Guid="*" Id="NeovideComponent">
-            <File Id="NeovideExecutable" KeyPath="yes" Name="nes-bundler.exe" Source="$(var.CargoTargetBinDir)\nes-bundler.exe">
-              <Shortcut Advertise="yes" Directory="DesktopFolder" Icon="nesBundler.ico" Id="DesktopShortcut" Name="NES Bundler" WorkingDirectory="INSTALLDIR" />
-              <Shortcut Advertise="yes" Directory="ProgramMenuFolder" Icon="nesBundler.ico" Id="StartMenuShortcut" Name="NES Bundler" WorkingDirectory="INSTALLDIR" />
+          <Component Guid="*" Id="BundleComponent">
+            <File Id="BundleExecutable" KeyPath="yes" Name="{bundle_name}.exe" Source="$(var.CargoTargetBinDir)\nes-bundler.exe">
+              <Shortcut Advertise="yes" Directory="DesktopFolder" Icon="bundle.ico" Id="DesktopShortcut" Name="{bundle_name}" WorkingDirectory="INSTALLDIR" />
+              <Shortcut Advertise="yes" Directory="ProgramMenuFolder" Icon="bundle.ico" Id="StartMenuShortcut" Name="{bundle_name}" WorkingDirectory="INSTALLDIR" />
             </File>
           </Component>
         </Directory>
@@ -39,21 +39,21 @@
     </Directory>
 
     <Feature Absent="disallow" AllowAdvertise="no" ConfigurableDirectory="INSTALLDIR" Description="Install the executable of [ProductName]." Display="expand" Id="BinaryFeature" Title="Executable">
-      <ComponentRef Id="NeovideComponent" />
+      <ComponentRef Id="BundleComponent" />
 
       <Feature Absent="allow" Description="Add the executable of [ProductName] to the system path." Id="PathFeature" Title="Path">
         <ComponentRef Id="PathComponent" />
       </Feature>
     </Feature>
 
-    <Icon Id="nesBundler.ico" SourceFile="assets\nes-bundler.ico" />
+    <Icon Id="bundle.ico" SourceFile="assets\bundle.ico" />
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." Schedule="afterInstallInitialize" />
 
     <MediaTemplate EmbedCab="yes" />
 
-    <Property Id="ARPHELPLINK" Value="https://github.com/neovide/neovide" />
-    <Property Id="ARPPRODUCTICON" Value="nesBundler.ico" />
+    <Property Id="ARPHELPLINK" Value="{homepage}" />
+    <Property Id="ARPPRODUCTICON" Value="bundle.ico" />
 
     <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLDIR]" After="CostFinalize" />
 

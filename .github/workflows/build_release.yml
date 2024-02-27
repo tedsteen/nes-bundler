@@ -41,7 +41,6 @@ jobs:
         elif [[ $RUNNER_OS == "macOS" ]]; then
           rustup target add x86_64-apple-darwin
           rustup target add aarch64-apple-darwin
-          if ! which cargo-bundle; then cargo install cargo-bundle; fi
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
           sudo apt-get update
@@ -51,16 +50,14 @@ jobs:
     - name: Build
       run: |
         if [[ $RUNNER_OS == "Windows" ]]; then
+          cargo build --locked --release
           cargo wix --output target/release/nes-bundler.msi --package nes-bundler
 
         elif [[ $RUNNER_OS == "macOS" ]]; then
-          #TODO: wat. -> echo "MACOSX_DEPLOYMENT_TARGET=10.11" >> $GITHUB_ENV
           # x86
           cargo build --locked --release --target=x86_64-apple-darwin
-          cargo bundle --release --target=x86_64-apple-darwin
           # arch 
           cargo build --locked --release --target=aarch64-apple-darwin
-          cargo bundle --release --target=aarch64-apple-darwin
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
           cargo build --locked --release
@@ -75,21 +72,18 @@ jobs:
           echo "ARTIFACT2=target/release/nes-bundler.msi" >> $GITHUB_ENV
 
         elif [[ $RUNNER_OS == "macOS" ]]; then
+          cd ..
           # merge builds
-          mkdir -p bundle/osx
-          rm -rf bundle/osx/nes-bundler.app || true
-          cp -R ../x86_64-apple-darwin/release/bundle/osx/nes-bundler.app \
-            bundle/osx/nes-bundler.app
-          rm bundle/osx/nes-bundler.app/Contents/MacOS/nes-bundler
-          lipo ../x86_64-apple-darwin/release/bundle/osx/nes-bundler.app/Contents/MacOS/nes-bundler \
-            ../aarch64-apple-darwin/release/bundle/osx/nes-bundler.app/Contents/MacOS/nes-bundler \
+          mkdir -p bundle/osx/nes-bundler.app/Contents/MacOS || true
+          lipo x86_64-apple-darwin/release/nes-bundler \
+            aarch64-apple-darwin/release/nes-bundler \
             -create -output \
             bundle/osx/nes-bundler.app/Contents/MacOS/nes-bundler
           codesign --force --deep -s - bundle/osx/nes-bundler.app
           # create .dmg
-          rm *.dmg
+          rm *.dmg || true
           hdiutil create nes-bundler-uncompressed.dmg -volname "nes-bundler" -srcfolder bundle/osx
-          hdiutil convert nes-bundler-uncompressed.dmg -format UDZO -o nes-bundler.dmg
+          hdiutil convert nes-bundler-uncompressed.dmg -format UDZO -o release/nes-bundler.dmg
 
           echo "ARTIFACT=target/release/nes-bundler.dmg" >> $GITHUB_ENV
 
@@ -107,9 +101,9 @@ jobs:
           export LDAI_UPDATE_INFORMATION="gh-releases-zsync|nes-bundler|nes-bundler|latest|nes-bundler.AppImage.zsync"
           ./linuxdeploy \
             --executable=nes-bundler \
-            --desktop-file=../../assets/nes-bundler.desktop \
+            --desktop-file=../../assets/bundle.desktop \
             --appdir=AppDir \
-            --icon-file=../../assets/nes-bundler.svg \
+            --icon-file=../../assets/bundle.svg \
             --output=appimage
 
           echo "ARTIFACT=target/release/nes-bundler-linux-x86_64.tar.gz" >> $GITHUB_ENV

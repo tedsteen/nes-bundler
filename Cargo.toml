@@ -13,44 +13,25 @@ default = []
 netplay = ["matchbox_socket", "tokio", "ggrs", "futures-timer", "futures", "uuid", "reqwest", "md5"]
 debug = ["egui_plot"]
 
-[[bin]]
-name = "nes-bundler"
-path = "src/main.rs"
-
-[[bin]]
-name = "nes-bundler-netplay"
-path = "src/main.rs"
-required-features = ["netplay"]
-
 [package.metadata.bundle]
-name = "nes-bundler"
+name = "NES Bundler Demo"
+version = "0.0.1"
 # See https://github.com/burtonageo/cargo-bundle for details
 identifier = "pub.hal.nes-bundler.demo"
+homepage = "https://darkbits.se/"
+manufacturer = "Darkbits"
 # TODO: icon = ["32x32.png", "128x128.png", "128x128@2x.png"]
-icon = ["assets/nes-bundler.ico"]
-version = "1.0.0"
-# copyright = "Copyright (c) Jane Doe 2016. All rights reserved."
+icon = ["assets/bundler.ico"]
+keywords = ["game", "demo"]
 category = "Game"
 short_description = "TODO: Bundle short Description"
 long_description = """
 TODO: Bundle long Description
 """
 
-[package.metadata.bundle.bin.nes-bundler-netplay]
-inherits = "package.metadata.bundle"
-name = "nes-bundler-netplay"
-
 [profile.release]
 strip = true
 
-# [profile.release-netplay]
-# inherits = "release"
-# features = "netplay"
-# 
-# [profile.release--no-netplay]
-# inherits = "release"
-# 
-# 
 [dependencies]
 log = "0.4"
 env_logger = "0.11"
@@ -89,4 +70,8 @@ md5 = { version = "0.7", optional = true }
 cxx = "1"
 
 [build-dependencies]
+anyhow = "1.0"
 cxx-build = "1"
+cargo_metadata = "0.18"
+serde = { version = "1.0", features = ["derive"] }
+tinytemplate = "1.2"

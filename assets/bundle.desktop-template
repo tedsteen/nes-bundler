@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Exec=nes-bundler %F
+Icon=bundle
+Name={bundle_name}
+Keywords={{ for keyword in keywords }}{keyword};{{ endfor }}
+Categories=Game;
+Comment={short_description}
