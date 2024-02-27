@@ -1,5 +1,5 @@
 .DS_Store
 target/**
 settings.yaml
-bundle.zip
-log.txt
+todo.md
+nes-bundler-log.txt

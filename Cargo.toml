@@ -1,5 +1,6 @@
 [package]
 name = "nes-bundler"
+description = ""
 version = "0.1.3"
 authors = ["Ted Steen <ted.steen@gmail.com>"]
 edition = "2021"
@@ -7,15 +8,49 @@ publish = false
 
 [features]
 default = []
-#default = ["netplay", "debug", "zip-bundle"]
+#default = ["netplay", "debug"]
 
 netplay = ["matchbox_socket", "tokio", "ggrs", "futures-timer", "futures", "uuid", "reqwest", "md5"]
-zip-bundle = ["rfd", "zip"]
 debug = ["egui_plot"]
+
+[[bin]]
+name = "nes-bundler"
+path = "src/main.rs"
+
+[[bin]]
+name = "nes-bundler-netplay"
+path = "src/main.rs"
+required-features = ["netplay"]
+
+[package.metadata.bundle]
+name = "nes-bundler"
+# See https://github.com/burtonageo/cargo-bundle for details
+identifier = "pub.hal.nes-bundler.demo"
+# TODO: icon = ["32x32.png", "128x128.png", "128x128@2x.png"]
+icon = ["assets/nes-bundler.ico"]
+version = "1.0.0"
+# copyright = "Copyright (c) Jane Doe 2016. All rights reserved."
+category = "Game"
+short_description = "TODO: Bundle short Description"
+long_description = """
+TODO: Bundle long Description
+"""
+
+[package.metadata.bundle.bin.nes-bundler-netplay]
+inherits = "package.metadata.bundle"
+name = "nes-bundler-netplay"
 
 [profile.release]
 strip = true
 
+# [profile.release-netplay]
+# inherits = "release"
+# features = "netplay"
+# 
+# [profile.release--no-netplay]
+# inherits = "release"
+# 
+# 
 [dependencies]
 log = "0.4"
 env_logger = "0.11"
@@ -40,10 +75,6 @@ sdl2 = { git = "https://github.com/tedsteen/rust-sdl2.git", branch = "rust-sdl2-
 
 rusticnes-core = { git = "https://github.com/tedsteen/rusticnes-core-for-nes-bundler" }
 base64 = "0.21"
-
-# zip-bundle deps
-rfd = { version = "0.13", optional = true }
-zip = { version = "0.6", default-features = false, features = ["deflate"], optional = true }
 
 # Netplay deps
 matchbox_socket = { version="0.8", features = ["ggrs"], optional = true }
