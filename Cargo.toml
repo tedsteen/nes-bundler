@@ -45,6 +45,7 @@ egui_plot = { version = "0.26", optional = true }
 egui_glow = { version = "0.26", features = ["winit", "links"] }
 glow = "0.13"
 winit = "0.29"
+image = { version = "0.24", default-features = false, features = ["ico"] }
 glutin-winit = "0.4"
 glutin="0.31"
 raw-window-handle = "0.5"

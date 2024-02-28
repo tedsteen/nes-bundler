@@ -4,6 +4,7 @@ use anyhow::Result;
 use egui::NumExt;
 use glutin::config::ConfigSurfaceTypes;
 use raw_window_handle::HasRawWindowHandle;
+use winit::window::Icon;
 
 use crate::input::keys::{KeyCode, Modifiers};
 mod winit_impl;
@@ -36,6 +37,7 @@ impl From<Size> for winit::dpi::Size {
         })
     }
 }
+
 impl GlutinWindowContext {
     // refactor this function to use `glutin-winit` crate eventually.
     // preferably add android support at the same time.
@@ -48,9 +50,19 @@ impl GlutinWindowContext {
         use glutin::display::GetGlDisplay;
         use glutin::display::GlDisplay;
         use glutin::prelude::GlSurface;
+
         let winit_window_builder = winit::window::WindowBuilder::new()
             .with_resizable(true)
-            //.with_window_icon(Some(Icon::from_rgba(vec![1; 10 * 10 * 4], 10, 10).unwrap()))
+            .with_window_icon(
+                image::load_from_memory(include_bytes!("../../os_bundle/windows/icon_256x256.ico"))
+                    .map(|image| {
+                        let image = image.into_rgba8();
+                        let (width, height) = image.dimensions();
+                        Icon::from_rgba(image.into_raw(), width, height)
+                            .expect("Failed to open icon")
+                    })
+                    .ok(),
+            )
             //.with_disallow_hidpi(true)
             .with_inner_size(inner_size)
             .with_min_inner_size(min_inner_size)
