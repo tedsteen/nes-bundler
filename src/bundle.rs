@@ -23,10 +23,10 @@ pub struct Bundle {
 impl LoadBundle for Bundle {
     fn load() -> Result<Bundle> {
         Ok(Bundle {
-            config: serde_yaml::from_str(include_str!("../config/config.yaml"))?,
-            rom: include_bytes!("../config/rom.nes").to_vec(),
+            config: serde_yaml::from_str(include_str!(env!("NB_BUNDLE_CONFIG")))?,
+            rom: include_bytes!(env!("NB_ROM")).to_vec(),
             #[cfg(feature = "netplay")]
-            netplay_rom: include_bytes!("../config/netplay-rom.nes").to_vec(),
+            netplay_rom: include_bytes!(env!("NB_NETPLAY_ROM")).to_vec(),
         })
     }
 }

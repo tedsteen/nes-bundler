@@ -38,7 +38,7 @@
       <ComponentRef Id="BundleComponent" />
     </Feature>
 
-    <Icon Id="bundle.ico" SourceFile="os_bundle/windows/icon_256x256.ico" />
+    <Icon Id="bundle.ico" SourceFile="config/windows/icon_256x256.ico" />
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." Schedule="afterInstallInitialize" />
 
@@ -52,8 +52,8 @@
       <UIRef Id="WixUI_InstallDir" />
     </UI>
     
-    <WixVariable Id="WixUIBannerBmp" Value="os_bundle/windows/wix/banner.bmp" />
-    <WixVariable Id="WixUIDialogBmp" Value="os_bundle/windows/wix/dialog.bmp" />
-    <WixVariable Id="WixUILicenseRtf" Value="os_bundle/windows/wix/license.rtf" />
+    <WixVariable Id="WixUIBannerBmp" Value="config/windows/wix/banner.bmp" />
+    <WixVariable Id="WixUIDialogBmp" Value="config/windows/wix/dialog.bmp" />
+    <WixVariable Id="WixUILicenseRtf" Value="config/windows/wix/license.rtf" />
   </Product>
 </Wix>

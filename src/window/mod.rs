@@ -54,7 +54,7 @@ impl GlutinWindowContext {
         let winit_window_builder = winit::window::WindowBuilder::new()
             .with_resizable(true)
             .with_window_icon(
-                image::load_from_memory(include_bytes!("../../os_bundle/windows/icon_256x256.ico"))
+                image::load_from_memory(include_bytes!("../../config/windows/icon_256x256.ico"))
                     .map(|image| {
                         let image = image.into_rgba8();
                         let (width, height) = image.dimensions();

@@ -50,13 +50,13 @@ jobs:
       run: |        
         if [[ $RUNNER_OS == "Windows" ]]; then
           cargo build --locked --release --features "netplay"
-          candle os_bundle/windows/wix/main.wxs -o target/release/
+          candle config/windows/wix/main.wxs -o target/release/
           light target/release/*.wixobj -o target/release/nes-bundler-netplay.msi -ext WixUIExtension
 
           cp target/release/nes-bundler.exe target/release/nes-bundler-netplay.exe
           
           cargo build --locked --release
-          candle os_bundle/windows/wix/main.wxs -o target/release/
+          candle config/windows/wix/main.wxs -o target/release/
           light target/release/*.wixobj -o target/release/nes-bundler.msi -ext WixUIExtension
 
         elif [[ $RUNNER_OS == "macOS" ]]; then
@@ -89,7 +89,7 @@ jobs:
         rm -rf artifacts || true
         mkdir artifacts
         ARTIFACTS=`readlink -f artifacts`
-        OS_BUNDLE=`readlink -f os_bundle`
+        BUNDLE_CONFIG=`readlink -f config`
         cd target/release
         
         if [[ $RUNNER_OS == "Windows" ]]; then
@@ -100,7 +100,7 @@ jobs:
           APP_BUNDLE=`readlink -f ../bundle/osx/nes-bundler.app`
           mkdir -p $APP_BUNDLE/Contents/MacOS || true
           mkdir -p $APP_BUNDLE/Contents/Resources || true
-          iconutil $OS_BUNDLE/macos/bundle.iconset -c icns --output $APP_BUNDLE/Contents/Resources/bundle.icns
+          iconutil $BUNDLE_CONFIG/macos/bundle.iconset -c icns --output $APP_BUNDLE/Contents/Resources/bundle.icns
 
           mv nes-bundler-netplay $APP_BUNDLE/Contents/MacOS/nes-bundler
           codesign --force --deep -s - $APP_BUNDLE
@@ -127,9 +127,9 @@ jobs:
           export LDAI_UPDATE_INFORMATION="gh-releases-zsync|nes-bundler|nes-bundler|latest|nes-bundler.AppImage.zsync"
           ./linuxdeploy \
             --executable=nes-bundler \
-            --desktop-file=$OS_BUNDLE/linux/bundle.desktop \
+            --desktop-file=$BUNDLE_CONFIG/linux/bundle.desktop \
             --appdir=AppDir \
-            --icon-file=$OS_BUNDLE/linux/icon_256x256.png \
+            --icon-file=$BUNDLE_CONFIG/linux/icon_256x256.png \
             --output=appimage
           mv nes-bundler.AppImage $ARTIFACTS/nes-bundler.AppImage
           mv nes-bundler.AppImage.zsync $ARTIFACTS/nes-bundler.AppImage.zsync
@@ -137,9 +137,9 @@ jobs:
           mv nes-bundler-netplay nes-bundler
           ./linuxdeploy \
             --executable=nes-bundler \
-            --desktop-file=$OS_BUNDLE/linux/bundle.desktop \
+            --desktop-file=$BUNDLE_CONFIG/linux/bundle.desktop \
             --appdir=AppDir \
-            --icon-file=$OS_BUNDLE/linux/icon_256x256.png \
+            --icon-file=$BUNDLE_CONFIG/linux/icon_256x256.png \
             --output=appimage
 
           mv nes-bundler.AppImage $ARTIFACTS/nes-bundler-netplay.AppImage
