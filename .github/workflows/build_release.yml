@@ -103,14 +103,14 @@ jobs:
           iconutil $BUNDLE_CONFIG/macos/bundle.iconset -c icns --output $APP_BUNDLE/Contents/Resources/bundle.icns
 
           mv nes-bundler-netplay $APP_BUNDLE/Contents/MacOS/nes-bundler
-          chmod +x $APP_BUNDLE/Contents/MacOS/nes-bundler
           codesign --force --deep -s - $APP_BUNDLE
           rsync -a $APP_BUNDLE $ARTIFACTS/nes-bundler-netplay.app
+          chmod +x $ARTIFACTS/nes-bundler-netplay.app/Contents/MacOS/nes-bundler
 
           mv nes-bundler $APP_BUNDLE/Contents/MacOS/nes-bundler
-          chmod +x $APP_BUNDLE/Contents/MacOS/nes-bundler
           codesign --force --deep -s - $APP_BUNDLE
-          rsync -a $APP_BUNDLE $ARTIFACTS/
+          rsync -a $APP_BUNDLE $ARTIFACTS/nes-bundler.app
+          chmod +x $ARTIFACTS/nes-bundler.app/Contents/MacOS/nes-bundler
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
           # archive artifact
