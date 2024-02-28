@@ -1,6 +1,23 @@
-# For all the gory details see the `BuildConfiguration`-struct in the source.
+# The name of the bundle and title of the window
+name: "NES Bundler Demo"
+# Short description used when creating linux and Windows installers
+short_description: "A demonstration of NES Bundler in action!"
+# The ROM of the game
+rom: "config/rom.nes"
+# Optional custom Netplay ROM if needed
+# netplay_rom: "config/netplay-rom.nes"
+# Version of the bundle used when creating Windows and macOS applications/installers
+version: "0.0.1"
+# macOS specific, See https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleidentifier
+cf_bundle_identifier: "se.darkbits.nes-bundler.demo"
+# Windows specific, See https://wixtoolset.org/docs/v3/howtos/updates/major_upgrade/#add-a-unique-id-to-identify-that-the-product-can-be-upgraded
+# Generate one here https://guid-generator.utiltree.com/
+wix_upgrade_code: "4D4E7FAD-4DA8-4D0D-9175-3B79B8A7C464"
+# Required by windows installer
+manufacturer: "Darkbits"
 
 # This will be the default settings for the bundle.
+# For all the gory details see the `BuildConfiguration`-struct in the source.
 default_settings:
     audio:
         volume: 100 #in %

@@ -2,6 +2,6 @@
 Type=Application
 Exec=nes-bundler %F
 Icon=icon_256x256
-Name={bundle_name}
+Name={name}
 Categories=Game;
 Comment={short_description}

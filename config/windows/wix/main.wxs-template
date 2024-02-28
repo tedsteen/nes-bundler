@@ -16,18 +16,18 @@
 <?endif ?>
 
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Codepage="1252" Id="*" Language="1033" Manufacturer="{manufacturer}" Name="{bundle_name}" UpgradeCode="{wix_upgrade_code}" Version="{version}">
+  <Product Codepage="1252" Id="*" Language="1033" Manufacturer="{manufacturer}" Name="{name}" UpgradeCode="{wix_upgrade_code}" Version="{version}">
     <Package Compressed="yes" Description="{short_description}" Id="*" InstallScope="perMachine" Manufacturer="{manufacturer}" />
 
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="DesktopFolder" />
       <Directory Id="ProgramMenuFolder" />
       <Directory Id="$(var.PlatformProgramFilesFolder)">
-        <Directory Id="INSTALLDIR" Name="{bundle_name}">
+        <Directory Id="INSTALLDIR" Name="{name}">
           <Component Guid="*" Id="BundleComponent">
-            <File Id="BundleExecutable" KeyPath="yes" Name="{bundle_name}.exe" Source="target/release/nes-bundler.exe">
-              <Shortcut Advertise="yes" Directory="DesktopFolder" Icon="bundle.ico" Id="DesktopShortcut" Name="{bundle_name}" WorkingDirectory="INSTALLDIR" />
-              <Shortcut Advertise="yes" Directory="ProgramMenuFolder" Icon="bundle.ico" Id="StartMenuShortcut" Name="{bundle_name}" WorkingDirectory="INSTALLDIR" />
+            <File Id="BundleExecutable" KeyPath="yes" Name="{name}.exe" Source="target/release/nes-bundler.exe">
+              <Shortcut Advertise="yes" Directory="DesktopFolder" Icon="bundle.ico" Id="DesktopShortcut" Name="{name}" WorkingDirectory="INSTALLDIR" />
+              <Shortcut Advertise="yes" Directory="ProgramMenuFolder" Icon="bundle.ico" Id="StartMenuShortcut" Name="{name}" WorkingDirectory="INSTALLDIR" />
             </File>
           </Component>
         </Directory>
