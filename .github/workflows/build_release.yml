@@ -9,13 +9,12 @@ defaults:
 
 jobs:
   build:
-    name: Build (${{ matrix.os }})
+    name: Build ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         # NOTE: Should use the oldest available Ubuntu release, for maximum compatibility
         os: [windows-latest, macOS-12, ubuntu-20.04]
-        features: ["", "netplay"]
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -49,53 +48,71 @@ jobs:
         fi
     
     - name: Build
-      run: |
+      run: |        
         if [[ $RUNNER_OS == "Windows" ]]; then
-          cargo build --locked --release --features "${{ matrix.features }}"
+          cargo build --locked --release --features "netplay"
+          cargo wix --include os_bundle/windows/wix/main.wxs --output target/release/nes-bundler-netplay.msi --package nes-bundler
+          cp target/release/nes-bundler.exe target/release/nes-bundler-netplay.exe
+          
+          cargo build --locked --release
           cargo wix --include os_bundle/windows/wix/main.wxs --output target/release/nes-bundler.msi --package nes-bundler
-
         elif [[ $RUNNER_OS == "macOS" ]]; then
+          mkdir -p target/release/
           # x86
-          cargo build --locked --release --target=x86_64-apple-darwin --features "${{ matrix.features }}"
+          cargo build --locked --release --target=x86_64-apple-darwin --features "netplay"
           # arch 
-          cargo build --locked --release --target=aarch64-apple-darwin --features "${{ matrix.features }}"
+          cargo build --locked --release --target=aarch64-apple-darwin --features "netplay"
+          lipo target/x86_64-apple-darwin/release/nes-bundler \
+            target/aarch64-apple-darwin/release/nes-bundler \
+            -create -output target/release/nes-bundler-netplay
+          
+          # x86
+          cargo build --locked --release --target=x86_64-apple-darwin
+          # arch 
+          cargo build --locked --release --target=aarch64-apple-darwin
+          lipo target/x86_64-apple-darwin/release/nes-bundler \
+            target/aarch64-apple-darwin/release/nes-bundler \
+            -create -output target/release/nes-bundler
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
-          cargo build --locked --release --features "${{ matrix.features }}"
+          cargo build --locked --release --features "netplay"
+          cp target/release/nes-bundler target/release/nes-bundler-netplay
+          cargo build --locked --release
         fi
 
     - name: Prepare Artifacts
       run: |
+        rm -rf artifacts || true
+        mkdir artifacts
+        set ARTIFACTS=`readlink -f artifacts`
+        set OS_BUNDLE=`readlink -f os_bundle`
         cd target/release
-
+        
         if [[ $RUNNER_OS == "Windows" ]]; then
-          echo "ARTIFACT=target/release/nes-bundler.exe" >> $GITHUB_ENV
-          echo "ARTIFACT2=target/release/nes-bundler.msi" >> $GITHUB_ENV
+          cp nes-bundler*.exe $ARTIFACTS
+          cp nes-bundler*.msi $ARTIFACTS
 
         elif [[ $RUNNER_OS == "macOS" ]]; then
-          cd ..
-          # merge builds
-          mkdir -p bundle/osx/nes-bundler.app/Contents/MacOS || true
-          mkdir -p bundle/osx/nes-bundler.app/Contents/Resources || true
-          iconutil ../os_bundle/macos/bundle.iconset -c icns --output bundle/osx/nes-bundler.app/Contents/Resources/bundle.icns
+          set APP_BUNDLE=`readlink -f ../bundle/osx/nes-bundler.app`
+          mkdir -p $APP_BUNDLE/Contents/MacOS || true
+          mkdir -p $APP_BUNDLE/Contents/Resources || true
+          iconutil $OS_BUNDLE/macos/bundle.iconset -c icns --output $APP_BUNDLE/Contents/Resources/bundle.icns
 
-          lipo x86_64-apple-darwin/release/nes-bundler \
-            aarch64-apple-darwin/release/nes-bundler \
-            -create -output \
-            bundle/osx/nes-bundler.app/Contents/MacOS/nes-bundler
-          codesign --force --deep -s - bundle/osx/nes-bundler.app
-          # create .dmg
-          rm *.dmg || true
-          rm release/nes-bundler.dmg || true
-          hdiutil create nes-bundler-uncompressed.dmg -volname "nes-bundler" -srcfolder bundle/osx
-          hdiutil convert nes-bundler-uncompressed.dmg -format UDZO -o release/nes-bundler.dmg
+          cp nes-bundler-netplay $APP_BUNDLE/Contents/MacOS/nes-bundler
+          codesign --force --deep -s - $APP_BUNDLE
+          cp -r $APP_BUNDLE $ARTIFACTS/nes-bundler-netplay.app
 
-          echo "ARTIFACT=target/release/nes-bundler.dmg" >> $GITHUB_ENV
+          cp nes-bundler $APP_BUNDLE/Contents/MacOS/nes-bundler
+          codesign --force --deep -s - $APP_BUNDLE
+          cp -r $APP_BUNDLE $ARTIFACTS/
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
           # archive artifact
           strip nes-bundler
           tar czvf nes-bundler-linux-x86_64.tar.gz nes-bundler
+          strip nes-bundler-netplay
+          tar czvf nes-bundler-netplay-linux-x86_64.tar.gz nes-bundler-netplay
+
           # create appimage
           curl -Lo linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/latest/download/linuxdeploy-x86_64.AppImage
           chmod +x linuxdeploy
@@ -106,23 +123,26 @@ jobs:
           export LDAI_UPDATE_INFORMATION="gh-releases-zsync|nes-bundler|nes-bundler|latest|nes-bundler.AppImage.zsync"
           ./linuxdeploy \
             --executable=nes-bundler \
-            --desktop-file=../../os_bundle/linux/bundle.desktop \
+            --desktop-file=$OS_BUNDLE/linux/bundle.desktop \
             --appdir=AppDir \
-            --icon-file=../../os_bundle/linux/icon_256x256.png \
+            --icon-file=$OS_BUNDLE/linux/icon_256x256.png \
+            --output=appimage
+          
+          ./linuxdeploy \
+            --executable=nes-bundler-netplay \
+            --desktop-file=$OS_BUNDLE/linux/bundle.desktop \
+            --appdir=AppDir \
+            --icon-file=$OS_BUNDLE/linux/icon_256x256.png \
             --output=appimage
 
-          echo "ARTIFACT=target/release/nes-bundler-linux-x86_64.tar.gz" >> $GITHUB_ENV
-          echo "ARTIFACT2=target/release/nes-bundler.AppImage" >> $GITHUB_ENV
-          echo "ARTIFACT3=target/release/nes-bundler.AppImage.zsync" >> $GITHUB_ENV
+          cp nes-bundler-*-linux-x86_64.tar.gz $ARTIFACTS
+          cp nes-bundler-*.AppImage* $ARTIFACTS
         fi
         echo "RUNNER_OS=$RUNNER_OS" >> $GITHUB_ENV
     - uses: actions/upload-artifact@v4
       with:
-        name: nes-bundler ${{ env.RUNNER_OS }} ${{ matrix.features }}
-        path: |
-          ${{ env.ARTIFACT }}
-          ${{ env.ARTIFACT2 }}
-          ${{ env.ARTIFACT3 }}
+        name: nes-bundler (${{ env.RUNNER_OS }})
+        path: artifacts/*
 
   release:
     name: Release
