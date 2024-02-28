@@ -101,16 +101,16 @@ jobs:
           mkdir -p $APP_BUNDLE/Contents/MacOS || true
           mkdir -p $APP_BUNDLE/Contents/Resources || true
           iconutil $BUNDLE_CONFIG/macos/bundle.iconset -c icns --output $APP_BUNDLE/Contents/Resources/bundle.icns
+          
+          ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.app"
+          rsync -a $APP_BUNDLE $ARTIFACT1
+          mv nes-bundler-netplay $ARTIFACT1/Contents/MacOS/nes-bundler
+          codesign --force --deep -s - $ARTIFACT1
 
-          mv nes-bundler-netplay $APP_BUNDLE/Contents/MacOS/nes-bundler
-          codesign --force --deep -s - $APP_BUNDLE
-          rsync -a $APP_BUNDLE $ARTIFACTS/nes-bundler-netplay.app
-          chmod +x $ARTIFACTS/nes-bundler-netplay.app/Contents/MacOS/nes-bundler
-
-          mv nes-bundler $APP_BUNDLE/Contents/MacOS/nes-bundler
-          codesign --force --deep -s - $APP_BUNDLE
-          rsync -a $APP_BUNDLE $ARTIFACTS/nes-bundler.app
-          chmod +x $ARTIFACTS/nes-bundler.app/Contents/MacOS/nes-bundler
+          ARTIFACT2="$ARTIFACTS/nes-bundler.app"
+          rsync -a $APP_BUNDLE $ARTIFACT2
+          mv nes-bundler $ARTIFACT2/Contents/MacOS/nes-bundler
+          codesign --force --deep -s - $ARTIFACT2
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
           # archive artifact
