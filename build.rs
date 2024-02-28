@@ -39,12 +39,12 @@ fn main() -> Result<()> {
 
     code.compile("signalsmith-stretch");
 
-    // #[cfg(windows)]
-    // {
-    //     let mut res = winres::WindowsResource::new();
-    //     res.set_icon("assets/neovide.ico");
-    //     res.compile().expect("Could not attach exe icon");
-    // }
+    #[cfg(windows)]
+    {
+        let mut res = winres::WindowsResource::new();
+        res.set_icon("assets/bundle.ico");
+        res.compile().expect("Could not attach exe icon");
+    }
     // println!(
     //     "cargo:warning=HELLOOO{:?}",
     //     std::env::var("OUT_DIR").unwrap()
