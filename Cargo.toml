@@ -24,7 +24,6 @@ wix_upgrade_code = "4D4E7FAD-4DA8-4D0D-9175-3B79B8A7C464"
 homepage = "https://darkbits.se/"
 manufacturer = "Darkbits"
 keywords = ["game", "demo"]
-category = "Game"
 short_description = "TODO: Bundle short Description"
 
 [profile.release]
