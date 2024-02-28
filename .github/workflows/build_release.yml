@@ -109,9 +109,9 @@ jobs:
         elif [[ $RUNNER_OS == "Linux" ]]; then
           # archive artifact
           strip nes-bundler
-          tar czvf nes-bundler-linux-x86_64.tar.gz nes-bundler
+          tar czvf $ARTIFACTS/nes-bundler-linux-x86_64.tar.gz nes-bundler
           strip nes-bundler-netplay
-          tar czvf nes-bundler-netplay-linux-x86_64.tar.gz nes-bundler-netplay
+          tar czvf $ARTIFACTS/nes-bundler-netplay-linux-x86_64.tar.gz nes-bundler-netplay
 
           # create appimage
           curl -Lo linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/latest/download/linuxdeploy-x86_64.AppImage
@@ -122,23 +122,23 @@ jobs:
           export LDAI_OUTPUT=nes-bundler.AppImage
           export LDAI_UPDATE_INFORMATION="gh-releases-zsync|nes-bundler|nes-bundler|latest|nes-bundler.AppImage.zsync"
           ./linuxdeploy \
-            --executable=nes-bundler \
-            --desktop-file=$OS_BUNDLE/linux/bundle.desktop \
-            --appdir=AppDir \
-            --icon-file=$OS_BUNDLE/linux/icon_256x256.png \
-            --output=appimage
-          
-          ./linuxdeploy \
             --executable=nes-bundler-netplay \
             --desktop-file=$OS_BUNDLE/linux/bundle.desktop \
             --appdir=AppDir \
             --icon-file=$OS_BUNDLE/linux/icon_256x256.png \
             --output=appimage
+          mv nes-bundler.AppImage $ARTIFACTS/nes-bundler-netplay.AppImage
+          mv nes-bundler.AppImage.zsync $ARTIFACTS/nes-bundler-netplay.AppImage.zsync
+          
+          ./linuxdeploy \
+            --executable=nes-bundler \
+            --desktop-file=$OS_BUNDLE/linux/bundle.desktop \
+            --appdir=AppDir \
+            --icon-file=$OS_BUNDLE/linux/icon_256x256.png \
+            --output=appimage
 
-          cp nes-bundler-linux-x86_64.tar.gz $ARTIFACTS
-          cp nes-bundler-netplay-linux-x86_64.tar.gz $ARTIFACTS
-          cp nes-bundler.AppImage* $ARTIFACTS
-          cp nes-bundler-netplay.AppImage* $ARTIFACTS
+          mv nes-bundler.AppImage $ARTIFACTS/nes-bundler.AppImage
+          mv nes-bundler.AppImage.zsync $ARTIFACTS/nes-bundler.AppImage.zsync
         fi
         echo "RUNNER_OS=$RUNNER_OS" >> $GITHUB_ENV
     - uses: actions/upload-artifact@v4
