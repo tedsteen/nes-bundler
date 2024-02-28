@@ -128,7 +128,7 @@ jobs:
       - name: Download bundles
         uses: actions/download-artifact@v4
         with:
-          pattern: bundle-*
+          pattern: nes-bundler*
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
