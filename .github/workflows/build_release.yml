@@ -78,8 +78,6 @@ jobs:
             target/aarch64-apple-darwin/release/nes-bundler \
             -create -output target/release/nes-bundler
           
-          chmod +x target/release/nes-bundler*
-          
         elif [[ $RUNNER_OS == "Linux" ]]; then
           cargo build --locked --release --features "netplay"
           cp target/release/nes-bundler target/release/nes-bundler-netplay
@@ -104,11 +102,11 @@ jobs:
           mkdir -p $APP_BUNDLE/Contents/Resources || true
           iconutil $OS_BUNDLE/macos/bundle.iconset -c icns --output $APP_BUNDLE/Contents/Resources/bundle.icns
 
-          cp nes-bundler-netplay $APP_BUNDLE/Contents/MacOS/nes-bundler
+          mv nes-bundler-netplay $APP_BUNDLE/Contents/MacOS/nes-bundler
           codesign --force --deep -s - $APP_BUNDLE
           cp -rp $APP_BUNDLE $ARTIFACTS/nes-bundler-netplay.app
 
-          cp nes-bundler $APP_BUNDLE/Contents/MacOS/nes-bundler
+          mv nes-bundler $APP_BUNDLE/Contents/MacOS/nes-bundler
           codesign --force --deep -s - $APP_BUNDLE
           cp -rp $APP_BUNDLE $ARTIFACTS/
 
