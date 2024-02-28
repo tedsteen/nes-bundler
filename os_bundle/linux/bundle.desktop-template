@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Exec=nes-bundler %F
-Icon=bundle
+Icon=icon_256x256
 Name={bundle_name}
 Keywords={{ for keyword in keywords }}{keyword};{{ endfor }}
 Categories=Game;
