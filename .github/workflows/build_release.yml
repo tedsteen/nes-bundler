@@ -105,11 +105,13 @@ jobs:
           ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.app"
           rsync -a $APP_BUNDLE/ $ARTIFACT1
           mv nes-bundler-netplay $ARTIFACT1/Contents/MacOS/nes-bundler
+          chmod +x $ARTIFACT1/Contents/MacOS/nes-bundler
           codesign --force --deep -s - $ARTIFACT1
 
           ARTIFACT2="$ARTIFACTS/nes-bundler.app"
           rsync -a $APP_BUNDLE/ $ARTIFACT2
           mv nes-bundler $ARTIFACT2/Contents/MacOS/nes-bundler
+          chmod +x $ARTIFACT2/Contents/MacOS/nes-bundler
           codesign --force --deep -s - $ARTIFACT2
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
@@ -169,8 +171,8 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           name: ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
+          draft: true #false
+          prerelease: true #false
+          generate_release_notes: false #true
           files: nes-bundler*
           
