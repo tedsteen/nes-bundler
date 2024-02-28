@@ -51,7 +51,7 @@ jobs:
       run: |
         if [[ $RUNNER_OS == "Windows" ]]; then
           cargo build --locked --release
-          cargo wix --output target/release/nes-bundler.msi --package nes-bundler
+          cargo wix --include os_bundle/windows/wix/main.wxs --output target/release/nes-bundler.msi --package nes-bundler
 
         elif [[ $RUNNER_OS == "macOS" ]]; then
           # x86
@@ -82,6 +82,7 @@ jobs:
           codesign --force --deep -s - bundle/osx/nes-bundler.app
           # create .dmg
           rm *.dmg || true
+          rm release/nes-bundler.dmg || true
           hdiutil create nes-bundler-uncompressed.dmg -volname "nes-bundler" -srcfolder bundle/osx
           hdiutil convert nes-bundler-uncompressed.dmg -format UDZO -o release/nes-bundler.dmg
 
@@ -101,9 +102,9 @@ jobs:
           export LDAI_UPDATE_INFORMATION="gh-releases-zsync|nes-bundler|nes-bundler|latest|nes-bundler.AppImage.zsync"
           ./linuxdeploy \
             --executable=nes-bundler \
-            --desktop-file=../../assets/bundle.desktop \
+            --desktop-file=../../os_bundle/linux/bundle.desktop \
             --appdir=AppDir \
-            --icon-file=../../assets/bundle.svg \
+            --icon-file=../../os_bundle/linux/bundle.svg \
             --output=appimage
 
           echo "ARTIFACT=target/release/nes-bundler-linux-x86_64.tar.gz" >> $GITHUB_ENV

@@ -16,18 +16,16 @@ debug = ["egui_plot"]
 [package.metadata.bundle]
 name = "NES Bundler Demo"
 version = "0.0.1"
-# See https://github.com/burtonageo/cargo-bundle for details
-identifier = "pub.hal.nes-bundler.demo"
+# See https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleidentifier
+cf_bundle_identifier = "pub.hal.nes-bundler.demo"
+# See https://wixtoolset.org/docs/v3/howtos/updates/major_upgrade/#add-a-unique-id-to-identify-that-the-product-can-be-upgraded
+# Generate one here https://guid-generator.utiltree.com/
+wix_upgrade_code = "4D4E7FAD-4DA8-4D0D-9175-3B79B8A7C464"
 homepage = "https://darkbits.se/"
 manufacturer = "Darkbits"
-# TODO: icon = ["32x32.png", "128x128.png", "128x128@2x.png"]
-icon = ["assets/bundler.ico"]
 keywords = ["game", "demo"]
 category = "Game"
 short_description = "TODO: Bundle short Description"
-long_description = """
-TODO: Bundle long Description
-"""
 
 [profile.release]
 strip = true

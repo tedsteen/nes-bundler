@@ -16,7 +16,7 @@
 <?endif ?>
 
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Codepage="1252" Id="*" Language="1033" Manufacturer="{manufacturer}" Name="{bundle_name}" UpgradeCode="22816C0C-92F8-46F9-BA8D-B2F5F8C8C743" Version="{version}">
+  <Product Codepage="1252" Id="*" Language="1033" Manufacturer="{manufacturer}" Name="{bundle_name}" UpgradeCode="{wix_upgrade_code}" Version="{version}">
     <Package Compressed="yes" Description="{short_description}" Id="*" InstallScope="perMachine" Manufacturer="{manufacturer}" />
 
     <Directory Id="TARGETDIR" Name="SourceDir">
@@ -24,7 +24,7 @@
       <Directory Id="ProgramMenuFolder" />
       <Directory Id="$(var.PlatformProgramFilesFolder)">
         <Directory Id="INSTALLDIR" Name="{bundle_name}">
-          <Component Guid="8F0CDDE4-C807-46B4-949C-A96508B04DB2" Id="PathComponent" KeyPath="yes">
+          <Component Guid="{wix_upgrade_code}" Id="PathComponent" KeyPath="yes">
             <Environment Action="set" Id="PathEnvironment" Name="PATH" Part="last" Permanent="no" System="yes" Value="[INSTALLDIR]" />
           </Component>
 
@@ -46,7 +46,7 @@
       </Feature>
     </Feature>
 
-    <Icon Id="bundle.ico" SourceFile="assets\bundle.ico" />
+    <Icon Id="bundle.ico" SourceFile="os_bundle/windows/bundle.ico" />
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." Schedule="afterInstallInitialize" />
 
@@ -61,8 +61,8 @@
       <UIRef Id="WixUI_FeatureTree" />
     </UI>
 
-    <WixVariable Id="WixUIBannerBmp" Value="wix/banner.bmp" />
-    <WixVariable Id="WixUIDialogBmp" Value="wix/dialog.bmp" />
-    <WixVariable Id="WixUILicenseRtf" Value="wix/license.rtf" />
+    <WixVariable Id="WixUIBannerBmp" Value="os_bundle/windows/wix/banner.bmp" />
+    <WixVariable Id="WixUIDialogBmp" Value="os_bundle/windows/wix/dialog.bmp" />
+    <WixVariable Id="WixUILicenseRtf" Value="os_bundle/windows/wix/license.rtf" />
   </Product>
 </Wix>

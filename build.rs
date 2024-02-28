@@ -8,7 +8,8 @@ use tinytemplate::TinyTemplate;
 #[derive(Serialize)]
 struct Context {
     version: String,
-    identifier: String,
+    cf_bundle_identifier: String,
+    wix_upgrade_code: String,
     bundle_name: String,
     short_description: String,
     keywords: Vec<String>,
@@ -20,8 +21,11 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=config/config.yaml");
     println!("cargo:rerun-if-changed=config/rom.nes");
     println!("cargo:rerun-if-changed=config/netplay-rom.nes");
-    println!("cargo:rerun-if-changed=wix/*");
-    println!("cargo:rerun-if-changed=assets/*");
+
+    println!("cargo:rerun-if-changed=os_bundle/linux/*");
+    println!("cargo:rerun-if-changed=os_bundle/macos/*");
+    println!("cargo:rerun-if-changed=os_bundle/windows/*");
+    println!("cargo:rerun-if-changed=os_bundle/windows/wix/*");
 
     println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch/signalsmith-stretch.h");
     println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch-wrapper.hpp");
@@ -42,7 +46,7 @@ fn main() -> Result<()> {
     #[cfg(windows)]
     {
         let mut res = winres::WindowsResource::new();
-        res.set_icon("assets/bundle.ico");
+        res.set_icon("os_bundle/windows/bundle.ico");
         res.compile().expect("Could not attach exe icon");
     }
     // println!(
@@ -61,12 +65,18 @@ fn main() -> Result<()> {
     if let Some(bundle) = root.metadata["bundle"].as_object() {
         let mut tt = TinyTemplate::new();
 
-        tt.add_template("main.wxs", include_str!("wix/main.wxs-template"))?;
+        tt.add_template(
+            "main.wxs",
+            include_str!("os_bundle/windows/wix/main.wxs-template"),
+        )?;
         tt.add_template(
             "bundle.desktop",
-            include_str!("assets/bundle.desktop-template"),
+            include_str!("os_bundle/linux/bundle.desktop-template"),
         )?;
-        tt.add_template("Info.plist", include_str!("assets/Info.plist-template"))?;
+        tt.add_template(
+            "Info.plist",
+            include_str!("os_bundle/macos/Info.plist-template"),
+        )?;
 
         let keywords = bundle["keywords"]
             .as_array()
@@ -77,7 +87,8 @@ fn main() -> Result<()> {
             .collect();
 
         let context = &Context {
-            identifier: bundle["identifier"].as_str().unwrap().to_string(),
+            cf_bundle_identifier: bundle["cf_bundle_identifier"].as_str().unwrap().to_string(),
+            wix_upgrade_code: bundle["wix_upgrade_code"].as_str().unwrap().to_string(),
             version: bundle["version"].as_str().unwrap().to_string(),
             bundle_name: bundle["name"].as_str().unwrap().to_string(),
             keywords,
@@ -86,9 +97,10 @@ fn main() -> Result<()> {
             manufacturer: bundle["manufacturer"].as_str().unwrap().to_string(),
         };
 
-        File::create("wix/main.wxs")?.write_all(tt.render("main.wxs", context)?.as_bytes())?;
+        File::create("os_bundle/windows/wix/main.wxs")?
+            .write_all(tt.render("main.wxs", context)?.as_bytes())?;
 
-        File::create("assets/bundle.desktop")?
+        File::create("os_bundle/linux/bundle.desktop")?
             .write_all(tt.render("bundle.desktop", context)?.as_bytes())?;
 
         let path = std::path::Path::new("target/bundle/osx/nes-bundler.app/Contents/");
