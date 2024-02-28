@@ -15,6 +15,7 @@ jobs:
       matrix:
         # NOTE: Should use the oldest available Ubuntu release, for maximum compatibility
         os: [windows-latest, macOS-12, ubuntu-20.04]
+        features: ["", "netplay"]
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -50,17 +51,17 @@ jobs:
     - name: Build
       run: |
         if [[ $RUNNER_OS == "Windows" ]]; then
-          cargo build --locked --release
+          cargo build --locked --release --features "${{ matrix.features }}"
           cargo wix --include os_bundle/windows/wix/main.wxs --output target/release/nes-bundler.msi --package nes-bundler
 
         elif [[ $RUNNER_OS == "macOS" ]]; then
           # x86
-          cargo build --locked --release --target=x86_64-apple-darwin
+          cargo build --locked --release --target=x86_64-apple-darwin --features "${{ matrix.features }}"
           # arch 
-          cargo build --locked --release --target=aarch64-apple-darwin
+          cargo build --locked --release --target=aarch64-apple-darwin --features "${{ matrix.features }}"
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
-          cargo build --locked --release
+          cargo build --locked --release --features "${{ matrix.features }}"
         fi
 
     - name: Prepare Artifacts
@@ -117,7 +118,7 @@ jobs:
         echo "RUNNER_OS=$RUNNER_OS" >> $GITHUB_ENV
     - uses: actions/upload-artifact@v4
       with:
-        name: nes-bundler (${{ env.RUNNER_OS }})
+        name: nes-bundler ${{ env.RUNNER_OS }} ${{ matrix.features }}
         path: |
           ${{ env.ARTIFACT }}
           ${{ env.ARTIFACT2 }}
