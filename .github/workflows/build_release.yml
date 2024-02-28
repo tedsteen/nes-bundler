@@ -65,6 +65,7 @@ jobs:
           cargo build --locked --release --target=x86_64-apple-darwin --features "netplay"
           # arch 
           cargo build --locked --release --target=aarch64-apple-darwin --features "netplay"
+          
           lipo target/x86_64-apple-darwin/release/nes-bundler \
             target/aarch64-apple-darwin/release/nes-bundler \
             -create -output target/release/nes-bundler-netplay
@@ -76,7 +77,9 @@ jobs:
           lipo target/x86_64-apple-darwin/release/nes-bundler \
             target/aarch64-apple-darwin/release/nes-bundler \
             -create -output target/release/nes-bundler
-
+          
+          chmod +x target/release/nes-bundler*
+          
         elif [[ $RUNNER_OS == "Linux" ]]; then
           cargo build --locked --release --features "netplay"
           cp target/release/nes-bundler target/release/nes-bundler-netplay
@@ -103,11 +106,11 @@ jobs:
 
           cp nes-bundler-netplay $APP_BUNDLE/Contents/MacOS/nes-bundler
           codesign --force --deep -s - $APP_BUNDLE
-          cp -r $APP_BUNDLE $ARTIFACTS/nes-bundler-netplay.app
+          cp -rp $APP_BUNDLE $ARTIFACTS/nes-bundler-netplay.app
 
           cp nes-bundler $APP_BUNDLE/Contents/MacOS/nes-bundler
           codesign --force --deep -s - $APP_BUNDLE
-          cp -r $APP_BUNDLE $ARTIFACTS/
+          cp -rp $APP_BUNDLE $ARTIFACTS/
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
           # archive artifact
