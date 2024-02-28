@@ -17,13 +17,13 @@ debug = ["egui_plot"]
 name = "NES Bundler Demo"
 version = "0.0.1"
 # See https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleidentifier
-cf_bundle_identifier = "pub.hal.nes-bundler.demo"
+cf_bundle_identifier = "se.darkbits.nes-bundler.demo"
 # See https://wixtoolset.org/docs/v3/howtos/updates/major_upgrade/#add-a-unique-id-to-identify-that-the-product-can-be-upgraded
 # Generate one here https://guid-generator.utiltree.com/
 wix_upgrade_code = "4D4E7FAD-4DA8-4D0D-9175-3B79B8A7C464"
 manufacturer = "Darkbits"
 keywords = ["game", "demo"]
-short_description = "TODO: Bundle short Description"
+short_description = "A demonstration of NES Bundler in action!"
 
 [profile.release]
 strip = true
