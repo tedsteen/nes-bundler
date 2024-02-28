@@ -36,8 +36,7 @@ jobs:
     - name: Install dependencies
       run: |
         if [[ $RUNNER_OS == "Windows" ]]; then
-          if ! which cargo-wix; then cargo install cargo-wix; fi
-
+          echo "${WIX}bin" >> $GITHUB_PATH
         elif [[ $RUNNER_OS == "macOS" ]]; then
           rustup target add x86_64-apple-darwin
           rustup target add aarch64-apple-darwin
@@ -51,11 +50,15 @@ jobs:
       run: |        
         if [[ $RUNNER_OS == "Windows" ]]; then
           cargo build --locked --release --features "netplay"
-          cargo wix --include os_bundle/windows/wix/main.wxs --output target/release/nes-bundler-netplay.msi --package nes-bundler
+          candle os_bundle/windows/wix/main.wxs -o target/release/
+          light target/release/*.wixobj -o target/release/nes-bundler-netplay.msi -ext WixUIExtension
+
           cp target/release/nes-bundler.exe target/release/nes-bundler-netplay.exe
           
           cargo build --locked --release
-          cargo wix --include os_bundle/windows/wix/main.wxs --output target/release/nes-bundler.msi --package nes-bundler
+          candle os_bundle/windows/wix/main.wxs -o target/release/
+          light target/release/*.wixobj -o target/release/nes-bundler.msi -ext WixUIExtension
+
         elif [[ $RUNNER_OS == "macOS" ]]; then
           mkdir -p target/release/
           # x86

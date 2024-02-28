@@ -24,12 +24,8 @@
       <Directory Id="ProgramMenuFolder" />
       <Directory Id="$(var.PlatformProgramFilesFolder)">
         <Directory Id="INSTALLDIR" Name="{bundle_name}">
-          <Component Guid="{wix_upgrade_code}" Id="PathComponent" KeyPath="yes">
-            <Environment Action="set" Id="PathEnvironment" Name="PATH" Part="last" Permanent="no" System="yes" Value="[INSTALLDIR]" />
-          </Component>
-
           <Component Guid="*" Id="BundleComponent">
-            <File Id="BundleExecutable" KeyPath="yes" Name="{bundle_name}.exe" Source="$(var.CargoTargetBinDir)\nes-bundler.exe">
+            <File Id="BundleExecutable" KeyPath="yes" Name="{bundle_name}.exe" Source="target/release/nes-bundler.exe">
               <Shortcut Advertise="yes" Directory="DesktopFolder" Icon="bundle.ico" Id="DesktopShortcut" Name="{bundle_name}" WorkingDirectory="INSTALLDIR" />
               <Shortcut Advertise="yes" Directory="ProgramMenuFolder" Icon="bundle.ico" Id="StartMenuShortcut" Name="{bundle_name}" WorkingDirectory="INSTALLDIR" />
             </File>
@@ -40,10 +36,6 @@
 
     <Feature Absent="disallow" AllowAdvertise="no" ConfigurableDirectory="INSTALLDIR" Description="Install the executable of [ProductName]." Display="expand" Id="BinaryFeature" Title="Executable">
       <ComponentRef Id="BundleComponent" />
-
-      <Feature Absent="allow" Description="Add the executable of [ProductName] to the system path." Id="PathFeature" Title="Path">
-        <ComponentRef Id="PathComponent" />
-      </Feature>
     </Feature>
 
     <Icon Id="bundle.ico" SourceFile="os_bundle/windows/icon_256x256.ico" />
@@ -55,12 +47,12 @@
     <Property Id="ARPHELPLINK" Value="{homepage}" />
     <Property Id="ARPPRODUCTICON" Value="bundle.ico" />
 
-    <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLDIR]" After="CostFinalize" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR" />
 
     <UI>
-      <UIRef Id="WixUI_FeatureTree" />
+      <UIRef Id="WixUI_InstallDir" />
     </UI>
-
+    
     <WixVariable Id="WixUIBannerBmp" Value="os_bundle/windows/wix/banner.bmp" />
     <WixVariable Id="WixUIDialogBmp" Value="os_bundle/windows/wix/dialog.bmp" />
     <WixVariable Id="WixUILicenseRtf" Value="os_bundle/windows/wix/license.rtf" />
