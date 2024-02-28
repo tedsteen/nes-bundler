@@ -122,14 +122,15 @@ jobs:
           export LDAI_OUTPUT=nes-bundler.AppImage
           export LDAI_UPDATE_INFORMATION="gh-releases-zsync|nes-bundler|nes-bundler|latest|nes-bundler.AppImage.zsync"
           ./linuxdeploy \
-            --executable=nes-bundler-netplay \
+            --executable=nes-bundler \
             --desktop-file=$OS_BUNDLE/linux/bundle.desktop \
             --appdir=AppDir \
             --icon-file=$OS_BUNDLE/linux/icon_256x256.png \
             --output=appimage
-          mv nes-bundler.AppImage $ARTIFACTS/nes-bundler-netplay.AppImage
-          mv nes-bundler.AppImage.zsync $ARTIFACTS/nes-bundler-netplay.AppImage.zsync
+          mv nes-bundler.AppImage $ARTIFACTS/nes-bundler.AppImage
+          mv nes-bundler.AppImage.zsync $ARTIFACTS/nes-bundler.AppImage.zsync
           
+          mv nes-bundler-netplay nes-bundler
           ./linuxdeploy \
             --executable=nes-bundler \
             --desktop-file=$OS_BUNDLE/linux/bundle.desktop \
@@ -137,8 +138,8 @@ jobs:
             --icon-file=$OS_BUNDLE/linux/icon_256x256.png \
             --output=appimage
 
-          mv nes-bundler.AppImage $ARTIFACTS/nes-bundler.AppImage
-          mv nes-bundler.AppImage.zsync $ARTIFACTS/nes-bundler.AppImage.zsync
+          mv nes-bundler.AppImage $ARTIFACTS/nes-bundler-netplay.AppImage
+          mv nes-bundler.AppImage.zsync $ARTIFACTS/nes-bundler-netplay.AppImage.zsync
         fi
         echo "RUNNER_OS=$RUNNER_OS" >> $GITHUB_ENV
     - uses: actions/upload-artifact@v4
