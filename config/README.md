@@ -9,5 +9,3 @@ Here is a breakdown of what can be customised
 * [Mac icon set](macos/bundle.iconset/)
 * [Windows program and window icon](windows/icon_256x256.ico)
 * [Windows installer details](windows/wix/) (banner.bmp, dialog.bmp and licence.rtf)
-
-To make your own bundle, clone this repository and do your updates, push and trigger a build by pushing a tag.

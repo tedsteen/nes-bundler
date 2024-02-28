@@ -3,7 +3,7 @@
 **Transform your NES-game into a single executable targeting your favourite OS!**
 
 Did you make a NES-game but none of your friends own a Nintendo? Don't worry.  
-Put your ROM and configure NES Bundler to build for Mac, Windows and Linux.  
+Add your ROM and configure NES Bundler to build for Mac, Windows and Linux.  
 What you get is an executable bundle with
 * Simple UI for settings (Show and hide with ESC).
 * Re-mappable Keyboard and Gamepad input (you bundle your default mappings).
@@ -16,12 +16,13 @@ What you get is an executable bundle with
 
 ## Bundling
 
-To create a bundle you first need to [configure it](config/README.md) with your ROM and a build configuration.  
-And then let GitHub actions build the bundles for you.  
+To create a bundle you first need to configure it with your ROM and a bundle configuration.  
+Then let GitHub actions build the bundles for you.
+To do this you need to:
 1. Fork this repository
 2. [configure](config/README.md) your bundle
 3. Trigger a build by running `./release.sh <your-version>`
-4. Pick up the bundles in [releases](releases/)
+4. Pick up the bundles under your releases
 
 ## Demo bundle
 
