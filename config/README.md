@@ -1,20 +1,13 @@
 # Configure your bundle
 
-In order to build your bundle you need three files.  
+This directory has a pre-configured bundle that you can have a look at.  
+You also need to dig into the individual subdirectories here to customise installer graphics, icons etc.
 
-* A `config.yaml` containing the build configuration.
-* A `rom.nes` with your game.
-* A `netplay-rom.nes` used when starting netplay sessions (optional if not using the netplay feature).
+Here is a breakdown of what can be customised
+* The main configuration [config.yaml](config.yaml)
+* [Linux icon](linux/icon_256x256.png)
+* [Mac icon set](macos/bundle.iconset/)
+* [Windows program and window icon](windows/icon_256x256.ico)
+* [Windows installer details](windows/wix/) (banner.bmp, dialog.bmp and licence.rtf)
 
-This directory has a pre-configured bundle that you can have a look at.
-
-## Build configuration
-
-A file named `config.yaml` containing your bundle configuration. Look at the demo configuration in this directory for details.  
-
-## ROM-files
-
-A file named `rom.nes` containing your actual game. This will be used when playing local non-netplay games.   
-
-If you use the netplay feature you also need a file named `netplay-rom.nes`. This will be used when playing netplay games.  
-It enables a different player experience for netplayers, f.ex if in a netplay session you do not want to present the player with the one player option you can bake a ROM that defaults to two players and use that as your `netplay-rom.nes`. If not, just copy the `rom.nes`.
+To make your own bundle, clone this repository and do your updates, push and trigger a build by pushing a tag.

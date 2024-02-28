@@ -3,8 +3,8 @@
 **Transform your NES-game into a single executable targeting your favourite OS!**
 
 Did you make a NES-game but none of your friends own a Nintendo? Don't worry.  
-Put your ROM and configuration in NES Bundler and build for Mac, Windows or Linux.  
-What you get is a single executable with
+Put your ROM and configure NES Bundler to build for Mac, Windows and Linux.  
+What you get is an executable bundle with
 * Simple UI for settings (Show and hide with ESC).
 * Re-mappable Keyboard and Gamepad input (you bundle your default mappings).
 * Save/Restore state (F1 = Save, F2 = Load).
@@ -17,19 +17,15 @@ What you get is a single executable with
 ## Bundling
 
 To create a bundle you first need to [configure it](config/README.md) with your ROM and a build configuration.  
-After that you can either ship your game with the configuration inside the executable or next to it.
-### Next to it (the easy way)
+And then let GitHub actions build the bundles for you.  
+1. Fork this repository
+2. [configure](config/README.md) your bundle
+3. Trigger a build by running `./release.sh <your-version>`
+4. Pick up the bundles in [releases](releases/)
 
-* Download the [binary of your choice](https://github.com/tedsteen/nes-bundler/releases/)
-* Run it and select the directory with your bundle (`config.yaml` and `rom.nes`)
-* This will result in `bundle.zip` being placed next to the executable which will load automatically on startup.
+## Demo bundle
 
-### Inside it (the not so easy way)
-
-* [Install Rust](https://www.rust-lang.org/tools/install).
-* Make sure your bundle configuration is in the config directory.
-* Run `cargo build --release` to build and if you want netplay use `--features netplay`
-* This will result in an executable with the bundle embedded inside of it.
+To see an example of what you will get when creating a bundle check out [releases](https://github.com/tedsteen/nes-bundler/releases). This is the result of the demo bundle currently in [config/](config/)
 
 ## Limitations
 
