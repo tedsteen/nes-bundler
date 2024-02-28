@@ -13,7 +13,6 @@ struct Context {
     bundle_name: String,
     short_description: String,
     keywords: Vec<String>,
-    homepage: String,
     manufacturer: String,
 }
 
@@ -93,7 +92,6 @@ fn main() -> Result<()> {
             bundle_name: bundle["name"].as_str().unwrap().to_string(),
             keywords,
             short_description: bundle["short_description"].as_str().unwrap().to_string(),
-            homepage: bundle["homepage"].as_str().unwrap().to_string(),
             manufacturer: bundle["manufacturer"].as_str().unwrap().to_string(),
         };
         println!("cargo:rustc-env=NB_WINDOW_TITLE={}", context.bundle_name);

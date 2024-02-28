@@ -44,7 +44,6 @@
 
     <MediaTemplate EmbedCab="yes" />
 
-    <Property Id="ARPHELPLINK" Value="{homepage}" />
     <Property Id="ARPPRODUCTICON" Value="bundle.ico" />
 
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR" />
