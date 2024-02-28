@@ -11,9 +11,6 @@ rom: "config/rom.nes"
 # It enables a different player experience for netplayers, f.ex if in a netplay session you do not want to present the player with the one player option you can bake a ROM that defaults to two players
 # netplay_rom: "config/netplay-rom.nes"
 
-# Version of the bundle used when creating Windows and macOS applications/installers
-version: "0.0.1"
-
 # macOS specific, See https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleidentifier
 cf_bundle_identifier: "se.darkbits.nes-bundler.demo"
 

@@ -10,7 +10,7 @@ struct BundleConfiguration {
     short_description: String,
     rom: String,
     netplay_rom: Option<String>,
-    version: String,
+    version: Option<String>,
     cf_bundle_identifier: String,
     wix_upgrade_code: String,
     manufacturer: String,
@@ -45,7 +45,7 @@ fn main() -> Result<()> {
         res.compile().expect("Could not attach exe icon");
     }
 
-    let bundle_config: BundleConfiguration =
+    let mut bundle_config: BundleConfiguration =
         serde_yaml::from_str(include_str!("config/config.yaml"))?;
 
     let mut tt = TinyTemplate::new();
@@ -73,6 +73,10 @@ fn main() -> Result<()> {
             .netplay_rom
             .unwrap_or(bundle_config.rom.clone())
     );
+
+    bundle_config
+        .version
+        .get_or_insert(env!("CARGO_PKG_VERSION").to_string());
 
     File::create("config/windows/wix/main.wxs")?
         .write_all(tt.render("main.wxs", &bundle_config)?.as_bytes())?;
