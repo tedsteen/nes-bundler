@@ -28,5 +28,7 @@
   <true/>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <key>CFBundleIconFile</key>
+	<string>bundle.icns</string>
 </dict>
 </plist>

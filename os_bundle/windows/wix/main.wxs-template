@@ -46,7 +46,7 @@
       </Feature>
     </Feature>
 
-    <Icon Id="bundle.ico" SourceFile="os_bundle/windows/bundle.ico" />
+    <Icon Id="bundle.ico" SourceFile="os_bundle/windows/icon_256x256.ico" />
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." Schedule="afterInstallInitialize" />
 

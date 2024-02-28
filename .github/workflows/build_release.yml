@@ -75,6 +75,9 @@ jobs:
           cd ..
           # merge builds
           mkdir -p bundle/osx/nes-bundler.app/Contents/MacOS || true
+          mkdir -p bundle/osx/nes-bundler.app/Contents/Resources || true
+          iconutil ../os_bundle/macos/bundle.iconset -c icns --output bundle/osx/nes-bundler.app/Contents/Resources/bundle.icns
+
           lipo x86_64-apple-darwin/release/nes-bundler \
             aarch64-apple-darwin/release/nes-bundler \
             -create -output \
@@ -104,7 +107,7 @@ jobs:
             --executable=nes-bundler \
             --desktop-file=../../os_bundle/linux/bundle.desktop \
             --appdir=AppDir \
-            --icon-file=../../os_bundle/linux/bundle.svg \
+            --icon-file=../../os_bundle/linux/icon_256x256.png \
             --output=appimage
 
           echo "ARTIFACT=target/release/nes-bundler-linux-x86_64.tar.gz" >> $GITHUB_ENV

@@ -46,7 +46,7 @@ fn main() -> Result<()> {
     #[cfg(windows)]
     {
         let mut res = winres::WindowsResource::new();
-        res.set_icon("os_bundle/windows/bundle.ico");
+        res.set_icon("os_bundle/windows/icon_256x256.ico");
         res.compile().expect("Could not attach exe icon");
     }
     // println!(
