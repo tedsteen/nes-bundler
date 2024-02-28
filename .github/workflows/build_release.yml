@@ -106,13 +106,13 @@ jobs:
           rsync -a $APP_BUNDLE/ $ARTIFACT1
           mv nes-bundler-netplay $ARTIFACT1/Contents/MacOS/nes-bundler
           chmod +x $ARTIFACT1/Contents/MacOS/nes-bundler
-          codesign --force --deep -s - $ARTIFACT1
+          #codesign --force --deep -s - $ARTIFACT1
 
           ARTIFACT2="$ARTIFACTS/nes-bundler.app"
           rsync -a $APP_BUNDLE/ $ARTIFACT2
           mv nes-bundler $ARTIFACT2/Contents/MacOS/nes-bundler
           chmod +x $ARTIFACT2/Contents/MacOS/nes-bundler
-          codesign --force --deep -s - $ARTIFACT2
+          #codesign --force --deep -s - $ARTIFACT2
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
           # archive artifact
@@ -164,7 +164,6 @@ jobs:
       - name: Download bundles
         uses: actions/download-artifact@v4
         with:
-          merge-multiple: true
           pattern: nes-bundler*
 
       - name: Create Release
