@@ -5,7 +5,6 @@ use crate::settings::Settings;
 
 #[derive(Deserialize, Debug)]
 pub struct BuildConfiguration {
-    pub window_title: String,
     pub default_settings: Settings,
     #[cfg(feature = "netplay")]
     pub netplay: crate::netplay::NetplayBuildConfiguration,

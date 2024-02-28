@@ -96,6 +96,7 @@ fn main() -> Result<()> {
             homepage: bundle["homepage"].as_str().unwrap().to_string(),
             manufacturer: bundle["manufacturer"].as_str().unwrap().to_string(),
         };
+        println!("cargo:rustc-env=NB_WINDOW_TITLE={}", context.bundle_name);
 
         File::create("os_bundle/windows/wix/main.wxs")?
             .write_all(tt.render("main.wxs", context)?.as_bytes())?;
