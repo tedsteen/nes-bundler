@@ -9,7 +9,7 @@ defaults:
 
 jobs:
   build:
-    name: Build ${{ matrix.os }}
+    name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -84,8 +84,8 @@ jobs:
       run: |
         rm -rf artifacts || true
         mkdir artifacts
-        set ARTIFACTS=`readlink -f artifacts`
-        set OS_BUNDLE=`readlink -f os_bundle`
+        ARTIFACTS=`readlink -f artifacts`
+        OS_BUNDLE=`readlink -f os_bundle`
         cd target/release
         
         if [[ $RUNNER_OS == "Windows" ]]; then
@@ -93,7 +93,7 @@ jobs:
           cp nes-bundler*.msi $ARTIFACTS
 
         elif [[ $RUNNER_OS == "macOS" ]]; then
-          set APP_BUNDLE=`readlink -f ../bundle/osx/nes-bundler.app`
+          APP_BUNDLE=`readlink -f ../bundle/osx/nes-bundler.app`
           mkdir -p $APP_BUNDLE/Contents/MacOS || true
           mkdir -p $APP_BUNDLE/Contents/Resources || true
           iconutil $OS_BUNDLE/macos/bundle.iconset -c icns --output $APP_BUNDLE/Contents/Resources/bundle.icns
@@ -135,8 +135,10 @@ jobs:
             --icon-file=$OS_BUNDLE/linux/icon_256x256.png \
             --output=appimage
 
-          cp nes-bundler-*-linux-x86_64.tar.gz $ARTIFACTS
-          cp nes-bundler-*.AppImage* $ARTIFACTS
+          cp nes-bundler-linux-x86_64.tar.gz $ARTIFACTS
+          cp nes-bundler-netplay-linux-x86_64.tar.gz $ARTIFACTS
+          cp nes-bundler.AppImage* $ARTIFACTS
+          cp nes-bundler-netplay.AppImage* $ARTIFACTS
         fi
         echo "RUNNER_OS=$RUNNER_OS" >> $GITHUB_ENV
     - uses: actions/upload-artifact@v4
