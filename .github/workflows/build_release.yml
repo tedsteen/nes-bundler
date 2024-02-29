@@ -211,12 +211,15 @@ jobs:
           echo "TODO"
         fi
 
-    - name: Tar artifacts
-      run: tar -C artifacts/ -cvf nes-bundler-${{ github.ref_name }}-$RUNNER_OS.tar .
+    - name: Zip artifacts
+      run: |
+        cd artifacts
+        7z a -tzip "nes-bundler-${{ github.ref_name }}-$RUNNER_OS.zip" .
+    
     - uses: actions/upload-artifact@v4
       with:
-        name: nes-bundler-${{ env.RUNNER_OS }}
-        path: nes-bundler*.tar
+        name: nes-bundler-${{ github.ref_name }}-${{ env.RUNNER_OS }}.zip
+        path: artifacts/nes-bundler*.zip
     
   release:
     name: Release
@@ -224,10 +227,8 @@ jobs:
     if: startsWith(github.event.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
-      - name: Download bundles
+      - name: Get artifacts
         uses: actions/download-artifact@v4
-        with:
-          pattern: nes-bundler*
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -236,6 +237,5 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-          files: |
-            **
+          files: "*/*.zip"
           
