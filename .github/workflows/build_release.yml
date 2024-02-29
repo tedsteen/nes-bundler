@@ -85,6 +85,14 @@ jobs:
         fi
 
     - name: Prepare Artifacts
+      env:
+        BUNDLE_APPLE_TEAM_ID: ${{ secrets.BUNDLE_APPLE_TEAM_ID }}
+        BUNDLE_APPLE_USER: ${{ secrets.BUNDLE_APPLE_USER }}
+        BUNDLE_APPLE_APP_PASSWORD: ${{ secrets.BUNDLE_APPLE_APP_PASSWORD }}
+        BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+        BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+        P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+        CODE_SIGN_IDENTITY: ${{ secrets.CODE_SIGN_IDENTITY }}
       run: |
         rm -rf artifacts || true
         mkdir artifacts
@@ -97,6 +105,31 @@ jobs:
           cp nes-bundler*.msi $ARTIFACTS
 
         elif [[ $RUNNER_OS == "macOS" ]]; then
+
+          # create variables
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          PP_PATH=$RUNNER_TEMP/build_pp.provisionprofile
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # import certificate and provisioning profile from secrets
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o $PP_PATH
+
+          # create temporary keychain
+          KEYCHAIN_PASSWORD=`openssl rand -hex 12`
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security default-keychain -s $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # import certificate to keychain
+          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          # apply provisioning profile
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+
           APP_BUNDLE=`readlink -f ../bundle/osx/nes-bundler.app`
           mkdir -p $APP_BUNDLE/Contents/MacOS || true
           mkdir -p $APP_BUNDLE/Contents/Resources || true
@@ -105,12 +138,28 @@ jobs:
           ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.app"
           rsync -a $APP_BUNDLE/ $ARTIFACT1
           mv nes-bundler-netplay $ARTIFACT1/Contents/MacOS/nes-bundler
-          codesign --force --deep -s - $ARTIFACT1
+          
+          codesign --force --options=runtime --deep -s $CODE_SIGN_IDENTITY $ARTIFACT1
+          ditto -c -k --keepParent $ARTIFACT1 to-submit.zip
+          xcrun notarytool submit \
+            --team-id $BUNDLE_APPLE_TEAM_ID \
+            --apple-id $BUNDLE_APPLE_USER \
+            --password $BUNDLE_APPLE_APP_PASSWORD \
+            --wait to-submit.zip
+          xcrun stapler staple $ARTIFACT1
 
           ARTIFACT2="$ARTIFACTS/nes-bundler.app"
           rsync -a $APP_BUNDLE/ $ARTIFACT2
           mv nes-bundler $ARTIFACT2/Contents/MacOS/nes-bundler
-          codesign --force --deep -s - $ARTIFACT2
+          
+          codesign --force --options=runtime --deep -s $CODE_SIGN_IDENTITY $ARTIFACT2
+          ditto -c -k --keepParent $ARTIFACT2 to-submit.zip
+          xcrun notarytool submit \
+            --team-id $BUNDLE_APPLE_TEAM_ID \
+            --apple-id $BUNDLE_APPLE_USER \
+            --password $BUNDLE_APPLE_APP_PASSWORD \
+            --wait to-submit.zip
+          xcrun stapler staple $ARTIFACT2
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
           # archive artifact
