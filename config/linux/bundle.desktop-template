@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Exec=nes-bundler %F
+Icon=icon_256x256
+Name={name}
+Categories=Game;
+Comment={short_description}

@@ -253,7 +253,7 @@ fn initialise() -> Result<
         std::process::exit(0);
     }
     let gl_window = create_display(
-        &bundle.config.window_title,
+        env!("NB_WINDOW_TITLE"),
         Size::new(
             MINIMUM_INTEGER_SCALING_SIZE.0 as f64,
             MINIMUM_INTEGER_SCALING_SIZE.1 as f64,

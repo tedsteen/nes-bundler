@@ -1,5 +1,7 @@
 .DS_Store
 target/**
 settings.yaml
-bundle.zip
-log.txt
+todo.md
+nes-bundler-log.txt
+config/windows/wix/main.wxs
+config/linux/bundle.desktop

@@ -1,8 +1,7 @@
 #!/bin/bash
 VERSION=$1
-if [[ $(git branch --show-current) == "master" ]]; then
-    git tag -a $VERSION -m"Release ${VERSION}" $2
-    git push origin $VERSION $2
+if [[ -z "$VERSION" ]]; then
+    echo "Usage: $0 [major, minor, patch, <version>]"
 else
-    >&2 echo "Can only release from master"
+    cargo release $VERSION --execute
 fi
