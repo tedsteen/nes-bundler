@@ -158,7 +158,7 @@ jobs:
   release:
     name: Release
     needs: build
-    # if: startsWith(github.event.ref, 'refs/tags/v')
+    if: startsWith(github.event.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - name: Download bundles
@@ -170,9 +170,9 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           name: ${{ github.ref_name }}
-          draft: true #false
-          prerelease: true #false
-          generate_release_notes: false #true
+          draft: false
+          prerelease: false
+          generate_release_notes: true
           files: |
             **
           
