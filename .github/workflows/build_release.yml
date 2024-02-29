@@ -149,11 +149,11 @@ jobs:
         fi
         echo "RUNNER_OS=$RUNNER_OS" >> $GITHUB_ENV
     - name: 'Tar artifacts'
-      run: tar -cvf artifacts-$RUNNER_OS.tar artifacts/
+      run: tar -cvf nes-bundler-${{ github.ref_name }}-$RUNNER_OS.tar artifacts/
     - uses: actions/upload-artifact@v4
       with:
-        name: nes-bundler (${{ env.RUNNER_OS }})
-        path: artifacts*.tar
+        name: nes-bundler-${{ env.RUNNER_OS }}
+        path: nes-bundler*.tar
 
   release:
     name: Release
