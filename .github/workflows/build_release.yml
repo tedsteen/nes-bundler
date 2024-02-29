@@ -147,7 +147,7 @@ jobs:
         fi
         echo "RUNNER_OS=$RUNNER_OS" >> $GITHUB_ENV
     
-    - name: Digitally sign artifacts
+    - name: Sign artifacts
       # if: startsWith(github.event.ref, 'refs/tags/v')
       env:
         BUNDLE_APPLE_TEAM_ID: ${{ secrets.BUNDLE_APPLE_TEAM_ID }}
@@ -158,6 +158,8 @@ jobs:
         P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
         CODE_SIGN_IDENTITY: ${{ secrets.CODE_SIGN_IDENTITY }}
       run: |
+        ARTIFACTS=`readlink -f artifacts`
+
         if [[ $RUNNER_OS == "Windows" ]]; then
           echo "TODO"
         elif [[ $RUNNER_OS == "macOS" ]]; then
@@ -184,7 +186,8 @@ jobs:
           # apply provisioning profile
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
-
+          
+          ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.app"
           codesign --force --options=runtime --deep -s $CODE_SIGN_IDENTITY $ARTIFACT1
           ditto -c -k --keepParent $ARTIFACT1 to-submit.zip
           xcrun notarytool submit \
@@ -194,6 +197,7 @@ jobs:
             --wait to-submit.zip
           xcrun stapler staple $ARTIFACT1
 
+          ARTIFACT2="$ARTIFACTS/nes-bundler.app"
           codesign --force --options=runtime --deep -s $CODE_SIGN_IDENTITY $ARTIFACT2
           ditto -c -k --keepParent $ARTIFACT2 to-submit.zip
           xcrun notarytool submit \
