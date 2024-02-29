@@ -148,7 +148,7 @@ jobs:
         echo "RUNNER_OS=$RUNNER_OS" >> $GITHUB_ENV
     
     - name: Sign artifacts
-      # if: startsWith(github.event.ref, 'refs/tags/v')
+      if: startsWith(github.event.ref, 'refs/tags/v')
       env:
         BUNDLE_APPLE_TEAM_ID: ${{ secrets.BUNDLE_APPLE_TEAM_ID }}
         BUNDLE_APPLE_USER: ${{ secrets.BUNDLE_APPLE_USER }}
