@@ -121,7 +121,6 @@ jobs:
 
         if [[ $RUNNER_OS == "Windows" ]]; then
           # Create and add installers
-          mkdir tmp
           candle -dExecutablePath="$BINARIES_PATH/nes-bundler-netplay.exe" $BUNDLE_CONFIG/windows/wix/main.wxs -o $BINARIES_PATH
           light $BINARIES_PATH/*.wixobj -o "$ARTIFACTS/nes-bundler-netplay.msi" -ext WixUIExtension
 
@@ -139,13 +138,13 @@ jobs:
           
           ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.app"
           rsync -a $APP_BUNDLE/ $ARTIFACT1
+          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY $BINARIES_PATH/nes-bundler-netplay
           mv $BINARIES_PATH/nes-bundler-netplay $ARTIFACT1/Contents/MacOS/nes-bundler
-          codesign --force --options=runtime --deep -s $CODE_SIGN_IDENTITY $ARTIFACT1
 
           ARTIFACT2="$ARTIFACTS/nes-bundler.app"
           rsync -a $APP_BUNDLE/ $ARTIFACT2
+          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY $BINARIES_PATH/nes-bundler
           mv $BINARIES_PATH/nes-bundler $ARTIFACT2/Contents/MacOS/nes-bundler
-          codesign --force --options=runtime --deep -s $CODE_SIGN_IDENTITY $ARTIFACT2
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
           # archive artifact
