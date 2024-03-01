@@ -119,14 +119,16 @@ jobs:
         if [[ $RUNNER_OS == "Windows" ]]; then
           # Create and add installers
           cp $BINARIES_PATH/nes-bundler-netplay.exe target/release/
-          candle $BUNDLE_CONFIG/windows/wix/main.wxs -o $RUNNER_TEMP
-          light $RUNNER_TEMP/*.wixobj -o "$ARTIFACTS/nes-bundler-netplay.msi" -ext WixUIExtension
-          
+          candle $BUNDLE_CONFIG/windows/wix/main.wxs -o .
+          light *.wixobj -o "$BINARIES_PATH/nes-bundler-netplay.msi" -ext WixUIExtension
+          mv $BINARIES_PATH/nes-bundler-netplay.msi $ARTIFACTS/
+
           rm target/release/nes-bundler.exe
           cp $BINARIES_PATH/nes-bundler.exe target/release/nes-bundler.exe
-          candle $BUNDLE_CONFIG/windows/wix/main.wxs -o $RUNNER_TEMP
-          light $RUNNER_TEMP/*.wixobj -o "$ARTIFACTS/nes-bundler.msi" -ext WixUIExtension
-          
+          candle $BUNDLE_CONFIG/windows/wix/main.wxs -o .
+          light *.wixobj -o "$BINARIES_PATH/nes-bundler.msi" -ext WixUIExtension
+          mv $BINARIES_PATH/nes-bundler.msi $ARTIFACTS/
+
           # Add exes
           mv $BINARIES_PATH/nes-bundler.exe $ARTIFACTS/
           mv $BINARIES_PATH/nes-bundler-netplay.exe $ARTIFACTS/
