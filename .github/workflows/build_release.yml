@@ -119,13 +119,13 @@ jobs:
         if [[ $RUNNER_OS == "Windows" ]]; then
           # Create and add installers
           cp $BINARIES_PATH/nes-bundler-netplay.exe target/release/
-          candle $BUNDLE_CONFIG/windows/wix/main.wxs -o target/release/
-          light target/release/*.wixobj -o "$ARTIFACTS/nes-bundler-netplay.msi" -ext WixUIExtension
+          candle $BUNDLE_CONFIG/windows/wix/main.wxs -o $RUNNER_TEMP
+          light $RUNNER_TEMP/*.wixobj -o "$ARTIFACTS/nes-bundler-netplay.msi" -ext WixUIExtension
           
           rm target/release/nes-bundler.exe
           cp $BINARIES_PATH/nes-bundler.exe target/release/nes-bundler.exe
-          candle $BUNDLE_CONFIG/windows/wix/main.wxs -o target/release/
-          light target/release/*.wixobj -o "$ARTIFACTS/nes-bundler.msi" -ext WixUIExtension
+          candle $BUNDLE_CONFIG/windows/wix/main.wxs -o $RUNNER_TEMP
+          light $RUNNER_TEMP/*.wixobj -o "$ARTIFACTS/nes-bundler.msi" -ext WixUIExtension
           
           # Add exes
           mv $BINARIES_PATH/nes-bundler.exe $ARTIFACTS/
@@ -204,7 +204,7 @@ jobs:
         rm -rf $ARTIFACT2
 
     - name: Sign and notarize final artifacts
-      #if: startsWith(github.event.ref, 'refs/tags/v')
+      if: startsWith(github.event.ref, 'refs/tags/v')
       env:
         BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
         BUNDLE_APPLE_TEAM_ID: ${{ secrets.BUNDLE_APPLE_TEAM_ID }}
