@@ -118,14 +118,14 @@ jobs:
 
         if [[ $RUNNER_OS == "Windows" ]]; then
           # Create and add installers
-          # candle can't seem to handle executables outside of the current directory
-          cp $BINARIES_PATH/nes-bundler-netplay.exe .
+          cp $BINARIES_PATH/nes-bundler-netplay.exe nes-bundler.exe
+          candle $BUNDLE_CONFIG/windows/wix/main.wxs -o $RUNNER_TEMP
+          light $RUNNER_TEMP/*.wixobj -o "$ARTIFACTS/nes-bundler-netplay.msi" -ext WixUIExtension
+          
+          rm nes-bundler.exe
           cp $BINARIES_PATH/nes-bundler.exe .
-          candle -dExecutablePath="nes-bundler-netplay.exe" $BUNDLE_CONFIG/windows/wix/main.wxs -o .
-          light *.wixobj -o "$ARTIFACTS/nes-bundler-netplay.msi" -ext WixUIExtension
-
-          candle -dExecutablePath="nes-bundler.exe" $BUNDLE_CONFIG/windows/wix/main.wxs -o .
-          light *.wixobj -o "$ARTIFACTS/nes-bundler.msi" -ext WixUIExtension
+          candle $BUNDLE_CONFIG/windows/wix/main.wxs -o $RUNNER_TEMP
+          light $RUNNER_TEMP/*.wixobj -o "$ARTIFACTS/nes-bundler.msi" -ext WixUIExtension
           
           # Add exe
           mv $BINARIES_PATH/nes-bundler.exe $ARTIFACTS/
