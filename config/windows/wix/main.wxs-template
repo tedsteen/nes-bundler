@@ -25,7 +25,7 @@
       <Directory Id="$(var.PlatformProgramFilesFolder)">
         <Directory Id="INSTALLDIR" Name="{name}">
           <Component Guid="*" Id="BundleComponent">
-            <File Id="BundleExecutable" KeyPath="yes" Name="{name}.exe" Source="nes-bundler.exe">
+            <File Id="BundleExecutable" KeyPath="yes" Name="{name}.exe" Source="target/release/nes-bundler.exe">
               <Shortcut Advertise="yes" Directory="DesktopFolder" Icon="bundle.ico" Id="DesktopShortcut" Name="{name}" WorkingDirectory="INSTALLDIR" />
               <Shortcut Advertise="yes" Directory="ProgramMenuFolder" Icon="bundle.ico" Id="StartMenuShortcut" Name="{name}" WorkingDirectory="INSTALLDIR" />
             </File>

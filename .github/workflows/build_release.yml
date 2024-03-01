@@ -53,9 +53,9 @@ jobs:
 
         if [[ $RUNNER_OS == "Windows" ]]; then
           cargo build --locked --release --features "netplay"
-          mv target/release/nes-bundler.exe $BINARIES_PATH/nes-bundler-netplay.exe
+          cp target/release/nes-bundler.exe $BINARIES_PATH/nes-bundler-netplay.exe
           cargo build --locked --release
-          mv target/release/nes-bundler.exe $BINARIES_PATH/nes-bundler.exe
+          cp target/release/nes-bundler.exe $BINARIES_PATH/nes-bundler.exe
         elif [[ $RUNNER_OS == "macOS" ]]; then
           mkdir -p target/release/
           
@@ -118,16 +118,16 @@ jobs:
 
         if [[ $RUNNER_OS == "Windows" ]]; then
           # Create and add installers
-          cp $BINARIES_PATH/nes-bundler-netplay.exe nes-bundler.exe
-          candle config/windows/wix/main.wxs -o .
-          light *.wixobj -o "$ARTIFACTS/nes-bundler-netplay.msi" -ext WixUIExtension
+          cp $BINARIES_PATH/nes-bundler.exe target/release/
+          candle config/windows/wix/main.wxs -o target/release/
+          light target/release/*.wixobj -o "$ARTIFACTS/nes-bundler-netplay.msi" -ext WixUIExtension
           
-          rm nes-bundler.exe
-          cp $BINARIES_PATH/nes-bundler.exe .
-          candle config/windows/wix/main.wxs -o .
-          light *.wixobj -o "$ARTIFACTS/nes-bundler.msi" -ext WixUIExtension
+          rm target/release/nes-bundler.exe
+          cp $BINARIES_PATH/nes-bundler-netplay.exe target/release/nes-bundler.exe
+          candle config/windows/wix/main.wxs -o target/release/
+          light target/release/*.wixobj -o "$ARTIFACTS/nes-bundler.msi" -ext WixUIExtension
           
-          # Add exe
+          # Add exes
           mv $BINARIES_PATH/nes-bundler.exe $ARTIFACTS/
           mv $BINARIES_PATH/nes-bundler-netplay.exe $ARTIFACTS/
         
@@ -204,7 +204,7 @@ jobs:
         rm -rf $ARTIFACT2
 
     - name: Sign and notarize final artifacts
-      # if: startsWith(github.event.ref, 'refs/tags/v')
+      if: startsWith(github.event.ref, 'refs/tags/v')
       env:
         BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
         BUNDLE_APPLE_TEAM_ID: ${{ secrets.BUNDLE_APPLE_TEAM_ID }}
