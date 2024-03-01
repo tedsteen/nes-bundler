@@ -119,20 +119,20 @@ jobs:
           # Create and add installers
           mkdir wix
           
-          cp $BINARIES_PATH/nes-bundler.exe wix/
+          cp $BINARIES_PATH/nes-bundler-netplay.exe wix/nes-bundler.exe
           candle $BUNDLE_CONFIG/windows/wix/main.wxs -o wix/
           light wix/*.wixobj -o "$BINARIES_PATH/nes-bundler-netplay.msi" -ext WixUIExtension
           
-          cp -f $BINARIES_PATH/nes-bundler-netplay.exe wix/nes-bundler.exe
+          cp -f $BINARIES_PATH/nes-bundler.exe wix/
           candle $BUNDLE_CONFIG/windows/wix/main.wxs -o wix/
           light wix/*.wixobj -o "$BINARIES_PATH/nes-bundler.msi" -ext WixUIExtension
 
           # Add artifacts
           mv $BINARIES_PATH/nes-bundler-netplay.msi $ARTIFACTS/
           mv $BINARIES_PATH/nes-bundler.msi $ARTIFACTS/
-          mv $BINARIES_PATH/nes-bundler.exe $ARTIFACTS/
           mv $BINARIES_PATH/nes-bundler-netplay.exe $ARTIFACTS/
-        
+          mv $BINARIES_PATH/nes-bundler.exe $ARTIFACTS/
+
         elif [[ $RUNNER_OS == "macOS" ]]; then
           # Prepare the app structure
           APP_BUNDLE="$RUNNER_TEMP/nes-bundler.app"
