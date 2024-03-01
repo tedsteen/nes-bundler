@@ -78,7 +78,7 @@ impl Stream {
         Ok(output_device)
     }
 
-    pub(crate) fn push_samples<T>(&mut self, new_samples: &[i16], fps_hint: Fps) {
+    pub(crate) fn push_samples(&mut self, new_samples: &[i16], fps_hint: Fps) {
         let new_len = ((FPS / fps_hint) * new_samples.len() as f32) as usize;
         let queue_size = self.audio_queue.size();
 

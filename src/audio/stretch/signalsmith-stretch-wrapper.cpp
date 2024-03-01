@@ -1,5 +1,4 @@
 #include "signalsmith-stretch-wrapper.hpp"
-#include <memory>
 
 std::unique_ptr<SignalsmithStretch> signalsmith_stretch_new() {
   return std::unique_ptr<SignalsmithStretch>(new SignalsmithStretch());

@@ -1,4 +1,6 @@
+#include <memory>
 #include "signalsmith-stretch/signalsmith-stretch.h"
+
 typedef float SampleFormat;
 typedef signalsmith::stretch::SignalsmithStretch<SampleFormat> SignalsmithStretch;
 typedef ::SignalsmithStretch & InstanceType;
