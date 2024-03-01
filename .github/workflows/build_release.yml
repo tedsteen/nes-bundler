@@ -138,18 +138,18 @@ jobs:
             --appdir=AppDir \
             --icon-file=$BUNDLE_CONFIG/linux/icon_256x256.png \
             --output=appimage
-          mv nes-bundler.AppImage $ARTIFACTS/nes-bundler.AppImage
-          mv nes-bundler.AppImage.zsync $ARTIFACTS/nes-bundler.AppImage.zsync
+          mv nes-bundler.AppImage $ARTIFACTS/
+          mv nes-bundler.AppImage.zsync $ARTIFACTS/
           
-          mv nes-bundler-netplay nes-bundler
+          mv $BINARIES_PATH/nes-bundler-netplay $BINARIES_PATH/nes-bundler
           ./linuxdeploy \
             --executable=$BINARIES_PATH/nes-bundler \
             --desktop-file=$BUNDLE_CONFIG/linux/bundle.desktop \
             --appdir=AppDir \
             --icon-file=$BUNDLE_CONFIG/linux/icon_256x256.png \
             --output=appimage
-          mv nes-bundler.AppImage $ARTIFACTS/nes-bundler-netplay.AppImage
-          mv nes-bundler.AppImage.zsync $ARTIFACTS/nes-bundler-netplay.AppImage.zsync
+          mv nes-bundler.AppImage $ARTIFACTS/
+          mv nes-bundler.AppImage.zsync $ARTIFACTS/
         fi
         echo "RUNNER_OS=$RUNNER_OS" >> $GITHUB_ENV
     
