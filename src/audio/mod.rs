@@ -14,8 +14,6 @@ use self::stretch::Stretch;
 pub mod gui;
 mod stretch;
 
-type SampleFormat = i16;
-
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct AudioSettings {
     pub volume: u8,
@@ -25,7 +23,7 @@ pub struct AudioSettings {
 pub struct Stream {
     output_device_name: Option<String>,
     stretch: Stretch,
-    audio_queue: AudioQueue<i16>,
+    audio_queue: AudioQueue<f32>,
     pub(crate) volume: f32,
 }
 
@@ -49,9 +47,11 @@ impl Stream {
         audio_subsystem: &AudioSubsystem,
         audio_settings: &AudioSettings,
     ) -> Result<Self> {
+        let mut stretch = Stretch::new();
+        stretch.preset_cheaper(1, 44100.0);
         Ok(Self {
             output_device_name: audio_settings.output_device.clone(),
-            stretch: Stretch::new(),
+            stretch,
             audio_queue: Stream::new_audio_queue(audio_subsystem, &audio_settings.output_device)?,
             volume: audio_settings.volume as f32 / 100.0,
         })
@@ -60,7 +60,7 @@ impl Stream {
     fn new_audio_queue(
         audio_subsystem: &AudioSubsystem,
         output_device: &Option<String>,
-    ) -> Result<AudioQueue<i16>> {
+    ) -> Result<AudioQueue<f32>> {
         let channels = 1;
         let sample_rate = 44100;
         let desired_spec = AudioSpecDesired {
@@ -69,8 +69,8 @@ impl Stream {
             samples: Some(512), //TODO: perhaps figure this value out during runtime
         };
         let output_device = audio_subsystem
-            .open_queue::<i16, _>(output_device.as_deref(), &desired_spec)
-            .or_else(|_| audio_subsystem.open_queue::<i16, _>(None, &desired_spec))
+            .open_queue::<f32, _>(output_device.as_deref(), &desired_spec)
+            .or_else(|_| audio_subsystem.open_queue::<f32, _>(None, &desired_spec))
             .map_err(anyhow::Error::msg)?;
         log::debug!("Starting audio: {:?}", output_device.spec());
 
@@ -78,7 +78,7 @@ impl Stream {
         Ok(output_device)
     }
 
-    pub(crate) fn push_samples(&mut self, new_samples: &[SampleFormat], fps_hint: Fps) {
+    pub(crate) fn push_samples<T>(&mut self, new_samples: &[i16], fps_hint: Fps) {
         let new_len = ((FPS / fps_hint) * new_samples.len() as f32) as usize;
         let queue_size = self.audio_queue.size();
 
@@ -92,14 +92,15 @@ impl Stream {
             new_len
         };
 
-        let stretched = self.stretch.process(new_samples, len);
-        //Set volume
-        let samples: Vec<i16> = stretched
+        // Convert to f32 and set volume
+        let new_samples: Vec<f32> = new_samples
             .iter()
-            .map(|s| (*s as f32 * self.volume) as SampleFormat)
+            .map(|s| (*s as f32 / -(i16::MIN as f32)) * self.volume)
             .collect();
 
-        self.audio_queue.queue_audio(&samples).unwrap();
+        let new_samples = self.stretch.process(&new_samples, len);
+
+        self.audio_queue.queue_audio(new_samples).unwrap();
     }
 
     pub(crate) fn set_output_device(&mut self, output_device_name: Option<String>) {

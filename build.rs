@@ -1,4 +1,4 @@
-use std::{fs::File, io::Write};
+use std::{env, fs::File, io::Write, path::PathBuf, process::Command};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -17,14 +17,22 @@ struct BundleConfiguration {
 }
 
 fn main() -> Result<()> {
+    let signalsmith_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("src/");
+    if !signalsmith_path.join("wrapper.cpp").exists() {
+        Command::new("git")
+            .args(["submodule", "update", "--init"])
+            .current_dir(signalsmith_path.clone())
+            .status()
+            .expect("Git is needed to retrieve the signalsmith-stretch source files");
+    }
+
     println!("cargo:rerun-if-changed=config/linux/*");
     println!("cargo:rerun-if-changed=config/macos/*");
     println!("cargo:rerun-if-changed=config/windows/*");
     println!("cargo:rerun-if-changed=config/windows/wix/*");
 
-    println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch/signalsmith-stretch.h");
-    println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch-wrapper.hpp");
-    println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch-wrapper.cpp");
+    println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch/**");
+    println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch-wrapper.*");
     println!("cargo:rerun-if-changed=src/audio/stretch/mod.rs");
     let mut code = cxx_build::bridge("src/audio/stretch/mod.rs");
     let code = code

@@ -1,11 +1,9 @@
 #include "signalsmith-stretch-wrapper.hpp"
-std::unique_ptr<SignalsmithStretch> signalsmith_stretch_new(int nChannels, float sampleRate) {
-  SignalsmithStretch *instance = new SignalsmithStretch();
-  instance->presetCheaper(nChannels, sampleRate);
-  instance->reset();
-  return std::unique_ptr<SignalsmithStretch>(instance);
+
+std::unique_ptr<SignalsmithStretch> signalsmith_stretch_new() {
+  return std::unique_ptr<SignalsmithStretch>(new SignalsmithStretch());
 }
 
-void signalsmith_stretch_process(std::unique_ptr<SignalsmithStretch> &ptr, const __SampleFormat * const * input, int nInputSamples, __SampleFormat **output, int nOutputSamples) {
-  ptr->process(input, nInputSamples, output, nOutputSamples);
+void process(InstanceType instance, const SampleFormat *const *inputs, int inputSamples, SampleFormat **outputs, int outputSamples) {
+    instance.process(inputs, inputSamples, outputs, outputSamples);
 }
