@@ -121,8 +121,8 @@ jobs:
           # archive artifact
           strip $BINARIES_PATH/nes-bundler
           tar czvf $ARTIFACTS/nes-bundler-linux-x86_64.tar.gz $BINARIES_PATH/nes-bundler
-          strip BINARIES_PATH/nes-bundler-netplay
-          tar czvf $ARTIFACTS/nes-bundler-netplay-linux-x86_64.tar.gz BINARIES_PATH/nes-bundler-netplay
+          strip $BINARIES_PATH/nes-bundler-netplay
+          tar czvf $ARTIFACTS/nes-bundler-netplay-linux-x86_64.tar.gz $BINARIES_PATH/nes-bundler-netplay
 
           # create appimage
           curl -Lo linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/latest/download/linuxdeploy-x86_64.AppImage
