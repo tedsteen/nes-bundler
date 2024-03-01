@@ -95,9 +95,7 @@ fn main() -> Result<()> {
     File::create("config/linux/bundle.desktop")?
         .write_all(tt.render("bundle.desktop", &bundle_config)?.as_bytes())?;
 
-    let path = std::path::Path::new("target/bundle/osx/nes-bundler.app/Contents/");
-    std::fs::create_dir_all(path).unwrap();
-    File::create(path.join("Info.plist"))?
+    File::create(std::path::Path::new("config/macos/Info.plist"))?
         .write_all(tt.render("Info.plist", &bundle_config)?.as_bytes())?;
     Ok(())
 }

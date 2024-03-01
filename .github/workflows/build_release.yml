@@ -47,28 +47,25 @@ jobs:
         fi
     
     - name: Build
-      run: |        
+      run: |
+        BINARIES_PATH="$RUNNER_TEMP/binaries"
+        mkdir -p $BINARIES_PATH
+
         if [[ $RUNNER_OS == "Windows" ]]; then
           cargo build --locked --release --features "netplay"
-          candle config/windows/wix/main.wxs -o target/release/
-          light target/release/*.wixobj -o target/release/nes-bundler-netplay.msi -ext WixUIExtension
-
-          cp target/release/nes-bundler.exe target/release/nes-bundler-netplay.exe
-          
+          cp target/release/nes-bundler.exe $BINARIES_PATH/nes-bundler-netplay.exe
           cargo build --locked --release
-          candle config/windows/wix/main.wxs -o target/release/
-          light target/release/*.wixobj -o target/release/nes-bundler.msi -ext WixUIExtension
-
+          cp target/release/nes-bundler.exe $BINARIES_PATH/nes-bundler.exe
         elif [[ $RUNNER_OS == "macOS" ]]; then
           mkdir -p target/release/
+          
           # x86
           cargo build --locked --release --target=x86_64-apple-darwin --features "netplay"
           # arch 
           cargo build --locked --release --target=aarch64-apple-darwin --features "netplay"
-          
           lipo target/x86_64-apple-darwin/release/nes-bundler \
             target/aarch64-apple-darwin/release/nes-bundler \
-            -create -output target/release/nes-bundler-netplay
+            -create -output $BINARIES_PATH/nes-bundler-netplay
           
           # x86
           cargo build --locked --release --target=x86_64-apple-darwin
@@ -76,46 +73,92 @@ jobs:
           cargo build --locked --release --target=aarch64-apple-darwin
           lipo target/x86_64-apple-darwin/release/nes-bundler \
             target/aarch64-apple-darwin/release/nes-bundler \
-            -create -output target/release/nes-bundler
+            -create -output $BINARIES_PATH/nes-bundler
           
         elif [[ $RUNNER_OS == "Linux" ]]; then
           cargo build --locked --release --features "netplay"
-          mv target/release/nes-bundler target/release/nes-bundler-netplay
+          mv target/release/nes-bundler $BINARIES_PATH/nes-bundler-netplay
           cargo build --locked --release
+          mv target/release/nes-bundler $BINARIES_PATH/nes-bundler
         fi
 
+    - name: Import Certificates (macOS)
+      if: runner.os == 'macOS'
+      env:
+        BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+        P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+      run: |
+        # create variables
+        CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+        # import certificate and provisioning profile from secrets
+        echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+
+        # create temporary keychain
+        KEYCHAIN_PASSWORD=`openssl rand -hex 12`
+        security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        security default-keychain -s $KEYCHAIN_PATH
+        security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+        # import certificate to keychain
+        security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+        security list-keychain -d user -s $KEYCHAIN_PATH
+    
     - name: Prepare Artifacts
+      env:
+        CODE_SIGN_IDENTITY: ${{ secrets.CODE_SIGN_IDENTITY }}
       run: |
         rm -rf artifacts || true
         mkdir artifacts
         ARTIFACTS=`readlink -f artifacts`
         BUNDLE_CONFIG=`readlink -f config`
-        cd target/release
-        
+        BINARIES_PATH="$RUNNER_TEMP/binaries"
         if [[ $RUNNER_OS == "Windows" ]]; then
-          cp nes-bundler*.exe $ARTIFACTS
-          cp nes-bundler*.msi $ARTIFACTS
+          # Create and add installers
+          mkdir wix
+          
+          cp $BINARIES_PATH/nes-bundler-netplay.exe wix/nes-bundler.exe
+          candle $BUNDLE_CONFIG/windows/wix/main.wxs -o wix/
+          light wix/*.wixobj -o "$BINARIES_PATH/nes-bundler-netplay.msi" -ext WixUIExtension
+          
+          cp -f $BINARIES_PATH/nes-bundler.exe wix/
+          candle $BUNDLE_CONFIG/windows/wix/main.wxs -o wix/
+          light wix/*.wixobj -o "$BINARIES_PATH/nes-bundler.msi" -ext WixUIExtension
+
+          # Add artifacts
+          mv $BINARIES_PATH/nes-bundler-netplay.msi $ARTIFACTS/
+          mv $BINARIES_PATH/nes-bundler.msi $ARTIFACTS/
+          mv $BINARIES_PATH/nes-bundler-netplay.exe $ARTIFACTS/
+          mv $BINARIES_PATH/nes-bundler.exe $ARTIFACTS/
 
         elif [[ $RUNNER_OS == "macOS" ]]; then
-          APP_BUNDLE=`readlink -f ../bundle/osx/nes-bundler.app`
+          # Prepare the app structure
+          APP_BUNDLE="$RUNNER_TEMP/nes-bundler.app"
           mkdir -p $APP_BUNDLE/Contents/MacOS || true
           mkdir -p $APP_BUNDLE/Contents/Resources || true
+          cp $BUNDLE_CONFIG/macos/Info.plist $APP_BUNDLE/Contents/
+
           iconutil $BUNDLE_CONFIG/macos/bundle.iconset -c icns --output $APP_BUNDLE/Contents/Resources/bundle.icns
           
+          # Create two apps (with and without netplay)
           ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.app"
-          rsync -a $APP_BUNDLE/ $ARTIFACT1
-          mv nes-bundler-netplay $ARTIFACT1/Contents/MacOS/nes-bundler
-          
           ARTIFACT2="$ARTIFACTS/nes-bundler.app"
+          rsync -a $APP_BUNDLE/ $ARTIFACT1
           rsync -a $APP_BUNDLE/ $ARTIFACT2
-          mv nes-bundler $ARTIFACT2/Contents/MacOS/nes-bundler
+          mv $BINARIES_PATH/nes-bundler-netplay $ARTIFACT1/Contents/MacOS/nes-bundler
+          mv $BINARIES_PATH/nes-bundler         $ARTIFACT2/Contents/MacOS/nes-bundler
+          # Sign
+          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY $ARTIFACT1/Contents/MacOS/nes-bundler
+          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY $ARTIFACT2/Contents/MacOS/nes-bundler
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
           # archive artifact
-          strip nes-bundler
-          tar czvf $ARTIFACTS/nes-bundler-linux-x86_64.tar.gz nes-bundler
-          strip nes-bundler-netplay
-          tar czvf $ARTIFACTS/nes-bundler-netplay-linux-x86_64.tar.gz nes-bundler-netplay
+          strip $BINARIES_PATH/nes-bundler
+          tar czvf $ARTIFACTS/nes-bundler-linux-x86_64.tar.gz $BINARIES_PATH/nes-bundler
+          strip $BINARIES_PATH/nes-bundler-netplay
+          tar czvf $ARTIFACTS/nes-bundler-netplay-linux-x86_64.tar.gz $BINARIES_PATH/nes-bundler-netplay
 
           # create appimage
           curl -Lo linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/latest/download/linuxdeploy-x86_64.AppImage
@@ -126,97 +169,91 @@ jobs:
           export LDAI_OUTPUT=nes-bundler.AppImage
           export LDAI_UPDATE_INFORMATION="gh-releases-zsync|nes-bundler|nes-bundler|latest|nes-bundler.AppImage.zsync"
           ./linuxdeploy \
-            --executable=nes-bundler \
+            --executable=$BINARIES_PATH/nes-bundler \
             --desktop-file=$BUNDLE_CONFIG/linux/bundle.desktop \
             --appdir=AppDir \
             --icon-file=$BUNDLE_CONFIG/linux/icon_256x256.png \
             --output=appimage
-          mv nes-bundler.AppImage $ARTIFACTS/nes-bundler.AppImage
-          mv nes-bundler.AppImage.zsync $ARTIFACTS/nes-bundler.AppImage.zsync
+          mv nes-bundler.AppImage $ARTIFACTS/
+          mv nes-bundler.AppImage.zsync $ARTIFACTS/
           
-          mv nes-bundler-netplay nes-bundler
+          mv $BINARIES_PATH/nes-bundler-netplay $BINARIES_PATH/nes-bundler
           ./linuxdeploy \
-            --executable=nes-bundler \
+            --executable=$BINARIES_PATH/nes-bundler \
             --desktop-file=$BUNDLE_CONFIG/linux/bundle.desktop \
             --appdir=AppDir \
             --icon-file=$BUNDLE_CONFIG/linux/icon_256x256.png \
             --output=appimage
-
-          mv nes-bundler.AppImage $ARTIFACTS/nes-bundler-netplay.AppImage
-          mv nes-bundler.AppImage.zsync $ARTIFACTS/nes-bundler-netplay.AppImage.zsync
+          mv nes-bundler.AppImage $ARTIFACTS/
+          mv nes-bundler.AppImage.zsync $ARTIFACTS/
         fi
         echo "RUNNER_OS=$RUNNER_OS" >> $GITHUB_ENV
     
-    - name: Sign artifacts
+    - name: Create dmg (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        ARTIFACTS=`readlink -f artifacts`
+        ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.app"
+        ARTIFACT2="$ARTIFACTS/nes-bundler.app"
+        
+        # Create dmgs and replace the artifacts with them
+        TEMP_UNCOMPRESSED_DMG_FILE="$RUNNER_TEMP/nes-bundler-uncompressed.dmg"
+        hdiutil create $TEMP_UNCOMPRESSED_DMG_FILE -volname "nes-bundler-netplay" -srcfolder $ARTIFACT1
+        hdiutil convert $TEMP_UNCOMPRESSED_DMG_FILE -format UDZO -o $ARTIFACTS/nes-bundler-netplay.dmg
+        rm -rf $ARTIFACT1 $TEMP_UNCOMPRESSED_DMG_FILE
+        hdiutil create $TEMP_UNCOMPRESSED_DMG_FILE -volname "nes-bundler" -srcfolder $ARTIFACT2
+        hdiutil convert $TEMP_UNCOMPRESSED_DMG_FILE -format UDZO -o $ARTIFACTS/nes-bundler.dmg
+        rm -rf $ARTIFACT2
+
+    - name: Sign and notarize final artifacts
       if: startsWith(github.event.ref, 'refs/tags/v')
       env:
+        BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
         BUNDLE_APPLE_TEAM_ID: ${{ secrets.BUNDLE_APPLE_TEAM_ID }}
         BUNDLE_APPLE_USER: ${{ secrets.BUNDLE_APPLE_USER }}
         BUNDLE_APPLE_APP_PASSWORD: ${{ secrets.BUNDLE_APPLE_APP_PASSWORD }}
-        BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
-        BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-        P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
-        CODE_SIGN_IDENTITY: ${{ secrets.CODE_SIGN_IDENTITY }}
       run: |
         ARTIFACTS=`readlink -f artifacts`
-
+        
         if [[ $RUNNER_OS == "Windows" ]]; then
-          echo "TODO"
+          dotnet tool install --global AzureSignTool
+          for Item in 'nes-bundler-netplay.exe' 'nes-bundler.exe' 'nes-bundler-netplay.msi' 'nes-bundler.msi' ;
+          do
+            AzureSignTool sign -kvu "${{ secrets.AZURE_KEY_VAULT_URI }}" -kvi "${{ secrets.AZURE_CLIENT_ID }}" -kvt "${{ secrets.AZURE_TENANT_ID }}" -kvs "${{ secrets.AZURE_CLIENT_SECRET }}" -kvc ${{ secrets.AZURE_CERT_NAME }} -tr http://timestamp.digicert.com -v $ARTIFACTS/$Item &
+          done
+          wait          
         elif [[ $RUNNER_OS == "macOS" ]]; then
-          # create variables
-          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
-          PP_PATH=$RUNNER_TEMP/build_pp.provisionprofile
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-
-          # import certificate and provisioning profile from secrets
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
-          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o $PP_PATH
-
-          # create temporary keychain
-          KEYCHAIN_PASSWORD=`openssl rand -hex 12`
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security default-keychain -s $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
-          # import certificate to keychain
-          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security list-keychain -d user -s $KEYCHAIN_PATH
-
           # apply provisioning profile
+          PP_PATH=$RUNNER_TEMP/build_pp.provisionprofile
+          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o $PP_PATH
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
           
-          ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.app"
-          codesign --force --options=runtime --deep -s $CODE_SIGN_IDENTITY $ARTIFACT1
-          ditto -c -k --keepParent $ARTIFACT1 to-submit.zip
+          # Notarize
+          ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.dmg"
+          ARTIFACT2="$ARTIFACTS/nes-bundler.dmg"
+
           xcrun notarytool submit \
             --team-id $BUNDLE_APPLE_TEAM_ID \
             --apple-id $BUNDLE_APPLE_USER \
             --password $BUNDLE_APPLE_APP_PASSWORD \
-            --wait to-submit.zip
+            --wait $ARTIFACT1 &
+
+          xcrun notarytool submit \
+            --team-id $BUNDLE_APPLE_TEAM_ID \
+            --apple-id $BUNDLE_APPLE_USER \
+            --password $BUNDLE_APPLE_APP_PASSWORD \
+            --wait $ARTIFACT2 &
+          wait
+
           xcrun stapler staple $ARTIFACT1
-
-          ARTIFACT2="$ARTIFACTS/nes-bundler.app"
-          codesign --force --options=runtime --deep -s $CODE_SIGN_IDENTITY $ARTIFACT2
-          ditto -c -k --keepParent $ARTIFACT2 to-submit.zip
-          xcrun notarytool submit \
-            --team-id $BUNDLE_APPLE_TEAM_ID \
-            --apple-id $BUNDLE_APPLE_USER \
-            --password $BUNDLE_APPLE_APP_PASSWORD \
-            --wait to-submit.zip
           xcrun stapler staple $ARTIFACT2
-
-        elif [[ $RUNNER_OS == "Linux" ]]; then
-          echo "TODO"
         fi
 
-    - name: Tar artifacts
-      run: tar -C artifacts/ -cvf nes-bundler-${{ github.ref_name }}-$RUNNER_OS.tar .
     - uses: actions/upload-artifact@v4
       with:
-        name: nes-bundler-${{ env.RUNNER_OS }}
-        path: nes-bundler*.tar
+        name: nes-bundler-${{ github.ref_name }}-${{ env.RUNNER_OS }}
+        path: artifacts/*
     
   release:
     name: Release
@@ -224,10 +261,8 @@ jobs:
     if: startsWith(github.event.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
-      - name: Download bundles
+      - name: Get artifacts
         uses: actions/download-artifact@v4
-        with:
-          pattern: nes-bundler*
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -236,6 +271,5 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-          files: |
-            **
+          files: "*"
           

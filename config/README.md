@@ -12,7 +12,7 @@ Here is a breakdown of what can be customised
 
 # Signing the binaries
 The Github action build scripts will sign the binaries. To do that they need a couple of secrets.
-Currently only the macOS bundle is digitally signed.
+Currently the macOS bundles and the windows binaries is digitally signed.
 
 ## Secrets needed to sign the macOS bundle
 
@@ -39,3 +39,13 @@ The password you created for the build certificate in the previous step.
 ### CODE_SIGN_IDENTITY
 The code sign identity for the build certificate.  
 Run `xcrun security find-identity -v -p codesigning` to find it
+
+## Secrets needed to sign the Windows binaries
+
+First [read this](https://melatonin.dev/blog/how-to-code-sign-windows-installers-with-an-ev-cert-on-github-actions/)
+And if you manage to get through all that you should have the five following variables :)
+* AZURE_KEY_VAULT_URI
+* AZURE_CLIENT_ID
+* AZURE_CLIENT_SECRET
+* AZURE_CERT_NAME
+* AZURE_TENANT_ID
