@@ -192,11 +192,10 @@ jobs:
         # Create dmgs and replace the artifacts with them
         hdiutil create $RUNNER_TEMP/nes-bundler-uncompressed.dmg -volname "nes-bundler" -srcfolder $ARTIFACT1
         hdiutil convert $RUNNER_TEMP/nes-bundler-uncompressed.dmg -format UDZO -o $ARTIFACTS/nes-bundler-netplay.dmg
-        rm $ARTIFACT1;
+        rm -rf $ARTIFACT1
         hdiutil create $RUNNER_TEMP/nes-bundler-uncompressed.dmg -volname "nes-bundler" -srcfolder $ARTIFACT2
         hdiutil convert $RUNNER_TEMP/nes-bundler-uncompressed.dmg -format UDZO -o $ARTIFACTS/nes-bundler.dmg
-        rm $ARTIFACT2;
-
+        rm -rf $ARTIFACT2
 
     - name: Sign and notarize final bundle
       if: startsWith(github.event.ref, 'refs/tags/v')
@@ -211,9 +210,9 @@ jobs:
           dotnet tool install --global AzureSignTool
           for Item in 'nes-bundler-netplay.exe' 'nes-bundler.exe' 'nes-bundler-netplay.msi' 'nes-bundler.msi' ;
           do
-            AzureSignTool sign -kvu "${{ secrets.AZURE_KEY_VAULT_URI }}" -kvi "${{ secrets.AZURE_CLIENT_ID }}" -kvt "${{ secrets.AZURE_TENANT_ID }}" -kvs "${{ secrets.AZURE_CLIENT_SECRET }}" -kvc ${{ secrets.AZURE_CERT_NAME }} -tr http://timestamp.digicert.com -v $ARTIFACTS/$Item
+            AzureSignTool sign -kvu "${{ secrets.AZURE_KEY_VAULT_URI }}" -kvi "${{ secrets.AZURE_CLIENT_ID }}" -kvt "${{ secrets.AZURE_TENANT_ID }}" -kvs "${{ secrets.AZURE_CLIENT_SECRET }}" -kvc ${{ secrets.AZURE_CERT_NAME }} -tr http://timestamp.digicert.com -v $ARTIFACTS/$Item &
           done
-          
+          wait          
         elif [[ $RUNNER_OS == "macOS" ]]; then
           # apply provisioning profile
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
