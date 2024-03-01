@@ -131,19 +131,22 @@ jobs:
           mv $BINARIES_PATH/nes-bundler-netplay.exe $ARTIFACTS/
         
         elif [[ $RUNNER_OS == "macOS" ]]; then
+          # Prepare the app structure
           APP_BUNDLE="$RUNNER_TEMP/nes-bundler.app"
           mkdir -p $APP_BUNDLE/Contents/MacOS || true
           mkdir -p $APP_BUNDLE/Contents/Resources || true
           iconutil $BUNDLE_CONFIG/macos/bundle.iconset -c icns --output $APP_BUNDLE/Contents/Resources/bundle.icns
           
+          # Create two apps (with and without netplay)
           ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.app"
           ARTIFACT2="$ARTIFACTS/nes-bundler.app"
           rsync -a $APP_BUNDLE/ $ARTIFACT1
           rsync -a $APP_BUNDLE/ $ARTIFACT2
           mv $BINARIES_PATH/nes-bundler-netplay $ARTIFACT1/Contents/MacOS/nes-bundler
           mv $BINARIES_PATH/nes-bundler         $ARTIFACT2/Contents/MacOS/nes-bundler
-          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY $ARTIFACT1/Contents/MacOS/nes-bundler/nes-bundler
-          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY $ARTIFACT2/Contents/MacOS/nes-bundler/nes-bundler
+          # Sign
+          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY $ARTIFACT1/Contents/MacOS/nes-bundler
+          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY $ARTIFACT2/Contents/MacOS/nes-bundler
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
           # archive artifact
@@ -198,6 +201,7 @@ jobs:
         rm -rf $ARTIFACT2
 
     - name: Sign and notarize final bundle
+      #if: startsWith(github.event.ref, 'refs/tags/v')
       env:
         BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
         BUNDLE_APPLE_TEAM_ID: ${{ secrets.BUNDLE_APPLE_TEAM_ID }}
@@ -237,7 +241,6 @@ jobs:
             --password $BUNDLE_APPLE_APP_PASSWORD \
             --wait $ARTIFACT2
           xcrun stapler staple $ARTIFACT2
-          
         fi
 
     - uses: actions/upload-artifact@v4
