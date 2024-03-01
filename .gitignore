@@ -5,3 +5,4 @@ todo.md
 nes-bundler-log.txt
 config/windows/wix/main.wxs
 config/linux/bundle.desktop
+config/linux/Info.plist

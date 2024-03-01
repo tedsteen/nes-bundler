@@ -135,6 +135,8 @@ jobs:
           APP_BUNDLE="$RUNNER_TEMP/nes-bundler.app"
           mkdir -p $APP_BUNDLE/Contents/MacOS || true
           mkdir -p $APP_BUNDLE/Contents/Resources || true
+          cp $BUNDLE_CONFIG/macos/Info.plist $APP_BUNDLE/Contents/
+
           iconutil $BUNDLE_CONFIG/macos/bundle.iconset -c icns --output $APP_BUNDLE/Contents/Resources/bundle.icns
           
           # Create two apps (with and without netplay)
@@ -200,8 +202,8 @@ jobs:
         hdiutil convert $TEMP_UNCOMPRESSED_DMG_FILE -format UDZO -o $ARTIFACTS/nes-bundler.dmg
         rm -rf $ARTIFACT2
 
-    - name: Sign and notarize final bundle
-      #if: startsWith(github.event.ref, 'refs/tags/v')
+    - name: Sign and notarize final artifacts
+      if: startsWith(github.event.ref, 'refs/tags/v')
       env:
         BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
         BUNDLE_APPLE_TEAM_ID: ${{ secrets.BUNDLE_APPLE_TEAM_ID }}
