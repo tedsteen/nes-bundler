@@ -119,13 +119,13 @@ jobs:
         if [[ $RUNNER_OS == "Windows" ]]; then
           # Create and add installers
           cp $BINARIES_PATH/nes-bundler-netplay.exe nes-bundler.exe
-          candle $BUNDLE_CONFIG/windows/wix/main.wxs -o $RUNNER_TEMP
-          light $RUNNER_TEMP/*.wixobj -o "$ARTIFACTS/nes-bundler-netplay.msi" -ext WixUIExtension
+          candle $BUNDLE_CONFIG/windows/wix/main.wxs -o .
+          light *.wixobj -o "$ARTIFACTS/nes-bundler-netplay.msi" -ext WixUIExtension
           
           rm nes-bundler.exe
           cp $BINARIES_PATH/nes-bundler.exe .
-          candle $BUNDLE_CONFIG/windows/wix/main.wxs -o $RUNNER_TEMP
-          light $RUNNER_TEMP/*.wixobj -o "$ARTIFACTS/nes-bundler.msi" -ext WixUIExtension
+          candle $BUNDLE_CONFIG/windows/wix/main.wxs -o .
+          light *.wixobj -o "$ARTIFACTS/nes-bundler.msi" -ext WixUIExtension
           
           # Add exe
           mv $BINARIES_PATH/nes-bundler.exe $ARTIFACTS/
@@ -204,7 +204,7 @@ jobs:
         rm -rf $ARTIFACT2
 
     - name: Sign and notarize final artifacts
-      if: startsWith(github.event.ref, 'refs/tags/v')
+      # if: startsWith(github.event.ref, 'refs/tags/v')
       env:
         BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
         BUNDLE_APPLE_TEAM_ID: ${{ secrets.BUNDLE_APPLE_TEAM_ID }}
@@ -235,14 +235,16 @@ jobs:
             --team-id $BUNDLE_APPLE_TEAM_ID \
             --apple-id $BUNDLE_APPLE_USER \
             --password $BUNDLE_APPLE_APP_PASSWORD \
-            --wait $ARTIFACT1
-          xcrun stapler staple $ARTIFACT1
+            --wait $ARTIFACT1 &
 
           xcrun notarytool submit \
             --team-id $BUNDLE_APPLE_TEAM_ID \
             --apple-id $BUNDLE_APPLE_USER \
             --password $BUNDLE_APPLE_APP_PASSWORD \
-            --wait $ARTIFACT2
+            --wait $ARTIFACT2 &
+          wait
+
+          xcrun stapler staple $ARTIFACT1
           xcrun stapler staple $ARTIFACT2
         fi
 
