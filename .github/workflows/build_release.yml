@@ -190,7 +190,7 @@ jobs:
         
         # Create dmgs and replace the artifacts with them
         TEMP_UNCOMPRESSED_DMG_FILE="$RUNNER_TEMP/nes-bundler-uncompressed.dmg"
-        hdiutil create $TEMP_UNCOMPRESSED_DMG_FILE -volname "nes-bundler" -srcfolder $ARTIFACT1
+        hdiutil create $TEMP_UNCOMPRESSED_DMG_FILE -volname "nes-bundler-netplay" -srcfolder $ARTIFACT1
         hdiutil convert $TEMP_UNCOMPRESSED_DMG_FILE -format UDZO -o $ARTIFACTS/nes-bundler-netplay.dmg
         rm -rf $ARTIFACT1 $TEMP_UNCOMPRESSED_DMG_FILE
         hdiutil create $TEMP_UNCOMPRESSED_DMG_FILE -volname "nes-bundler" -srcfolder $ARTIFACT2
@@ -227,15 +227,14 @@ jobs:
             --team-id $BUNDLE_APPLE_TEAM_ID \
             --apple-id $BUNDLE_APPLE_USER \
             --password $BUNDLE_APPLE_APP_PASSWORD \
-            --wait $ARTIFACT1 &
+            --wait $ARTIFACT1
+          xcrun stapler staple $ARTIFACT1
           
           xcrun notarytool submit \
             --team-id $BUNDLE_APPLE_TEAM_ID \
             --apple-id $BUNDLE_APPLE_USER \
             --password $BUNDLE_APPLE_APP_PASSWORD \
-            --wait $ARTIFACT2 &
-          wait
-          xcrun stapler staple $ARTIFACT1
+            --wait $ARTIFACT2
           xcrun stapler staple $ARTIFACT2
         fi
 
