@@ -227,15 +227,16 @@ jobs:
             --team-id $BUNDLE_APPLE_TEAM_ID \
             --apple-id $BUNDLE_APPLE_USER \
             --password $BUNDLE_APPLE_APP_PASSWORD \
-            --wait $ARTIFACT1
-          xcrun stapler staple $ARTIFACT1
-          
+            --wait $ARTIFACT2
+          xcrun stapler staple $ARTIFACT2
+
           xcrun notarytool submit \
             --team-id $BUNDLE_APPLE_TEAM_ID \
             --apple-id $BUNDLE_APPLE_USER \
             --password $BUNDLE_APPLE_APP_PASSWORD \
-            --wait $ARTIFACT2
-          xcrun stapler staple $ARTIFACT2
+            --wait $ARTIFACT1
+          xcrun stapler staple $ARTIFACT1
+          
         fi
 
     - uses: actions/upload-artifact@v4
