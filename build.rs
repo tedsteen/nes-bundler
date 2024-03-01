@@ -17,8 +17,11 @@ struct BundleConfiguration {
 }
 
 fn main() -> Result<()> {
-    let signalsmith_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("src/");
-    if !signalsmith_path.join("wrapper.cpp").exists() {
+    let stretch_path =
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("src/audio/stretch");
+    let signalsmith_path = stretch_path.join("signalsmith-stretch");
+
+    if !signalsmith_path.join("signalsmith-stretch.h").exists() {
         Command::new("git")
             .args(["submodule", "update", "--init"])
             .current_dir(signalsmith_path.clone())
@@ -34,9 +37,9 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch/**");
     println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch-wrapper.*");
     println!("cargo:rerun-if-changed=src/audio/stretch/mod.rs");
-    let mut code = cxx_build::bridge("src/audio/stretch/mod.rs");
+    let mut code = cxx_build::bridge(stretch_path.join("mod.rs"));
     let code = code
-        .file("src/audio/stretch/signalsmith-stretch-wrapper.cpp")
+        .file(stretch_path.join("signalsmith-stretch-wrapper.cpp"))
         .flag_if_supported("-std=c++11");
 
     #[cfg(not(target_os = "windows"))]
