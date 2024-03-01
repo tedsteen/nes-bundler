@@ -120,12 +120,12 @@ jobs:
         BINARIES_PATH="$RUNNER_TEMP/binaries"
 
         if [[ $RUNNER_OS == "Windows" ]]; then
-          # Create and add installers
-          candle -dExecutablePath="$BINARIES_PATH/nes-bundler-netplay.exe" $BUNDLE_CONFIG/windows/wix/main.wxs -o $BINARIES_PATH
-          light $BINARIES_PATH/*.wixobj -o "$ARTIFACTS/nes-bundler-netplay.msi" -ext WixUIExtension
+          # # Create and add installers
+          # candle -dExecutablePath="$BINARIES_PATH/nes-bundler-netplay.exe" $BUNDLE_CONFIG/windows/wix/main.wxs -o $BINARIES_PATH
+          # light $BINARIES_PATH/*.wixobj -o "$ARTIFACTS/nes-bundler-netplay.msi" -ext WixUIExtension
 
-          candle -dExecutablePath="$BINARIES_PATH/nes-bundler.exe" $BUNDLE_CONFIG/windows/wix/main.wxs -o $BINARIES_PATH
-          light $BINARIES_PATH/*.wixobj -o "$ARTIFACTS/nes-bundler.msi" -ext WixUIExtension
+          # candle -dExecutablePath="$BINARIES_PATH/nes-bundler.exe" $BUNDLE_CONFIG/windows/wix/main.wxs -o $BINARIES_PATH
+          # light $BINARIES_PATH/*.wixobj -o "$ARTIFACTS/nes-bundler.msi" -ext WixUIExtension
           
           # Add exe
           mv $BINARIES_PATH/nes-bundler.exe $ARTIFACTS/
@@ -220,19 +220,20 @@ jobs:
           
           # Notarize
           ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.dmg"
-          xcrun notarytool submit \
-            --team-id $BUNDLE_APPLE_TEAM_ID \
-            --apple-id $BUNDLE_APPLE_USER \
-            --password $BUNDLE_APPLE_APP_PASSWORD \
-            --wait $ARTIFACT1
-          xcrun stapler staple $ARTIFACT1
-          
           ARTIFACT2="$ARTIFACTS/nes-bundler.dmg"
           xcrun notarytool submit \
             --team-id $BUNDLE_APPLE_TEAM_ID \
             --apple-id $BUNDLE_APPLE_USER \
             --password $BUNDLE_APPLE_APP_PASSWORD \
-            --wait $ARTIFACT2
+            --wait $ARTIFACT1 &
+          
+          xcrun notarytool submit \
+            --team-id $BUNDLE_APPLE_TEAM_ID \
+            --apple-id $BUNDLE_APPLE_USER \
+            --password $BUNDLE_APPLE_APP_PASSWORD \
+            --wait $ARTIFACT2 &
+          wait
+          xcrun stapler staple $ARTIFACT1
           xcrun stapler staple $ARTIFACT2
         fi
 
