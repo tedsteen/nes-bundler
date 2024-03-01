@@ -60,19 +60,17 @@ jobs:
           mkdir -p target/release/
           
           # x86
-          cargo build --locked --release --target=x86_64-apple-darwin --features "netplay" &
+          cargo build --locked --release --target=x86_64-apple-darwin --features "netplay"
           # arch 
-          cargo build --locked --release --target=aarch64-apple-darwin --features "netplay" &
-          wait
+          cargo build --locked --release --target=aarch64-apple-darwin --features "netplay"
           lipo target/x86_64-apple-darwin/release/nes-bundler \
             target/aarch64-apple-darwin/release/nes-bundler \
             -create -output $BINARIES_PATH/nes-bundler-netplay
           
           # x86
-          cargo build --locked --release --target=x86_64-apple-darwin &
+          cargo build --locked --release --target=x86_64-apple-darwin
           # arch 
-          cargo build --locked --release --target=aarch64-apple-darwin &
-          wait
+          cargo build --locked --release --target=aarch64-apple-darwin
           lipo target/x86_64-apple-darwin/release/nes-bundler \
             target/aarch64-apple-darwin/release/nes-bundler \
             -create -output $BINARIES_PATH/nes-bundler
@@ -85,7 +83,7 @@ jobs:
         fi
 
     - name: Import Certificates (macOS)
-      if: ${{ env.RUNNER_OS == 'macOS' }}
+      if: runner.os == 'macOS'
       env:
         BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
         BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
@@ -185,8 +183,8 @@ jobs:
         fi
         echo "RUNNER_OS=$RUNNER_OS" >> $GITHUB_ENV
     
-    - name: Create DMG and notarize
-      if: startsWith(github.event.ref, 'refs/tags/v')
+    - name: Create DMG and notarize (macOS)
+      if: startsWith(github.event.ref, 'refs/tags/v') && runner.os == 'macOS'
       env:
         BUNDLE_APPLE_TEAM_ID: ${{ secrets.BUNDLE_APPLE_TEAM_ID }}
         BUNDLE_APPLE_USER: ${{ secrets.BUNDLE_APPLE_USER }}
@@ -194,42 +192,35 @@ jobs:
       run: |
         ARTIFACTS=`readlink -f artifacts`
 
-        if [[ $RUNNER_OS == "Windows" ]]; then
-          echo "TODO"
-        elif [[ $RUNNER_OS == "macOS" ]]; then
-          # apply provisioning profile
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
-          
-          ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.app"
-          ARTIFACT2="$ARTIFACTS/nes-bundler.app"
-          
-          # Create dmgs and replace the artifacts with them
-          hdiutil create $RUNNER_TEMP/nes-bundler-uncompressed.dmg -volname "nes-bundler" -srcfolder $ARTIFACT1
-          hdiutil convert $RUNNER_TEMP/nes-bundler-uncompressed.dmg -format UDZO -o $ARTIFACTS/nes-bundler-netplay.dmg
-          rm $ARTIFACT1; ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.dmg"
-          hdiutil create $RUNNER_TEMP/nes-bundler-uncompressed.dmg -volname "nes-bundler" -srcfolder $ARTIFACT2
-          hdiutil convert $RUNNER_TEMP/nes-bundler-uncompressed.dmg -format UDZO -o $ARTIFACTS/nes-bundler.dmg
-          rm $ARTIFACT2; ARTIFACT1="$ARTIFACTS/nes-bundler.dmg"
+        # apply provisioning profile
+        mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+        cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+        
+        ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.app"
+        ARTIFACT2="$ARTIFACTS/nes-bundler.app"
+        
+        # Create dmgs and replace the artifacts with them
+        hdiutil create $RUNNER_TEMP/nes-bundler-uncompressed.dmg -volname "nes-bundler" -srcfolder $ARTIFACT1
+        hdiutil convert $RUNNER_TEMP/nes-bundler-uncompressed.dmg -format UDZO -o $ARTIFACTS/nes-bundler-netplay.dmg
+        rm $ARTIFACT1; ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.dmg"
+        hdiutil create $RUNNER_TEMP/nes-bundler-uncompressed.dmg -volname "nes-bundler" -srcfolder $ARTIFACT2
+        hdiutil convert $RUNNER_TEMP/nes-bundler-uncompressed.dmg -format UDZO -o $ARTIFACTS/nes-bundler.dmg
+        rm $ARTIFACT2; ARTIFACT1="$ARTIFACTS/nes-bundler.dmg"
 
-          # Notarize
-          xcrun notarytool submit \
-            --team-id $BUNDLE_APPLE_TEAM_ID \
-            --apple-id $BUNDLE_APPLE_USER \
-            --password $BUNDLE_APPLE_APP_PASSWORD \
-            --wait $ARTIFACT1
-          xcrun stapler staple $ARTIFACT1
+        # Notarize
+        xcrun notarytool submit \
+          --team-id $BUNDLE_APPLE_TEAM_ID \
+          --apple-id $BUNDLE_APPLE_USER \
+          --password $BUNDLE_APPLE_APP_PASSWORD \
+          --wait $ARTIFACT1
+        xcrun stapler staple $ARTIFACT1
 
-          xcrun notarytool submit \
-            --team-id $BUNDLE_APPLE_TEAM_ID \
-            --apple-id $BUNDLE_APPLE_USER \
-            --password $BUNDLE_APPLE_APP_PASSWORD \
-            --wait $ARTIFACT2
-          xcrun stapler staple $ARTIFACT2
-
-        elif [[ $RUNNER_OS == "Linux" ]]; then
-          echo "TODO"
-        fi
+        xcrun notarytool submit \
+          --team-id $BUNDLE_APPLE_TEAM_ID \
+          --apple-id $BUNDLE_APPLE_USER \
+          --password $BUNDLE_APPLE_APP_PASSWORD \
+          --wait $ARTIFACT2
+        xcrun stapler staple $ARTIFACT2
     
     - uses: actions/upload-artifact@v4
       with:
