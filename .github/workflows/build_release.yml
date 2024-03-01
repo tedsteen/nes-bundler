@@ -123,11 +123,12 @@ jobs:
 
         if [[ $RUNNER_OS == "Windows" ]]; then
           # Create and add installers
-          candle -dExecutablePath="$BINARIES_PATH/nes-bundler-netplay.exe" $BUNDLE_CONFIG/windows/wix/main.wxs -o .
-          light *.wixobj -o "$ARTIFACTS/nes-bundler-netplay.msi" -ext WixUIExtension
+          mkdir tmp
+          candle -dExecutablePath="$BINARIES_PATH/nes-bundler-netplay.exe" $BUNDLE_CONFIG/windows/wix/main.wxs -o tmp
+          light tmp/*.wixobj -o "$ARTIFACTS/nes-bundler-netplay.msi" -ext WixUIExtension
 
-          candle -dExecutablePath="$BINARIES_PATH/nes-bundler.exe" $BUNDLE_CONFIG/windows/wix/main.wxs -o .
-          light *.wixobj -o "$ARTIFACTS/nes-bundler.msi" -ext WixUIExtension
+          candle -dExecutablePath="$BINARIES_PATH/nes-bundler.exe" $BUNDLE_CONFIG/windows/wix/main.wxs -o tmp
+          light tmp/*.wixobj -o "$ARTIFACTS/nes-bundler.msi" -ext WixUIExtension
           
           # Add exe
           mv $BINARIES_PATH/nes-bundler.exe $ARTIFACTS/
