@@ -48,8 +48,7 @@ jobs:
     
     - name: Build
       run: |
-        mkdir binaries
-        BINARIES_PATH="binaries"
+        BINARIES_PATH="$RUNNER_TEMP/binaries"
         mkdir -p $BINARIES_PATH
 
         if [[ $RUNNER_OS == "Windows" ]]; then
@@ -85,21 +84,49 @@ jobs:
           mv target/release/nes-bundler $BINARIES_PATH/nes-bundler
         fi
 
+    - name: Import Certificates (macOS)
+      if: ${{ env.RUNNER_OS == 'macOS' }}
+      env:
+        BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+        BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+        P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+      run: |
+          # create variables
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          PP_PATH=$RUNNER_TEMP/build_pp.provisionprofile
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # import certificate and provisioning profile from secrets
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o $PP_PATH
+
+          # create temporary keychain
+          KEYCHAIN_PASSWORD=`openssl rand -hex 12`
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security default-keychain -s $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # import certificate to keychain
+          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
     - name: Prepare Artifacts
+      env:
+        CODE_SIGN_IDENTITY: ${{ secrets.CODE_SIGN_IDENTITY }}
       run: |
         rm -rf artifacts || true
         mkdir artifacts
         ARTIFACTS=`readlink -f artifacts`
         BUNDLE_CONFIG=`readlink -f config`
-        BINARIES_PATH="binaries"
+        BINARIES_PATH="$RUNNER_TEMP/binaries"
 
         if [[ $RUNNER_OS == "Windows" ]]; then
           # Create and add installers
-          candle -dExecutablePath=$BINARIES_PATH/nes-bundler-netplay.exe config/windows/wix/main.wxs -o .
-          light *.wixobj -o $ARTIFACTS/nes-bundler-netplay.msi -ext WixUIExtension
+          candle -dExecutablePath="$BINARIES_PATH/nes-bundler-netplay.exe" $BUNDLE_CONFIG/windows/wix/main.wxs -o .
+          light *.wixobj -o "$ARTIFACTS/nes-bundler-netplay.msi" -ext WixUIExtension
 
-          candle -dExecutablePath=$BINARIES_PATH/nes-bundler.exe config/windows/wix/main.wxs -o .
-          light *.wixobj -o $ARTIFACTS/nes-bundler.msi -ext WixUIExtension
+          candle -dExecutablePath="$BINARIES_PATH/nes-bundler.exe" $BUNDLE_CONFIG/windows/wix/main.wxs -o .
+          light *.wixobj -o "$ARTIFACTS/nes-bundler.msi" -ext WixUIExtension
           
           # Add exe
           mv $BINARIES_PATH/nes-bundler.exe $ARTIFACTS/
@@ -113,10 +140,12 @@ jobs:
           ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.app"
           rsync -a $APP_BUNDLE/ $ARTIFACT1
           mv $BINARIES_PATH/nes-bundler-netplay $ARTIFACT1/Contents/MacOS/nes-bundler
-          
+          codesign --force --options=runtime --deep -s $CODE_SIGN_IDENTITY $ARTIFACT1
+
           ARTIFACT2="$ARTIFACTS/nes-bundler.app"
           rsync -a $APP_BUNDLE/ $ARTIFACT2
           mv $BINARIES_PATH/nes-bundler $ARTIFACT2/Contents/MacOS/nes-bundler
+          codesign --force --options=runtime --deep -s $CODE_SIGN_IDENTITY $ARTIFACT2
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
           # archive artifact
@@ -154,53 +183,26 @@ jobs:
         fi
         echo "RUNNER_OS=$RUNNER_OS" >> $GITHUB_ENV
     
-    - name: Sign artifacts
+    - name: Create DMG and notarize
       if: startsWith(github.event.ref, 'refs/tags/v')
-      env:
+    env:
         BUNDLE_APPLE_TEAM_ID: ${{ secrets.BUNDLE_APPLE_TEAM_ID }}
         BUNDLE_APPLE_USER: ${{ secrets.BUNDLE_APPLE_USER }}
         BUNDLE_APPLE_APP_PASSWORD: ${{ secrets.BUNDLE_APPLE_APP_PASSWORD }}
-        BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
-        BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-        P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
-        CODE_SIGN_IDENTITY: ${{ secrets.CODE_SIGN_IDENTITY }}
       run: |
         ARTIFACTS=`readlink -f artifacts`
 
         if [[ $RUNNER_OS == "Windows" ]]; then
           echo "TODO"
         elif [[ $RUNNER_OS == "macOS" ]]; then
-          # create variables
-          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
-          PP_PATH=$RUNNER_TEMP/build_pp.provisionprofile
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-
-          # import certificate and provisioning profile from secrets
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
-          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o $PP_PATH
-
-          # create temporary keychain
-          KEYCHAIN_PASSWORD=`openssl rand -hex 12`
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security default-keychain -s $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
-          # import certificate to keychain
-          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security list-keychain -d user -s $KEYCHAIN_PATH
-
           # apply provisioning profile
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
           
           ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.app"
-          codesign --force --options=runtime --deep -s $CODE_SIGN_IDENTITY $ARTIFACT1
           ARTIFACT2="$ARTIFACTS/nes-bundler.app"
-          codesign --force --options=runtime --deep -s $CODE_SIGN_IDENTITY $ARTIFACT2
-
+          
           # Create dmgs and replace the artifacts with them
-
           hdiutil create $RUNNER_TEMP/nes-bundler-uncompressed.dmg -volname "nes-bundler" -srcfolder $ARTIFACT1
           hdiutil convert $RUNNER_TEMP/nes-bundler-uncompressed.dmg -format UDZO -o $ARTIFACTS/nes-bundler-netplay.dmg
           rm $ARTIFACT1; ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.dmg"
