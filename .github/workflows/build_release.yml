@@ -182,45 +182,61 @@ jobs:
         fi
         echo "RUNNER_OS=$RUNNER_OS" >> $GITHUB_ENV
     
-    - name: Create DMG and notarize (macOS)
-      if: startsWith(github.event.ref, 'refs/tags/v') && runner.os == 'macOS'
-      env:
-        BUNDLE_APPLE_TEAM_ID: ${{ secrets.BUNDLE_APPLE_TEAM_ID }}
-        BUNDLE_APPLE_USER: ${{ secrets.BUNDLE_APPLE_USER }}
-        BUNDLE_APPLE_APP_PASSWORD: ${{ secrets.BUNDLE_APPLE_APP_PASSWORD }}
+    - name: Create dmg (macOS)
+      if: runner.os == 'macOS'
       run: |
         ARTIFACTS=`readlink -f artifacts`
-
-        # apply provisioning profile
-        mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-        cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
-        
         ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.app"
         ARTIFACT2="$ARTIFACTS/nes-bundler.app"
         
         # Create dmgs and replace the artifacts with them
         hdiutil create $RUNNER_TEMP/nes-bundler-uncompressed.dmg -volname "nes-bundler" -srcfolder $ARTIFACT1
         hdiutil convert $RUNNER_TEMP/nes-bundler-uncompressed.dmg -format UDZO -o $ARTIFACTS/nes-bundler-netplay.dmg
-        rm $ARTIFACT1; ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.dmg"
+        rm $ARTIFACT1;
         hdiutil create $RUNNER_TEMP/nes-bundler-uncompressed.dmg -volname "nes-bundler" -srcfolder $ARTIFACT2
         hdiutil convert $RUNNER_TEMP/nes-bundler-uncompressed.dmg -format UDZO -o $ARTIFACTS/nes-bundler.dmg
-        rm $ARTIFACT2; ARTIFACT1="$ARTIFACTS/nes-bundler.dmg"
+        rm $ARTIFACT2;
 
-        # Notarize
-        xcrun notarytool submit \
-          --team-id $BUNDLE_APPLE_TEAM_ID \
-          --apple-id $BUNDLE_APPLE_USER \
-          --password $BUNDLE_APPLE_APP_PASSWORD \
-          --wait $ARTIFACT1
-        xcrun stapler staple $ARTIFACT1
 
-        xcrun notarytool submit \
-          --team-id $BUNDLE_APPLE_TEAM_ID \
-          --apple-id $BUNDLE_APPLE_USER \
-          --password $BUNDLE_APPLE_APP_PASSWORD \
-          --wait $ARTIFACT2
-        xcrun stapler staple $ARTIFACT2
-    
+    - name: Sign and notarize final bundle
+      if: startsWith(github.event.ref, 'refs/tags/v')
+      env:
+        BUNDLE_APPLE_TEAM_ID: ${{ secrets.BUNDLE_APPLE_TEAM_ID }}
+        BUNDLE_APPLE_USER: ${{ secrets.BUNDLE_APPLE_USER }}
+        BUNDLE_APPLE_APP_PASSWORD: ${{ secrets.BUNDLE_APPLE_APP_PASSWORD }}
+      run: |
+        ARTIFACTS=`readlink -f artifacts`
+        
+        if [[ $RUNNER_OS == "Windows" ]]; then
+          dotnet tool install --global AzureSignTool
+          for Item in 'nes-bundler-netplay.exe' 'nes-bundler.exe' 'nes-bundler-netplay.msi' 'nes-bundler.msi' ;
+          do
+            AzureSignTool sign -kvu "${{ secrets.AZURE_KEY_VAULT_URI }}" -kvi "${{ secrets.AZURE_CLIENT_ID }}" -kvt "${{ secrets.AZURE_TENANT_ID }}" -kvs "${{ secrets.AZURE_CLIENT_SECRET }}" -kvc ${{ secrets.AZURE_CERT_NAME }} -tr http://timestamp.digicert.com -v $ARTIFACTS/$Item
+          done
+          
+        elif [[ $RUNNER_OS == "macOS" ]]; then
+          # apply provisioning profile
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+          
+          # Notarize
+          ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.dmg"
+          xcrun notarytool submit \
+            --team-id $BUNDLE_APPLE_TEAM_ID \
+            --apple-id $BUNDLE_APPLE_USER \
+            --password $BUNDLE_APPLE_APP_PASSWORD \
+            --wait $ARTIFACT1
+          xcrun stapler staple $ARTIFACT1
+          
+          ARTIFACT2="$ARTIFACTS/nes-bundler.dmg"
+          xcrun notarytool submit \
+            --team-id $BUNDLE_APPLE_TEAM_ID \
+            --apple-id $BUNDLE_APPLE_USER \
+            --password $BUNDLE_APPLE_APP_PASSWORD \
+            --wait $ARTIFACT2
+          xcrun stapler staple $ARTIFACT2
+        fi
+
     - uses: actions/upload-artifact@v4
       with:
         name: nes-bundler-${{ github.ref_name }}-${{ env.RUNNER_OS }}
