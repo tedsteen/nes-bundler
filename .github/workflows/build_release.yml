@@ -129,6 +129,7 @@ jobs:
           # Add exe
           mv $BINARIES_PATH/nes-bundler.exe $ARTIFACTS/
           mv $BINARIES_PATH/nes-bundler-netplay.exe $ARTIFACTS/
+        
         elif [[ $RUNNER_OS == "macOS" ]]; then
           APP_BUNDLE="$RUNNER_TEMP/nes-bundler.app"
           mkdir -p $APP_BUNDLE/Contents/MacOS || true
@@ -136,14 +137,13 @@ jobs:
           iconutil $BUNDLE_CONFIG/macos/bundle.iconset -c icns --output $APP_BUNDLE/Contents/Resources/bundle.icns
           
           ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.app"
-          rsync -a $APP_BUNDLE/ $ARTIFACT1
-          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY $BINARIES_PATH/nes-bundler-netplay
-          mv $BINARIES_PATH/nes-bundler-netplay $ARTIFACT1/Contents/MacOS/nes-bundler
-
           ARTIFACT2="$ARTIFACTS/nes-bundler.app"
+          rsync -a $APP_BUNDLE/ $ARTIFACT1
           rsync -a $APP_BUNDLE/ $ARTIFACT2
-          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY $BINARIES_PATH/nes-bundler
-          mv $BINARIES_PATH/nes-bundler $ARTIFACT2/Contents/MacOS/nes-bundler
+          mv $BINARIES_PATH/nes-bundler-netplay $ARTIFACT1/Contents/MacOS/nes-bundler
+          mv $BINARIES_PATH/nes-bundler         $ARTIFACT2/Contents/MacOS/nes-bundler
+          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY $ARTIFACT1/Contents/MacOS/nes-bundler/nes-bundler
+          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY $ARTIFACT2/Contents/MacOS/nes-bundler/nes-bundler
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
           # archive artifact
@@ -223,12 +223,6 @@ jobs:
           # Notarize
           ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.dmg"
           ARTIFACT2="$ARTIFACTS/nes-bundler.dmg"
-          xcrun notarytool submit \
-            --team-id $BUNDLE_APPLE_TEAM_ID \
-            --apple-id $BUNDLE_APPLE_USER \
-            --password $BUNDLE_APPLE_APP_PASSWORD \
-            --wait $ARTIFACT2
-          xcrun stapler staple $ARTIFACT2
 
           xcrun notarytool submit \
             --team-id $BUNDLE_APPLE_TEAM_ID \
@@ -236,6 +230,13 @@ jobs:
             --password $BUNDLE_APPLE_APP_PASSWORD \
             --wait $ARTIFACT1
           xcrun stapler staple $ARTIFACT1
+
+          xcrun notarytool submit \
+            --team-id $BUNDLE_APPLE_TEAM_ID \
+            --apple-id $BUNDLE_APPLE_USER \
+            --password $BUNDLE_APPLE_APP_PASSWORD \
+            --wait $ARTIFACT2
+          xcrun stapler staple $ARTIFACT2
           
         fi
 
