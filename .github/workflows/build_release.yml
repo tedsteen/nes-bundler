@@ -48,7 +48,8 @@ jobs:
     
     - name: Build
       run: |
-        BINARIES_PATH="$RUNNER_TEMP/binaries"
+        mkdir binaries
+        BINARIES_PATH="binaries"
         mkdir -p $BINARIES_PATH
 
         if [[ $RUNNER_OS == "Windows" ]]; then
@@ -90,7 +91,7 @@ jobs:
         mkdir artifacts
         ARTIFACTS=`readlink -f artifacts`
         BUNDLE_CONFIG=`readlink -f config`
-        BINARIES_PATH="$RUNNER_TEMP/binaries"
+        BINARIES_PATH="binaries"
 
         if [[ $RUNNER_OS == "Windows" ]]; then
           # Create and add installers
