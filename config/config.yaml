@@ -1,5 +1,5 @@
 # The name of the bundle and title of the window
-name: "NES Bundler Demo!!!"
+name: "NES Bundler Demo"
 
 # Short description used when creating linux and Windows installers
 short_description: "A demonstration of NES Bundler in action!"
