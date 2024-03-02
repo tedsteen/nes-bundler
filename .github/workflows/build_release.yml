@@ -105,7 +105,10 @@ jobs:
         # import certificate to keychain
         security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
         security list-keychain -d user -s $KEYCHAIN_PATH
-    
+
+    - name: Set bundle name
+      run: echo "BUNDLE_NAME=NES Bundler Demo" >> $GITHUB_ENV
+
     - name: Prepare Artifacts
       env:
         CODE_SIGN_IDENTITY: ${{ secrets.CODE_SIGN_IDENTITY }}
@@ -128,10 +131,10 @@ jobs:
           light wix/*.wixobj -o "$BINARIES_PATH/nes-bundler.msi" -ext WixUIExtension
 
           # Add artifacts
-          mv $BINARIES_PATH/nes-bundler-netplay.msi $ARTIFACTS/
-          mv $BINARIES_PATH/nes-bundler.msi $ARTIFACTS/
-          mv $BINARIES_PATH/nes-bundler-netplay.exe $ARTIFACTS/
-          mv $BINARIES_PATH/nes-bundler.exe $ARTIFACTS/
+          mv $BINARIES_PATH/nes-bundler-netplay.msi "$ARTIFACTS/$BUNDLE_NAME (Netplay).msi"
+          mv $BINARIES_PATH/nes-bundler.msi "$ARTIFACTS/$BUNDLE_NAME.msi"
+          mv $BINARIES_PATH/nes-bundler-netplay.exe "$ARTIFACTS/$BUNDLE_NAME (Netplay).exe"
+          mv $BINARIES_PATH/nes-bundler.exe "$ARTIFACTS/$BUNDLE_NAME.exe"
 
         elif [[ $RUNNER_OS == "macOS" ]]; then
           # Prepare the app structure
@@ -143,24 +146,25 @@ jobs:
           iconutil $BUNDLE_CONFIG/macos/bundle.iconset -c icns --output $APP_BUNDLE/Contents/Resources/bundle.icns
           
           # Create two apps (with and without netplay)
-          ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.app"
-          ARTIFACT2="$ARTIFACTS/nes-bundler.app"
-          rsync -a $APP_BUNDLE/ $ARTIFACT1
-          rsync -a $APP_BUNDLE/ $ARTIFACT2
-          mv $BINARIES_PATH/nes-bundler-netplay $ARTIFACT1/Contents/MacOS/nes-bundler
-          mv $BINARIES_PATH/nes-bundler         $ARTIFACT2/Contents/MacOS/nes-bundler
+          ARTIFACT1="$ARTIFACTS/$BUNDLE_NAME.app"
+          mkdir "$ARTIFACTS/netplay"
+          ARTIFACT2="$ARTIFACTS/netplay/$BUNDLE_NAME.app"
+          rsync -a $APP_BUNDLE/ "$ARTIFACT1"
+          rsync -a $APP_BUNDLE/ "$ARTIFACT2"
+          mv $BINARIES_PATH/nes-bundler-netplay "$ARTIFACT1/Contents/MacOS/nes-bundler"
+          mv $BINARIES_PATH/nes-bundler         "$ARTIFACT2/Contents/MacOS/nes-bundler"
           # Sign
-          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY $ARTIFACT1/Contents/MacOS/nes-bundler
-          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY $ARTIFACT2/Contents/MacOS/nes-bundler
+          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY "$ARTIFACT1/Contents/MacOS/nes-bundler"
+          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY "$ARTIFACT2/Contents/MacOS/nes-bundler"
 
           # Create dmgs and replace the artifacts with them
           TEMP_UNCOMPRESSED_DMG_FILE="$RUNNER_TEMP/nes-bundler-uncompressed.dmg"
-          hdiutil create $TEMP_UNCOMPRESSED_DMG_FILE -volname "nes-bundler-netplay" -srcfolder $ARTIFACT1
-          hdiutil convert $TEMP_UNCOMPRESSED_DMG_FILE -format UDZO -o $ARTIFACTS/nes-bundler-netplay.dmg
-          rm -rf $ARTIFACT1 $TEMP_UNCOMPRESSED_DMG_FILE
-          hdiutil create $TEMP_UNCOMPRESSED_DMG_FILE -volname "nes-bundler" -srcfolder $ARTIFACT2
-          hdiutil convert $TEMP_UNCOMPRESSED_DMG_FILE -format UDZO -o $ARTIFACTS/nes-bundler.dmg
-          rm -rf $ARTIFACT2
+          hdiutil create $TEMP_UNCOMPRESSED_DMG_FILE -volname "$BUNDLE_NAME" -srcfolder "$ARTIFACT1"
+          hdiutil convert $TEMP_UNCOMPRESSED_DMG_FILE -format UDZO -o "$ARTIFACTS/$BUNDLE_NAME (Netplay).dmg"
+          rm -rf "$ARTIFACT1" $TEMP_UNCOMPRESSED_DMG_FILE
+          hdiutil create $TEMP_UNCOMPRESSED_DMG_FILE -volname "$BUNDLE_NAME" -srcfolder "$ARTIFACT2"
+          hdiutil convert $TEMP_UNCOMPRESSED_DMG_FILE -format UDZO -o "$ARTIFACTS/$BUNDLE_NAME.dmg"
+          rm -rf "$ARTIFACT2"
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
           # archive artifact
@@ -210,9 +214,9 @@ jobs:
         
         if [[ $RUNNER_OS == "Windows" ]]; then
           dotnet tool install --global AzureSignTool
-          for Item in 'nes-bundler-netplay.exe' 'nes-bundler.exe' 'nes-bundler-netplay.msi' 'nes-bundler.msi' ;
+          for Item in '$BUNDLE_NAME (Netplay).exe' '$BUNDLE_NAME.exe' '$BUNDLE_NAME (Netplay).msi' '$BUNDLE_NAME.msi' ;
           do
-            AzureSignTool sign -d "nes-bundler" -kvu "${{ secrets.AZURE_KEY_VAULT_URI }}" -kvi "${{ secrets.AZURE_CLIENT_ID }}" -kvt "${{ secrets.AZURE_TENANT_ID }}" -kvs "${{ secrets.AZURE_CLIENT_SECRET }}" -kvc ${{ secrets.AZURE_CERT_NAME }} -tr http://timestamp.digicert.com -v $ARTIFACTS/$Item &
+            AzureSignTool sign -d "$BUNDLE_NAME" -kvu "${{ secrets.AZURE_KEY_VAULT_URI }}" -kvi "${{ secrets.AZURE_CLIENT_ID }}" -kvt "${{ secrets.AZURE_TENANT_ID }}" -kvs "${{ secrets.AZURE_CLIENT_SECRET }}" -kvc ${{ secrets.AZURE_CERT_NAME }} -tr http://timestamp.digicert.com -v "$ARTIFACTS/$Item" &
           done
           wait          
         elif [[ $RUNNER_OS == "macOS" ]]; then
@@ -223,24 +227,24 @@ jobs:
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
           
           # Notarize
-          ARTIFACT1="$ARTIFACTS/nes-bundler-netplay.dmg"
-          ARTIFACT2="$ARTIFACTS/nes-bundler.dmg"
+          ARTIFACT1="$ARTIFACTS/$BUNDLE_NAME (Netplay).dmg"
+          ARTIFACT2="$ARTIFACTS/$BUNDLE_NAME.dmg"
 
           xcrun notarytool submit \
             --team-id $BUNDLE_APPLE_TEAM_ID \
             --apple-id $BUNDLE_APPLE_USER \
             --password $BUNDLE_APPLE_APP_PASSWORD \
-            --wait $ARTIFACT1 &
+            --wait "$ARTIFACT1" &
 
           xcrun notarytool submit \
             --team-id $BUNDLE_APPLE_TEAM_ID \
             --apple-id $BUNDLE_APPLE_USER \
             --password $BUNDLE_APPLE_APP_PASSWORD \
-            --wait $ARTIFACT2 &
+            --wait "$ARTIFACT2" &
           wait
 
-          xcrun stapler staple $ARTIFACT1
-          xcrun stapler staple $ARTIFACT2
+          xcrun stapler staple "$ARTIFACT1"
+          xcrun stapler staple "$ARTIFACT2"
         fi
 
     - uses: actions/upload-artifact@v4
