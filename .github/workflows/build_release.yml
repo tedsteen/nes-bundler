@@ -63,17 +63,19 @@ jobs:
           mkdir -p target/release/
           
           # x86
-          cargo build --locked --release --target=x86_64-apple-darwin --features "netplay"
+          cargo build --locked --release --target=x86_64-apple-darwin --features "netplay" &
           # arch 
-          cargo build --locked --release --target=aarch64-apple-darwin --features "netplay"
+          cargo build --locked --release --target=aarch64-apple-darwin --features "netplay" &
+          wait
           lipo target/x86_64-apple-darwin/release/nes-bundler \
             target/aarch64-apple-darwin/release/nes-bundler \
             -create -output $BINARIES_PATH/nes-bundler-netplay
           
           # x86
-          cargo build --locked --release --target=x86_64-apple-darwin
+          cargo build --locked --release --target=x86_64-apple-darwin &
           # arch 
-          cargo build --locked --release --target=aarch64-apple-darwin
+          cargo build --locked --release --target=aarch64-apple-darwin &
+          wait
           lipo target/x86_64-apple-darwin/release/nes-bundler \
             target/aarch64-apple-darwin/release/nes-bundler \
             -create -output $BINARIES_PATH/nes-bundler
