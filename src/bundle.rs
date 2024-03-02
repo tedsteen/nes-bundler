@@ -36,7 +36,7 @@ fn load_external_bundle(default_window_icon: Option<DynamicImage>) -> Result<Opt
         let config = serde_yaml::from_str(&config)?;
         let rom = fs::read(rom_path)?;
 
-        let window_icon = fs::read(Path::new("config/windows/icon_256x256.ico")).map_or_else(
+        let window_icon = fs::read(Path::new("windows/icon_256x256.ico")).map_or_else(
             |_| default_window_icon,
             |image_data| image::load_from_memory(&image_data).ok(),
         );
