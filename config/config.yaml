@@ -4,13 +4,6 @@ name: "NES Bundler Demo"
 # Short description used when creating linux and Windows installers
 short_description: "A demonstration of NES Bundler in action!"
 
-# The ROM of the game
-rom: "config/rom.nes"
-
-# Optional custom Netplay ROM if needed. This will be used when playing netplay games.
-# It enables a different player experience for netplayers, f.ex if in a netplay session you do not want to present the player with the one player option you can bake a ROM that defaults to two players
-# netplay_rom: "config/netplay-rom.nes"
-
 # macOS specific, See https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleidentifier
 cf_bundle_identifier: "se.darkbits.nes-bundler.demo"
 

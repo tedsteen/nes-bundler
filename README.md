@@ -4,7 +4,7 @@
 
 Did you make a NES-game but none of your friends own a Nintendo? Don't worry.  
 Add your ROM and configure NES Bundler to build for Mac, Windows and Linux.  
-What you get is an executable bundle with
+What you get is an executable with
 * Simple UI for settings (Show and hide with ESC).
 * Re-mappable Keyboard and Gamepad input (you bundle your default mappings).
 * Save/Restore state (F1 = Save, F2 = Load).
@@ -14,19 +14,18 @@ What you get is an executable bundle with
   <img src="https://github.com/tedsteen/nes-bundler/blob/master/screenshot.png?raw=true" alt="Super Mario!"/>
 </p>
 
-## Bundling
+## Try it out
 
-To create a bundle you first need to configure it with your ROM and a bundle configuration.  
-Then let GitHub actions build the bundles for you.
-To do this you need to:
-1. Fork this repository
-2. [configure](config/README.md) your bundle
-3. Trigger a build by running `./release.sh <your-version>`
-4. Pick up the bundles under your releases
+Before you make a proper bundle with your own icons and installer graphics you can try out NES Bundler by downloading the [binary of your choice](https://github.com/tedsteen/nes-bundler/releases/).  
+Running that will start a demo bundle, but if you place your own [config.yaml and rom.nes](config/) in the same directory as the executable it will use that.
 
-## Demo bundle
+## Proper bundling
 
-To see an example of what you will get when creating a bundle check out [releases](https://github.com/tedsteen/nes-bundler/releases). This is the result of the demo bundle currently in [config/](config/)
+To create a bundle you first need to configure it with your ROM and a bundle configuration and then let Github actions build it.  
+To do this you need to create a PR with your own [configuration](config/README.md).  
+Why you ask? Because in order to build for all platforms and digitally sign the executables you need a lot of setup. It is possible to do it yourself and you can read all about it in the configuration readme.  
+
+Perhaps in the future there will be a more convenient way to build a bundle.
 
 ## Limitations
 
