@@ -2,7 +2,7 @@
 #![allow(unsafe_code)]
 #![deny(clippy::all)]
 
-use crate::bundle::{Bundle, LoadBundle};
+use crate::bundle::Bundle;
 use crate::input::buttons::GamepadButton;
 use crate::nes_state::NesStateHandler;
 use crate::settings::gui::ToGuiEvent;
@@ -57,8 +57,8 @@ fn main() {
 
     log::info!("nes-bundler starting!");
     match initialise() {
-        Ok((game_loop, event_loop, sdl_event_pump, gl_window)) => {
-            run(game_loop, event_loop, sdl_event_pump, gl_window)
+        Ok((game_loop, event_loop, sdl_event_pump, gl_window, bundle)) => {
+            run(&bundle, game_loop, event_loop, sdl_event_pump, gl_window)
                 .expect("Could not run the winit event loop");
         }
         Err(e) => {
@@ -68,6 +68,7 @@ fn main() {
 }
 
 fn run(
+    bundle: &Bundle,
     mut game_loop: GameLoop<Game, Time>,
     winit_event_loop: winit::event_loop::EventLoop<()>,
     mut sdl_event_pump: EventPump,
@@ -145,7 +146,7 @@ fn run(
                             F1 => {
                                 if let Some(save_state) = nes_state.save() {
                                     settings.last_save_state = Some(b64.encode(save_state));
-                                    settings.save();
+                                    settings.save(&bundle.settings_path);
                                 }
 
                                 true
@@ -206,7 +207,7 @@ fn run(
                     let game = &mut game_loop.game;
 
                     if game.run_gui(gl_window.window()) {
-                        game.settings.save();
+                        game.settings.save(&bundle.settings_path);
                     }
 
                     unsafe {
@@ -235,13 +236,16 @@ fn initialise() -> Result<
         winit::event_loop::EventLoop<()>,
         EventPump,
         GlutinWindowContext,
+        Bundle,
     ),
     anyhow::Error,
 > {
+    let bundle = Bundle::load()?;
+
     let event_loop = winit::event_loop::EventLoopBuilder::with_user_event()
         .build()
         .expect("Could not create the event loop");
-    let bundle = Bundle::load()?;
+
     #[cfg(feature = "netplay")]
     if std::env::args()
         .collect::<String>()
@@ -252,6 +256,7 @@ fn initialise() -> Result<
         }
         std::process::exit(0);
     }
+
     let gl_window = create_display(
         &bundle.config.name,
         bundle.window_icon.clone(),
@@ -271,7 +276,10 @@ fn initialise() -> Result<
     );
 
     #[allow(unused_mut)] //Needed by the netplay feature
-    let mut settings = Settings::new(bundle.config.default_settings.clone());
+    let mut settings = Settings::load(
+        &bundle.settings_path,
+        bundle.config.default_settings.clone(),
+    );
 
     // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
     sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
@@ -319,6 +327,7 @@ fn initialise() -> Result<
         event_loop,
         sdl_context.event_pump().map_err(anyhow::Error::msg)?,
         gl_window,
+        bundle,
     ))
 }
 
