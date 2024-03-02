@@ -49,15 +49,18 @@ fn main() -> Result<()> {
 
     code.compile("signalsmith-stretch");
 
+    let mut bundle_config: BundleConfiguration =
+        serde_yaml::from_str(include_str!("config/config.yaml"))?;
+
     #[cfg(windows)]
     {
         let mut res = winres::WindowsResource::new();
         res.set_icon("config/windows/icon_256x256.ico");
+        res.set("FileDescription", &bundle_config.short_description);
+        res.set("ProductName", &bundle_config.name);
+        res.set("OriginalFilename", &format!("{}.exe", bundle_config.name));
         res.compile().expect("Could not attach exe icon");
     }
-
-    let mut bundle_config: BundleConfiguration =
-        serde_yaml::from_str(include_str!("config/config.yaml"))?;
 
     let mut tt = TinyTemplate::new();
 

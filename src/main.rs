@@ -254,6 +254,7 @@ fn initialise() -> Result<
     }
     let gl_window = create_display(
         &bundle.config.name,
+        bundle.window_icon.clone(),
         Size::new(
             MINIMUM_INTEGER_SCALING_SIZE.0 as f64,
             MINIMUM_INTEGER_SCALING_SIZE.1 as f64,

@@ -3,6 +3,7 @@ use std::{num::NonZeroU32, sync::Arc};
 use anyhow::Result;
 use egui::NumExt;
 use glutin::config::ConfigSurfaceTypes;
+use image::DynamicImage;
 use raw_window_handle::HasRawWindowHandle;
 use winit::window::Icon;
 
@@ -43,6 +44,7 @@ impl GlutinWindowContext {
     // preferably add android support at the same time.
     pub fn new(
         title: &str,
+        window_icon: Option<DynamicImage>,
         inner_size: Size,
         min_inner_size: Size,
         event_loop: &winit::event_loop::EventLoopWindowTarget<()>,
@@ -53,16 +55,11 @@ impl GlutinWindowContext {
 
         let winit_window_builder = winit::window::WindowBuilder::new()
             .with_resizable(true)
-            .with_window_icon(
-                image::load_from_memory(include_bytes!("../../config/windows/icon_256x256.ico"))
-                    .map(|image| {
-                        let image = image.into_rgba8();
-                        let (width, height) = image.dimensions();
-                        Icon::from_rgba(image.into_raw(), width, height)
-                            .expect("Failed to open icon")
-                    })
-                    .ok(),
-            )
+            .with_window_icon(window_icon.map(|image| {
+                let image = image.into_rgba8();
+                let (width, height) = image.dimensions();
+                Icon::from_rgba(image.into_raw(), width, height).expect("Failed to open icon")
+            }))
             //.with_disallow_hidpi(true)
             .with_inner_size(inner_size)
             .with_min_inner_size(min_inner_size)
@@ -187,9 +184,10 @@ impl GlutinWindowContext {
 
 pub fn create_display(
     title: &str,
+    window_icon: Option<DynamicImage>,
     inner_size: Size,
     min_inner_size: Size,
     event_loop: &winit::event_loop::EventLoopWindowTarget<()>,
 ) -> Result<GlutinWindowContext> {
-    GlutinWindowContext::new(title, inner_size, min_inner_size, event_loop)
+    GlutinWindowContext::new(title, window_icon, inner_size, min_inner_size, event_loop)
 }
