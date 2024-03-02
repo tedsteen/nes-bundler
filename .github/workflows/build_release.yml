@@ -214,7 +214,7 @@ jobs:
         
         if [[ $RUNNER_OS == "Windows" ]]; then
           dotnet tool install --global AzureSignTool
-          for Item in '$BUNDLE_NAME (Netplay).exe' '$BUNDLE_NAME.exe' '$BUNDLE_NAME (Netplay).msi' '$BUNDLE_NAME.msi' ;
+          for Item in "$BUNDLE_NAME (Netplay).exe" "$BUNDLE_NAME.exe" "$BUNDLE_NAME (Netplay).msi" "$BUNDLE_NAME.msi" ;
           do
             AzureSignTool sign -d "$BUNDLE_NAME" -kvu "${{ secrets.AZURE_KEY_VAULT_URI }}" -kvi "${{ secrets.AZURE_CLIENT_ID }}" -kvt "${{ secrets.AZURE_TENANT_ID }}" -kvs "${{ secrets.AZURE_CLIENT_SECRET }}" -kvc ${{ secrets.AZURE_CERT_NAME }} -tr http://timestamp.digicert.com -v "$ARTIFACTS/$Item" &
           done
