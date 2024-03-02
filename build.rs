@@ -29,14 +29,12 @@ fn main() -> Result<()> {
 
     println!("cargo:rerun-if-changed=config/config.yaml");
     println!("cargo:rerun-if-changed=config/rom.nes");
-    println!("cargo:rerun-if-changed=config/rom-netplay.nes");
+    println!("cargo:rerun-if-changed=config/netplay-rom.nes");
     println!("cargo:rerun-if-changed=config/linux/bundle.desktop-template");
     println!("cargo:rerun-if-changed=config/macos/Info.plist-template");
     println!("cargo:rerun-if-changed=config/windows/wix/main.wxs-template");
 
-    println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch/*");
-    println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch-wrapper.*");
-    println!("cargo:rerun-if-changed=src/audio/stretch/mod.rs");
+    println!("cargo:rerun-if-changed=src/audio/stretch");
     let mut code = cxx_build::bridge(stretch_path.join("mod.rs"));
     let code = code
         .file(stretch_path.join("signalsmith-stretch-wrapper.cpp"))

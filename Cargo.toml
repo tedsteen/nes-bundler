@@ -41,6 +41,7 @@ sdl2 = { git = "https://github.com/tedsteen/rust-sdl2.git", branch = "rust-sdl2-
 
 rusticnes-core = { git = "https://github.com/tedsteen/rusticnes-core", branch="for-nes-bundler" }
 base64 = "0.21"
+directories = "5"
 
 # Netplay deps
 matchbox_socket = { version="0.8", features = ["ggrs"], optional = true }
