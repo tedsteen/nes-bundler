@@ -30,9 +30,6 @@ jobs:
           target/
         key: ${{ matrix.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Set bundle name
-      run: echo "BUNDLE_NAME=$(yq '.name' config/config.yaml)" >> $GITHUB_ENV
-
     - name: Install latest rust toolchain
       uses: dtolnay/rust-toolchain@stable
 
@@ -40,6 +37,7 @@ jobs:
       run: |
         if [[ $RUNNER_OS == "Windows" ]]; then
           echo "${WIX}bin" >> $GITHUB_PATH
+          choco install yq
         elif [[ $RUNNER_OS == "macOS" ]]; then
           rustup target add x86_64-apple-darwin
           rustup target add aarch64-apple-darwin
@@ -48,7 +46,10 @@ jobs:
           sudo apt-get update
           sudo apt-get -y install libatk1.0-dev libgtk-3-dev libsdl2-dev
         fi
-    
+
+    - name: Set bundle name
+      run: echo "BUNDLE_NAME=$(yq '.name' config/config.yaml)" >> $GITHUB_ENV
+
     - name: Build
       run: |
         BINARIES_PATH="$RUNNER_TEMP/binaries"
