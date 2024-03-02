@@ -7,7 +7,7 @@ edition = "2021"
 publish = false
 
 [features]
-default = ["netplay"]
+default = []
 #default = ["netplay", "debug"]
 
 netplay = ["matchbox_socket", "tokio", "ggrs", "futures-timer", "futures", "uuid", "reqwest", "md5"]
