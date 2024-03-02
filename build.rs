@@ -8,8 +8,6 @@ use tinytemplate::TinyTemplate;
 struct BundleConfiguration {
     name: String,
     short_description: String,
-    rom: String,
-    netplay_rom: Option<String>,
     version: Option<String>,
     cf_bundle_identifier: String,
     wix_upgrade_code: String,
@@ -29,12 +27,14 @@ fn main() -> Result<()> {
             .expect("Git is needed to retrieve the signalsmith-stretch source files");
     }
 
-    println!("cargo:rerun-if-changed=config/linux/*");
-    println!("cargo:rerun-if-changed=config/macos/*");
-    println!("cargo:rerun-if-changed=config/windows/*");
-    println!("cargo:rerun-if-changed=config/windows/wix/*");
+    println!("cargo:rerun-if-changed=config/config.yaml");
+    println!("cargo:rerun-if-changed=config/rom.nes");
+    println!("cargo:rerun-if-changed=config/rom-netplay.nes");
+    println!("cargo:rerun-if-changed=config/linux/bundle.desktop-template");
+    println!("cargo:rerun-if-changed=config/macos/Info.plist-template");
+    println!("cargo:rerun-if-changed=config/windows/wix/main.wxs-template");
 
-    println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch/**");
+    println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch/*");
     println!("cargo:rerun-if-changed=src/audio/stretch/signalsmith-stretch-wrapper.*");
     println!("cargo:rerun-if-changed=src/audio/stretch/mod.rs");
     let mut code = cxx_build::bridge(stretch_path.join("mod.rs"));
@@ -73,17 +73,6 @@ fn main() -> Result<()> {
         "Info.plist",
         include_str!("config/macos/Info.plist-template"),
     )?;
-
-    println!("cargo:rustc-env=NB_WINDOW_TITLE={}", bundle_config.name);
-    println!("cargo:rustc-env=NB_ROM=../{}", bundle_config.rom);
-
-    println!(
-        "cargo:rustc-env=NB_NETPLAY_ROM=../{}",
-        bundle_config
-            .clone()
-            .netplay_rom
-            .unwrap_or(bundle_config.rom.clone())
-    );
 
     bundle_config
         .version
