@@ -10,7 +10,7 @@ use serde::Deserialize;
 
 use crate::settings::Settings;
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 pub struct BuildConfiguration {
     pub name: String,
     pub manufacturer: String,

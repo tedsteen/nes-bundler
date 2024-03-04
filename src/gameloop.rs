@@ -74,6 +74,11 @@ impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
         U: FnMut(&mut GameLoop<G, T>),
         R: FnMut(&mut GameLoop<G, T>),
     {
+        if T::now().sub(&self.last_stats) >= 1.0 {
+            let (ups, rps, ..) = self.get_stats();
+            log::trace!("UPS: {:?}, RPS: {:?}", ups, rps);
+        }
+
         let g = self;
 
         g.current_instant = T::now();
