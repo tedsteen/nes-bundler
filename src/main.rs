@@ -75,6 +75,7 @@ fn run() -> anyhow::Result<()> {
                     .collect(),
             );
 
+            let game = &mut game_loop.game;
             match &winit_event {
                 winit::event::Event::WindowEvent {
                     event: window_event,
@@ -88,7 +89,7 @@ fn run() -> anyhow::Result<()> {
                             control_flow.exit();
                         }
                         winit::event::WindowEvent::Resized(physical_size) => {
-                            game_loop.game.gl_window.resize(*physical_size);
+                            game.gl_window.resize(*physical_size);
                         }
                         _ => {}
                     }
@@ -97,7 +98,7 @@ fn run() -> anyhow::Result<()> {
                     should_update = true;
                 }
                 winit::event::Event::LoopExiting => {
-                    game_loop.game.gui.destroy();
+                    game.gui.destroy();
                     return;
                 }
                 _ => {}
@@ -270,7 +271,7 @@ fn initialise() -> Result<
     ))
 }
 
-static NTSC_PAL: [u8; 64 * 8 * 3] = *include_bytes!("../ntscpalette.pal");
+static NTSC_PAL: &[u8] = include_bytes!("../ntscpalette.pal");
 
 fn init_logger() {
     #[cfg(windows)]
