@@ -20,6 +20,8 @@ pub struct GlutinWindowContext {
     gl_surface: glutin::surface::Surface<glutin::surface::WindowSurface>,
     pub glow_context: Arc<glow::Context>,
 }
+unsafe impl Send for GlutinWindowContext {}
+
 pub struct Size {
     pub width: f64,
     pub height: f64,
@@ -138,7 +140,11 @@ impl GlutinWindowContext {
             &gl_surface,
         )?;
 
-        gl_surface.set_swap_interval(&gl_context, glutin::surface::SwapInterval::DontWait)?;
+        gl_surface.set_swap_interval(
+            &gl_context,
+            glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap()),
+        )?;
+        //gl_surface.set_swap_interval(&gl_context, glutin::surface::SwapInterval::DontWait)?;
 
         #[allow(clippy::arc_with_non_send_sync)]
         Ok(GlutinWindowContext {
