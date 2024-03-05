@@ -38,7 +38,7 @@ fn main() -> Result<()> {
     let mut code = cxx_build::bridge(stretch_path.join("mod.rs"));
     let code = code
         .file(stretch_path.join("signalsmith-stretch-wrapper.cpp"))
-        .flag_if_supported("-std=c++11");
+        .std("c++11");
 
     #[cfg(not(target_os = "windows"))]
     code.flag("-O3");
