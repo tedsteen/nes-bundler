@@ -105,30 +105,28 @@ fn run() -> anyhow::Result<()> {
             }
 
             if should_update {
+                // Let egui consume its events
+                queued_events.retain(|event| match &event {
+                    QueuedEvent::WinitEvent(window_event) => {
+                        !game.gui.on_event(game.gl_window.window(), window_event)
+                    }
+                    _ => true,
+                });
+
                 game_loop.next_frame(
                     |game_loop| {
                         let game = &mut game_loop.game;
-
-                        // Let egui consume its events
-                        queued_events.retain(|event| match &event {
-                            QueuedEvent::WinitEvent(window_event) => {
-                                !game.gui.on_event(game.gl_window.window(), window_event)
-                            }
-                            _ => true,
-                        });
-
                         // Let the game consume the rest of the events
-                        queued_events.retain(|event| {
-                            let event = match event {
+                        queued_events.retain(|queued_event| {
+                            if let Some(gui_event) = &match queued_event {
                                 QueuedEvent::SdlEvent(event) => {
                                     event.to_gamepad_event().map(GuiEvent::Gamepad)
                                 }
                                 QueuedEvent::WinitEvent(window_event) => {
                                     window_event.to_gui_event()
                                 }
-                            };
-                            if let Some(event) = &event {
-                                game.apply_gui_event(event);
+                            } {
+                                game.apply_gui_event(gui_event);
                             }
 
                             false
