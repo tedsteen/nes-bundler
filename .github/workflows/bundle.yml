@@ -271,13 +271,13 @@ jobs:
       run: |
         CONFIGURATION_PASSWORD=$(jq -r '.inputs.configuration_password' $GITHUB_EVENT_PATH)
         echo ::add-mask::$CONFIGURATION_PASSWORD
-        7z a -p$CONFIGURATION_PASSWORD bundles.zip artifacts/*
+        7z a -p$CONFIGURATION_PASSWORD password_protected.zip artifacts/*
         rm -rf artifacts/*
-        mv bundles.zip artifacts/
+        mv password_protected.zip artifacts/
 
     - uses: actions/upload-artifact@v4
       with:
-        name: nes-bundler-${{ github.ref_name }}-${{ env.RUNNER_OS }}
+        name: ${{ env.BUNDLE_NAME }} ${{ github.ref_name }} ${{ env.RUNNER_OS }}
         path: artifacts/*
     
   release:
