@@ -11,43 +11,47 @@ Here is a breakdown of what can be customised
 The rest is only needed for a proper bundle
 * [Linux icon](linux/icon_256x256.png)
 * [Mac icon set](macos/bundle.iconset/)
-* [Windows program and window icon](windows/icon_256x256.ico)
+* [Windows program and window icon](windows/icon_256x256.ico) (check out [png2ico](https://www.png2ico.com/) for baking a proper windows .ico-file)
 * [Windows installer details](windows/wix/) (banner.bmp, dialog.bmp and licence.rtf)
 
-# Total control
-If you want to build your own binaries with your own certificates you would have to fork this repository, provide some github secrets and finally run the `release.sh`-script to trigger a build in your fork.
+## Pack it up for use with the github Bundle action (create a bundle configuration zip-file)
 
-## Signing the binaries
-The Github action build scripts will sign the binaries. To do that they need a couple of secrets.
+When you are done configuring your bundle you need to zip the files (you can use [`./bundle.sh`](./bundle.sh) for this) and put it online somewhere for the GitHub Bundle action to pick up.
+
+## Full control
+If you want to build your own binaries with your own certificates (you probably don't need this) you would have to fork this repository and provide some github secrets to make the builds work.
+
+### Signing the binaries
+The GitHub action build scripts will sign the binaries. To do that they need a couple of secrets.
 Currently the macOS bundles and the windows binaries is digitally signed.
 
-### Secrets needed to sign the macOS bundle
+#### Secrets needed to sign the macOS bundle
 
-#### BUNDLE_APPLE_TEAM_ID
+##### BUNDLE_APPLE_TEAM_ID
 Your Apple developer Team ID
-#### BUNDLE_APPLE_USER
+##### BUNDLE_APPLE_USER
 Your Apple ID
-#### BUNDLE_APPLE_APP_PASSWORD
+##### BUNDLE_APPLE_APP_PASSWORD
 App specific password, create it under your account [here](https://appleid.apple.com/account/manage)
 
-#### BUILD_PROVISION_PROFILE_BASE64
+##### BUILD_PROVISION_PROFILE_BASE64
 A base64 encoded provision profile.  
 Create it [here](https://developer.apple.com/account/resources/profiles/list) and then base64 encode it `base64 -i "mygame.provisionprofile" | pbcopy`
 
-#### BUILD_CERTIFICATE_BASE64
+##### BUILD_CERTIFICATE_BASE64
 A base64 encoded build certificate.  
 [Here's a guide](https://support.magplus.com/hc/en-us/articles/203808748-iOS-Creating-a-Distribution-Certificate-and-p12-File) on how to create it.  
 Remember the password as you need it for the next secret.  
 When you have the p12-file base 64 encode it `base64 -i "certificate.p12" | pbcopy`
 
-#### P12_PASSWORD
+##### P12_PASSWORD
 The password you created for the build certificate in the previous step.
 
-#### CODE_SIGN_IDENTITY
+##### CODE_SIGN_IDENTITY
 The code sign identity for the build certificate.  
 Run `xcrun security find-identity -v -p codesigning` to find it
 
-### Secrets needed to sign the Windows binaries
+#### Secrets needed to sign the Windows binaries
 
 First [read this](https://melatonin.dev/blog/how-to-code-sign-windows-installers-with-an-ev-cert-on-github-actions/)
 And if you manage to get through all that you should have the five following variables :)

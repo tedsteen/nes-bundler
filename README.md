@@ -21,11 +21,13 @@ Running that will start a demo bundle, but if you place your own [config.yaml an
 
 ## Proper bundling
 
-To create a bundle you first need to configure it with your ROM and a bundle configuration and then let Github actions build it.  
-To do this you need to create a PR with your own [configuration](config/README.md).  
-Why you ask? Because in order to build for all platforms and digitally sign the executables you need a lot of setup. It is possible to do it yourself and you can read all about it in the configuration readme.  
+To create a bundle you first need to [configure it](config/README.md) with your ROM and a bundle configuration and then let the GitHub Bundle action build it.  
+1. Head over to the [Bundle action](https://github.com/tedsteen/nes-bundler/actions/workflows/bundle.yml)
+1. Click "Run workflow"
+2. Paste the URL to your bundle configuration zip (don't worry it won't show up in the action log)
+3. Run the workflow
 
-Perhaps in the future there will be a more convenient way to build a bundle.
+If everything goes well you should be able to pick up the artifacts when the run is finished.
 
 ## Limitations
 
