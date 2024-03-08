@@ -5,8 +5,8 @@ on:
   workflow_dispatch:
     inputs:
       configuration_url:
-        description: "Zipped bundle URL"
-        default: "https://example.com/my-bundle.zip"
+        description: "URL to zipped bundle configuration"
+        default: "https://your.bundle/config.zip"
 
 defaults:
   run:
