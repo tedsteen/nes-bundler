@@ -1,15 +1,20 @@
-name: Build
+name: Bundle
 
 on:
   push:
+  workflow_dispatch:
+    inputs:
+      configuration_url:
+        description: "URL to zipped bundle configuration"
+        default: "https://your.bundle/config.zip"
 
 defaults:
   run:
     shell: bash # necessary for windows
 
 jobs:
-  build:
-    name: Build (${{ matrix.os }})
+  bundle:
+    name: Bundle for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -46,6 +51,14 @@ jobs:
           sudo apt-get update
           sudo apt-get -y install libatk1.0-dev libgtk-3-dev libsdl2-dev
         fi
+    
+    - name: Unpack bundle configuration
+      if: github.event.inputs.configuration_url != ''
+      run: |
+        CONFIGURATION_URL=$(jq -r '.inputs.configuration_url' $GITHUB_EVENT_PATH)
+        echo ::add-mask::$CONFIGURATION_URL
+        curl -OL $CONFIGURATION_URL
+        7z x *.zip -oconfig
 
     - name: Set bundle name
       run: echo "BUNDLE_NAME=$(yq '.name' config/config.yaml)" >> $GITHUB_ENV
@@ -257,8 +270,8 @@ jobs:
     
   release:
     name: Release
-    needs: build
-    if: startsWith(github.event.ref, 'refs/tags/v')
+    needs: bundle
+    if: startsWith(github.event.ref, 'refs/tags/v') && github.event.inputs.configuration_url == ''
     runs-on: ubuntu-latest
     steps:
       - name: Get artifacts
