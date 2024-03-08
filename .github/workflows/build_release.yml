@@ -2,7 +2,11 @@ name: Build
 
 on:
   push:
-
+  workflow_dispatch:
+    inputs:
+      bundle-url:
+        description: "Bundle URL"
+        default: ""
 defaults:
   run:
     shell: bash # necessary for windows
@@ -46,6 +50,11 @@ jobs:
           sudo apt-get update
           sudo apt-get -y install libatk1.0-dev libgtk-3-dev libsdl2-dev
         fi
+
+    - name: Unpack bundle
+      if: github.event.inputs.bundle-url != ''
+      run: |
+        echo "TODO: Download and unpack to the config directory ${{ github.event.inputs.bundle-url }}"
 
     - name: Set bundle name
       run: echo "BUNDLE_NAME=$(yq '.name' config/config.yaml)" >> $GITHUB_ENV
