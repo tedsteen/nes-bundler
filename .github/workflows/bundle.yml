@@ -267,7 +267,7 @@ jobs:
         fi
 
     - name: Zip and password protect bundles
-      if: github.event.inputs.configuration_url == ''
+      if: github.event.inputs.configuration_url != ''
       run: |
         CONFIGURATION_PASSWORD=$(jq -r '.inputs.configuration_password' $GITHUB_EVENT_PATH)
         echo ::add-mask::$CONFIGURATION_PASSWORD
