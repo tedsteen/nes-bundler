@@ -21,9 +21,9 @@ Running that will start a demo bundle, but if you place your own [config.yaml an
 
 ## Proper bundling
 
-To create a bundle you first need to [configure it](config/README.md) with your ROM and a bundle configuration and then let GitHub Bundle action build it.  
+To create a bundle you first need to [configure it](config/README.md) with your ROM and a bundle configuration and then let the GitHub Bundle action build it.  
 1. Head over to the [Bundle action](https://github.com/tedsteen/nes-bundler/actions/workflows/bundle.yml)
-1. Press "Run workflow"
+1. Click "Run workflow"
 2. Paste the URL to your bundle configuration zip (don't worry it won't show up in the action log)
 3. Run the workflow
 

@@ -16,7 +16,7 @@ The rest is only needed for a proper bundle
 
 ## Pack it up for use with the github Bundle action (create a bundle configuration zip-file)
 
-When you have configured your bundle you zip the files (you can use [`./bundle.sh`](./bundle.sh) for this) and put it online somewhere for the GitHub Bundle action to pick up.
+When you are done configuring your bundle you need to zip the files (you can use [`./bundle.sh`](./bundle.sh) for this) and put it online somewhere for the GitHub Bundle action to pick up.
 
 ## Full control
 If you want to build your own binaries with your own certificates (you probably don't need this) you would have to fork this repository and provide some github secrets to make the builds work.
