@@ -291,7 +291,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           name: ${{ github.ref_name }}
-          draft: true
+          draft: false
           prerelease: false
           generate_release_notes: true
           files: "artifacts/*.zip"
