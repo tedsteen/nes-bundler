@@ -14,12 +14,13 @@ The rest is only needed for a proper bundle
 * [Windows program and window icon](windows/icon_256x256.ico) (check out [png2ico](https://www.png2ico.com/) for baking a proper windows .ico-file)
 * [Windows installer details](windows/wix/) (banner.bmp, dialog.bmp and licence.rtf)
 
-## Pack it up for use with the github Bundle action (create a bundle configuration zip-file)
+## Prepare the configuration for the github Bundle action
 
-When you are done configuring your bundle you need to zip the files (you can use [`./bundle.sh`](./bundle.sh) for this) and put it online somewhere for the GitHub Bundle action to pick up.
+When you are done configuring your bundle you need to zip the files and put it online for the GitHub Bundle action to pick up.  
+If you use [`./bundle.sh`](./bundle.sh) it can do both for you (zipping and uploading through bashupload.com).
 
-## Full control
-If you want to build your own binaries with your own certificates (you probably don't need this) you would have to fork this repository and provide some github secrets to make the builds work.
+## Full control (you probably don't need this)
+If you want to build your own binaries with your own certificates you would have to fork this repository and provide some github secrets to make the builds work.
 
 ### Signing the binaries
 The GitHub action build scripts will sign the binaries. To do that they need a couple of secrets.

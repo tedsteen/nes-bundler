@@ -7,9 +7,11 @@ on:
       configuration_url:
         description: "URL to zipped bundle configuration"
         default: "https://your.bundle/config.zip"
-      configuration_password:
-        description: "Password to protect the bundle zip-files"
+        required: true
+      recipient_email:
+        description: "Email where to send the finished bundles"
         default: ""
+        required: true
 
 defaults:
   run:
@@ -61,7 +63,7 @@ jobs:
         CONFIGURATION_URL=$(jq -r '.inputs.configuration_url' $GITHUB_EVENT_PATH)
         echo ::add-mask::$CONFIGURATION_URL
         curl -OL $CONFIGURATION_URL
-        7z -y x *.zip -oconfig
+        7z -y x *.zip -oconfig 2>&1 >/dev/null
 
     - name: Set bundle name
       run: echo "BUNDLE_NAME=$(yq '.name' config/config.yaml)" >> $GITHUB_ENV
@@ -165,9 +167,9 @@ jobs:
           iconutil $BUNDLE_CONFIG/macos/bundle.iconset -c icns --output $APP_BUNDLE/Contents/Resources/bundle.icns
           
           # Create two apps (with and without netplay)
-          ARTIFACT1="$ARTIFACTS/$BUNDLE_NAME.app"
-          mkdir "$ARTIFACTS/netplay"
-          ARTIFACT2="$ARTIFACTS/netplay/$BUNDLE_NAME.app"
+          ARTIFACT1="$RUNNER_TEMP/$BUNDLE_NAME.app"
+          mkdir "$RUNNER_TEMP/netplay"
+          ARTIFACT2="$RUNNER_TEMP/netplay/$BUNDLE_NAME.app"
           rsync -a $APP_BUNDLE/ "$ARTIFACT1"
           rsync -a $APP_BUNDLE/ "$ARTIFACT2"
           mv $BINARIES_PATH/nes-bundler-netplay "$ARTIFACT1/Contents/MacOS/nes-bundler"
@@ -266,20 +268,67 @@ jobs:
           xcrun stapler staple "$ARTIFACT2"
         fi
 
-    - name: Zip and password protect bundles
+    - name: Password protect bundle
       if: github.event.inputs.configuration_url != ''
+      id: zip-bundle
       run: |
-        CONFIGURATION_PASSWORD=$(jq -r '.inputs.configuration_password' $GITHUB_EVENT_PATH)
-        echo ::add-mask::$CONFIGURATION_PASSWORD
-        7z a -p$CONFIGURATION_PASSWORD password_protected.zip artifacts/*
+        BUNDLE_PASSWORD=$(openssl rand -hex 24)
+        echo ::add-mask::$BUNDLE_PASSWORD
+        7z a -p$BUNDLE_PASSWORD password_protected.zip artifacts/*
         rm -rf artifacts/*
         mv password_protected.zip artifacts/
+        
+        echo "BUNDLE_PASSWORD=$BUNDLE_PASSWORD" >> $GITHUB_ENV
 
     - uses: actions/upload-artifact@v4
+      id: artifact-upload-step
       with:
         name: ${{ env.BUNDLE_NAME }} ${{ github.ref_name }} ${{ env.RUNNER_OS }}
         path: artifacts/*
-    
+
+    - name: Create email
+      run: |
+        cat <<'EOF' >> email.html
+        <p>
+          <a href="${{ steps.artifact-upload-step.outputs.artifact-url }}">${{ env.BUNDLE_NAME }} ${{ github.ref_name }} ${{ env.RUNNER_OS }}.zip</a><br />
+          Zip password: ${{ env.BUNDLE_PASSWORD }}
+        </p>
+        <p>The downloads will be available for 90 days and you have to be logged in to GitHub to access it.</p>
+        <p>Thanks for using NES Bundler!</p>
+        EOF
+
+    - name: Get email address
+      if: always()
+      run: |
+        RECIPIENT_EMAIL=$(jq -r '.inputs.recipient_email' $GITHUB_EVENT_PATH)
+        echo ::add-mask::$RECIPIENT_EMAIL
+        echo "RECIPIENT_EMAIL=$RECIPIENT_EMAIL" >> $GITHUB_ENV
+
+    - name: Email bundle
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: smtp.gmail.com
+        server_port: 465
+        username: ${{secrets.MAIL_USERNAME}}
+        password: ${{secrets.MAIL_PASSWORD}}
+        subject: ${{ env.BUNDLE_NAME }} for ${{ env.RUNNER_OS }} is bundled!
+        to: ${{ env.RECIPIENT_EMAIL }}
+        from: NES Bundler
+        html_body: file://email.html
+
+    - name: Email failure message
+      if: failure()
+      uses: dawidd6/action-send-mail@v3
+      with: 
+        server_address: smtp.gmail.com
+        server_port: 465
+        username: ${{secrets.MAIL_USERNAME}}
+        password: ${{secrets.MAIL_PASSWORD}}
+        subject: There was a problem serving your bundle request
+        to: ${{ env.RECIPIENT_EMAIL }}
+        from: NES Bundler
+        body: Go here ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} for details
+
   release:
     name: Release
     needs: bundle
