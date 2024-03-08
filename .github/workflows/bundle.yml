@@ -7,6 +7,9 @@ on:
       configuration_url:
         description: "URL to zipped bundle configuration"
         default: "https://your.bundle/config.zip"
+      configuration_password:
+        description: "Password to protect the bundle zip-files"
+        default: ""
 
 defaults:
   run:
@@ -262,6 +265,15 @@ jobs:
           xcrun stapler staple "$ARTIFACT1"
           xcrun stapler staple "$ARTIFACT2"
         fi
+
+    - name: Zip and password protect bundles
+      if: github.event.inputs.configuration_url == ''
+      run: |
+        CONFIGURATION_PASSWORD=$(jq -r '.inputs.configuration_password' $GITHUB_EVENT_PATH)
+        echo ::add-mask::$CONFIGURATION_PASSWORD
+        7z a -p$CONFIGURATION_PASSWORD bundles.zip artifacts/*
+        rm -rf artifacts/*
+        mv bundles.zip artifacts/
 
     - uses: actions/upload-artifact@v4
       with:
