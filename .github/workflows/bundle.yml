@@ -58,7 +58,7 @@ jobs:
         CONFIGURATION_URL=$(jq -r '.inputs.configuration_url' $GITHUB_EVENT_PATH)
         echo ::add-mask::$CONFIGURATION_URL
         curl -OL $CONFIGURATION_URL
-        7z x *.zip -oconfig
+        7z -y x *.zip -oconfig
 
     - name: Set bundle name
       run: echo "BUNDLE_NAME=$(yq '.name' config/config.yaml)" >> $GITHUB_ENV
