@@ -28,7 +28,7 @@ To create a bundle you first need to [configure it](config/README.md) with your 
 3. Paste the URL to your bundle configuration zip (don't worry it won't show up in the action log)
 4. Run it!
 
-If everything goes well you should be able to pick up the artifacts when the run is finished.
+If everything goes well you should receive emails with the bundles.
 
 ## Limitations
 
