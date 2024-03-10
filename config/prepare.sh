@@ -7,7 +7,7 @@ fi
 
 echo "Configuration is zipped!"
 echo "You can upload it through bashupload.com and use that URL when starting the GitHub Bundle action."
-read -r -p "Do you want to upload? [y/N]" -n 1
+read -r -p "Do you want to upload? [y/N]"
 echo
 if [[ "$REPLY" =~ ^[Yy]$ ]]; then
     curl bashupload.com -T config.zip
