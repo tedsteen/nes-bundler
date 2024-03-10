@@ -287,14 +287,14 @@ jobs:
         path: artifacts/*
 
     - name: Get email address
-      if: always() && github.event.inputs.configuration_url != ''
+      if: always() && github.event.inputs.recipient_email != ''
       run: |
         RECIPIENT_EMAIL=$(jq -r '.inputs.recipient_email' $GITHUB_EVENT_PATH)
         echo ::add-mask::$RECIPIENT_EMAIL
         echo "RECIPIENT_EMAIL=$RECIPIENT_EMAIL" >> $GITHUB_ENV
   
     - name: Create email
-      if: github.event.inputs.configuration_url != ''
+      if: github.event.inputs.recipient_email != ''
       run: |
         cat <<'EOF' >> email.html
         <p>
@@ -306,7 +306,7 @@ jobs:
         EOF
 
     - name: Email bundle
-      if: github.event.inputs.configuration_url != ''
+      if: github.event.inputs.recipient_email != ''
       uses: dawidd6/action-send-mail@v3
       with:
         server_address: smtp.gmail.com
@@ -319,7 +319,7 @@ jobs:
         html_body: file://email.html
 
     - name: Email failure message
-      if: failure() && github.event.inputs.configuration_url != ''
+      if: failure() && github.event.inputs.recipient_email != ''
       uses: dawidd6/action-send-mail@v3
       with: 
         server_address: smtp.gmail.com
