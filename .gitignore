@@ -6,3 +6,4 @@ nes-bundler-log.txt
 config/windows/wix/main.wxs
 config/linux/bundle.desktop
 config/macos/Info.plist
+config/config.zip
