@@ -1,6 +1,9 @@
 # The name of the bundle and title of the window
 name: "NES Bundler Demo"
 
+# Optional version of your game, will default to the nes-bundler version if omitted
+# version: "1.0.0"
+
 # Short description used when creating linux and Windows installers
 short_description: "A demonstration of NES Bundler in action!"
 

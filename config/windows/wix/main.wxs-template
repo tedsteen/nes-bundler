@@ -38,7 +38,7 @@
       <ComponentRef Id="BundleComponent" />
     </Feature>
 
-    <Icon Id="bundle.ico" SourceFile="config/windows/icon_256x256.ico" />
+    <Icon Id="bundle.ico" SourceFile="config/windows/app.ico" />
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." Schedule="afterInstallInitialize" />
 

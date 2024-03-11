@@ -42,9 +42,9 @@ pub struct Bundle {
 }
 impl Bundle {
     pub fn load() -> Result<Bundle> {
-        let external_windows_icon = fs::read(Path::new("windows/icon_256x256.ico"))
+        let external_windows_icon = fs::read(Path::new("windows/window_title.png"))
             .map(|image_data| image::load_from_memory(&image_data).map_err(anyhow::Error::msg))
-            .inspect_err(|e| log::info!("Not using external windows/icon_256x256.ico: {:?}", e));
+            .inspect_err(|e| log::info!("Not using external windows/window_title.png: {:?}", e));
 
         let external_config = fs::read_to_string(Path::new("config.yaml"))
             .map_err(anyhow::Error::msg)
@@ -61,7 +61,7 @@ impl Bundle {
 
         let window_icon = external_windows_icon
             .unwrap_or(
-                image::load_from_memory(include_bytes!("../config/windows/icon_256x256.ico"))
+                image::load_from_memory(include_bytes!("../config/windows/window_title.png"))
                     .map_err(anyhow::Error::msg),
             )
             .ok();

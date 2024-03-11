@@ -53,7 +53,7 @@ fn main() -> Result<()> {
     #[cfg(windows)]
     {
         let mut res = winres::WindowsResource::new();
-        res.set_icon("config/windows/icon_256x256.ico");
+        res.set_icon("config/windows/app.ico");
         res.set("FileDescription", &bundle_config.short_description);
         res.set("ProductName", &bundle_config.name);
         res.set("OriginalFilename", &format!("{}.exe", bundle_config.name));
@@ -75,9 +75,9 @@ fn main() -> Result<()> {
         include_str!("config/macos/Info.plist-template"),
     )?;
 
-    bundle_config
-        .version
-        .get_or_insert(env!("CARGO_PKG_VERSION").to_string());
+    if bundle_config.version.is_none() {
+        bundle_config.version = Some(env!("CARGO_PKG_VERSION").to_string());
+    }
 
     File::create("config/windows/wix/main.wxs")?
         .write_all(tt.render("main.wxs", &bundle_config)?.as_bytes())?;
