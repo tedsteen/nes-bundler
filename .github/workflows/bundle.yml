@@ -51,6 +51,7 @@ jobs:
         elif [[ $RUNNER_OS == "macOS" ]]; then
           rustup target add x86_64-apple-darwin
           rustup target add aarch64-apple-darwin
+          brew install create-dmg
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
           sudo apt-get update
@@ -166,26 +167,43 @@ jobs:
 
           iconutil $BUNDLE_CONFIG/macos/bundle.iconset -c icns --output $APP_BUNDLE/Contents/Resources/bundle.icns
           
-          # Create two apps (with and without netplay)
-          ARTIFACT1="$RUNNER_TEMP/$BUNDLE_NAME.app"
-          mkdir "$RUNNER_TEMP/netplay"
-          ARTIFACT2="$RUNNER_TEMP/netplay/$BUNDLE_NAME.app"
-          rsync -a $APP_BUNDLE/ "$ARTIFACT1"
-          rsync -a $APP_BUNDLE/ "$ARTIFACT2"
-          mv $BINARIES_PATH/nes-bundler-netplay "$ARTIFACT1/Contents/MacOS/nes-bundler"
-          mv $BINARIES_PATH/nes-bundler         "$ARTIFACT2/Contents/MacOS/nes-bundler"
-          # Sign
-          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY "$ARTIFACT1/Contents/MacOS/nes-bundler"
-          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY "$ARTIFACT2/Contents/MacOS/nes-bundler"
+          NETPLAY_APP="$RUNNER_TEMP/netplay/$BUNDLE_NAME.app"
+          NON_NETPLAY_APP="$RUNNER_TEMP/no-netplay/$BUNDLE_NAME.app"
+          
+          mkdir -p "$NETPLAY_APP"
+          mkdir -p "$NON_NETPLAY_APP"
+          rsync -a $APP_BUNDLE/ "$NETPLAY_APP"
+          rsync -a $APP_BUNDLE/ "$NON_NETPLAY_APP"
+          
+          mv $BINARIES_PATH/nes-bundler-netplay "$NETPLAY_APP/Contents/MacOS/nes-bundler"
+          mv $BINARIES_PATH/nes-bundler         "$NON_NETPLAY_APP/Contents/MacOS/nes-bundler"
+          
+          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY "$NETPLAY_APP/Contents/MacOS/nes-bundler"
+          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY "$NON_NETPLAY_APP/Contents/MacOS/nes-bundler"
 
-          # Create dmgs and replace the artifacts with them
-          TEMP_UNCOMPRESSED_DMG_FILE="$RUNNER_TEMP/nes-bundler-uncompressed.dmg"
-          hdiutil create $TEMP_UNCOMPRESSED_DMG_FILE -volname "$BUNDLE_NAME" -srcfolder "$ARTIFACT1"
-          hdiutil convert $TEMP_UNCOMPRESSED_DMG_FILE -format UDZO -o "$ARTIFACTS/$BUNDLE_NAME (Netplay).dmg"
-          rm -rf "$ARTIFACT1" $TEMP_UNCOMPRESSED_DMG_FILE
-          hdiutil create $TEMP_UNCOMPRESSED_DMG_FILE -volname "$BUNDLE_NAME" -srcfolder "$ARTIFACT2"
-          hdiutil convert $TEMP_UNCOMPRESSED_DMG_FILE -format UDZO -o "$ARTIFACTS/$BUNDLE_NAME.dmg"
-          rm -rf "$ARTIFACT2"
+          create-dmg \
+            --volname "$BUNDLE_NAME Installer" \
+            --volicon "$APP_BUNDLE/Contents/Resources/bundle.icns" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "$BUNDLE_NAME.app" 200 170 \
+            --hide-extension "$BUNDLE_NAME.app" \
+            --app-drop-link 600 165 \
+            "$ARTIFACTS/$BUNDLE_NAME Installer (Netplay).dmg" \
+            "$NETPLAY_APP/../"
+
+          create-dmg \
+            --volname "$BUNDLE_NAME Installer" \
+            --volicon "$APP_BUNDLE/Contents/Resources/bundle.icns" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "$BUNDLE_NAME.app" 200 170 \
+            --hide-extension "$BUNDLE_NAME.app" \
+            --app-drop-link 600 165 \
+            "$ARTIFACTS/$BUNDLE_NAME Installer.dmg" \
+            "$NON_NETPLAY_APP/../"
 
         elif [[ $RUNNER_OS == "Linux" ]]; then
           # archive artifact
@@ -248,8 +266,8 @@ jobs:
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
           
           # Notarize
-          ARTIFACT1="$ARTIFACTS/$BUNDLE_NAME (Netplay).dmg"
-          ARTIFACT2="$ARTIFACTS/$BUNDLE_NAME.dmg"
+          ARTIFACT1="$ARTIFACTS/$BUNDLE_NAME Installer (Netplay).dmg"
+          ARTIFACT2="$ARTIFACTS/$BUNDLE_NAME Installer.dmg"
 
           xcrun notarytool submit \
             --team-id $BUNDLE_APPLE_TEAM_ID \
