@@ -50,13 +50,43 @@ fn main() -> Result<()> {
     let mut bundle_config: BundleConfiguration =
         serde_yaml::from_str(include_str!("config/config.yaml"))?;
 
+    if bundle_config.version.is_none() {
+        bundle_config.version = Some(env!("CARGO_PKG_VERSION").to_string());
+    }
+
     #[cfg(windows)]
     {
+        fn read_semver(version: &str) -> anyhow::Result<(u64, u64, u64)> {
+            let mut input = version.split('.');
+            match (input.next(), input.next(), input.next()) {
+                (Some(major), Some(minor), Some(patch)) => {
+                    Ok((major.parse()?, minor.parse()?, patch.parse()?))
+                }
+                _ => Err(anyhow::Error::msg(format!(
+                    "Could not parse '{version}' as semantic version"
+                ))),
+            }
+        }
+
         let mut res = winres::WindowsResource::new();
         res.set_icon("config/windows/app.ico");
         res.set("FileDescription", &bundle_config.short_description);
         res.set("ProductName", &bundle_config.name);
         res.set("OriginalFilename", &format!("{}.exe", bundle_config.name));
+        if let Some(version) = &bundle_config.version {
+            res.set("FileVersion", version);
+            res.set("ProductVersion", version);
+            match read_semver(version) {
+                Ok((major, minor, patch)) => {
+                    let version = major << 48 | minor << 32 | patch << 16;
+                    res.set_version_info(winres::VersionInfo::FILEVERSION, version);
+                    res.set_version_info(winres::VersionInfo::PRODUCTVERSION, version);
+                }
+                Err(e) => {
+                    panic!("Could not read semantic version: {:?}", e);
+                }
+            }
+        }
         res.compile().expect("Could not attach exe icon");
     }
 
@@ -74,10 +104,6 @@ fn main() -> Result<()> {
         "Info.plist",
         include_str!("config/macos/Info.plist-template"),
     )?;
-
-    if bundle_config.version.is_none() {
-        bundle_config.version = Some(env!("CARGO_PKG_VERSION").to_string());
-    }
 
     File::create("config/windows/wix/main.wxs")?
         .write_all(tt.render("main.wxs", &bundle_config)?.as_bytes())?;
