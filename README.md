@@ -16,8 +16,8 @@ What you get is an executable with
 
 ## Try it out
 
-Before you make a proper bundle with your own icons and installer graphics you can try out NES Bundler by downloading the [binary of your choice](https://github.com/tedsteen/nes-bundler/releases/).  
-Running that will start a demo bundle, but if you place your own [config.yaml and rom.nes](config/) in the same directory as the executable it will use that.
+Before you make a proper bundle with your own icons and installer graphics you can try out NES Bundler by downloading [your binary of choice](https://github.com/tedsteen/nes-bundler/releases/).  
+Running that will start a demo bundle, but if you place your own [config.yaml and/or rom.nes](config/) in the same directory as the executable it will use that.
 
 ## Proper bundling
 
