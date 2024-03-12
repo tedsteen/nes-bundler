@@ -11,8 +11,7 @@ Here is a breakdown of what can be customised
 The rest is only needed for a proper bundle
 * [Linux icon](linux/icon_256x256.png)
 * [Mac icon set](macos/bundle.iconset/)
-* [Windows app icon](windows/app.ico) look [here](https://learn.microsoft.com/en-us/windows/apps/design/style/iconography/app-icon-construction) for baking a proper windows .ico-file
-* [Windows window title icon](windows/window_title_icon.png) look [here](https://learn.microsoft.com/en-us/windows/apps/design/basics/titlebar-design) for details.
+* [Windows app and window title icon](windows/app.ico) look [here](https://learn.microsoft.com/en-us/windows/apps/design/style/iconography/app-icon-construction) for details about baking a proper windows .ico-file
 * [Windows installer details](windows/wix/) (banner.bmp, dialog.bmp and licence.rtf)
 
 ## Prepare the configuration for the github Bundle action
