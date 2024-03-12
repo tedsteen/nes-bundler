@@ -5,7 +5,6 @@ use std::{
 
 use anyhow::Result;
 use directories::ProjectDirs;
-use image::DynamicImage;
 use serde::Deserialize;
 
 use crate::settings::Settings;
@@ -34,7 +33,6 @@ impl BuildConfiguration {
 
 pub struct Bundle {
     pub settings_path: PathBuf,
-    pub window_icon: Option<DynamicImage>,
     pub config: BuildConfiguration,
     pub rom: Vec<u8>,
     #[cfg(feature = "netplay")]
@@ -42,10 +40,6 @@ pub struct Bundle {
 }
 impl Bundle {
     pub fn load() -> Result<Bundle> {
-        let external_windows_icon = fs::read(Path::new("windows/window_title.png"))
-            .map(|image_data| image::load_from_memory(&image_data).map_err(anyhow::Error::msg))
-            .inspect_err(|e| log::info!("Not using external windows/window_title.png: {:?}", e));
-
         let external_config = fs::read_to_string(Path::new("config.yaml"))
             .map_err(anyhow::Error::msg)
             .and_then(|config| serde_yaml::from_str(&config).map_err(anyhow::Error::msg))
@@ -59,13 +53,6 @@ impl Bundle {
         let config: BuildConfiguration =
             external_config.unwrap_or(serde_yaml::from_str(include_str!("../config/config.yaml"))?);
 
-        let window_icon = external_windows_icon
-            .unwrap_or(
-                image::load_from_memory(include_bytes!("../config/windows/window_title.png"))
-                    .map_err(anyhow::Error::msg),
-            )
-            .ok();
-
         let rom = external_rom.unwrap_or(include_bytes!("../config/rom.nes").to_vec());
 
         let settings_path = config
@@ -77,7 +64,6 @@ impl Bundle {
 
         Ok(Bundle {
             settings_path,
-            window_icon,
             config,
             rom,
 
