@@ -12,8 +12,8 @@ pub type LocalNesState = RusticNesState;
 
 #[derive(Clone)]
 pub struct FrameData {
-    pub video: Vec<u16>,
-    pub audio: Vec<i16>,
+    pub video: Vec<u8>,
+    pub audio: Vec<f32>,
     pub fps: Fps,
 }
 

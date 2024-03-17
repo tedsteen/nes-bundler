@@ -1,6 +1,6 @@
 use crate::input::buttons::GamepadButton;
 use crate::nes_state::NesStateHandler;
-use crate::{Fps, NES_HEIGHT, NES_WIDTH, NTSC_PAL};
+use crate::{Fps, NES_HEIGHT, NES_WIDTH};
 
 use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
 use base64::Engine;
@@ -141,27 +141,17 @@ impl Game {
             .advance([self.inputs.get_joypad(0), self.inputs.get_joypad(1)])
     }
 
-    pub fn draw_frame(&mut self, video_data: Option<&[u16]>) {
-        let new_image_data = video_data.map(|frame| {
-            let pixels = frame
-                .iter()
-                .flat_map(|&palette_index| {
-                    let palette_index = palette_index as usize * 3;
-                    let rgba: [u8; 3] = NTSC_PAL[palette_index..palette_index + 3]
-                        .try_into()
-                        .unwrap();
-                    rgba
-                })
-                .collect::<Vec<u8>>();
+    pub fn draw_frame(&mut self, video_data: Option<&[u8]>) {
+        let new_image_data = video_data.map(|video_data| {
             ImageData::Color(
-                ColorImage::from_rgb([NES_WIDTH as usize, NES_HEIGHT as usize], &pixels).into(),
+                ColorImage::from_rgb([NES_WIDTH as usize, NES_HEIGHT as usize], video_data).into(),
             )
         });
 
         self.gui.update_nes_texture(new_image_data);
     }
 
-    pub fn push_audio(&mut self, samples: &[i16], fps_hint: Fps) {
+    pub fn push_audio(&mut self, samples: &[f32], fps_hint: Fps) {
         self.audio.stream.push_samples(samples, fps_hint);
     }
 }
