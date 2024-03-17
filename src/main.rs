@@ -9,16 +9,13 @@ use crate::{
     input::gamepad::ToGamepadEvent,
     settings::gui::{Gui, GuiEvent},
 };
-use anyhow::{Context, Result};
+use anyhow::Result;
 use audio::Audio;
 
 use gameloop::{GameLoop, Time};
 use input::Inputs;
-use nes_state::local::LocalNesState;
-use nes_state::start_nes;
 
 use game::Game;
-use rusticnes_core::cartridge::mapper_from_file;
 use sdl2::EventPump;
 use settings::Settings;
 use window::Size;
@@ -228,28 +225,16 @@ fn initialise() -> Result<
     let audio = Audio::new(&sdl_context, &settings)?;
     let rom = bundle.rom.clone();
 
-    let start_new_nes = move || -> LocalNesState {
-        start_nes(
-            mapper_from_file(&rom)
-                .map_err(anyhow::Error::msg)
-                .context("Failed to load ROM")
-                .unwrap(),
-        )
-    };
+    #[cfg(not(feature = "netplay"))]
+    let nes_state = nes_state::LocalNesState::load_rom(&rom);
 
     #[cfg(feature = "netplay")]
-    let start_new_nes = || -> netplay::NetplayStateHandler {
-        netplay::NetplayStateHandler::new(
-            Box::new(start_new_nes),
-            &bundle,
-            &mut settings.netplay_id,
-        )
-    };
+    let nes_state = netplay::NetplayStateHandler::new(rom, &bundle, &mut settings.netplay_id);
 
     Ok((
         GameLoop::new(
             Game::new(
-                Box::new(start_new_nes()),
+                Box::new(nes_state),
                 Gui::new(egui_glow),
                 settings,
                 audio,
