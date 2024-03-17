@@ -120,6 +120,16 @@ impl NesStateHandler for NetplayStateHandler {
     fn get_gui(&mut self) -> Option<&mut dyn crate::settings::gui::GuiComponent> {
         Some(self)
     }
+
+    fn discard_samples(&mut self) {
+        if let Some(NetplayState::Connected(s)) = &mut self.netplay {
+            s.state
+                .netplay_session
+                .game_state
+                .nes_state
+                .discard_samples()
+        }
+    }
 }
 
 impl NetplayStateHandler {
