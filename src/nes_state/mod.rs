@@ -1,5 +1,3 @@
-use tetanes_core::control_deck::ControlDeck;
-
 use crate::{
     input::JoypadInput,
     settings::{gui::GuiComponent, MAX_PLAYERS},
@@ -9,9 +7,7 @@ use crate::{
 //pub mod rusticnes;
 pub mod tetanes;
 
-pub struct NesState<T>(pub T);
-
-pub type LocalNesState = NesState<ControlDeck>;
+pub type LocalNesState = TetanesNesState;
 
 #[derive(Clone)]
 pub struct FrameData {
@@ -25,4 +21,5 @@ pub trait NesStateHandler {
     fn save(&self) -> Option<Vec<u8>>;
     fn load(&mut self, data: &mut Vec<u8>);
     fn get_gui(&mut self) -> Option<&mut dyn GuiComponent>;
+    fn discard_samples(&mut self);
 }

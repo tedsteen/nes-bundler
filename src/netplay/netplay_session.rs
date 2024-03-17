@@ -101,7 +101,7 @@ impl NetplaySession {
                             if self.game_state.frame <= self.last_handled_frame {
                                 //This is a replay
                                 // Discard the samples for this frame since it's a replay from ggrs. Audio has already been produced and pushed for it.
-                                self.game_state.apu.consume_samples();
+                                self.game_state.discard_samples();
                             } else {
                                 self.last_frame_data = this_frame_data;
                                 //This is not a replay
