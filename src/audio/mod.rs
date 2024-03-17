@@ -78,7 +78,7 @@ impl Stream {
         Ok(output_device)
     }
 
-    pub(crate) fn push_samples(&mut self, new_samples: &[i16], fps_hint: Fps) {
+    pub(crate) fn push_samples(&mut self, new_samples: &[f32], fps_hint: Fps) {
         let new_len = ((FPS / fps_hint) * new_samples.len() as f32) as usize;
         let queue_size = self.audio_queue.size();
 
@@ -92,12 +92,8 @@ impl Stream {
             new_len
         };
 
-        // Convert to f32 and set volume
-        let new_samples: Vec<f32> = new_samples
-            .iter()
-            .map(|s| (*s as f32 / -(i16::MIN as f32)) * self.volume)
-            .collect();
-
+        // Set volume
+        let new_samples: Vec<f32> = new_samples.iter().map(|&s| s * self.volume).collect();
         let new_samples = self.stretch.process(&new_samples, len);
 
         self.audio_queue.queue_audio(new_samples).unwrap();

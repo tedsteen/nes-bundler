@@ -60,7 +60,13 @@ impl NesStateHandler for RusticNesState {
 
         Some(FrameData {
             video,
-            audio: self.nes.apu.consume_samples(),
+            audio: self
+                .nes
+                .apu
+                .consume_samples()
+                .iter()
+                .map(|&s| s as f32 / -(i16::MIN as f32))
+                .collect(),
             fps: FPS,
         })
     }

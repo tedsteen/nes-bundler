@@ -151,7 +151,7 @@ impl Game {
         self.gui.update_nes_texture(new_image_data);
     }
 
-    pub fn push_audio(&mut self, samples: &[i16], fps_hint: Fps) {
+    pub fn push_audio(&mut self, samples: &[f32], fps_hint: Fps) {
         self.audio.stream.push_samples(samples, fps_hint);
     }
 }
