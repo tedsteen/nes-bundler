@@ -4,11 +4,11 @@ use crate::{
     Fps,
 };
 
+use self::rusticnes::RusticNesState;
+
 pub mod rusticnes;
 
-pub struct NesState<T>(pub T);
-
-pub type LocalNesState = NesState<rusticnes_core::nes::NesState>;
+pub type LocalNesState = RusticNesState;
 
 #[derive(Clone)]
 pub struct FrameData {
@@ -22,4 +22,5 @@ pub trait NesStateHandler {
     fn save(&self) -> Option<Vec<u8>>;
     fn load(&mut self, data: &mut Vec<u8>);
     fn get_gui(&mut self) -> Option<&mut dyn GuiComponent>;
+    fn discard_samples(&mut self);
 }
