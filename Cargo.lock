@@ -2296,6 +2296,7 @@ version = "1.1.7"
 dependencies = [
  "anyhow",
  "base64",
+ "bincode",
  "bitflags 2.4.2",
  "cxx",
  "cxx-build",

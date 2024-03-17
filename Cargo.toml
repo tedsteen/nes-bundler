@@ -40,6 +40,7 @@ sdl2 = { git = "https://github.com/tedsteen/rust-sdl2.git", branch = "rust-sdl2-
 
 rusticnes-core = { git = "https://github.com/tedsteen/rusticnes-core", branch="for-nes-bundler" }
 tetanes-core = { git = "https://github.com/lukexor/tetanes.git", branch="engine-rework" }
+bincode = "1.3"
 
 base64 = "0.21"
 directories = "5"
