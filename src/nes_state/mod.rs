@@ -1,14 +1,17 @@
+use tetanes_core::control_deck::ControlDeck;
+
 use crate::{
     input::JoypadInput,
     settings::{gui::GuiComponent, MAX_PLAYERS},
     Fps,
 };
 
-pub mod rusticnes;
+//pub mod rusticnes;
+pub mod tetanes;
 
 pub struct NesState<T>(pub T);
 
-pub type LocalNesState = NesState<rusticnes_core::nes::NesState>;
+pub type LocalNesState = NesState<ControlDeck>;
 
 #[derive(Clone)]
 pub struct FrameData {
