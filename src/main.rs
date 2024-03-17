@@ -253,8 +253,6 @@ fn initialise() -> Result<
     ))
 }
 
-static NTSC_PAL: &[u8] = include_bytes!("../ntscpalette.pal");
-
 fn init_logger() {
     #[cfg(windows)]
     {
