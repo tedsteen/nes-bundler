@@ -1,14 +1,15 @@
-use rusticnes_core::mmc::mapper::Mapper;
-
 use crate::{
     input::JoypadInput,
     settings::{gui::GuiComponent, MAX_PLAYERS},
     Fps,
 };
 
-use self::local::LocalNesState;
+pub mod rusticnes;
 
-pub mod local;
+pub struct NesState<T>(pub T);
+
+pub type LocalNesState = NesState<rusticnes_core::nes::NesState>;
+
 #[derive(Clone)]
 pub struct FrameData {
     pub video: Vec<u16>,
@@ -21,10 +22,4 @@ pub trait NesStateHandler {
     fn save(&self) -> Option<Vec<u8>>;
     fn load(&mut self, data: &mut Vec<u8>);
     fn get_gui(&mut self) -> Option<&mut dyn GuiComponent>;
-}
-
-pub fn start_nes(mapper: Box<dyn Mapper>) -> LocalNesState {
-    let mut nes = LocalNesState(rusticnes_core::nes::NesState::new(mapper));
-    nes.power_on();
-    nes
 }

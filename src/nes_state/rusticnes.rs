@@ -1,4 +1,7 @@
-use super::{FrameData, NesStateHandler};
+use anyhow::Context;
+use rusticnes_core::cartridge::mapper_from_file;
+
+use super::{FrameData, LocalNesState, NesState, NesStateHandler};
 use crate::{
     input::JoypadInput,
     settings::{gui::GuiComponent, MAX_PLAYERS},
@@ -6,7 +9,17 @@ use crate::{
 };
 use std::ops::{Deref, DerefMut};
 
-pub struct LocalNesState(pub rusticnes_core::nes::NesState);
+impl LocalNesState {
+    pub fn load_rom(rom: &[u8]) -> LocalNesState {
+        let mapper = mapper_from_file(rom)
+            .map_err(anyhow::Error::msg)
+            .context("Failed to load ROM")
+            .unwrap();
+        let mut nes = NesState(rusticnes_core::nes::NesState::new(mapper));
+        nes.power_on();
+        nes
+    }
+}
 
 impl Deref for LocalNesState {
     type Target = rusticnes_core::nes::NesState;
