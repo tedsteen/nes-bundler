@@ -1,3 +1,5 @@
+use std::io::Cursor;
+
 use rusticnes_core::palettes::NTSC_PAL;
 use tetanes_core::{
     self,
@@ -20,8 +22,7 @@ pub struct TetanesNesState {
 impl TetanesNesState {
     pub fn load_rom(rom: &[u8]) -> LocalNesState {
         let mut deck = InternalNesState::new();
-
-        deck.load_rom("Name", &mut rom.clone(), None)
+        deck.load_rom("Name", &mut Cursor::new(rom), None)
             .expect("Could not load ROM");
         deck.reset(tetanes_core::common::ResetKind::Hard);
 

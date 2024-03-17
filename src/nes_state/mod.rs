@@ -6,7 +6,6 @@ use crate::{
 
 use self::tetanes::TetanesNesState;
 
-//pub mod rusticnes;
 pub mod tetanes;
 
 pub type LocalNesState = TetanesNesState;
