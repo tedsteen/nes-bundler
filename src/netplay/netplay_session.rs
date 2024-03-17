@@ -147,10 +147,7 @@ impl NetplaySession {
 
         //In case the last frame is repeated multiple times, make sure to fade out the audio to avoid a screetching sound.
         if let Some(last_frame_data) = &mut self.last_frame_data {
-            last_frame_data
-                .audio
-                .iter_mut()
-                .for_each(|s| *s = (*s as f32 * 0.9) as i16);
+            last_frame_data.audio.iter_mut().for_each(|s| *s *= 0.9);
         }
         res
     }
