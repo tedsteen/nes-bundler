@@ -1,44 +1,33 @@
-use anyhow::Context;
-use tetanes_core::{self, common::Reset};
+use tetanes_core::{
+    self,
+    common::Reset,
+    input::{Joypad, Player},
+};
 
-use super::{FrameData, LocalNesState, NesState, NesStateHandler};
+use super::{FrameData, LocalNesState, NesStateHandler};
 use crate::{
     input::JoypadInput,
     settings::{gui::GuiComponent, MAX_PLAYERS},
-    FPS,
 };
-use std::ops::{Deref, DerefMut};
 type InternalNesState = tetanes_core::control_deck::ControlDeck;
 
-impl LocalNesState {
+#[derive(Clone)]
+pub struct TetanesNesState {
+    deck: tetanes_core::control_deck::ControlDeck,
+}
+
+impl TetanesNesState {
     pub fn load_rom(rom: &[u8]) -> LocalNesState {
-        let mut nes = NesState(InternalNesState::new());
+        let mut deck = InternalNesState::new();
 
-        //nes.load_rom("Name", &mut rom.clone(), None);
-        nes.reset(tetanes_core::common::ResetKind::Hard);
+        let a = deck.load_rom("Name", &mut rom.clone(), None);
+        deck.reset(tetanes_core::common::ResetKind::Hard);
 
-        nes
-    }
-}
-impl Clone for LocalNesState {
-    fn clone(&self) -> Self {
-        Self(self.0.clone())
-    }
-}
-impl Deref for LocalNesState {
-    type Target = InternalNesState;
-    fn deref(&self) -> &InternalNesState {
-        &self.0
+        TetanesNesState { deck }
     }
 }
 
-impl DerefMut for LocalNesState {
-    fn deref_mut(&mut self) -> &mut InternalNesState {
-        &mut self.0
-    }
-}
-
-impl NesStateHandler for LocalNesState {
+impl NesStateHandler for TetanesNesState {
     fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Option<FrameData> {
         println!("TODO: Advance");
         // self.p1_input = *inputs[0];
@@ -49,7 +38,19 @@ impl NesStateHandler for LocalNesState {
         //     audio: self.apu.consume_samples(),
         //     fps: FPS,
         // })
-        None
+        *self.deck.joypad_mut(Player::One) = Joypad::signature((*inputs[0]).into());
+        *self.deck.joypad_mut(Player::Two) = Joypad::signature((*inputs[1]).into());
+
+        self.deck.clock_frame().expect("Failed to clock the NES");
+
+        let audio = self.deck.audio_samples().to_vec();
+
+        let video = self.deck.frame_buffer().to_vec();
+        Some(FrameData {
+            video,
+            audio,
+            fps: crate::FPS,
+        })
     }
 
     fn save(&self) -> Option<Vec<u8>> {
@@ -65,5 +66,9 @@ impl NesStateHandler for LocalNesState {
 
     fn get_gui(&mut self) -> Option<&mut dyn GuiComponent> {
         None
+    }
+
+    fn discard_samples(&mut self) {
+        todo!()
     }
 }

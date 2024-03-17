@@ -4,6 +4,8 @@ use crate::{
     Fps,
 };
 
+use self::tetanes::TetanesNesState;
+
 //pub mod rusticnes;
 pub mod tetanes;
 
