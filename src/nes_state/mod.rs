@@ -3,11 +3,14 @@ use crate::{
     settings::{gui::GuiComponent, MAX_PLAYERS},
     Fps,
 };
+pub static NTSC_PAL: &[u8] = include_bytes!("ntscpalette.pal");
 
-use self::tetanes::TetanesNesState;
+// pub mod rusticnes;
+// use self::rusticnes::RusticNesState;
+// pub type LocalNesState = RusticNesState;
 
 pub mod tetanes;
-
+use self::tetanes::TetanesNesState;
 pub type LocalNesState = TetanesNesState;
 
 #[derive(Clone)]
