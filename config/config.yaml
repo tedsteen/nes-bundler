@@ -1,5 +1,5 @@
 # The name of the bundle and title of the window
-name: "NES Bundler Demo"
+name: "Super Mario Bros 3"
 
 # Optional version of your game, will default to the nes-bundler version if omitted
 # version: "1.0.0"
@@ -80,7 +80,7 @@ default_settings:
 # Netplay configuration. You can remove this if the netplay feature is disabled.
 netplay:
     # The default room name when starting a new netplay game
-    default_room_name: ""
+    default_room_name: "testroom"
     # GGRS and Matchbox server configuration. You can read more about them over here https://github.com/johanhelsing/matchbox and here https://github.com/gschup/ggrs
     # This config can be either fetched from an external service (TurnOn) or configured statically (Static)
     server:

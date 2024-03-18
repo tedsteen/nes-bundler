@@ -1,7 +1,7 @@
 use anyhow::Context;
 use rusticnes_core::cartridge::mapper_from_file;
 
-use super::{FrameData, LocalNesState, NesStateHandler};
+use super::{FrameData, NesStateHandler, NTSC_PAL};
 use crate::{
     input::JoypadInput,
     settings::{gui::GuiComponent, MAX_PLAYERS},
@@ -13,14 +13,14 @@ pub struct RusticNesState {
 }
 
 impl RusticNesState {
-    pub fn load_rom(rom: &[u8]) -> LocalNesState {
+    pub fn load_rom(rom: &[u8]) -> Self {
         let mapper = mapper_from_file(rom)
             .map_err(anyhow::Error::msg)
             .context("Failed to load ROM")
             .unwrap();
         let mut nes = rusticnes_core::nes::NesState::new(mapper);
         nes.power_on();
-        RusticNesState { nes }
+        Self { nes }
     }
 }
 
@@ -35,8 +35,6 @@ impl Clone for RusticNesState {
         clone
     }
 }
-
-static NTSC_PAL: &[u8] = include_bytes!("ntscpalette.pal");
 
 impl NesStateHandler for RusticNesState {
     fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Option<FrameData> {
