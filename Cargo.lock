@@ -393,15 +393,14 @@ checksum = "fbb36e985947064623dbd357f727af08ffd077f93d696782f3c56365fa2e2799"
 
 [[package]]
 name = "async-tls"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfeefd0ca297cbbb3bd34fd6b228401c2a5177038257afd751bc29f0a2da4795"
+checksum = "b2ae3c9eba89d472a0e4fe1dea433df78fbbe63d2b764addaf2ba3a6bde89a5e"
 dependencies = [
  "futures-core",
  "futures-io",
- "rustls 0.20.9",
+ "rustls",
  "rustls-pemfile",
- "webpki",
  "webpki-roots",
 ]
 
@@ -418,9 +417,9 @@ dependencies = [
 
 [[package]]
 name = "async-tungstenite"
-version = "0.23.0"
+version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1e9efbe14612da0a19fb983059a0b621e9cf6225d7018ecab4f9988215540dc"
+checksum = "ef0f8d64ef9351752fbe5462f242c625d9c4910d2bc3f7ec44c43857ca123f5d"
 dependencies = [
  "async-std",
  "async-tls",
@@ -480,6 +479,12 @@ name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
+
+[[package]]
+name = "base64"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9475866fec1451be56a3c2400fd081ff546538961565ccb5b7142cbd22bc7a51"
 
 [[package]]
 name = "base64ct"
@@ -1699,7 +1704,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "futures-util",
- "http",
+ "http 0.2.12",
  "indexmap",
  "slab",
  "tokio",
@@ -1764,13 +1769,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "http"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21b9ddb458710bc376481b842f5da65cdf31522de232c1ca8146abce2a358258"
+dependencies = [
+ "bytes",
+ "fnv",
+ "itoa",
+]
+
+[[package]]
 name = "http-body"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ceab25649e9960c0311ea418d17bee82c0dcec1bd053b5f9a66e265a693bed2"
 dependencies = [
  "bytes",
- "http",
+ "http 0.2.12",
  "pin-project-lite",
 ]
 
@@ -1803,7 +1819,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "h2",
- "http",
+ "http 0.2.12",
  "http-body",
  "httparse",
  "httpdate",
@@ -1884,16 +1900,16 @@ dependencies = [
 
 [[package]]
 name = "interceptor"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5927883184e6a819b22d5e4f5f7bc7ca134fde9b2026fbddd8d95249746ba21e"
+checksum = "5b12e186d2a4c21225df6beb8ae5d81817c928da12e7ce78d0953fc74d88b590"
 dependencies = [
  "async-trait",
  "bytes",
  "log",
  "rand",
  "rtcp",
- "rtp 0.9.0",
+ "rtp",
  "thiserror",
  "tokio",
  "waitgroup",
@@ -2074,9 +2090,9 @@ dependencies = [
 
 [[package]]
 name = "matchbox_protocol"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a08a1627b52e1a4053d330511747d8385692d780a59b75df078be3dcdd06eb85"
+checksum = "f0ee522f118be98f5a7b17aaafee927b3b38fe4608910aa6d863658ba7a0f64b"
 dependencies = [
  "cfg-if",
  "derive_more",
@@ -2086,9 +2102,9 @@ dependencies = [
 
 [[package]]
 name = "matchbox_socket"
-version = "0.8.1"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75225972ed3d375ace95f06a89b798ddaa04d379dac372ebe19683bcfb2b3db9"
+checksum = "5fcf35ffbb5218ea788e671f02ada3a170a18de76c0de33d441b22c27a4df85d"
 dependencies = [
  "async-compat",
  "async-trait",
@@ -2252,7 +2268,7 @@ name = "nes-bundler"
 version = "1.1.7"
 dependencies = [
  "anyhow",
- "base64",
+ "base64 0.22.0",
  "bitflags 2.4.2",
  "cxx",
  "cxx-build",
@@ -2592,7 +2608,7 @@ version = "3.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b8fcc794035347fb64beda2d3b462595dd2753e3f268d89c5aae77e8cf2c310"
 dependencies = [
- "base64",
+ "base64 0.21.7",
  "serde",
 ]
 
@@ -2893,13 +2909,13 @@ version = "0.11.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6920094eb85afde5e4a138be3f2de8bbdf28000f0029e72c45025a56b042251"
 dependencies = [
- "base64",
+ "base64 0.21.7",
  "bytes",
  "encoding_rs",
  "futures-core",
  "futures-util",
  "h2",
- "http",
+ "http 0.2.12",
  "http-body",
  "hyper",
  "hyper-tls",
@@ -2980,19 +2996,6 @@ dependencies = [
 
 [[package]]
 name = "rtp"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e60482acbe8afb31edf6b1413103b7bca7a65004c423b3c3993749a083994fbe"
-dependencies = [
- "bytes",
- "rand",
- "serde",
- "thiserror",
- "webrtc-util",
-]
-
-[[package]]
-name = "rtp"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47fca9bd66ae0b1f3f649b8f5003d6176433d7293b78b0fce7e1031816bdd99d"
@@ -3062,18 +3065,6 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.20.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b80e3dec595989ea8510028f30c408a4630db12c9cbb8de34203b89d6577e99"
-dependencies = [
- "log",
- "ring 0.16.20",
- "sct",
- "webpki",
-]
-
-[[package]]
-name = "rustls"
 version = "0.21.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9d5a6813c0759e4609cd494e8e725babae6a2ca7b62a5536a13daaec6fcb7ba"
@@ -3090,7 +3081,7 @@ version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c74cae0a4cf6ccbbf5f359f08efdf8ee7e1dc532573bf0db71968cb56b1448c"
 dependencies = [
- "base64",
+ "base64 0.21.7",
 ]
 
 [[package]]
@@ -3477,7 +3468,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3f371788132e9d623e6eab4ba28aac083763a4133f045e6ebaee5ceb869803d"
 dependencies = [
- "base64",
+ "base64 0.21.7",
  "crc",
  "lazy_static",
  "md-5",
@@ -3807,14 +3798,14 @@ checksum = "17f77d76d837a7830fe1d4f12b7b4ba4192c1888001c7164257e4bc6d21d96b4"
 
 [[package]]
 name = "tungstenite"
-version = "0.20.1"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e3dac10fd62eaf6617d3a904ae222845979aec67c615d1c842b4002c7666fb9"
+checksum = "9ef1a641ea34f399a848dea702823bbecfb4c486f911735368f1f137cb8257e1"
 dependencies = [
  "byteorder",
  "bytes",
  "data-encoding",
- "http",
+ "http 1.1.0",
  "httparse",
  "log",
  "rand",
@@ -3831,7 +3822,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ffb2ac4f331064513ad510b7a36edc0df555bd61672986607f7c9ff46f98f415"
 dependencies = [
  "async-trait",
- "base64",
+ "base64 0.21.7",
  "futures",
  "log",
  "md-5",
@@ -4255,9 +4246,9 @@ dependencies = [
 
 [[package]]
 name = "webrtc"
-version = "0.9.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d91e7cf018f7185552bf6a5dd839f4ed9827aea33b746763c9a215f84a0d0b34"
+checksum = "1fbdf025f0fa62f4bf252b2fb0cff0a04d3eac2021c440096649e62f4e48553d"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -4270,10 +4261,10 @@ dependencies = [
  "rand",
  "rcgen",
  "regex",
- "ring 0.16.20",
+ "ring 0.17.8",
  "rtcp",
- "rtp 0.9.0",
- "rustls 0.21.10",
+ "rtp",
+ "rustls",
  "sdp",
  "serde",
  "serde_json",
@@ -4312,9 +4303,9 @@ dependencies = [
 
 [[package]]
 name = "webrtc-dtls"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32b140b953f986e97828aa33ec6318186b05d862bee689efbc57af04a243e832"
+checksum = "188ce061a2371bdf4df54b136c89a6df243ed0ef6b03431b4bd18482cd718dfe"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -4332,8 +4323,8 @@ dependencies = [
  "rand",
  "rand_core",
  "rcgen",
- "ring 0.16.20",
- "rustls 0.21.10",
+ "ring 0.17.8",
+ "rustls",
  "sec1",
  "serde",
  "sha1",
@@ -4392,7 +4383,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "rand",
- "rtp 0.10.0",
+ "rtp",
  "thiserror",
 ]
 
@@ -4415,9 +4406,9 @@ dependencies = [
 
 [[package]]
 name = "webrtc-srtp"
-version = "0.11.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1db1f36c1c81e4b1e531c0b9678ba0c93809e196ce62122d87259bb71c03b9f"
+checksum = "383b0f0f73ee6cce396bdbc4d54ec661861a59eae9fc988914c1a8d82c5ac272"
 dependencies = [
  "aead",
  "aes",
@@ -4428,7 +4419,7 @@ dependencies = [
  "hmac",
  "log",
  "rtcp",
- "rtp 0.9.0",
+ "rtp",
  "sha1",
  "subtle",
  "thiserror",

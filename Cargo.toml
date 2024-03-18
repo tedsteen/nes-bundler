@@ -39,11 +39,11 @@ raw-window-handle = "0.5"
 sdl2 = { git = "https://github.com/tedsteen/rust-sdl2.git", branch = "rust-sdl2-for-nes-bundler", features = ["bundled", "static-link"] }
 
 rusticnes-core = { git = "https://github.com/tedsteen/rusticnes-core", branch="for-nes-bundler" }
-base64 = "0.21"
+base64 = "0.22"
 directories = "5"
 
 # Netplay deps
-matchbox_socket = { version="0.8", features = ["ggrs"], optional = true }
+matchbox_socket = { version="0.9", features = ["ggrs"], optional = true }
 futures-timer = { version = "3", features = ["wasm-bindgen"], optional = true }
 ggrs = { version = "0.10", optional = true }
 tokio = { version = "1", features = ["rt"], optional = true }
