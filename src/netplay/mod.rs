@@ -109,12 +109,18 @@ impl NesStateHandler for NetplayStateHandler {
     }
 
     fn save(&self) -> Option<Vec<u8>> {
-        //Saving is not supported in netplay
-        None
+        match &self.netplay {
+            Some(NetplayState::Connected(s)) => s.state.netplay_session.game_state.save(),
+            Some(NetplayState::Disconnected(s)) => s.state.save(),
+            _ => None,
+        }
     }
 
-    fn load(&mut self, _data: &mut Vec<u8>) {
-        //Loading is not supported in netplay
+    fn load(&mut self, data: &mut Vec<u8>) {
+        // Loading is only supported when disconnected
+        if let Some(NetplayState::Disconnected(s)) = &mut self.netplay {
+            s.state.load(data);
+        }
     }
 
     fn get_gui(&mut self) -> Option<&mut dyn crate::settings::gui::GuiComponent> {
