@@ -120,7 +120,7 @@ impl GlutinWindowContext {
                 if icon_handle != 0 {
                     let window_handle = w.hwnd as isize;
                     log::debug!("Got window handle: {:?}", icon_handle);
-                    for icon_type in [ICON_BIG, ICON_SMALL, ICON_SMALL2] {
+                    for icon_type in [ICON_SMALL, ICON_SMALL2, ICON_BIG] {
                         unsafe {
                             SendMessageW(
                                 window_handle,
