@@ -36,7 +36,7 @@ impl Clone for RusticNesState {
     }
 }
 
-static NTSC_PAL: &[u8] = include_bytes!("ntscpalette.pal");
+static NTSC_PAL: &[u8] = include_bytes!("../../config/ntscpalette.pal");
 
 impl NesStateHandler for RusticNesState {
     fn advance(
