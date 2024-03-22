@@ -1,7 +1,7 @@
 use md5::Digest;
 
 use crate::{
-    input::JoypadInput,
+    input::JoypadState,
     nes_state::{FrameData, LocalNesState, NesStateHandler, VideoFrame},
     settings::MAX_PLAYERS,
 };
@@ -26,7 +26,7 @@ pub struct Failed {
 impl NetplayState {
     pub fn advance(
         self,
-        inputs: [JoypadInput; MAX_PLAYERS],
+        joypad_state: [JoypadState; MAX_PLAYERS],
         video_frame: &mut VideoFrame,
     ) -> (Self, Option<FrameData>) {
         use NetplayState::*;
@@ -35,12 +35,12 @@ impl NetplayState {
                 video_frame.fill(0); //Black screen while connecting
                 netplay.advance()
             }
-            Connected(netplay) => netplay.advance(inputs, video_frame),
+            Connected(netplay) => netplay.advance(joypad_state, video_frame),
             Resuming(netplay) => {
                 video_frame.fill(0); //Black screen while resuming
                 netplay.advance()
             }
-            Disconnected(netplay) => netplay.advance(inputs, video_frame),
+            Disconnected(netplay) => netplay.advance(joypad_state, video_frame),
             Failed(netplay) => netplay.advance(),
         }
     }
@@ -162,10 +162,10 @@ impl Netplay<LocalNesState> {
     }
     fn advance(
         mut self,
-        inputs: [JoypadInput; 2],
+        joypad_state: [JoypadState; 2],
         video_frame: &mut VideoFrame,
     ) -> (NetplayState, Option<FrameData>) {
-        let frame_data = self.state.advance(inputs, video_frame);
+        let frame_data = self.state.advance(joypad_state, video_frame);
         (NetplayState::Disconnected(Box::new(self)), frame_data)
     }
 }
@@ -232,14 +232,14 @@ impl Netplay<Connected> {
 
     fn advance(
         mut self,
-        inputs: [JoypadInput; MAX_PLAYERS],
+        joypad_state: [JoypadState; MAX_PLAYERS],
         video_frame: &mut VideoFrame,
     ) -> (NetplayState, Option<FrameData>) {
         //log::trace!("Advancing Netplay<Connected>");
         let netplay_session = &mut self.state.netplay_session;
 
         if let Some(joypad_mapping) = &mut netplay_session.game_state.joypad_mapping.clone() {
-            match netplay_session.advance(inputs, joypad_mapping, video_frame) {
+            match netplay_session.advance(joypad_state, joypad_mapping, video_frame) {
                 Ok(frame_data) => (NetplayState::Connected(Box::new(self)), frame_data),
                 Err(e) => {
                     log::error!("Resuming due to error: {:?}", e);

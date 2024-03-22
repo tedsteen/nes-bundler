@@ -1,7 +1,7 @@
 use super::buttons::ToGamepadButton;
 use super::settings::InputConfigurationRef;
 use super::ToInputId;
-use super::{buttons::GamepadButton, settings::InputSettings, InputId, JoypadInput};
+use super::{buttons::GamepadButton, settings::InputSettings, InputId, JoypadState};
 use crate::input::{self, InputConfigurationKind};
 use std::collections::{HashMap, HashSet};
 
@@ -52,11 +52,11 @@ pub struct Sdl2Gamepads {
 }
 
 impl Gamepads for Sdl2Gamepads {
-    fn get_joypad(&mut self, id: &InputId, mapping: &JoypadGamepadMapping) -> JoypadInput {
+    fn get_joypad(&mut self, id: &InputId, mapping: &JoypadGamepadMapping) -> JoypadState {
         if let Some(state) = self.get_gamepad_by_input_id(id) {
             mapping.calculate_state(state.get_pressed_buttons())
         } else {
-            JoypadInput(0)
+            JoypadState(0)
         }
     }
 

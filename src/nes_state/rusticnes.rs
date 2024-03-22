@@ -3,7 +3,7 @@ use rusticnes_core::cartridge::mapper_from_file;
 
 use super::{FrameData, LocalNesState, NesStateHandler, VideoFrame};
 use crate::{
-    input::JoypadInput,
+    input::JoypadState,
     settings::{gui::GuiComponent, MAX_PLAYERS},
     FPS,
 };
@@ -41,11 +41,11 @@ static NTSC_PAL: &[u8] = include_bytes!("../../config/ntscpalette.pal");
 impl NesStateHandler for RusticNesState {
     fn advance(
         &mut self,
-        inputs: [JoypadInput; MAX_PLAYERS],
+        joypad_state: [JoypadState; MAX_PLAYERS],
         video_frame: &mut VideoFrame,
     ) -> Option<FrameData> {
-        self.nes.p1_input = *inputs[0];
-        self.nes.p2_input = *inputs[1];
+        self.nes.p1_input = *joypad_state[0];
+        self.nes.p2_input = *joypad_state[1];
         self.nes.run_until_vblank();
 
         self.nes

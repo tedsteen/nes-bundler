@@ -2,7 +2,6 @@ use self::{
     gamepad::{Gamepads, JoypadGamepadMapping},
     keyboard::{JoypadKeyboardMapping, Keyboards},
     keys::{KeyCode, Modifiers},
-    sdl2_impl::Sdl2Gamepads,
     settings::InputConfigurationRef,
 };
 use crate::settings::{gui::GuiEvent, Settings, MAX_PLAYERS};
@@ -94,8 +93,8 @@ where
         })
     }
 
-    fn calculate_state(&self, keys: &HashSet<KeyType>) -> JoypadInput {
-        JoypadInput(keys.iter().fold(0_u8, |mut acc, key| {
+    fn calculate_state(&self, keys: &HashSet<KeyType>) -> JoypadState {
+        JoypadState(keys.iter().fold(0_u8, |mut acc, key| {
             for button in self.reverse_lookup(key) {
                 acc |= button as u8;
             }
@@ -105,9 +104,9 @@ where
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct JoypadInput(pub u8);
+pub struct JoypadState(pub u8);
 
-impl Deref for JoypadInput {
+impl Deref for JoypadState {
     type Target = u8;
 
     fn deref(&self) -> &Self::Target {
@@ -115,7 +114,7 @@ impl Deref for JoypadInput {
     }
 }
 
-impl JoypadInput {
+impl JoypadState {
     pub fn is_pressed(&self, button: JoypadButton) -> bool {
         self.deref() & (button as u8) != 0
     }
@@ -147,7 +146,7 @@ struct MapRequest {
 pub struct Inputs {
     keyboards: Keyboards,
     gamepads: Box<dyn Gamepads>,
-    pub joypads: Arc<Mutex<[JoypadInput; MAX_PLAYERS]>>,
+    pub joypads: Arc<Mutex<[JoypadState; MAX_PLAYERS]>>,
     default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
 
     //Gui
@@ -156,16 +155,15 @@ pub struct Inputs {
 
 impl Inputs {
     pub fn new(
-        game_controller_subsystem: sdl2::GameControllerSubsystem,
+        gamepads: Box<dyn Gamepads>,
         default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
     ) -> Self {
-        let gamepads = Box::new(Sdl2Gamepads::new(game_controller_subsystem));
         let keyboards = Keyboards::new();
 
         Self {
             keyboards,
             gamepads,
-            joypads: Arc::new(Mutex::new([JoypadInput(0), JoypadInput(0)])),
+            joypads: Arc::new(Mutex::new([JoypadState(0), JoypadState(0)])),
             default_input_configurations,
 
             mapping_request: None,
@@ -191,7 +189,7 @@ impl Inputs {
         joypads[1] = pad2;
     }
 
-    pub fn get_joypad(&self, player: usize) -> JoypadInput {
+    pub fn get_joypad(&self, player: usize) -> JoypadState {
         self.joypads.lock().unwrap()[player]
     }
 
@@ -202,7 +200,7 @@ impl Inputs {
     fn get_joypad_for_input_configuration(
         &mut self,
         input_conf: &InputConfiguration,
-    ) -> JoypadInput {
+    ) -> JoypadState {
         match &input_conf.kind {
             InputConfigurationKind::Keyboard(mapping) => self.keyboards.get_joypad(mapping),
             InputConfigurationKind::Gamepad(mapping) => {

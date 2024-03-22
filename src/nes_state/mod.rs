@@ -1,5 +1,5 @@
 use crate::{
-    input::JoypadInput,
+    input::JoypadState,
     settings::{gui::GuiComponent, MAX_PLAYERS},
     Fps, NES_HEIGHT, NES_WIDTH,
 };
@@ -20,7 +20,7 @@ pub type VideoFrame = [u8; (NES_WIDTH * NES_HEIGHT * 3) as usize];
 pub trait NesStateHandler: Send {
     fn advance(
         &mut self,
-        inputs: [JoypadInput; MAX_PLAYERS],
+        joypad_state: [JoypadState; MAX_PLAYERS],
         video_frame: &mut VideoFrame,
     ) -> Option<FrameData>;
     fn save(&self) -> Option<Vec<u8>>;

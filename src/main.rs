@@ -10,6 +10,7 @@ use audio::Audio;
 
 use game::Game;
 
+use input::sdl2_impl::Sdl2Gamepads;
 use input::Inputs;
 use nes_state::emulator::Emulator;
 use ringbuf::HeapRb;
@@ -99,11 +100,14 @@ async fn run() -> anyhow::Result<()> {
     let (audio_tx, audio_rx) = HeapRb::<f32>::new(1024 * 8).split();
 
     let audio = Audio::new(&sdl_context, settings.audio.clone(), audio_rx)?;
+
     let inputs = Inputs::new(
-        sdl_context
-            .game_controller()
-            .map_err(anyhow::Error::msg)
-            .expect("Could not create sdl context"),
+        Box::new(Sdl2Gamepads::new(
+            sdl_context
+                .game_controller()
+                .map_err(anyhow::Error::msg)
+                .expect("Could not create sdl context"),
+        )),
         bundle.config.default_settings.input.selected.clone(),
     );
     let emulator = Emulator::new(

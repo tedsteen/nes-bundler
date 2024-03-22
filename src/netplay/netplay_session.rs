@@ -2,7 +2,7 @@ use ggrs::{Config, GgrsRequest, P2PSession};
 use matchbox_socket::PeerId;
 
 use crate::{
-    input::JoypadInput,
+    input::JoypadState,
     nes_state::{FrameData, NesStateHandler, VideoFrame},
     settings::MAX_PLAYERS,
     FPS,
@@ -63,7 +63,7 @@ impl NetplaySession {
 
     pub fn advance(
         &mut self,
-        inputs: [JoypadInput; MAX_PLAYERS],
+        joypad_state: [JoypadState; MAX_PLAYERS],
         joypad_mapping: &JoypadMapping,
         video_frame: &mut VideoFrame,
     ) -> anyhow::Result<Option<FrameData>> {
@@ -78,7 +78,7 @@ impl NetplaySession {
         }
 
         for handle in sess.local_player_handles() {
-            sess.add_local_input(handle, *inputs[0])?;
+            sess.add_local_input(handle, *joypad_state[0])?;
         }
 
         match sess.advance_frame() {
@@ -96,7 +96,7 @@ impl NetplaySession {
                         GgrsRequest::AdvanceFrame { inputs } => {
                             let this_frame_data = self.game_state.advance(
                                 joypad_mapping.map(
-                                    [JoypadInput(inputs[0].0), JoypadInput(inputs[1].0)],
+                                    [JoypadState(inputs[0].0), JoypadState(inputs[1].0)],
                                     local_player_idx,
                                 ),
                                 video_frame,

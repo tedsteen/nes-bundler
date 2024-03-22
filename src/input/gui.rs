@@ -1,5 +1,5 @@
 use crate::{
-    input::{Inputs, JoypadButton, JoypadInput},
+    input::{Inputs, JoypadButton, JoypadState},
     settings::{
         gui::{GuiComponent, GuiEvent},
         Settings,
@@ -12,7 +12,7 @@ use super::{settings::InputConfigurationRef, MapRequest};
 impl Inputs {
     fn key_map_ui(
         ui: &mut Ui,
-        joypad_input: JoypadInput,
+        joypad_state: JoypadState,
         available_configurations: &[InputConfigurationRef],
         selected_configuration: &mut InputConfigurationRef,
         player: usize,
@@ -46,7 +46,7 @@ impl Inputs {
                             mapping_request,
                             ui,
                             input_configuration,
-                            joypad_input,
+                            joypad_state,
                             button,
                         );
                     });
@@ -57,11 +57,11 @@ impl Inputs {
         map_request: &mut Option<MapRequest>,
         ui: &mut Ui,
         input_configuration: &InputConfigurationRef,
-        joypad_input: JoypadInput,
+        joypad_state: JoypadState,
         button: JoypadButton,
     ) {
         let mut text = RichText::new(format!("{:?}", button));
-        if joypad_input.is_pressed(button) {
+        if joypad_state.is_pressed(button) {
             text = text.color(Color32::from_rgb(255, 255, 255));
         }
         ui.label(text);

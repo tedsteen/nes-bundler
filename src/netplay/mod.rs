@@ -1,7 +1,7 @@
 use std::ops::{Deref, DerefMut};
 
 use crate::{
-    input::JoypadInput,
+    input::JoypadState,
     nes_state::{FrameData, LocalNesState, NesStateHandler, VideoFrame},
     settings::MAX_PLAYERS,
 };
@@ -28,22 +28,22 @@ pub enum JoypadMapping {
 impl JoypadMapping {
     fn map(
         &self,
-        inputs: [JoypadInput; MAX_PLAYERS],
+        joypad_state: [JoypadState; MAX_PLAYERS],
         local_player_idx: usize,
-    ) -> [JoypadInput; MAX_PLAYERS] {
+    ) -> [JoypadState; MAX_PLAYERS] {
         match self {
             JoypadMapping::P1 => {
                 if local_player_idx == 0 {
-                    [inputs[0], inputs[1]]
+                    [joypad_state[0], joypad_state[1]]
                 } else {
-                    [inputs[1], inputs[0]]
+                    [joypad_state[1], joypad_state[0]]
                 }
             }
             JoypadMapping::P2 => {
                 if local_player_idx == 0 {
-                    [inputs[1], inputs[0]]
+                    [joypad_state[1], joypad_state[0]]
                 } else {
-                    [inputs[0], inputs[1]]
+                    [joypad_state[0], joypad_state[1]]
                 }
             }
         }
@@ -97,13 +97,13 @@ impl DerefMut for NetplayNesState {
 impl NesStateHandler for NetplayStateHandler {
     fn advance(
         &mut self,
-        inputs: [JoypadInput; MAX_PLAYERS],
+        joypad_state: [JoypadState; MAX_PLAYERS],
         video_frame: &mut VideoFrame,
     ) -> Option<FrameData> {
         if let Some((new_state, frame_data)) = self
             .netplay
             .take()
-            .map(|netplay| netplay.advance(inputs, video_frame))
+            .map(|netplay| netplay.advance(joypad_state, video_frame))
         {
             self.netplay = Some(new_state);
             frame_data

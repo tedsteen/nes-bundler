@@ -7,7 +7,7 @@ use crate::{
     audio::AudioSender,
     bundle::Bundle,
     gameloop::GameLoop,
-    input::JoypadInput,
+    input::JoypadState,
     settings::{gui::GuiComponent, Settings, MAX_PLAYERS},
     window::egui_winit_wgpu::VideoFramePool,
     FPS,
@@ -26,7 +26,7 @@ impl Emulator {
         settings: &mut Settings,
         frame_pool: VideoFramePool,
         mut audio_tx: AudioSender,
-        joypads: Arc<Mutex<[JoypadInput; MAX_PLAYERS]>>,
+        joypads: Arc<Mutex<[JoypadState; MAX_PLAYERS]>>,
     ) -> Self {
         let rom = bundle.rom.clone();
 
@@ -49,6 +49,7 @@ impl Emulator {
         };
         let nes_state = Arc::new(Mutex::new(nes_state));
         let mut game_loop = GameLoop::new(nes_state.clone(), FPS);
+
         let jh = tokio::spawn(async move {
             loop {
                 //println!("LOOP");
