@@ -5,7 +5,7 @@ use winit::event_loop::EventLoop;
 
 use crate::input::keys::{KeyCode, Modifiers};
 
-use self::egui_winit_wgpu::{State, VideoFramePool};
+use self::egui_winit_wgpu::{Renderer, VideoFramePool};
 pub mod egui_winit_wgpu;
 mod winit_impl;
 
@@ -38,7 +38,7 @@ pub async fn create_state(
     min_inner_size: Size,
     event_loop: &EventLoop<()>,
     frame_pool: VideoFramePool,
-) -> Result<State> {
+) -> Result<Renderer> {
     let window = winit::window::WindowBuilder::new()
         .with_resizable(true)
         .with_inner_size(inner_size)
@@ -53,5 +53,5 @@ pub async fn create_state(
         winit_window_builder.with_window_icon(Some(winit::window::Icon::from_resource(1, None)?))
     };
 
-    State::new(Arc::new(window), frame_pool).await
+    Renderer::new(Arc::new(window), frame_pool).await
 }

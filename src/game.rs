@@ -1,5 +1,5 @@
 use crate::nes_state::emulator::Emulator;
-use crate::window::egui_winit_wgpu::State;
+use crate::window::egui_winit_wgpu::Renderer;
 use crate::window::Fullscreen;
 
 use crate::input::keys::Modifiers;
@@ -101,11 +101,11 @@ impl Game {
         }
     }
 
-    pub fn render_gui(&mut self, state: &mut State, gui: &mut Gui) {
-        if let Some(frame_buffer) = state.frame_pool.pop_ref() {
+    pub fn render_gui(&mut self, renderer: &mut Renderer, gui: &mut Gui) {
+        if let Some(frame_buffer) = renderer.frame_pool.pop_ref() {
             gui.update_nes_texture(&frame_buffer);
         }
-        let render_result = state.render(move |ctx| {
+        let render_result = renderer.render(move |ctx| {
             self.audio.sync_audio_devices(&mut self.settings.audio);
             let settings_hash_before = self.settings.get_hash();
             gui.ui(
@@ -129,7 +129,7 @@ impl Game {
             Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
                 // Reconfigure the surface if it's lost or outdated
 
-                state.resize(state.size);
+                renderer.resize(renderer.size);
             }
             // The system is out of memory, we should probably quit
             Err(wgpu::SurfaceError::OutOfMemory) => {

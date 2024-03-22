@@ -52,7 +52,7 @@ impl<const N: usize> Default for BytePool<N> {
 const VIDEO_FRAME_SIZE: usize = size_of::<VideoFrame>();
 pub type VideoFramePool = BytePool<VIDEO_FRAME_SIZE>;
 
-pub struct State {
+pub struct Renderer {
     //TODO: Where should this live?
     pub frame_pool: VideoFramePool,
 
@@ -66,7 +66,7 @@ pub struct State {
     pub egui: gui::EguiRenderer,
 }
 
-impl State {
+impl Renderer {
     pub async fn new(window: Arc<Window>, frame_pool: VideoFramePool) -> Result<Self> {
         let size = window.inner_size();
 
