@@ -88,6 +88,12 @@ fn run() -> anyhow::Result<()> {
                         winit::event::WindowEvent::Resized(physical_size) => {
                             game.gl_window.resize(*physical_size);
                         }
+                        winit::event::WindowEvent::RedrawRequested => {
+                            // Windows needs this to not freeze the window when resizing or moving
+                            #[cfg(windows)]
+                            game.gl_window.window().request_redraw();
+                            should_update = true;
+                        }
                         _ => {}
                     }
                 }
