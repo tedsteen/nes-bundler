@@ -36,7 +36,10 @@ impl NetplayState {
                 netplay.advance()
             }
             Connected(netplay) => netplay.advance(inputs, video_frame),
-            Resuming(netplay) => netplay.advance(),
+            Resuming(netplay) => {
+                video_frame.fill(0); //Black screen while resuming
+                netplay.advance()
+            }
             Disconnected(netplay) => netplay.advance(inputs, video_frame),
             Failed(netplay) => netplay.advance(),
         }
