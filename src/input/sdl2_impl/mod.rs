@@ -5,7 +5,6 @@ use super::{buttons::GamepadButton, settings::InputSettings, InputId, JoypadInpu
 use crate::input::{self, InputConfigurationKind};
 use std::collections::{HashMap, HashSet};
 
-use anyhow::Result;
 use sdl2::{controller::GameController, GameControllerSubsystem};
 
 use super::gamepad::{GamepadEvent, GamepadState, Gamepads, JoypadGamepadMapping, ToGamepadEvent};
@@ -109,11 +108,11 @@ impl Sdl2Gamepads {
         format!("01-gamepad-{}", id)
     }
 
-    pub fn new(game_controller_subsystem: GameControllerSubsystem) -> Result<Self> {
-        Ok(Sdl2Gamepads {
+    pub fn new(game_controller_subsystem: GameControllerSubsystem) -> Self {
+        Sdl2Gamepads {
             game_controller_subsystem,
             all: HashMap::new(),
-        })
+        }
     }
 
     fn get_gamepad(&mut self, id: InputId) -> Option<&mut Box<dyn GamepadState>> {

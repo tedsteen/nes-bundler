@@ -146,7 +146,7 @@ struct MapRequest {
 
 pub struct Inputs {
     keyboards: Keyboards,
-    gamepads: Option<Box<dyn Gamepads>>,
+    gamepads: Box<dyn Gamepads>,
     pub joypads: Arc<Mutex<[JoypadInput; MAX_PLAYERS]>>,
     default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
 
@@ -159,14 +159,7 @@ impl Inputs {
         game_controller_subsystem: sdl2::GameControllerSubsystem,
         default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
     ) -> Self {
-        let gamepads: Option<Box<dyn Gamepads>> = match Sdl2Gamepads::new(game_controller_subsystem)
-        {
-            Ok(gamepads) => Some(Box::new(gamepads)),
-            Err(e) => {
-                log::error!("Failed to initialize gamepads: {:?}", e);
-                None
-            }
-        };
+        let gamepads = Box::new(Sdl2Gamepads::new(game_controller_subsystem));
         let keyboards = Keyboards::new();
 
         Self {
@@ -185,9 +178,7 @@ impl Inputs {
                 self.keyboards.advance(key_event);
             }
             GuiEvent::Gamepad(gamepad_event) => {
-                if let Some(gamepads) = &mut self.gamepads {
-                    gamepads.advance(gamepad_event, &mut settings.input);
-                }
+                self.gamepads.advance(gamepad_event, &mut settings.input);
             }
         }
         let input_settings = &mut settings.input;
@@ -195,7 +186,6 @@ impl Inputs {
 
         let pad1 = self.get_joypad_for_input_configuration(&input_settings.selected[0].borrow());
         let pad2 = self.get_joypad_for_input_configuration(&input_settings.selected[1].borrow());
-
         let mut joypads = self.joypads.lock().unwrap();
         joypads[0] = pad1;
         joypads[1] = pad2;
@@ -216,11 +206,7 @@ impl Inputs {
         match &input_conf.kind {
             InputConfigurationKind::Keyboard(mapping) => self.keyboards.get_joypad(mapping),
             InputConfigurationKind::Gamepad(mapping) => {
-                if let Some(gamepads) = &mut self.gamepads {
-                    gamepads.get_joypad(&input_conf.id, mapping)
-                } else {
-                    JoypadInput(0)
-                }
+                self.gamepads.get_joypad(&input_conf.id, mapping)
             }
         }
     }
@@ -228,14 +214,11 @@ impl Inputs {
     pub fn is_connected(&self, input_conf: &InputConfiguration) -> bool {
         match &input_conf.kind {
             InputConfigurationKind::Keyboard(_) => true,
-            InputConfigurationKind::Gamepad(_) => {
-                self.gamepads.as_ref().map_or(false, |gamepads| {
-                    gamepads
-                        .get_gamepad_by_input_id(&input_conf.id)
-                        .map(|state| state.is_connected())
-                        .unwrap_or(false)
-                })
-            }
+            InputConfigurationKind::Gamepad(_) => self
+                .gamepads
+                .get_gamepad_by_input_id(&input_conf.id)
+                .map(|gp| gp.is_connected())
+                .unwrap_or(false),
         }
     }
 
@@ -256,15 +239,12 @@ impl Inputs {
                     }
                 }
                 InputConfigurationKind::Gamepad(mapping) => {
-                    if let Some(gamepads) = &self.gamepads {
-                        if let Some(state) =
-                            gamepads.get_gamepad_by_input_id(&input_configuration_id)
-                        {
-                            if let Some(new_button) = state.get_pressed_buttons().iter().next() {
-                                //If there's any button pressed, use the first found.
-                                let _ = mapping.lookup(button).insert(*new_button);
-                                remapped = true;
-                            }
+                    let gamepads = &self.gamepads;
+                    if let Some(state) = gamepads.get_gamepad_by_input_id(&input_configuration_id) {
+                        if let Some(new_button) = state.get_pressed_buttons().iter().next() {
+                            //If there's any button pressed, use the first found.
+                            let _ = mapping.lookup(button).insert(*new_button);
+                            remapped = true;
                         }
                     }
                 }
