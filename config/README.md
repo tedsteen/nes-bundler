@@ -7,6 +7,7 @@ Here is a breakdown of what can be customised
 * [config.yaml](config.yaml) - the main configuration
 * [rom.nes](rom.nes) - your game
 * [netplay-rom.nes](netplay-rom.nes) - optional custom Netplay ROM. This will enable a different player experience for netplayers, if f.ex in a netplay session you do not want to present the player with the one player option you can bake a ROM that defaults to two players
+* [NTSC palette](ntscpalette.pal) - the current pallette is generated with `palgen_persune.py --skip-plot -aps 5 -ela 0.01429 -e -hue 3.75 -sat 0.8 -o ntscpalette.pal`. Look [here](https://github.com/Gumball2415/palgen-persune) for details
 
 The rest is only needed for a proper bundle
 * [Linux icon](linux/icon_256x256.png)
