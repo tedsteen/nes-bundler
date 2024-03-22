@@ -7,7 +7,12 @@ use self::{
 };
 use crate::settings::{gui::GuiEvent, Settings, MAX_PLAYERS};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, fmt::Debug, ops::Deref};
+use std::{
+    collections::HashSet,
+    fmt::Debug,
+    ops::Deref,
+    sync::{Arc, Mutex},
+};
 
 pub mod buttons;
 pub mod gamepad;
@@ -127,6 +132,7 @@ pub struct InputConfiguration {
     pub name: String,
     pub kind: InputConfigurationKind,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub enum InputConfigurationKind {
     Keyboard(JoypadKeyboardMapping),
@@ -141,11 +147,10 @@ struct MapRequest {
 pub struct Inputs {
     keyboards: Keyboards,
     gamepads: Option<Box<dyn Gamepads>>,
-    joypads: [JoypadInput; MAX_PLAYERS],
+    pub joypads: Arc<Mutex<[JoypadInput; MAX_PLAYERS]>>,
     default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
 
     //Gui
-    gui_is_open: bool,
     mapping_request: Option<MapRequest>,
 }
 
@@ -167,10 +172,9 @@ impl Inputs {
         Self {
             keyboards,
             gamepads,
-            joypads: [JoypadInput(0), JoypadInput(0)],
+            joypads: Arc::new(Mutex::new([JoypadInput(0), JoypadInput(0)])),
             default_input_configurations,
 
-            gui_is_open: true,
             mapping_request: None,
         }
     }
@@ -189,14 +193,16 @@ impl Inputs {
         let input_settings = &mut settings.input;
         input_settings.reset_selected_disconnected_inputs(self);
 
-        self.joypads[0] =
-            self.get_joypad_for_input_configuration(&input_settings.selected[0].borrow());
-        self.joypads[1] =
-            self.get_joypad_for_input_configuration(&input_settings.selected[1].borrow());
+        let pad1 = self.get_joypad_for_input_configuration(&input_settings.selected[0].borrow());
+        let pad2 = self.get_joypad_for_input_configuration(&input_settings.selected[1].borrow());
+
+        let mut joypads = self.joypads.lock().unwrap();
+        joypads[0] = pad1;
+        joypads[1] = pad2;
     }
 
     pub fn get_joypad(&self, player: usize) -> JoypadInput {
-        self.joypads[player]
+        self.joypads.lock().unwrap()[player]
     }
 
     pub fn get_default_conf(&self, player: usize) -> &InputConfigurationRef {

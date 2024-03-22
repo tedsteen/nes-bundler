@@ -114,7 +114,6 @@ impl<'de> InputSettings {
         id: &'a InputId,
         player: usize,
     ) -> Result<&'a InputConfigurationRef, SettingsParseError> {
-        #[allow(clippy::or_fun_call)]
         configurations
             .get(id)
             .ok_or(SettingsParseError::new(&format!(

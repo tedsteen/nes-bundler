@@ -1,3 +1,0 @@
-[submodule "src/audio/stretch/signalsmith-stretch"]
-	path = src/audio/stretch/signalsmith-stretch
-	url = https://github.com/Signalsmith-Audio/signalsmith-stretch.git

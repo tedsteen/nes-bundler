@@ -148,9 +148,6 @@ impl GuiComponent for Inputs {
         Some("Input".to_string())
     }
 
-    fn open(&mut self) -> &mut bool {
-        &mut self.gui_is_open
-    }
     fn messages(&self) -> Vec<String> {
         [].to_vec()
     }

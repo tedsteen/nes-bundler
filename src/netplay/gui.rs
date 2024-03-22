@@ -252,9 +252,5 @@ impl GuiComponent for NetplayStateHandler {
         Some("Netplay!".to_string())
     }
 
-    fn open(&mut self) -> &mut bool {
-        &mut self.gui_is_open
-    }
-
     fn event(&mut self, _event: &GuiEvent, _settings: &mut Settings) {}
 }

@@ -2,9 +2,8 @@ use std::ops::{Deref, DerefMut};
 
 use crate::{
     input::JoypadInput,
-    nes_state::{FrameData, LocalNesState, NesStateHandler},
+    nes_state::{FrameData, LocalNesState, NesStateHandler, VideoFrame},
     settings::MAX_PLAYERS,
-    Bundle,
 };
 use serde::Deserialize;
 
@@ -62,7 +61,6 @@ pub struct NetplayStateHandler {
     netplay: Option<NetplayState>,
 
     //Gui
-    gui_is_open: bool,
     room_name: String,
 }
 
@@ -97,9 +95,15 @@ impl DerefMut for NetplayNesState {
 }
 
 impl NesStateHandler for NetplayStateHandler {
-    fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Option<FrameData> {
-        if let Some((new_state, frame_data)) =
-            self.netplay.take().map(|netplay| netplay.advance(inputs))
+    fn advance(
+        &mut self,
+        inputs: [JoypadInput; MAX_PLAYERS],
+        video_frame: &mut VideoFrame,
+    ) -> Option<FrameData> {
+        if let Some((new_state, frame_data)) = self
+            .netplay
+            .take()
+            .map(|netplay| netplay.advance(inputs, video_frame))
         {
             self.netplay = Some(new_state);
             frame_data
@@ -139,20 +143,21 @@ impl NesStateHandler for NetplayStateHandler {
 }
 
 impl NetplayStateHandler {
-    pub fn new(local_rom: Vec<u8>, bundle: &Bundle, netplay_id: &mut Option<String>) -> Self {
-        let netplay_build_config = &bundle.config.netplay;
-        let netplay_rom = bundle.netplay_rom.clone();
-
+    pub fn new(
+        local_rom: Vec<u8>,
+        netplay_rom: Vec<u8>,
+        netplay_build_config: NetplayBuildConfiguration,
+        netplay_id: String,
+    ) -> Self {
         NetplayStateHandler {
-            netplay: Some(NetplayState::Disconnected(Netplay::new(
-                netplay_build_config.clone(),
+            room_name: netplay_build_config.default_room_name.clone(),
+            netplay: Some(NetplayState::Disconnected(Box::new(Netplay::new(
+                netplay_build_config,
                 netplay_id,
                 md5::compute(&netplay_rom),
                 local_rom,
                 netplay_rom,
-            ))),
-            gui_is_open: true,
-            room_name: netplay_build_config.default_room_name.clone(),
+            )))),
         }
     }
 }

@@ -3,7 +3,7 @@ use matchbox_socket::PeerId;
 
 use crate::{
     input::JoypadInput,
-    nes_state::{FrameData, NesStateHandler},
+    nes_state::{FrameData, NesStateHandler, VideoFrame},
     settings::MAX_PLAYERS,
     FPS,
 };
@@ -65,6 +65,7 @@ impl NetplaySession {
         &mut self,
         inputs: [JoypadInput; MAX_PLAYERS],
         joypad_mapping: &JoypadMapping,
+        video_frame: &mut VideoFrame,
     ) -> anyhow::Result<Option<FrameData>> {
         let local_player_idx = self.get_local_player_idx();
         let sess = &mut self.p2p_session;
@@ -93,10 +94,13 @@ impl NetplaySession {
                             cell.save(frame, Some(self.game_state.clone()), None);
                         }
                         GgrsRequest::AdvanceFrame { inputs } => {
-                            let this_frame_data = self.game_state.advance(joypad_mapping.map(
-                                [JoypadInput(inputs[0].0), JoypadInput(inputs[1].0)],
-                                local_player_idx,
-                            ));
+                            let this_frame_data = self.game_state.advance(
+                                joypad_mapping.map(
+                                    [JoypadInput(inputs[0].0), JoypadInput(inputs[1].0)],
+                                    local_player_idx,
+                                ),
+                                video_frame,
+                            );
 
                             if self.game_state.frame <= self.last_handled_frame {
                                 //This is a replay

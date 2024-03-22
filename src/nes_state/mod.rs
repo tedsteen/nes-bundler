@@ -1,24 +1,28 @@
 use crate::{
     input::JoypadInput,
     settings::{gui::GuiComponent, MAX_PLAYERS},
-    Fps,
+    Fps, NES_HEIGHT, NES_WIDTH,
 };
 
 use self::rusticnes::RusticNesState;
 
+pub mod emulator;
 pub mod rusticnes;
-
 pub type LocalNesState = RusticNesState;
 
 #[derive(Clone)]
 pub struct FrameData {
-    pub video: Vec<u8>,
     pub audio: Vec<f32>,
     pub fps: Fps,
 }
+pub type VideoFrame = [u8; (NES_WIDTH * NES_HEIGHT * 3) as usize];
 
-pub trait NesStateHandler {
-    fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Option<FrameData>;
+pub trait NesStateHandler: Send {
+    fn advance(
+        &mut self,
+        inputs: [JoypadInput; MAX_PLAYERS],
+        video_frame: &mut VideoFrame,
+    ) -> Option<FrameData>;
     fn save(&self) -> Option<Vec<u8>>;
     fn load(&mut self, data: &mut Vec<u8>);
     fn get_gui(&mut self) -> Option<&mut dyn GuiComponent>;

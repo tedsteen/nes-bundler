@@ -11,14 +11,11 @@ use crate::{
 pub struct Debug {
     pub override_fps: bool,
     pub fps: Fps,
-
-    gui_is_open: bool,
 }
 
 impl Debug {
     pub(crate) fn new() -> Self {
         Self {
-            gui_is_open: true,
             override_fps: false,
             fps: FPS,
         }
@@ -44,10 +41,6 @@ impl GuiComponent for Debug {
 
     fn name(&self) -> Option<String> {
         Some("Debug".to_string())
-    }
-
-    fn open(&mut self) -> &mut bool {
-        &mut self.gui_is_open
     }
 
     fn event(&mut self, _event: &GuiEvent, _settings: &mut Settings) {}

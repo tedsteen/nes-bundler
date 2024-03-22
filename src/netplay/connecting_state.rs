@@ -6,9 +6,7 @@ use matchbox_socket::{ChannelConfig, RtcIceServerConfig, WebRtcSocket, WebRtcSoc
 use md5::Digest;
 use serde::Deserialize;
 use std::fmt::Debug;
-use std::rc::Rc;
 use std::time::{Duration, Instant};
-use tokio::runtime::Runtime;
 
 use crate::{settings::MAX_PLAYERS, FPS};
 
@@ -29,12 +27,11 @@ pub struct StaticNetplayServerConfiguration {
     pub ggrs: GGRSConfiguration,
 }
 
-#[allow(clippy::large_enum_variant)]
 pub enum ConnectingState {
     LoadingNetplayServerConfiguration(Connecting<LoadingNetplayServerConfiguration>),
     PeeringUp(Connecting<PeeringState>),
-    Synchronizing(Connecting<SynchonizingState>),
-    Connected(Connecting<NetplaySession>),
+    Synchronizing(Box<Connecting<SynchonizingState>>),
+    Connected(Box<Connecting<NetplaySession>>),
     Retrying(Connecting<Retrying>),
     Failed(String),
 }
@@ -43,7 +40,6 @@ impl ConnectingState {
     pub fn connect<T>(netplay: &Netplay<T>, start_method: StartMethod) -> Self {
         Self::start(
             netplay.config.server.clone(),
-            netplay.rt.clone(),
             netplay.netplay_id.clone(),
             netplay.rom_hash,
             start_method,
@@ -52,7 +48,6 @@ impl ConnectingState {
 
     fn start(
         netplay_server_config: NetplayServerConfiguration,
-        rt: Rc<Runtime>,
         netplay_id: String,
         rom_hash: Digest,
         start_method: StartMethod,
@@ -64,7 +59,6 @@ impl ConnectingState {
                 Self::PeeringUp(Connecting::<PeeringState>::new(
                     netplay_server_config.clone(),
                     conf.clone(),
-                    rt,
                     netplay_id,
                     rom_hash,
                     start_method,
@@ -76,8 +70,8 @@ impl ConnectingState {
                 let req = reqwest_client.get(format!("{server}/{netplay_id}")).send();
                 let (sender, result) =
                     futures::channel::oneshot::channel::<Result<TurnOnResponse, TurnOnError>>();
-                rt.spawn(async move {
-                    let _ = match req.await {
+                tokio::spawn(async move {
+                    if let Err(e) = match req.await {
                         Ok(res) => {
                             log::trace!("Received response from TurnOn server: {:?}", res);
                             sender.send(res.json().await.map_err(|e| TurnOnError {
@@ -87,10 +81,12 @@ impl ConnectingState {
                         Err(e) => sender.send(Err(TurnOnError {
                             description: format!("Could not connect: {}", e),
                         })),
-                    };
+                    } {
+                        log::error!("Could not send response: {:?}", e);
+                    }
                 });
+
                 Self::LoadingNetplayServerConfiguration(Connecting {
-                    rt,
                     start_method,
                     netplay_server_config,
                     netplay_id,
@@ -112,7 +108,6 @@ impl ConnectingState {
     }
 }
 pub struct Connecting<S> {
-    rt: Rc<Runtime>,
     netplay_server_config: NetplayServerConfiguration,
     netplay_id: String,
     rom_hash: Digest,
@@ -123,7 +118,6 @@ pub struct Connecting<S> {
 impl<T> Connecting<T> {
     fn from<S>(state: T, other: Connecting<S>) -> Self {
         Self {
-            rt: other.rt,
             netplay_server_config: other.netplay_server_config,
             netplay_id: other.netplay_id,
             rom_hash: other.rom_hash,
@@ -137,7 +131,6 @@ impl<T> Connecting<T> {
                 fail_message.to_string(),
                 ConnectingState::start(
                     self.netplay_server_config.clone(),
-                    self.rt.clone(),
                     self.netplay_id.clone(),
                     self.rom_hash,
                     self.start_method.clone(),
@@ -158,7 +151,7 @@ pub struct PeeringState {
     unlock_url: Option<String>,
 }
 impl PeeringState {
-    pub fn new(rt: &Rc<Runtime>, resp: TurnOnResponse, start_method: StartMethod) -> Self {
+    pub fn new(resp: TurnOnResponse, start_method: StartMethod) -> Self {
         let mut maybe_unlock_url = None;
         let conf = match resp {
             TurnOnResponse::Basic(BasicConfiguration { unlock_url, conf }) => {
@@ -211,9 +204,8 @@ impl PeeringState {
         };
 
         let loop_fut = loop_fut.fuse();
-
-        rt.spawn(async move {
-            let timeout = Delay::new(Duration::from_millis(100));
+        let timeout = Delay::new(Duration::from_millis(100));
+        tokio::spawn(async move {
             futures::pin_mut!(loop_fut, timeout);
             loop {
                 select! {
@@ -253,7 +245,6 @@ impl SynchonizingState {
 type RoomName = String;
 
 #[derive(Clone, Debug)]
-#[allow(clippy::large_enum_variant)]
 pub enum StartMethod {
     Join(StartState, RoomName),
     Resume(StartState),
@@ -282,7 +273,7 @@ impl Connecting<LoadingNetplayServerConfiguration> {
             Ok(Some(Ok(resp))) => {
                 log::debug!("Got TurnOn config response: {:?}", resp);
                 ConnectingState::PeeringUp(Connecting::from(
-                    PeeringState::new(&self.rt, resp, self.start_method.clone()),
+                    PeeringState::new(resp, self.start_method.clone()),
                     self,
                 ))
             }
@@ -304,18 +295,12 @@ impl Connecting<PeeringState> {
     fn new(
         netplay_server_config: NetplayServerConfiguration,
         conf: StaticNetplayServerConfiguration,
-        rt: Rc<Runtime>,
         netplay_id: String,
         rom_hash: Digest,
         start_method: StartMethod,
     ) -> Self {
         Self {
-            state: PeeringState::new(
-                &rt,
-                TurnOnResponse::Full(conf.clone()),
-                start_method.clone(),
-            ),
-            rt,
+            state: PeeringState::new(TurnOnResponse::Full(conf.clone()), start_method.clone()),
             start_method,
             netplay_server_config,
             netplay_id,
@@ -351,8 +336,7 @@ impl Connecting<PeeringState> {
                     .expect("failed to add player");
             }
 
-            ConnectingState::Synchronizing(Connecting {
-                rt: self.rt,
+            ConnectingState::Synchronizing(Box::new(Connecting {
                 netplay_server_config: self.netplay_server_config,
                 netplay_id: self.netplay_id,
                 rom_hash: self.rom_hash,
@@ -363,7 +347,7 @@ impl Connecting<PeeringState> {
                         .expect("p2p session should be able to start"),
                     self.state.unlock_url.clone(),
                 ),
-            })
+            }))
         } else {
             ConnectingState::PeeringUp(self)
         }
@@ -376,16 +360,15 @@ impl Connecting<SynchonizingState> {
         if let SessionState::Running = self.state.p2p_session.current_state() {
             let start_method = self.start_method;
             log::debug!("Synchronized!");
-            ConnectingState::Connected(Connecting {
-                rt: self.rt,
+            ConnectingState::Connected(Box::new(Connecting {
                 netplay_server_config: self.netplay_server_config,
                 netplay_id: self.netplay_id,
                 rom_hash: self.rom_hash,
                 start_method: start_method.clone(),
                 state: NetplaySession::new(start_method.clone(), self.state.p2p_session),
-            })
+            }))
         } else {
-            ConnectingState::Synchronizing(self)
+            ConnectingState::Synchronizing(Box::new(self))
         }
     }
 }
@@ -419,7 +402,6 @@ impl Connecting<Retrying> {
                         log::warn!("All retry attempt failed, using fallback configuration");
                         ConnectingState::PeeringUp(Connecting::from(
                             PeeringState::new(
-                                &self.rt,
                                 TurnOnResponse::Full(StaticNetplayServerConfiguration {
                                     matchbox: MatchboxConfiguration {
                                         server: "matchbox.netplay.tech:3536".to_string(),

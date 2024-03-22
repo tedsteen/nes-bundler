@@ -20,74 +20,67 @@ impl TimeTrait for Time {
     }
 }
 
-pub struct GameLoop<G, T: TimeTrait> {
+pub struct GameLoop<G> {
     pub game: G,
     pub updates_per_second: Fps,
-    pub max_frame_time: f64,
 
     fixed_time_step: f64,
-    pub last_stats: T,
-    updates: Vec<T>,
-    renders: Vec<T>,
+    pub last_stats: Time,
+    updates: Vec<Time>,
+    renders: Vec<Time>,
     last_frame_time: f64,
     running_time: f64,
     accumulated_time: f64,
-    previous_instant: T,
-    current_instant: T,
+    previous_instant: Time,
+    current_instant: Time,
 }
 const SAMPLE_WINDOW: f64 = 1.0;
 
-impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
-    pub fn new(game: G, updates_per_second: Fps, max_frame_time: f64) -> Self {
+impl<G> GameLoop<G> {
+    pub fn new(game: G, updates_per_second: Fps) -> Self {
         Self {
             game,
             updates_per_second,
-            max_frame_time,
 
             fixed_time_step: 1.0 / updates_per_second as f64,
 
-            last_stats: T::now(),
+            last_stats: Time::now(),
             updates: vec![],
             renders: vec![],
 
             running_time: 0.0,
             accumulated_time: 0.0,
-            previous_instant: T::now(),
-            current_instant: T::now(),
+            previous_instant: Time::now(),
+            current_instant: Time::now(),
             last_frame_time: 0.0,
         }
     }
 
-    pub fn get_stats(&mut self) -> (f64, f64, f64, T) {
+    pub fn get_stats(&mut self) -> (f64, f64, f64, Time) {
         let res = (
             self.updates.len() as f64 / SAMPLE_WINDOW,
             self.renders.len() as f64 / SAMPLE_WINDOW,
             self.running_time,
             self.last_stats,
         );
-        self.last_stats = T::now();
+        self.last_stats = Time::now();
         res
     }
 
-    pub fn next_frame<U, R>(&mut self, mut update: U, mut render: R)
+    pub fn next_frame<U>(&mut self, mut update: U)
     where
-        U: FnMut(&mut GameLoop<G, T>),
-        R: FnMut(&mut GameLoop<G, T>),
+        U: FnMut(&mut GameLoop<G>),
     {
-        if T::now().sub(&self.last_stats) >= 1.0 {
+        if Time::now().sub(&self.last_stats) >= 1.0 {
             let (ups, rps, ..) = self.get_stats();
             log::trace!("UPS: {:?}, RPS: {:?}", ups, rps);
         }
 
         let g = self;
 
-        g.current_instant = T::now();
+        g.current_instant = Time::now();
 
-        let mut elapsed = g.current_instant.sub(&g.previous_instant);
-
-        if elapsed > g.max_frame_time {
-            elapsed = g.max_frame_time;
-        }
+        let elapsed = g.current_instant.sub(&g.previous_instant);
 
         g.last_frame_time = elapsed;
         g.running_time += elapsed;
@@ -101,8 +94,6 @@ impl<G, T: TimeTrait + Debug> GameLoop<G, T> {
             g.updates
                 .retain(|e| g.current_instant.sub(e) <= SAMPLE_WINDOW);
         }
-
-        render(g);
 
         g.renders.push(g.current_instant);
         g.renders

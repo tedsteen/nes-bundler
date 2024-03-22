@@ -20,7 +20,7 @@ impl GuiComponent for Audio {
                     ui.label("Output");
                     let selected_device = &mut audio_settings.output_device;
                     if selected_device.is_none() {
-                        *selected_device = self.stream.get_default_device_name();
+                        *selected_device = self.get_default_device_name();
                     }
                     if let Some(selected_text) = selected_device.as_deref_mut() {
                         egui::ComboBox::from_id_source("audio-output")
@@ -48,7 +48,7 @@ impl GuiComponent for Audio {
                         .add(Slider::new(&mut audio_settings.volume, 0..=100).suffix("%"))
                         .changed()
                     {
-                        self.stream.volume = audio_settings.volume as f32 / 100.0;
+                        *self.stream.volume.lock().unwrap() = audio_settings.volume as f32 / 100.0;
                     }
                 });
         });
@@ -56,10 +56,6 @@ impl GuiComponent for Audio {
 
     fn name(&self) -> Option<String> {
         Some("Audio".to_string())
-    }
-
-    fn open(&mut self) -> &mut bool {
-        &mut self.gui_is_open
     }
 
     fn event(&mut self, _event: &GuiEvent, _settings: &mut Settings) {}
