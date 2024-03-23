@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::{
     audio::AudioSender,
     bundle::Bundle,
+    fps::RateCounter,
     gameloop::GameLoop,
     input::JoypadState,
     settings::{gui::GuiComponent, Settings, MAX_PLAYERS},
@@ -49,13 +50,17 @@ impl Emulator {
         };
         let nes_state = Arc::new(Mutex::new(nes_state));
         let mut game_loop = GameLoop::new(nes_state.clone(), FPS);
-
+        let mut loop_counter = RateCounter::new();
         let jh = tokio::spawn(async move {
             loop {
+                loop_counter.tick("LPS");
+
                 //println!("LOOP");
                 game_loop.next_frame(|game_loop| {
                     //println!("FRAME");
-
+                    if let Some(report) = loop_counter.tick("FPS").report() {
+                        println!("{report}");
+                    }
                     let _ = frame_pool.push_with(|video_frame| {
                         let nes_state = &mut game_loop.game;
                         let joypads = joypads.lock().unwrap();

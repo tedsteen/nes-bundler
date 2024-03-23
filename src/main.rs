@@ -8,6 +8,7 @@ use crate::settings::gui::ToGuiEvent;
 use crate::{input::gamepad::ToGamepadEvent, settings::gui::GuiEvent};
 use audio::Audio;
 
+use fps::RateCounter;
 use game::Game;
 
 use input::sdl2_impl::Sdl2Gamepads;
@@ -25,6 +26,7 @@ mod audio;
 mod bundle;
 #[cfg(feature = "debug")]
 mod debug;
+mod fps;
 mod game;
 mod gameloop;
 mod input;
@@ -127,10 +129,13 @@ async fn run() -> anyhow::Result<()> {
         inputs,
         bundle.settings_path.clone(),
     );
-
+    let mut rate_counter = RateCounter::new();
     event_loop.set_control_flow(ControlFlow::Poll);
     event_loop
         .run(|winit_event, control_flow| {
+            if let Some(report) = rate_counter.tick("EPS").report() {
+                println!("{report}");
+            }
             ////println!("EVENT: {:?}", winit_event);
             let mut should_render = false;
             let window_event = match winit_event {

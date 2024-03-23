@@ -39,19 +39,18 @@ pub async fn create_state(
     event_loop: &EventLoop<()>,
     frame_pool: VideoFramePool,
 ) -> Result<Renderer> {
-    let window = winit::window::WindowBuilder::new()
+    let window_builder = winit::window::WindowBuilder::new()
         .with_resizable(true)
         .with_inner_size(inner_size)
         .with_min_inner_size(min_inner_size)
         .with_title(title)
-        .with_visible(true)
-        .build(event_loop)?;
+        .with_visible(true);
 
     #[cfg(windows)]
-    let winit_window_builder = {
+    let window_builder = {
         use winit::platform::windows::IconExtWindows;
-        winit_window_builder.with_window_icon(Some(winit::window::Icon::from_resource(1, None)?))
+        window_builder.with_window_icon(Some(winit::window::Icon::from_resource(1, None)?))
     };
 
-    Renderer::new(Arc::new(window), frame_pool).await
+    Renderer::new(Arc::new(window_builder.build(event_loop)?), frame_pool).await
 }
