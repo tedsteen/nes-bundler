@@ -118,7 +118,7 @@ async fn run() -> anyhow::Result<()> {
         inputs.joypads.clone(),
     );
 
-    let mut gui = Gui::new(&state.egui.context, &emulator);
+    let mut gui = Gui::new(&state.egui.context, emulator.new_gui());
 
     let mut game = Game::new(
         emulator,

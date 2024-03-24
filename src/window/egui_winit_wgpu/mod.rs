@@ -53,7 +53,6 @@ const VIDEO_FRAME_SIZE: usize = size_of::<VideoFrame>();
 pub type VideoFramePool = BytePool<VIDEO_FRAME_SIZE>;
 
 pub struct Renderer {
-    //TODO: Where should this live?
     pub frame_pool: VideoFramePool,
 
     surface: wgpu::Surface<'static>,

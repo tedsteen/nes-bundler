@@ -7,10 +7,7 @@ use egui::{
 
 use crate::{
     audio::{gui::AudioGui, Audio},
-    input::{
-        buttons::GamepadButton, gamepad::GamepadEvent, gui::InputsGui, keys::KeyCode, Inputs,
-        KeyEvent,
-    },
+    input::{gamepad::GamepadEvent, gui::InputsGui, Inputs, KeyEvent},
     integer_scaling::{calculate_size_corrected, Size},
     nes_state::{
         emulator::{Emulator, EmulatorGui},
@@ -34,9 +31,6 @@ pub enum GuiEvent {
 pub trait GuiComponent<T> {
     fn ui(&mut self, instance: &mut T, ui: &mut Ui, settings: &mut Settings);
 
-    //TODO: remove from gui component. Has nothing to do with a gui
-    fn event(&mut self, _instance: &mut T, _event: &GuiEvent, _settings: &mut Settings) {}
-
     fn messages(&self, _instance: &T) -> Option<Vec<String>> {
         None
     }
@@ -57,13 +51,6 @@ impl GuiWithState<'_> {
             GuiWithState::Inputs(gui, instance) => gui.ui(instance, ui, settings),
             GuiWithState::Audio(gui, instance) => gui.ui(instance, ui, settings),
             GuiWithState::Emulator(gui, instance) => gui.ui(instance, ui, settings),
-        }
-    }
-    fn event(&mut self, event: &GuiEvent, settings: &mut Settings) {
-        match self {
-            GuiWithState::Inputs(gui, instance) => gui.event(instance, event, settings),
-            GuiWithState::Audio(gui, instance) => gui.event(instance, event, settings),
-            GuiWithState::Emulator(gui, instance) => gui.event(instance, event, settings),
         }
     }
 
@@ -96,7 +83,7 @@ pub struct Gui {
 }
 
 impl Gui {
-    pub fn new(ctx: &Context, emulator: &Emulator) -> Self {
+    pub fn new(ctx: &Context, emulator_gui: EmulatorGui) -> Self {
         let nes_texture_options = TextureOptions {
             magnification: egui::TextureFilter::Nearest,
             minification: egui::TextureFilter::Nearest,
@@ -105,7 +92,7 @@ impl Gui {
         Self {
             inputs_gui: InputsGui::new(),
             audio_gui: AudioGui {},
-            emulator_gui: emulator.new_gui(),
+            emulator_gui,
             start_time: Instant::now(),
             visible: false,
             nes_texture_handle: ctx.load_texture(
@@ -114,37 +101,6 @@ impl Gui {
                 nes_texture_options,
             ),
             nes_texture_options,
-        }
-    }
-
-    pub fn handle_event(
-        &mut self,
-        event: &GuiEvent,
-
-        inputs: &mut Inputs,
-        audio: &mut Audio,
-        emulator: &mut Emulator,
-
-        settings: &mut Settings,
-    ) {
-        match &event {
-            GuiEvent::Gamepad(crate::input::gamepad::GamepadEvent::ButtonDown {
-                button: GamepadButton::Guide,
-                ..
-            })
-            | GuiEvent::Keyboard(KeyEvent::Pressed(KeyCode::Escape)) => {
-                self.toggle_visibility();
-            }
-            _ => {
-                let guis = &mut [
-                    GuiWithState::Audio(&mut self.audio_gui, audio),
-                    GuiWithState::Inputs(&mut self.inputs_gui, inputs),
-                    GuiWithState::Emulator(&mut self.emulator_gui, emulator),
-                ];
-                for gui in guis {
-                    gui.event(event, settings)
-                }
-            }
         }
     }
 

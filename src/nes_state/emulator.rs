@@ -149,15 +149,6 @@ impl GuiComponent<Emulator> for EmulatorGui {
                 ui.end_row();
             });
     }
-    fn event(
-        &mut self,
-        instance: &mut Emulator,
-        event: &crate::settings::gui::GuiEvent,
-        settings: &mut Settings,
-    ) {
-        self.netplay_gui
-            .event(&mut instance.nes_state.lock().unwrap(), event, settings);
-    }
 
     fn messages(&self, instance: &Emulator) -> Option<Vec<String>> {
         self.netplay_gui

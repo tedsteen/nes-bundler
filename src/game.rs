@@ -1,8 +1,9 @@
+use crate::input::buttons::GamepadButton;
 use crate::nes_state::emulator::Emulator;
 use crate::window::egui_winit_wgpu::Renderer;
 use crate::window::Fullscreen;
 
-use crate::input::keys::Modifiers;
+use crate::input::keys::{KeyCode, Modifiers};
 
 use crate::audio::Audio;
 
@@ -55,6 +56,14 @@ impl Game {
                 self.modifiers = *modifiers;
                 false
             }
+            GuiEvent::Gamepad(crate::input::gamepad::GamepadEvent::ButtonDown {
+                button: GamepadButton::Guide,
+                ..
+            })
+            | GuiEvent::Keyboard(KeyEvent::Pressed(KeyCode::Escape)) => {
+                gui.toggle_visibility();
+                true
+            }
             Keyboard(KeyEvent::Pressed(key_code)) => {
                 let settings = &mut self.settings;
                 //let nes_state = &mut self.nes_state;
@@ -84,13 +93,7 @@ impl Game {
             _ => false,
         };
         if !consumed {
-            gui.handle_event(
-                gui_event,
-                &mut self.inputs,
-                &mut self.audio,
-                &mut self.emulator,
-                &mut self.settings,
-            )
+            self.inputs.advance(gui_event, &mut self.settings)
         }
     }
 

@@ -1,9 +1,6 @@
 use crate::{
     input::{Inputs, JoypadButton, JoypadState},
-    settings::{
-        gui::{GuiComponent, GuiEvent},
-        Settings,
-    },
+    settings::{gui::GuiComponent, Settings},
 };
 use egui::{Color32, Grid, RichText, Ui};
 
@@ -110,10 +107,6 @@ impl InputsGui {
 }
 
 impl GuiComponent<Inputs> for InputsGui {
-    fn event(&mut self, instance: &mut Inputs, event: &GuiEvent, settings: &mut Settings) {
-        instance.advance(event, settings);
-    }
-
     fn ui(&mut self, instance: &mut Inputs, ui: &mut Ui, settings: &mut Settings) {
         let input_settings = &mut settings.input;
         let available_configurations = &mut input_settings
