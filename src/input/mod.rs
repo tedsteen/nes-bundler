@@ -2,6 +2,7 @@ use self::{
     gamepad::{Gamepads, JoypadGamepadMapping},
     keyboard::{JoypadKeyboardMapping, Keyboards},
     keys::{KeyCode, Modifiers},
+    sdl2_impl::Sdl2Gamepads,
     settings::InputConfigurationRef,
 };
 use crate::settings::{gui::GuiEvent, Settings, MAX_PLAYERS};
@@ -20,6 +21,8 @@ pub mod keyboard;
 pub mod keys;
 pub mod sdl2_impl;
 pub mod settings;
+
+type GamepadImpl = Sdl2Gamepads;
 
 #[derive(Clone, Debug)]
 pub enum KeyEvent {
@@ -145,14 +148,14 @@ pub struct MapRequest {
 
 pub struct Inputs {
     keyboards: Keyboards,
-    gamepads: Box<dyn Gamepads>,
+    gamepads: GamepadImpl,
     pub joypads: Arc<Mutex<[JoypadState; MAX_PLAYERS]>>,
     default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
 }
 
 impl Inputs {
     pub fn new(
-        gamepads: Box<dyn Gamepads>,
+        gamepads: GamepadImpl,
         default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
     ) -> Self {
         let keyboards = Keyboards::new();
@@ -165,13 +168,19 @@ impl Inputs {
         }
     }
 
-    pub fn advance(&mut self, event: &GuiEvent, settings: &mut Settings) {
+    pub fn advance(
+        &mut self,
+        event: &GuiEvent,
+        settings: &mut Settings,
+        state: &mut <crate::input::sdl2_impl::Sdl2Gamepads as crate::input::gamepad::Gamepads>::State,
+    ) {
         match event {
             GuiEvent::Keyboard(key_event) => {
                 self.keyboards.advance(key_event);
             }
             GuiEvent::Gamepad(gamepad_event) => {
-                self.gamepads.advance(gamepad_event, &mut settings.input);
+                self.gamepads
+                    .advance(gamepad_event, &mut settings.input, state);
             }
         }
         let input_settings = &mut settings.input;

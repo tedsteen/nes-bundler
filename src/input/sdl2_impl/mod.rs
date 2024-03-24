@@ -47,11 +47,12 @@ impl GamepadState for Sdl2GamepadState {
     }
 }
 pub struct Sdl2Gamepads {
-    game_controller_subsystem: GameControllerSubsystem,
     all: HashMap<InputId, Box<dyn GamepadState>>,
 }
 
 impl Gamepads for Sdl2Gamepads {
+    type State = GameControllerSubsystem;
+
     fn get_joypad(&mut self, id: &InputId, mapping: &JoypadGamepadMapping) -> JoypadState {
         if let Some(state) = self.get_gamepad_by_input_id(id) {
             mapping.calculate_state(state.get_pressed_buttons())
@@ -64,10 +65,19 @@ impl Gamepads for Sdl2Gamepads {
         self.all.get(id).map(|a| a.as_ref())
     }
 
-    fn advance(&mut self, gamepad_event: &GamepadEvent, input_settings: &mut InputSettings) {
+    fn advance(
+        &mut self,
+        gamepad_event: &GamepadEvent,
+        input_settings: &mut InputSettings,
+        game_controller_subsystem: &mut GameControllerSubsystem,
+    ) {
         match gamepad_event {
             GamepadEvent::ControllerAdded { which, .. } => {
-                if let Some(conf) = self.setup_gamepad_config(which.clone(), input_settings) {
+                if let Some(conf) = self.setup_gamepad_config(
+                    which.clone(),
+                    input_settings,
+                    game_controller_subsystem,
+                ) {
                     // Automatically select a gamepad if it's connected and keyboard is currently selected.
                     if let InputConfigurationKind::Keyboard(_) =
                         &input_settings.selected[0].clone().borrow().kind
@@ -108,9 +118,8 @@ impl Sdl2Gamepads {
         format!("01-gamepad-{}", id)
     }
 
-    pub fn new(game_controller_subsystem: GameControllerSubsystem) -> Self {
+    pub fn new() -> Self {
         Sdl2Gamepads {
-            game_controller_subsystem,
             all: HashMap::new(),
         }
     }
@@ -123,13 +132,13 @@ impl Sdl2Gamepads {
         &mut self,
         input_id: InputId,
         input_settings: &mut InputSettings,
+        game_controller_subsystem: &GameControllerSubsystem,
     ) -> Option<InputConfigurationRef> {
-        if let Some(found_controller) =
-            (0..self.game_controller_subsystem.num_joysticks().unwrap_or(0)).find_map(|id| {
-                if input_id == id.to_input_id()
-                    && self.game_controller_subsystem.is_game_controller(id)
+        if let Some(found_controller) = (0..game_controller_subsystem.num_joysticks().unwrap_or(0))
+            .find_map(|id| {
+                if input_id == id.to_input_id() && game_controller_subsystem.is_game_controller(id)
                 {
-                    match self.game_controller_subsystem.open(id) {
+                    match game_controller_subsystem.open(id) {
                         Ok(c) => Some(c),
                         Err(e) => {
                             log::error!("Failed to open controller {:?}", e);

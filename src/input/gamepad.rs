@@ -10,7 +10,13 @@ pub trait GamepadState {
 }
 
 pub trait Gamepads {
-    fn advance(&mut self, gamepad_event: &GamepadEvent, input_settings: &mut InputSettings);
+    type State;
+    fn advance(
+        &mut self,
+        gamepad_event: &GamepadEvent,
+        input_settings: &mut InputSettings,
+        state: &mut Self::State,
+    );
     fn get_joypad(&mut self, id: &InputId, mapping: &JoypadGamepadMapping) -> JoypadState;
     fn get_gamepad_by_input_id(&self, id: &InputId) -> Option<&dyn GamepadState>;
 }

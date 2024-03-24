@@ -1,4 +1,7 @@
+use sdl2::GameControllerSubsystem;
+
 use crate::input::buttons::GamepadButton;
+
 use crate::nes_state::emulator::Emulator;
 use crate::window::egui_winit_wgpu::Renderer;
 use crate::window::Fullscreen;
@@ -25,6 +28,7 @@ pub struct Game {
     pub inputs: Inputs,
     modifiers: Modifiers,
     pub settings_path: PathBuf,
+    game_controller_subsystem: GameControllerSubsystem,
 }
 
 impl Game {
@@ -34,6 +38,7 @@ impl Game {
         audio: Audio,
         inputs: Inputs,
         settings_path: PathBuf,
+        game_controller_subsystem: GameControllerSubsystem,
     ) -> Self {
         Self {
             emulator,
@@ -42,6 +47,7 @@ impl Game {
             audio,
             modifiers: Modifiers::empty(),
             settings_path,
+            game_controller_subsystem,
         }
     }
     pub fn handle_event(
@@ -93,7 +99,11 @@ impl Game {
             _ => false,
         };
         if !consumed {
-            self.inputs.advance(gui_event, &mut self.settings)
+            self.inputs.advance(
+                gui_event,
+                &mut self.settings,
+                &mut self.game_controller_subsystem,
+            );
         }
     }
 

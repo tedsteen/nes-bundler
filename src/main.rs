@@ -102,12 +102,7 @@ async fn run() -> anyhow::Result<()> {
     let audio = Audio::new(&sdl_context, settings.audio.clone(), audio_rx)?;
 
     let inputs = Inputs::new(
-        Box::new(Sdl2Gamepads::new(
-            sdl_context
-                .game_controller()
-                .map_err(anyhow::Error::msg)
-                .expect("Could not create sdl context"),
-        )),
+        Sdl2Gamepads::new(),
         bundle.config.default_settings.input.selected.clone(),
     );
     let emulator = Emulator::new(
@@ -126,6 +121,7 @@ async fn run() -> anyhow::Result<()> {
         audio,
         inputs,
         bundle.settings_path.clone(),
+        sdl_context.game_controller().map_err(anyhow::Error::msg)?,
     );
     let mut rate_counter = RateCounter::new();
     event_loop.set_control_flow(ControlFlow::Poll);
