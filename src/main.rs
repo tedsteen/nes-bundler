@@ -9,13 +9,13 @@ use crate::{input::gamepad::ToGamepadEvent, settings::gui::GuiEvent};
 use audio::Audio;
 
 use fps::RateCounter;
-use game::Game;
 
+use gui::MainGui;
 use input::sdl2_impl::Sdl2Gamepads;
 use input::Inputs;
 use nes_state::emulator::Emulator;
 use ringbuf::HeapRb;
-use settings::gui::Gui;
+
 use settings::Settings;
 use window::egui_winit_wgpu::VideoFramePool;
 use window::{create_state, Size};
@@ -25,8 +25,8 @@ use winit::event_loop::{ControlFlow, EventLoop};
 mod audio;
 mod bundle;
 mod fps;
-mod game;
 mod gameloop;
+mod gui;
 mod input;
 mod integer_scaling;
 mod nes_state;
@@ -102,7 +102,7 @@ async fn run() -> anyhow::Result<()> {
     let audio = Audio::new(&sdl_context, settings.audio.clone(), audio_rx)?;
 
     let inputs = Inputs::new(
-        Sdl2Gamepads::new(),
+        Sdl2Gamepads::new(sdl_context.game_controller().map_err(anyhow::Error::msg)?),
         bundle.config.default_settings.input.selected.clone(),
     );
     let emulator = Emulator::new(
@@ -113,16 +113,16 @@ async fn run() -> anyhow::Result<()> {
         inputs.joypads.clone(),
     );
 
-    let mut gui = Gui::new(&state.egui.context, emulator.new_gui());
-
-    let mut game = Game::new(
+    let mut main_gui = MainGui::new(
+        &state.egui.context,
+        emulator.new_gui(),
         emulator,
         settings,
         audio,
         inputs,
         bundle.settings_path.clone(),
-        sdl_context.game_controller().map_err(anyhow::Error::msg)?,
     );
+
     let mut rate_counter = RateCounter::new();
     event_loop.set_control_flow(ControlFlow::Poll);
     event_loop
@@ -191,12 +191,12 @@ async fn run() -> anyhow::Result<()> {
             }
 
             for gui_event in &gui_events {
-                game.handle_event(gui_event, &mut gui, &state.window);
+                main_gui.handle_event(gui_event, &state.window);
             }
 
             if should_render {
                 //println!("RENDER: {:?}", std::time::Instant::now());
-                game.render_gui(&mut state, &mut gui);
+                main_gui.render_gui(&mut state);
                 //thread::sleep(std::time::Duration::from_millis(10));
             }
         })

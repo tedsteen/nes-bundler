@@ -1,19 +1,12 @@
 use std::time::{Duration, Instant};
 
-use egui::{
-    load::SizedTexture, Align2, Color32, ColorImage, Context, Image, Order, RichText,
-    TextureHandle, TextureOptions, Ui, Window,
-};
+use egui::{Align2, Color32, Context, Order, RichText, Ui, Window};
 
 use crate::{
     audio::{gui::AudioGui, Audio},
     input::{gamepad::GamepadEvent, gui::InputsGui, Inputs, KeyEvent},
-    integer_scaling::{calculate_size_corrected, Size},
-    nes_state::{
-        emulator::{Emulator, EmulatorGui},
-        VideoFrame,
-    },
-    MINIMUM_INTEGER_SCALING_SIZE, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3,
+    nes_state::emulator::{Emulator, EmulatorGui},
+    MINIMUM_INTEGER_SCALING_SIZE,
 };
 
 use super::Settings;
@@ -71,36 +64,23 @@ impl GuiWithState<'_> {
     }
 }
 
-pub struct Gui {
+pub struct SettingsGui {
     inputs_gui: InputsGui,
     audio_gui: AudioGui,
     emulator_gui: EmulatorGui,
 
     start_time: Instant,
     visible: bool,
-    pub nes_texture_handle: TextureHandle,
-    nes_texture_options: TextureOptions,
 }
 
-impl Gui {
-    pub fn new(ctx: &Context, emulator_gui: EmulatorGui) -> Self {
-        let nes_texture_options = TextureOptions {
-            magnification: egui::TextureFilter::Nearest,
-            minification: egui::TextureFilter::Nearest,
-            wrap_mode: egui::TextureWrapMode::ClampToEdge,
-        };
+impl SettingsGui {
+    pub fn new(emulator_gui: EmulatorGui) -> Self {
         Self {
             inputs_gui: InputsGui::new(),
             audio_gui: AudioGui {},
             emulator_gui,
             start_time: Instant::now(),
             visible: false,
-            nes_texture_handle: ctx.load_texture(
-                "nes",
-                ColorImage::new([NES_WIDTH as usize, NES_HEIGHT as usize], Color32::BLACK),
-                nes_texture_options,
-            ),
-            nes_texture_options,
         }
     }
 
@@ -114,45 +94,6 @@ impl Gui {
 
         settings: &mut Settings,
     ) {
-        egui::Area::new("game_area")
-            .fixed_pos([0.0, 0.0])
-            .order(Order::Background)
-            .show(ctx, |ui| {
-                let texture_handle = &self.nes_texture_handle;
-                if let Some(t) = ctx.tex_manager().read().meta(texture_handle.id()) {
-                    if t.size[0] != 0 {
-                        let available_size = ui.available_size();
-                        let new_size = if available_size.x < MINIMUM_INTEGER_SCALING_SIZE.0 as f32
-                            || available_size.y < MINIMUM_INTEGER_SCALING_SIZE.1 as f32
-                        {
-                            let width = NES_WIDTH_4_3;
-                            let ratio_height = available_size.y / NES_HEIGHT as f32;
-                            let ratio_width = available_size.x / width as f32;
-                            let ratio = f32::min(ratio_height, ratio_width);
-                            Size {
-                                width: (width as f32 * ratio) as u32,
-                                height: (NES_HEIGHT as f32 * ratio) as u32,
-                            }
-                        } else {
-                            calculate_size_corrected(
-                                available_size.x as u32,
-                                available_size.y as u32,
-                                NES_WIDTH,
-                                NES_HEIGHT,
-                                4.0,
-                                3.0,
-                            )
-                        };
-
-                        ui.centered_and_justified(|ui| {
-                            ui.add(Image::new(SizedTexture::new(
-                                texture_handle,
-                                (new_size.width as f32, new_size.height as f32),
-                            )));
-                        });
-                    }
-                }
-            });
         let guis = &mut [
             GuiWithState::Audio(&mut self.audio_gui, audio),
             GuiWithState::Inputs(&mut self.inputs_gui, inputs),
@@ -216,12 +157,5 @@ impl Gui {
 
     pub fn toggle_visibility(&mut self) {
         self.visible = !self.visible;
-    }
-
-    pub(crate) fn update_nes_texture(&mut self, buffer: &VideoFrame) {
-        self.nes_texture_handle.set(
-            ColorImage::from_rgb([NES_WIDTH as usize, NES_HEIGHT as usize], buffer),
-            self.nes_texture_options,
-        );
     }
 }

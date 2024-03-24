@@ -168,19 +168,13 @@ impl Inputs {
         }
     }
 
-    pub fn advance(
-        &mut self,
-        event: &GuiEvent,
-        settings: &mut Settings,
-        state: &mut <crate::input::sdl2_impl::Sdl2Gamepads as crate::input::gamepad::Gamepads>::State,
-    ) {
+    pub fn advance(&mut self, event: &GuiEvent, settings: &mut Settings) {
         match event {
             GuiEvent::Keyboard(key_event) => {
                 self.keyboards.advance(key_event);
             }
             GuiEvent::Gamepad(gamepad_event) => {
-                self.gamepads
-                    .advance(gamepad_event, &mut settings.input, state);
+                self.gamepads.advance(gamepad_event, &mut settings.input);
             }
         }
         let input_settings = &mut settings.input;
