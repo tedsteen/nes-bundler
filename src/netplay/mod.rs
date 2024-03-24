@@ -136,14 +136,9 @@ impl NesStateHandler for NetplayStateHandler {
 }
 
 impl NetplayStateHandler {
-    pub fn new(local_rom: Vec<u8>, netplay_rom: Vec<u8>, netplay_id: String) -> Self {
+    pub fn new() -> Self {
         NetplayStateHandler {
-            netplay: Some(NetplayState::Disconnected(Box::new(Netplay::new(
-                netplay_id,
-                md5::compute(&netplay_rom),
-                local_rom,
-                netplay_rom,
-            )))),
+            netplay: Some(NetplayState::Disconnected(Box::new(Netplay::new()))),
         }
     }
 }

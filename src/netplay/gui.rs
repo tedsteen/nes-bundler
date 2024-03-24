@@ -2,22 +2,20 @@ use std::time::{Duration, Instant};
 
 use egui::{Button, TextEdit, Ui};
 
-use crate::settings::{gui::GuiComponent, Settings, MAX_PLAYERS};
+use crate::settings::{gui::GuiComponent, MAX_PLAYERS};
 
 use super::{
-    connecting_state::{Connecting, NetplayServerConfiguration, PeeringState},
+    connecting_state::{Connecting, PeeringState},
     netplay_state::NetplayState,
     ConnectingState, NetplayBuildConfiguration, NetplayStateHandler,
 };
 pub struct NetplayGui {
-    server_config: NetplayServerConfiguration,
     room_name: String,
 }
 
 impl NetplayGui {
     pub fn new(netplay_build_config: NetplayBuildConfiguration) -> Self {
         Self {
-            server_config: netplay_build_config.server,
             room_name: netplay_build_config.default_room_name.clone(),
         }
     }
@@ -109,7 +107,7 @@ impl GuiComponent<NetplayStateHandler> for NetplayGui {
             .collect(),
         )
     }
-    fn ui(&mut self, instance: &mut NetplayStateHandler, ui: &mut Ui, _settings: &mut Settings) {
+    fn ui(&mut self, instance: &mut NetplayStateHandler, ui: &mut Ui) {
         instance.netplay = Some(match instance.netplay.take().unwrap() {
             NetplayState::Disconnected(netplay_disconnected) => {
                 let mut do_join = false;
@@ -152,9 +150,9 @@ impl GuiComponent<NetplayStateHandler> for NetplayGui {
                         ui.end_row();
                     });
                 if do_join {
-                    netplay_disconnected.join_by_name(&self.room_name, self.server_config.clone())
+                    netplay_disconnected.join_by_name(&self.room_name)
                 } else if random_clicked {
-                    netplay_disconnected.match_with_random(self.server_config.clone())
+                    netplay_disconnected.match_with_random()
                 } else {
                     NetplayState::Disconnected(netplay_disconnected)
                 }
@@ -220,9 +218,7 @@ impl GuiComponent<NetplayStateHandler> for NetplayGui {
                     _ => {}
                 }
                 if let Some(start_method) = retry_start_method {
-                    netplay_connecting
-                        .cancel()
-                        .join(start_method, self.server_config.clone())
+                    netplay_connecting.cancel().join(start_method)
                 } else if ui.button("Cancel").clicked() {
                     NetplayState::Disconnected(netplay_connecting.cancel())
                 } else {

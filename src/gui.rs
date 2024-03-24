@@ -1,25 +1,20 @@
-use std::path::PathBuf;
-
 use egui::{
     load::SizedTexture, Color32, ColorImage, Context, Image, Order, TextureHandle, TextureOptions,
 };
 
 use crate::{
-    audio::Audio,
     input::{
         buttons::GamepadButton,
         keys::{KeyCode, Modifiers},
-        Inputs, KeyEvent,
+        KeyEvent,
     },
     integer_scaling::{calculate_size_corrected, Size},
     nes_state::{
         emulator::{Emulator, EmulatorGui},
         VideoFrame,
     },
-    settings::{
-        gui::{GuiEvent, SettingsGui},
-        Settings,
-    },
+    settings::gui::{GuiEvent, SettingsGui},
+    settings2,
     window::{egui_winit_wgpu::Renderer, Fullscreen},
     MINIMUM_INTEGER_SCALING_SIZE, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3,
 };
@@ -30,22 +25,10 @@ pub struct MainGui {
     nes_texture_options: TextureOptions,
 
     pub emulator: Emulator,
-    pub settings: Settings,
-    pub audio: Audio,
-    pub inputs: Inputs,
     modifiers: Modifiers,
-    pub settings_path: PathBuf,
 }
 impl MainGui {
-    pub fn new(
-        ctx: &Context,
-        emulator_gui: EmulatorGui,
-        emulator: Emulator,
-        settings: Settings,
-        audio: Audio,
-        inputs: Inputs,
-        settings_path: PathBuf,
-    ) -> Self {
+    pub fn new(ctx: &Context, emulator_gui: EmulatorGui, emulator: Emulator) -> Self {
         let nes_texture_options = TextureOptions {
             magnification: egui::TextureFilter::Nearest,
             minification: egui::TextureFilter::Nearest,
@@ -61,11 +44,7 @@ impl MainGui {
             ),
             nes_texture_options,
             emulator,
-            inputs,
-            settings,
-            audio,
             modifiers: Modifiers::empty(),
-            settings_path,
         }
     }
 }
@@ -93,7 +72,7 @@ impl MainGui {
                 true
             }
             Keyboard(KeyEvent::Pressed(key_code)) => {
-                let settings = &mut self.settings;
+                let settings = &mut crate::settings2();
                 //let nes_state = &mut self.nes_state;
 
                 use crate::input::keys::KeyCode::*;
@@ -103,7 +82,7 @@ impl MainGui {
                     F1 => {
                         if let Some(save_state) = self.emulator.save_state() {
                             settings.last_save_state = Some(b64.encode(save_state));
-                            settings.save(&self.settings_path);
+                            settings.save();
                         }
                         true
                     }
@@ -121,7 +100,7 @@ impl MainGui {
             _ => false,
         };
         if !consumed {
-            self.inputs.advance(gui_event, &mut self.settings);
+            self.emulator.inputs.advance(gui_event);
         }
     }
 
@@ -130,11 +109,11 @@ impl MainGui {
             self.update_nes_texture(&frame_buffer);
         }
         let render_result = renderer.render(move |ctx| {
-            self.audio.sync_audio_devices(&mut self.settings.audio);
-            let settings_hash_before = self.settings.get_hash();
+            self.emulator.audio.sync_audio_devices();
+            let settings_hash_before = settings2().get_hash();
             self.ui(ctx);
-            if settings_hash_before != self.settings.get_hash() {
-                self.settings.save(&self.settings_path);
+            if settings_hash_before != settings2().get_hash() {
+                settings2().save();
             }
         });
 
@@ -195,12 +174,6 @@ impl MainGui {
                 }
             });
 
-        self.settings_gui.ui(
-            ctx,
-            &mut self.inputs,
-            &mut self.audio,
-            &mut self.emulator,
-            &mut self.settings,
-        );
+        self.settings_gui.ui(ctx, &mut self.emulator);
     }
 }

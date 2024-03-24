@@ -5,11 +5,10 @@ use egui::{Align2, Color32, Context, Order, RichText, Ui, Window};
 use crate::{
     audio::{gui::AudioGui, Audio},
     input::{gamepad::GamepadEvent, gui::InputsGui, Inputs, KeyEvent},
-    nes_state::emulator::{Emulator, EmulatorGui},
+    nes_state::emulator::{Emulator, EmulatorGui, SharedState},
     MINIMUM_INTEGER_SCALING_SIZE,
 };
 
-use super::Settings;
 pub trait ToGuiEvent {
     /// Convert the struct to a GuiEvent
     fn to_gui_event(&self) -> Option<GuiEvent>;
@@ -22,7 +21,7 @@ pub enum GuiEvent {
 }
 
 pub trait GuiComponent<T> {
-    fn ui(&mut self, instance: &mut T, ui: &mut Ui, settings: &mut Settings);
+    fn ui(&mut self, instance: &mut T, ui: &mut Ui);
 
     fn messages(&self, _instance: &T) -> Option<Vec<String>> {
         None
@@ -35,15 +34,15 @@ pub trait GuiComponent<T> {
 enum GuiWithState<'a> {
     Inputs(&'a mut InputsGui, &'a mut Inputs),
     Audio(&'a mut AudioGui, &'a mut Audio),
-    Emulator(&'a mut EmulatorGui, &'a mut Emulator),
+    Emulator(&'a mut EmulatorGui, &'a mut SharedState),
 }
 
 impl GuiWithState<'_> {
-    fn ui(&mut self, ui: &mut Ui, settings: &mut Settings) {
+    fn ui(&mut self, ui: &mut Ui) {
         match self {
-            GuiWithState::Inputs(gui, instance) => gui.ui(instance, ui, settings),
-            GuiWithState::Audio(gui, instance) => gui.ui(instance, ui, settings),
-            GuiWithState::Emulator(gui, instance) => gui.ui(instance, ui, settings),
+            GuiWithState::Inputs(gui, instance) => gui.ui(instance, ui),
+            GuiWithState::Audio(gui, instance) => gui.ui(instance, ui),
+            GuiWithState::Emulator(gui, instance) => gui.ui(instance, ui),
         }
     }
 
@@ -84,20 +83,11 @@ impl SettingsGui {
         }
     }
 
-    pub fn ui(
-        &mut self,
-        ctx: &Context,
-
-        inputs: &mut Inputs,
-        audio: &mut Audio,
-        emulator: &mut Emulator,
-
-        settings: &mut Settings,
-    ) {
+    pub fn ui(&mut self, ctx: &Context, emulator: &mut Emulator) {
         let guis = &mut [
-            GuiWithState::Audio(&mut self.audio_gui, audio),
-            GuiWithState::Inputs(&mut self.inputs_gui, inputs),
-            GuiWithState::Emulator(&mut self.emulator_gui, emulator),
+            GuiWithState::Audio(&mut self.audio_gui, &mut emulator.audio),
+            GuiWithState::Inputs(&mut self.inputs_gui, &mut emulator.inputs),
+            GuiWithState::Emulator(&mut self.emulator_gui, &mut emulator.shared_state),
         ];
         egui::Area::new("message_area")
             .fixed_pos([0.0, 0.0])
@@ -149,7 +139,7 @@ impl SettingsGui {
                             ui.heading(name);
                         });
 
-                        gui.ui(ui, settings);
+                        gui.ui(ui);
                     }
                 }
             });

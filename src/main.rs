@@ -2,19 +2,18 @@
 #![allow(unsafe_code)]
 #![deny(clippy::all)]
 
+use std::sync::{Mutex, OnceLock};
+
 use crate::bundle::Bundle;
 use crate::settings::gui::ToGuiEvent;
 
 use crate::{input::gamepad::ToGamepadEvent, settings::gui::GuiEvent};
-use audio::Audio;
 
 use fps::RateCounter;
 
 use gui::MainGui;
-use input::sdl2_impl::Sdl2Gamepads;
-use input::Inputs;
+
 use nes_state::emulator::Emulator;
-use ringbuf::HeapRb;
 
 use settings::Settings;
 use window::egui_winit_wgpu::VideoFramePool;
@@ -43,6 +42,19 @@ const NES_HEIGHT: u32 = 240;
 
 const MINIMUM_INTEGER_SCALING_SIZE: (u32, u32) = (1024, 720);
 
+pub fn bundle() -> &'static Bundle {
+    static MEM: OnceLock<Bundle> = OnceLock::new();
+    MEM.get_or_init(|| Bundle::load().expect("Could not load bundle"))
+}
+
+pub fn settings() -> &'static Mutex<Settings> {
+    static MEM: OnceLock<Mutex<Settings>> = OnceLock::new();
+    MEM.get_or_init(|| Mutex::new(Settings::load()))
+}
+pub fn settings2<'a>() -> std::sync::MutexGuard<'a, settings::Settings> {
+    settings().lock().unwrap()
+}
+
 #[tokio::main]
 async fn main() {
     init_logger();
@@ -55,22 +67,6 @@ async fn main() {
 }
 
 async fn run() -> anyhow::Result<()> {
-    let event_loop = EventLoop::new()?;
-    let bundle = Bundle::load()?;
-    let video_frame_pool = VideoFramePool::new();
-
-    let mut state = create_state(
-        &bundle.config.name,
-        Size::new(
-            MINIMUM_INTEGER_SCALING_SIZE.0 as f64,
-            MINIMUM_INTEGER_SCALING_SIZE.1 as f64,
-        ),
-        Size::new(NES_WIDTH_4_3 as f64, NES_HEIGHT as f64),
-        &event_loop,
-        video_frame_pool.clone(),
-    )
-    .await?;
-
     // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
     sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
     // TODO: Perhaps do this to fix this issue: https://github.com/libsdl-org/SDL/issues/7896#issuecomment-1616700934
@@ -79,49 +75,37 @@ async fn run() -> anyhow::Result<()> {
     let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
     let mut sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
 
+    let bundle = bundle();
+    let frame_pool = VideoFramePool::new();
+
+    let mut emulator = Emulator::new(frame_pool.clone(), &sdl_context)?;
+    emulator.start()?;
+
+    let event_loop = EventLoop::new()?;
+    let mut state = create_state(
+        &bundle.config.name,
+        Size::new(
+            MINIMUM_INTEGER_SCALING_SIZE.0 as f64,
+            MINIMUM_INTEGER_SCALING_SIZE.1 as f64,
+        ),
+        Size::new(NES_WIDTH_4_3 as f64, NES_HEIGHT as f64),
+        &event_loop,
+        frame_pool,
+    )
+    .await?;
+
     #[cfg(feature = "netplay")]
     if std::env::args()
         .collect::<String>()
         .contains(&"--print-netplay-id".to_string())
     {
-        if let Some(id) = bundle.config.netplay.netplay_id {
+        if let Some(id) = &bundle.config.netplay.netplay_id {
             println!("{id}");
         }
         std::process::exit(0);
     }
 
-    #[allow(unused_mut)] //Needed by the netplay feature
-    let mut settings = Settings::load(
-        &bundle.settings_path,
-        bundle.config.default_settings.clone(),
-    );
-
-    //TODO: Figure out a good buffer here..
-    let (audio_tx, audio_rx) = HeapRb::<f32>::new(1024 * 8).split();
-
-    let audio = Audio::new(&sdl_context, settings.audio.clone(), audio_rx)?;
-
-    let inputs = Inputs::new(
-        Sdl2Gamepads::new(sdl_context.game_controller().map_err(anyhow::Error::msg)?),
-        bundle.config.default_settings.input.selected.clone(),
-    );
-    let emulator = Emulator::new(
-        &bundle,
-        &mut settings,
-        video_frame_pool,
-        audio_tx,
-        inputs.joypads.clone(),
-    );
-
-    let mut main_gui = MainGui::new(
-        &state.egui.context,
-        emulator.new_gui(),
-        emulator,
-        settings,
-        audio,
-        inputs,
-        bundle.settings_path.clone(),
-    );
+    let mut main_gui = MainGui::new(&state.egui.context, emulator.new_gui(), emulator);
 
     let mut rate_counter = RateCounter::new();
     event_loop.set_control_flow(ControlFlow::Poll);

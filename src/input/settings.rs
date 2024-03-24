@@ -1,15 +1,12 @@
 use super::MAX_PLAYERS;
 use crate::input::{gamepad::JoypadGamepadMapping, InputConfiguration, InputId, Inputs};
-use core::fmt;
-use serde::{Deserialize, Deserializer, Serialize};
-use std::{cell::RefCell, collections::BTreeMap, hash::Hash, rc::Rc};
+use serde::{Deserialize, Serialize};
+use std::{collections::BTreeMap, hash::Hash};
 
-pub type InputConfigurationRef = Rc<RefCell<InputConfiguration>>;
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InputSettings {
-    pub selected: [InputConfigurationRef; MAX_PLAYERS],
-    pub configurations: BTreeMap<InputId, InputConfigurationRef>,
+    pub selected: [InputId; MAX_PLAYERS],
+    pub configurations: BTreeMap<InputId, InputConfiguration>,
     pub default_gamepad_mapping: JoypadGamepadMapping,
 }
 
@@ -18,131 +15,38 @@ impl InputSettings {
         &mut self,
         id: InputId,
         default: InputConfiguration,
-    ) -> &InputConfigurationRef {
-        self.configurations
-            .entry(id)
-            .or_insert_with(|| Rc::new(RefCell::new(default)))
+    ) -> &InputConfiguration {
+        self.configurations.entry(id).or_insert_with(|| default)
+    }
+
+    pub fn get_selected_configuration(&self, idx: usize) -> &InputConfiguration {
+        self.configurations.get(&self.selected[idx]).unwrap()
+    }
+    pub fn get_selected_configuration_mut(&mut self, idx: usize) -> &mut InputConfiguration {
+        self.configurations.get_mut(&self.selected[idx]).unwrap()
     }
 
     pub(crate) fn reset_selected_disconnected_inputs(&mut self, inputs: &Inputs) {
-        if !inputs.is_connected(&self.selected[0].borrow()) {
-            self.selected[0] = inputs.get_default_conf(0).clone();
+        let input_conf = self.get_selected_configuration(0);
+        if !inputs.is_connected(input_conf) {
+            self.selected[0] = inputs.get_default_conf(0).id.clone();
         }
-        if !inputs.is_connected(&self.selected[1].borrow()) {
-            self.selected[1] = inputs.get_default_conf(1).clone();
+
+        let input_conf = self.get_selected_configuration(1);
+        if !inputs.is_connected(input_conf) {
+            self.selected[1] = inputs.get_default_conf(1).id.clone();
         }
     }
 }
 
 impl Hash for InputSettings {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.selected[0].borrow().hash(state);
-        self.selected[1].borrow().hash(state);
+        self.selected[0].hash(state);
+        self.selected[1].hash(state);
 
         for (k, v) in &self.configurations {
             k.hash(state);
-            v.borrow().hash(state);
+            v.hash(state);
         }
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-struct SerializableInputSettings {
-    selected: [InputId; MAX_PLAYERS],
-    configurations: BTreeMap<InputId, InputConfiguration>,
-    pub default_gamepad_mapping: JoypadGamepadMapping,
-}
-
-impl SerializableInputSettings {
-    fn new(source: &InputSettings) -> Self {
-        SerializableInputSettings {
-            selected: source.selected.clone().map(|v| v.borrow().id.clone()),
-            configurations: source
-                .configurations
-                .iter()
-                .map(|(k, v)| (k.clone(), v.borrow().clone()))
-                .collect(),
-            default_gamepad_mapping: source.default_gamepad_mapping,
-        }
-    }
-}
-
-impl Serialize for InputSettings {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        SerializableInputSettings::new(self).serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for InputSettings {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        SerializableInputSettings::deserialize(deserializer)
-            .and_then(|s| InputSettings::from::<D>(s))
-    }
-}
-
-impl<'de> InputSettings {
-    fn from<D>(source: SerializableInputSettings) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let configurations: BTreeMap<InputId, InputConfigurationRef> = source
-            .configurations
-            .iter()
-            .map(|(k, v)| (k.clone(), Rc::new(RefCell::new(v.clone()))))
-            .collect();
-        Ok(Self {
-            selected: [
-                Self::map_selected(&configurations, &source.selected[0], 1)
-                    .map_err(serde::de::Error::custom)?
-                    .clone(),
-                Self::map_selected(&configurations, &source.selected[1], 2)
-                    .map_err(serde::de::Error::custom)?
-                    .clone(),
-            ],
-            configurations,
-            default_gamepad_mapping: source.default_gamepad_mapping,
-        })
-    }
-    fn map_selected<'a>(
-        configurations: &'a BTreeMap<String, InputConfigurationRef>,
-        id: &'a InputId,
-        player: usize,
-    ) -> Result<&'a InputConfigurationRef, SettingsParseError> {
-        configurations
-            .get(id)
-            .ok_or(SettingsParseError::new(&format!(
-                "non-existant input configuration '{id}' selected for player {player}"
-            )))
-    }
-}
-
-#[derive(Debug)]
-struct SettingsParseError {
-    details: String,
-}
-
-impl SettingsParseError {
-    fn new(msg: &str) -> SettingsParseError {
-        SettingsParseError {
-            details: msg.to_string(),
-        }
-    }
-}
-
-impl fmt::Display for SettingsParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.details)
-    }
-}
-
-impl std::error::Error for SettingsParseError {
-    fn description(&self) -> &str {
-        &self.details
     }
 }

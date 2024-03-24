@@ -1,14 +1,15 @@
-use md5::Digest;
+use uuid::Uuid;
 
 use crate::{
+    bundle,
     input::JoypadState,
     nes_state::{FrameData, LocalNesState, NesStateHandler, VideoFrame},
     settings::MAX_PLAYERS,
+    settings2,
 };
 
 use super::{
-    connecting_state::NetplayServerConfiguration, netplay_session::NetplaySession, ConnectingState,
-    JoypadMapping, StartMethod, StartState,
+    netplay_session::NetplaySession, ConnectingState, JoypadMapping, StartMethod, StartState,
 };
 
 pub enum NetplayState {
@@ -47,39 +48,23 @@ impl NetplayState {
 }
 
 pub struct Netplay<S> {
-    pub netplay_id: String,
-    pub rom_hash: Digest,
-    local_rom: Vec<u8>,
-    netplay_rom: Vec<u8>,
     pub state: S,
 }
 
 impl<T> Netplay<T> {
-    fn from<S>(state: T, other: Netplay<S>) -> Self {
-        Self {
-            netplay_id: other.netplay_id,
-            rom_hash: other.rom_hash,
-            local_rom: other.local_rom,
-            netplay_rom: other.netplay_rom,
-            state,
-        }
+    fn from(state: T) -> Self {
+        Self { state }
     }
 
     pub fn disconnect(self) -> Box<Netplay<LocalNesState>> {
         log::debug!("Disconnecting");
-        Box::new(Netplay::new(
-            self.netplay_id,
-            self.rom_hash,
-            self.local_rom,
-            self.netplay_rom,
-        ))
+        Box::new(Netplay::new())
     }
 }
 
 pub struct Connected {
     pub netplay_session: NetplaySession,
     session_id: String,
-    server_config: NetplayServerConfiguration,
 }
 
 pub struct Resuming {
@@ -92,88 +77,60 @@ impl Resuming {
 
         let session_id = netplay.state.session_id.clone();
         Self {
-            attempt1: ConnectingState::connect(
-                netplay,
-                StartMethod::Resume(StartState {
-                    game_state: netplay_session.last_confirmed_game_states[1].clone(),
-                    session_id: session_id.clone(),
-                }),
-                netplay.state.server_config.clone(),
-            ),
-            attempt2: ConnectingState::connect(
-                netplay,
-                StartMethod::Resume(StartState {
-                    game_state: netplay_session.last_confirmed_game_states[0].clone(),
-                    session_id,
-                }),
-                netplay.state.server_config.clone(),
-            ),
+            attempt1: ConnectingState::connect(StartMethod::Resume(StartState {
+                game_state: netplay_session.last_confirmed_game_states[1].clone(),
+                session_id: session_id.clone(),
+            })),
+            attempt2: ConnectingState::connect(StartMethod::Resume(StartState {
+                game_state: netplay_session.last_confirmed_game_states[0].clone(),
+                session_id,
+            })),
         }
     }
 }
-
+pub fn get_netplay_id() -> String {
+    settings2()
+        .netplay_id
+        .get_or_insert_with(|| Uuid::new_v4().to_string())
+        .to_string()
+}
 impl Netplay<LocalNesState> {
-    pub fn new(
-        netplay_id: String,
-        rom_hash: Digest,
-        local_rom: Vec<u8>,
-        netplay_rom: Vec<u8>,
-    ) -> Self {
+    pub fn new() -> Self {
         Self {
-            netplay_id,
-            rom_hash,
-            state: LocalNesState::load_rom(&local_rom),
-            local_rom,
-            netplay_rom,
+            state: LocalNesState::load_rom(&bundle().rom),
         }
     }
 
-    pub fn join_by_name(
-        self,
-        room_name: &str,
-        netplay_server_config: NetplayServerConfiguration,
-    ) -> NetplayState {
-        let session_id = format!("{}_{:x}", room_name, self.rom_hash);
-        let nes_state = LocalNesState::load_rom(&self.netplay_rom);
-        self.join(
-            StartMethod::Join(
-                StartState {
-                    game_state: super::NetplayNesState::new(nes_state),
-                    session_id,
-                },
-                room_name.to_string(),
-            ),
-            netplay_server_config,
-        )
-    }
-
-    pub fn match_with_random(
-        self,
-        netplay_server_config: NetplayServerConfiguration,
-    ) -> NetplayState {
-        // TODO: When resuming using this session id there might be collisions, but it's unlikely.
-        //       Should be fixed though.
-        let session_id = format!("{:x}", self.rom_hash);
-        let nes_state = LocalNesState::load_rom(&self.netplay_rom);
-        self.join(
-            StartMethod::MatchWithRandom(StartState {
+    pub fn join_by_name(self, room_name: &str) -> NetplayState {
+        let netplay_rom = &bundle().netplay_rom;
+        let session_id = format!("{}_{:x}", room_name, md5::compute(netplay_rom));
+        let nes_state = LocalNesState::load_rom(netplay_rom);
+        self.join(StartMethod::Join(
+            StartState {
                 game_state: super::NetplayNesState::new(nes_state),
                 session_id,
-            }),
-            netplay_server_config,
-        )
+            },
+            room_name.to_string(),
+        ))
     }
 
-    pub fn join(
-        self,
-        start_method: StartMethod,
-        netplay_server_config: NetplayServerConfiguration,
-    ) -> NetplayState {
+    pub fn match_with_random(self) -> NetplayState {
+        let netplay_rom = &bundle().netplay_rom;
+        let rom_hash = md5::compute(netplay_rom);
+
+        // TODO: When resuming using this session id there might be collisions, but it's unlikely.
+        //       Should be fixed though.
+        let session_id = format!("{:x}", rom_hash);
+        let nes_state = LocalNesState::load_rom(netplay_rom);
+        self.join(StartMethod::MatchWithRandom(StartState {
+            game_state: super::NetplayNesState::new(nes_state),
+            session_id,
+        }))
+    }
+
+    pub fn join(self, start_method: StartMethod) -> NetplayState {
         log::debug!("Joining: {:?}", start_method);
-        NetplayState::Connecting(Netplay::from(
-            ConnectingState::connect(&self, start_method, netplay_server_config),
-            self,
-        ))
+        NetplayState::Connecting(Netplay::from(ConnectingState::connect(start_method)))
     }
     fn advance(
         mut self,
@@ -201,12 +158,7 @@ impl Netplay<ConnectingState> {
                 ConnectingState::Connected(connected) => {
                     log::debug!("Connected! Starting netplay session");
                     NetplayState::Connected(Box::new(Netplay {
-                        netplay_id: self.netplay_id,
-                        rom_hash: self.rom_hash,
-                        local_rom: self.local_rom,
-                        netplay_rom: self.netplay_rom,
                         state: Connected {
-                            server_config: connected.netplay_server_config,
                             netplay_session: connected.state,
                             session_id: match connected.start_method {
                                 StartMethod::Join(StartState { session_id, .. }, _)
@@ -217,10 +169,6 @@ impl Netplay<ConnectingState> {
                     }))
                 }
                 ConnectingState::Failed(reason) => NetplayState::Failed(Box::new(Netplay {
-                    netplay_id: self.netplay_id,
-                    rom_hash: self.rom_hash,
-                    local_rom: self.local_rom,
-                    netplay_rom: self.netplay_rom,
                     state: Failed { reason },
                 })),
                 _ => NetplayState::Connecting(self),
@@ -241,7 +189,7 @@ impl Netplay<Connected> {
                 .map(|s| s.frame)
         );
 
-        Netplay::from(Resuming::new(&mut self), self)
+        Netplay::from(Resuming::new(&mut self))
     }
 
     fn advance(
@@ -283,18 +231,10 @@ impl Netplay<Resuming> {
         (
             if let ConnectingState::Connected(_) = &self.state.attempt1 {
                 NetplayState::Connecting(Netplay {
-                    netplay_id: self.netplay_id,
-                    rom_hash: self.rom_hash,
-                    local_rom: self.local_rom,
-                    netplay_rom: self.netplay_rom,
                     state: self.state.attempt1,
                 })
             } else if let ConnectingState::Connected(_) = &self.state.attempt2 {
                 NetplayState::Connecting(Netplay {
-                    netplay_id: self.netplay_id,
-                    rom_hash: self.rom_hash,
-                    local_rom: self.local_rom,
-                    netplay_rom: self.netplay_rom,
                     state: self.state.attempt2,
                 })
             } else {

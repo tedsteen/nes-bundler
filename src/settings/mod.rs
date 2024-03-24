@@ -1,5 +1,6 @@
 use crate::{
     audio::AudioSettings,
+    bundle,
     input::{settings::InputSettings, InputConfigurationKind},
 };
 
@@ -10,7 +11,6 @@ use std::{
     fs::File,
     hash::{Hash, Hasher},
     io::{BufReader, BufWriter},
-    path::Path,
 };
 pub mod gui;
 
@@ -25,7 +25,11 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn load(settings_path: &Path, default_settings: Settings) -> Settings {
+    pub fn load() -> Settings {
+        let bundle = bundle();
+        let settings_path = &bundle.settings_path;
+        let default_settings = bundle.config.default_settings.clone();
+
         let mut settings: Result<Settings> = File::open(settings_path)
             .map_err(anyhow::Error::msg)
             .and_then(|f| serde_yaml::from_reader(BufReader::new(f)).map_err(anyhow::Error::msg));
@@ -35,12 +39,12 @@ impl Settings {
                 let default_selected = default_settings.clone().input.selected;
                 //Make sure no gamepads are selected after loading settings (they will be autoselected later if they are connected)
                 if let InputConfigurationKind::Gamepad(_) =
-                    &settings.input.selected[0].clone().borrow().kind
+                    &settings.input.get_selected_configuration(0).kind
                 {
                     settings.input.selected[0] = default_selected[0].clone();
                 }
                 if let InputConfigurationKind::Gamepad(_) =
-                    &settings.input.selected[1].clone().borrow().kind
+                    &settings.input.get_selected_configuration(1).kind
                 {
                     settings.input.selected[1] = default_selected[1].clone();
                 }
@@ -51,7 +55,8 @@ impl Settings {
         //eprintln!("Failed to load config ({err}), falling back to default settings");
         settings.unwrap_or(default_settings)
     }
-    pub fn save(&self, settings_path: &Path) {
+    pub fn save(&self) {
+        let settings_path = &bundle().settings_path;
         if let Err(e) = File::create(settings_path)
             .map_err(anyhow::Error::msg)
             .and_then(|file| {

@@ -3,9 +3,12 @@ use self::{
     keyboard::{JoypadKeyboardMapping, Keyboards},
     keys::{KeyCode, Modifiers},
     sdl2_impl::Sdl2Gamepads,
-    settings::InputConfigurationRef,
+    settings::InputSettings,
 };
-use crate::settings::{gui::GuiEvent, Settings, MAX_PLAYERS};
+use crate::{
+    bundle,
+    settings::{gui::GuiEvent, MAX_PLAYERS},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
@@ -142,7 +145,7 @@ pub enum InputConfigurationKind {
 }
 #[derive(Debug)]
 pub struct MapRequest {
-    input_configuration: InputConfigurationRef,
+    input_id: InputId,
     button: JoypadButton,
 }
 
@@ -150,38 +153,35 @@ pub struct Inputs {
     keyboards: Keyboards,
     gamepads: GamepadImpl,
     pub joypads: Arc<Mutex<[JoypadState; MAX_PLAYERS]>>,
-    default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
 }
 
 impl Inputs {
-    pub fn new(
-        gamepads: GamepadImpl,
-        default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
-    ) -> Self {
+    pub fn new(gamepads: GamepadImpl) -> Self {
         let keyboards = Keyboards::new();
 
         Self {
             keyboards,
             gamepads,
             joypads: Arc::new(Mutex::new([JoypadState(0), JoypadState(0)])),
-            default_input_configurations,
         }
     }
 
-    pub fn advance(&mut self, event: &GuiEvent, settings: &mut Settings) {
+    pub fn advance(&mut self, event: &GuiEvent) {
         match event {
             GuiEvent::Keyboard(key_event) => {
                 self.keyboards.advance(key_event);
             }
             GuiEvent::Gamepad(gamepad_event) => {
-                self.gamepads.advance(gamepad_event, &mut settings.input);
+                self.gamepads.advance(gamepad_event);
             }
         }
-        let input_settings = &mut settings.input;
+        let input_settings = &mut crate::settings2().input;
         input_settings.reset_selected_disconnected_inputs(self);
 
-        let pad1 = self.get_joypad_for_input_configuration(&input_settings.selected[0].borrow());
-        let pad2 = self.get_joypad_for_input_configuration(&input_settings.selected[1].borrow());
+        let pad1 =
+            self.get_joypad_for_input_configuration(input_settings.get_selected_configuration(0));
+        let pad2 =
+            self.get_joypad_for_input_configuration(input_settings.get_selected_configuration(1));
         let mut joypads = self.joypads.lock().unwrap();
         joypads[0] = pad1;
         joypads[1] = pad2;
@@ -191,8 +191,12 @@ impl Inputs {
         self.joypads.lock().unwrap()[player]
     }
 
-    pub fn get_default_conf(&self, player: usize) -> &InputConfigurationRef {
-        &self.default_input_configurations[player]
+    pub fn get_default_conf(&self, player: usize) -> &InputConfiguration {
+        bundle()
+            .config
+            .default_settings
+            .input
+            .get_selected_configuration(player)
     }
 
     fn get_joypad_for_input_configuration(
@@ -218,29 +222,37 @@ impl Inputs {
         }
     }
 
-    pub fn remap_configuration(&mut self, mapping_request: &mut Option<MapRequest>) {
+    pub fn remap_configuration(
+        &mut self,
+        mapping_request: &mut Option<MapRequest>,
+        input_settings: &mut InputSettings,
+    ) {
         let mut remapped = false;
-        if let Some(map_request) = &mapping_request {
-            let input_configuration = &map_request.input_configuration;
-            let button = &map_request.button;
-
-            let mut input_configuration = input_configuration.borrow_mut();
-            let input_configuration_id = input_configuration.id.clone();
-            match &mut input_configuration.kind {
-                InputConfigurationKind::Keyboard(mapping) => {
-                    if let Some(code) = self.keyboards.pressed_keys.iter().next() {
-                        //If there's any key pressed, use the first found.
-                        let _ = mapping.lookup(button).insert(*code);
-                        remapped = true;
-                    }
-                }
-                InputConfigurationKind::Gamepad(mapping) => {
-                    let gamepads = &self.gamepads;
-                    if let Some(state) = gamepads.get_gamepad_by_input_id(&input_configuration_id) {
-                        if let Some(new_button) = state.get_pressed_buttons().iter().next() {
-                            //If there's any button pressed, use the first found.
-                            let _ = mapping.lookup(button).insert(*new_button);
+        if let Some(map_request) = mapping_request {
+            if let Some(input_configuration) = &mut input_settings
+                .configurations
+                .get_mut(&map_request.input_id.clone())
+            {
+                let button = &map_request.button;
+                let input_configuration_id = input_configuration.id.clone();
+                match &mut input_configuration.kind {
+                    InputConfigurationKind::Keyboard(mapping) => {
+                        if let Some(code) = self.keyboards.pressed_keys.iter().next() {
+                            //If there's any key pressed, use the first found.
+                            let _ = mapping.lookup(button).insert(*code);
                             remapped = true;
+                        }
+                    }
+                    InputConfigurationKind::Gamepad(mapping) => {
+                        let gamepads = &self.gamepads;
+                        if let Some(state) =
+                            gamepads.get_gamepad_by_input_id(&input_configuration_id)
+                        {
+                            if let Some(new_button) = state.get_pressed_buttons().iter().next() {
+                                //If there's any button pressed, use the first found.
+                                let _ = mapping.lookup(button).insert(*new_button);
+                                remapped = true;
+                            }
                         }
                     }
                 }

@@ -3,15 +3,17 @@ use futures::{select, FutureExt};
 use futures_timer::Delay;
 use ggrs::{P2PSession, SessionBuilder, SessionState};
 use matchbox_socket::{ChannelConfig, RtcIceServerConfig, WebRtcSocket, WebRtcSocketBuilder};
-use md5::Digest;
+
 use serde::Deserialize;
 use std::fmt::Debug;
 use std::time::{Duration, Instant};
 
+use crate::bundle;
+use crate::netplay::netplay_state::get_netplay_id;
 use crate::{settings::MAX_PLAYERS, FPS};
 
 use super::netplay_session::{GGRSConfig, NetplaySession};
-use super::netplay_state::Netplay;
+
 use super::NetplayNesState;
 
 #[derive(Deserialize, Clone, Debug)]
@@ -37,40 +39,20 @@ pub enum ConnectingState {
 }
 
 impl ConnectingState {
-    pub fn connect<T>(
-        netplay: &Netplay<T>,
-        start_method: StartMethod,
-        netplay_server_config: NetplayServerConfiguration,
-    ) -> Self {
-        Self::start(
-            netplay_server_config,
-            netplay.netplay_id.clone(),
-            netplay.rom_hash,
-            start_method,
-        )
+    pub fn connect(start_method: StartMethod) -> Self {
+        Self::start(start_method)
     }
 
-    fn start(
-        netplay_server_config: NetplayServerConfiguration,
-        netplay_id: String,
-        rom_hash: Digest,
-        start_method: StartMethod,
-    ) -> Self {
+    fn start(start_method: StartMethod) -> Self {
         let reqwest_client = reqwest::Client::new();
-        log::debug!("Connecting: {:?}", netplay_server_config);
-        match &netplay_server_config {
+        match &bundle().config.netplay.server {
             NetplayServerConfiguration::Static(conf) => {
-                Self::PeeringUp(Connecting::<PeeringState>::new(
-                    netplay_server_config.clone(),
-                    conf.clone(),
-                    netplay_id,
-                    rom_hash,
-                    start_method,
-                ))
+                Self::PeeringUp(Connecting::<PeeringState>::new(conf.clone(), start_method))
             }
 
             NetplayServerConfiguration::TurnOn(server) => {
                 log::debug!("Fetching TurnOn config from server: {}", server);
+                let netplay_id = get_netplay_id();
                 let req = reqwest_client.get(format!("{server}/{netplay_id}")).send();
                 let (sender, result) =
                     futures::channel::oneshot::channel::<Result<TurnOnResponse, TurnOnError>>();
@@ -92,9 +74,6 @@ impl ConnectingState {
 
                 Self::LoadingNetplayServerConfiguration(Connecting {
                     start_method,
-                    netplay_server_config,
-                    netplay_id,
-                    rom_hash,
                     state: LoadingNetplayServerConfiguration { result },
                 })
             }
@@ -112,9 +91,6 @@ impl ConnectingState {
     }
 }
 pub struct Connecting<S> {
-    pub netplay_server_config: NetplayServerConfiguration,
-    netplay_id: String,
-    rom_hash: Digest,
     pub start_method: StartMethod,
     pub state: S,
 }
@@ -122,9 +98,6 @@ pub struct Connecting<S> {
 impl<T> Connecting<T> {
     fn from<S>(state: T, other: Connecting<S>) -> Self {
         Self {
-            netplay_server_config: other.netplay_server_config,
-            netplay_id: other.netplay_id,
-            rom_hash: other.rom_hash,
             start_method: other.start_method,
             state,
         }
@@ -133,12 +106,7 @@ impl<T> Connecting<T> {
         Connecting::from(
             Retrying::new(
                 fail_message.to_string(),
-                ConnectingState::start(
-                    self.netplay_server_config.clone(),
-                    self.netplay_id.clone(),
-                    self.rom_hash,
-                    self.start_method.clone(),
-                ),
+                ConnectingState::start(self.start_method.clone()),
             ),
             self,
         )
@@ -296,19 +264,10 @@ impl Connecting<LoadingNetplayServerConfiguration> {
 }
 
 impl Connecting<PeeringState> {
-    fn new(
-        netplay_server_config: NetplayServerConfiguration,
-        conf: StaticNetplayServerConfiguration,
-        netplay_id: String,
-        rom_hash: Digest,
-        start_method: StartMethod,
-    ) -> Self {
+    fn new(conf: StaticNetplayServerConfiguration, start_method: StartMethod) -> Self {
         Self {
             state: PeeringState::new(TurnOnResponse::Full(conf.clone()), start_method.clone()),
             start_method,
-            netplay_server_config,
-            netplay_id,
-            rom_hash,
         }
     }
 
@@ -341,9 +300,6 @@ impl Connecting<PeeringState> {
             }
 
             ConnectingState::Synchronizing(Box::new(Connecting {
-                netplay_server_config: self.netplay_server_config,
-                netplay_id: self.netplay_id,
-                rom_hash: self.rom_hash,
                 start_method: self.start_method,
                 state: SynchonizingState::new(
                     sess_build
@@ -365,9 +321,6 @@ impl Connecting<SynchonizingState> {
             let start_method = self.start_method;
             log::debug!("Synchronized!");
             ConnectingState::Connected(Box::new(Connecting {
-                netplay_server_config: self.netplay_server_config,
-                netplay_id: self.netplay_id,
-                rom_hash: self.rom_hash,
                 start_method: start_method.clone(),
                 state: NetplaySession::new(start_method.clone(), self.state.p2p_session),
             }))

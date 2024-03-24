@@ -1,11 +1,11 @@
-use crate::settings::{gui::GuiComponent, Settings};
+use crate::{settings::gui::GuiComponent, settings2};
 use egui::{Slider, Ui};
 
 use super::Audio;
 pub struct AudioGui {}
 
 impl GuiComponent<Audio> for AudioGui {
-    fn ui(&mut self, instance: &mut Audio, ui: &mut Ui, settings: &mut Settings) {
+    fn ui(&mut self, instance: &mut Audio, ui: &mut Ui) {
         let available_device_names = instance.get_available_output_device_names();
         ui.horizontal(|ui| {
             egui::Grid::new("netplay_grid")
@@ -13,7 +13,7 @@ impl GuiComponent<Audio> for AudioGui {
                 .spacing([10.0, 4.0])
                 .striped(true)
                 .show(ui, |ui| {
-                    let audio_settings = &mut settings.audio;
+                    let audio_settings = &mut settings2().audio;
 
                     ui.label("Output");
                     let selected_device = &mut audio_settings.output_device;
@@ -42,13 +42,7 @@ impl GuiComponent<Audio> for AudioGui {
                     }
 
                     ui.label("Volume");
-                    if ui
-                        .add(Slider::new(&mut audio_settings.volume, 0..=100).suffix("%"))
-                        .changed()
-                    {
-                        *instance.stream.volume.lock().unwrap() =
-                            audio_settings.volume as f32 / 100.0;
-                    }
+                    ui.add(Slider::new(&mut audio_settings.volume, 0..=100).suffix("%"));
                 });
         });
     }

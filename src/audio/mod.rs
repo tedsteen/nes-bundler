@@ -1,6 +1,6 @@
 use std::ops::Add;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
@@ -8,6 +8,8 @@ use ringbuf::{Consumer, HeapRb, Producer};
 use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
 use sdl2::{AudioSubsystem, Sdl};
 use serde::{Deserialize, Serialize};
+
+use crate::settings2;
 
 pub mod gui;
 
@@ -20,11 +22,10 @@ pub struct AudioSettings {
 pub struct Stream {
     output_device_name: Option<String>,
     audio_device: Option<AudioDevice<AudioReceiverCallback>>,
-    pub(crate) volume: Arc<Mutex<f32>>,
 }
 pub type AudioSender = Producer<f32, Arc<HeapRb<f32>>>;
 pub type AudioReceiver = Consumer<f32, Arc<HeapRb<f32>>>;
-struct AudioReceiverCallback(AudioReceiver, Arc<Mutex<f32>>);
+struct AudioReceiverCallback(AudioReceiver);
 
 impl AudioCallback for AudioReceiverCallback {
     type Channel = f32;
@@ -39,7 +40,7 @@ impl AudioCallback for AudioReceiverCallback {
 
         // I don't want to hold the lock during the whole sample copy
         #[allow(clippy::clone_on_copy)]
-        let volume = self.1.lock().unwrap().clone();
+        let volume = settings2().audio.volume.clone() as f32 / 100.0;
         for (sample, value) in out.iter_mut().zip(
             consumer
                 .pop_iter()
@@ -52,21 +53,15 @@ impl AudioCallback for AudioReceiverCallback {
 }
 
 impl Stream {
-    pub(crate) fn new(
-        audio_subsystem: &AudioSubsystem,
-        audio_settings: AudioSettings,
-        audio_rx: AudioReceiver,
-    ) -> Result<Self> {
-        let volume = Arc::new(Mutex::new(audio_settings.volume as f32 / 100.0));
+    pub(crate) fn new(audio_subsystem: &AudioSubsystem, audio_rx: AudioReceiver) -> Result<Self> {
+        let audio_settings = &settings2().audio;
         Ok(Self {
             output_device_name: audio_settings.output_device.clone(),
             audio_device: Some(Stream::new_audio_device(
                 audio_subsystem,
                 &audio_settings.output_device,
                 audio_rx,
-                volume.clone(),
             )?),
-            volume,
         })
     }
 
@@ -74,7 +69,6 @@ impl Stream {
         audio_subsystem: &AudioSubsystem,
         output_device: &Option<String>,
         audio_rx: AudioReceiver,
-        volume: Arc<Mutex<f32>>,
     ) -> Result<AudioDevice<AudioReceiverCallback>> {
         let channels = 1;
         let sample_rate = 44100;
@@ -86,7 +80,7 @@ impl Stream {
 
         let output_device = audio_subsystem
             .open_playback(output_device.as_deref(), &desired_spec, |_| {
-                AudioReceiverCallback(audio_rx, volume)
+                AudioReceiverCallback(audio_rx)
             })
             // .or_else(|_| {
             //     audio_subsystem.open_playback(None, &desired_spec, |_| {
@@ -105,12 +99,7 @@ impl Stream {
             if let Some(audio_device) = self.audio_device.take() {
                 let subsystem = audio_device.subsystem().clone();
                 let old_callback = audio_device.close_and_get_callback();
-                match Stream::new_audio_device(
-                    &subsystem,
-                    &output_device_name,
-                    old_callback.0,
-                    old_callback.1,
-                ) {
+                match Stream::new_audio_device(&subsystem, &output_device_name, old_callback.0) {
                     Ok(audio_device) => {
                         self.output_device_name = output_device_name;
                         self.audio_device = Some(audio_device);
@@ -132,15 +121,11 @@ pub struct Audio {
 }
 
 impl Audio {
-    pub fn new(
-        sdl_context: &Sdl,
-        settings: AudioSettings,
-        audio_rx: AudioReceiver,
-    ) -> Result<Self> {
+    pub fn new(sdl_context: &Sdl, audio_rx: AudioReceiver) -> Result<Self> {
         let audio_subsystem = sdl_context.audio().map_err(anyhow::Error::msg)?;
 
         Ok(Audio {
-            stream: Stream::new(&audio_subsystem, settings, audio_rx)?,
+            stream: Stream::new(&audio_subsystem, audio_rx)?,
             available_device_names: vec![],
             next_device_names_clear: Instant::now(),
             audio_subsystem,
@@ -161,7 +146,7 @@ impl Audio {
         }
     }
 
-    pub fn sync_audio_devices(&mut self, audio_settings: &mut AudioSettings) {
+    pub fn sync_audio_devices(&mut self) {
         if self.next_device_names_clear < Instant::now() {
             self.next_device_names_clear = Instant::now().add(Duration::new(1, 0));
             self.available_device_names = self.get_available_output_device_names();
@@ -169,7 +154,7 @@ impl Audio {
 
         let available_device_names = self.get_available_output_device_names();
 
-        let selected_device = &mut audio_settings.output_device;
+        let selected_device = &mut settings2().audio.output_device;
         if let Some(name) = selected_device {
             if !available_device_names.contains(name) {
                 *selected_device = None;

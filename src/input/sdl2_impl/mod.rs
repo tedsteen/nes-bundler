@@ -1,8 +1,8 @@
 use super::buttons::ToGamepadButton;
-use super::settings::InputConfigurationRef;
-use super::ToInputId;
-use super::{buttons::GamepadButton, settings::InputSettings, InputId, JoypadState};
+use super::{buttons::GamepadButton, InputId, JoypadState};
+use super::{InputConfiguration, ToInputId};
 use crate::input::{self, InputConfigurationKind};
+use crate::settings2;
 use std::collections::{HashMap, HashSet};
 
 use sdl2::{controller::GameController, GameControllerSubsystem};
@@ -64,19 +64,20 @@ impl Gamepads for Sdl2Gamepads {
         self.all.get(id).map(|a| a.as_ref())
     }
 
-    fn advance(&mut self, gamepad_event: &GamepadEvent, input_settings: &mut InputSettings) {
+    fn advance(&mut self, gamepad_event: &GamepadEvent) {
+        let input_settings = &mut settings2().input;
         match gamepad_event {
             GamepadEvent::ControllerAdded { which, .. } => {
-                if let Some(conf) = self.setup_gamepad_config(which.clone(), input_settings) {
+                if let Some(conf) = self.setup_gamepad_config(which.clone()) {
                     // Automatically select a gamepad if it's connected and keyboard is currently selected.
                     if let InputConfigurationKind::Keyboard(_) =
-                        &input_settings.selected[0].clone().borrow().kind
+                        input_settings.get_selected_configuration(0).kind
                     {
-                        input_settings.selected[0] = conf;
+                        input_settings.selected[0] = conf.id;
                     } else if let InputConfigurationKind::Keyboard(_) =
-                        &input_settings.selected[1].clone().borrow().kind
+                        input_settings.get_selected_configuration(1).kind
                     {
-                        input_settings.selected[1] = conf;
+                        input_settings.selected[1] = conf.id;
                     }
                 } else {
                     log::error!("Could not setup controller {:?}", which);
@@ -119,11 +120,7 @@ impl Sdl2Gamepads {
         self.all.get_mut(&Self::to_gamepad_id(&id))
     }
 
-    fn setup_gamepad_config(
-        &mut self,
-        input_id: InputId,
-        input_settings: &mut InputSettings,
-    ) -> Option<InputConfigurationRef> {
+    fn setup_gamepad_config(&mut self, input_id: InputId) -> Option<InputConfiguration> {
         if let Some(found_controller) =
             (0..self.game_controller_subsystem.num_joysticks().unwrap_or(0)).find_map(|id| {
                 if input_id == id.to_input_id()
@@ -147,7 +144,7 @@ impl Sdl2Gamepads {
                 gamepad_id.clone(),
                 Box::new(Sdl2GamepadState::new(found_controller)),
             );
-
+            let input_settings = &mut settings2().input;
             let conf = input_settings.get_or_create_config(
                 gamepad_id.clone(),
                 input::InputConfiguration {
