@@ -37,9 +37,13 @@ pub enum ConnectingState {
 }
 
 impl ConnectingState {
-    pub fn connect<T>(netplay: &Netplay<T>, start_method: StartMethod) -> Self {
+    pub fn connect<T>(
+        netplay: &Netplay<T>,
+        start_method: StartMethod,
+        netplay_server_config: NetplayServerConfiguration,
+    ) -> Self {
         Self::start(
-            netplay.config.server.clone(),
+            netplay_server_config,
             netplay.netplay_id.clone(),
             netplay.rom_hash,
             start_method,
@@ -108,7 +112,7 @@ impl ConnectingState {
     }
 }
 pub struct Connecting<S> {
-    netplay_server_config: NetplayServerConfiguration,
+    pub netplay_server_config: NetplayServerConfiguration,
     netplay_id: String,
     rom_hash: Digest,
     pub start_method: StartMethod,

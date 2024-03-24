@@ -1,14 +1,12 @@
-use crate::settings::{
-    gui::{GuiComponent, GuiEvent},
-    Settings,
-};
+use crate::settings::{gui::GuiComponent, Settings};
 use egui::{Slider, Ui};
 
 use super::Audio;
+pub struct AudioGui {}
 
-impl GuiComponent for Audio {
-    fn ui(&mut self, ui: &mut Ui, settings: &mut Settings) {
-        let available_device_names = self.get_available_output_device_names();
+impl GuiComponent<Audio> for AudioGui {
+    fn ui(&mut self, instance: &mut Audio, ui: &mut Ui, settings: &mut Settings) {
+        let available_device_names = instance.get_available_output_device_names();
         ui.horizontal(|ui| {
             egui::Grid::new("netplay_grid")
                 .num_columns(2)
@@ -20,7 +18,7 @@ impl GuiComponent for Audio {
                     ui.label("Output");
                     let selected_device = &mut audio_settings.output_device;
                     if selected_device.is_none() {
-                        *selected_device = self.get_default_device_name();
+                        *selected_device = instance.get_default_device_name();
                     }
                     if let Some(selected_text) = selected_device.as_deref_mut() {
                         egui::ComboBox::from_id_source("audio-output")
@@ -36,7 +34,7 @@ impl GuiComponent for Audio {
                                         )
                                         .changed()
                                     {
-                                        self.stream.set_output_device(Some(name))
+                                        instance.stream.set_output_device(Some(name))
                                     }
                                 }
                             });
@@ -48,7 +46,8 @@ impl GuiComponent for Audio {
                         .add(Slider::new(&mut audio_settings.volume, 0..=100).suffix("%"))
                         .changed()
                     {
-                        *self.stream.volume.lock().unwrap() = audio_settings.volume as f32 / 100.0;
+                        *instance.stream.volume.lock().unwrap() =
+                            audio_settings.volume as f32 / 100.0;
                     }
                 });
         });
@@ -56,11 +55,5 @@ impl GuiComponent for Audio {
 
     fn name(&self) -> Option<String> {
         Some("Audio".to_string())
-    }
-
-    fn event(&mut self, _event: &GuiEvent, _settings: &mut Settings) {}
-
-    fn messages(&self) -> Vec<String> {
-        [].to_vec()
     }
 }

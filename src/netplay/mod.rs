@@ -59,9 +59,6 @@ pub struct NetplayBuildConfiguration {
 
 pub struct NetplayStateHandler {
     netplay: Option<NetplayState>,
-
-    //Gui
-    room_name: String,
 }
 
 #[derive(Clone)]
@@ -127,10 +124,6 @@ impl NesStateHandler for NetplayStateHandler {
         }
     }
 
-    fn get_gui(&mut self) -> Option<&mut dyn crate::settings::gui::GuiComponent> {
-        Some(self)
-    }
-
     fn discard_samples(&mut self) {
         if let Some(NetplayState::Connected(s)) = &mut self.netplay {
             s.state
@@ -143,16 +136,9 @@ impl NesStateHandler for NetplayStateHandler {
 }
 
 impl NetplayStateHandler {
-    pub fn new(
-        local_rom: Vec<u8>,
-        netplay_rom: Vec<u8>,
-        netplay_build_config: NetplayBuildConfiguration,
-        netplay_id: String,
-    ) -> Self {
+    pub fn new(local_rom: Vec<u8>, netplay_rom: Vec<u8>, netplay_id: String) -> Self {
         NetplayStateHandler {
-            room_name: netplay_build_config.default_room_name.clone(),
             netplay: Some(NetplayState::Disconnected(Box::new(Netplay::new(
-                netplay_build_config,
                 netplay_id,
                 md5::compute(&netplay_rom),
                 local_rom,

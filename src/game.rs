@@ -17,16 +17,19 @@ use std::path::PathBuf;
 
 use crate::settings::Settings;
 
+// TODO: Rename to Gui?
 pub struct Game {
     pub emulator: Emulator,
     pub settings: Settings,
     #[cfg(feature = "debug")]
+    //TODO: Move all the instances out of gui and pass them in instead
     pub debug: crate::debug::Debug,
     pub audio: Audio,
     pub inputs: Inputs,
     modifiers: Modifiers,
     pub settings_path: PathBuf,
 }
+
 impl Game {
     pub fn new(
         emulator: Emulator,
@@ -89,13 +92,10 @@ impl Game {
         if !consumed {
             gui.handle_event(
                 gui_event,
-                &mut [
-                    #[cfg(feature = "debug")]
-                    Some(&mut self.debug),
-                    Some(&mut self.inputs),
-                    Some(&mut self.audio),
-                    Some(&mut self.emulator),
-                ],
+                &mut self.debug,
+                &mut self.inputs,
+                &mut self.audio,
+                &mut self.emulator,
                 &mut self.settings,
             )
         }
@@ -110,13 +110,10 @@ impl Game {
             let settings_hash_before = self.settings.get_hash();
             gui.ui(
                 ctx,
-                &mut [
-                    #[cfg(feature = "debug")]
-                    Some(&mut self.debug),
-                    Some(&mut self.inputs),
-                    Some(&mut self.audio),
-                    Some(&mut self.emulator),
-                ],
+                &mut self.debug,
+                &mut self.inputs,
+                &mut self.audio,
+                &mut self.emulator,
                 &mut self.settings,
             );
             if settings_hash_before != self.settings.get_hash() {

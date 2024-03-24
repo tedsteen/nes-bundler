@@ -138,7 +138,7 @@ pub enum InputConfigurationKind {
     Gamepad(JoypadGamepadMapping),
 }
 #[derive(Debug)]
-struct MapRequest {
+pub struct MapRequest {
     input_configuration: InputConfigurationRef,
     button: JoypadButton,
 }
@@ -148,9 +148,6 @@ pub struct Inputs {
     gamepads: Box<dyn Gamepads>,
     pub joypads: Arc<Mutex<[JoypadState; MAX_PLAYERS]>>,
     default_input_configurations: [InputConfigurationRef; MAX_PLAYERS],
-
-    //Gui
-    mapping_request: Option<MapRequest>,
 }
 
 impl Inputs {
@@ -165,8 +162,6 @@ impl Inputs {
             gamepads,
             joypads: Arc::new(Mutex::new([JoypadState(0), JoypadState(0)])),
             default_input_configurations,
-
-            mapping_request: None,
         }
     }
 
@@ -220,9 +215,9 @@ impl Inputs {
         }
     }
 
-    pub fn remap_configuration(&mut self) {
+    pub fn remap_configuration(&mut self, mapping_request: &mut Option<MapRequest>) {
         let mut remapped = false;
-        if let Some(map_request) = &mut self.mapping_request {
+        if let Some(map_request) = &mapping_request {
             let input_configuration = &map_request.input_configuration;
             let button = &map_request.button;
 
@@ -249,7 +244,7 @@ impl Inputs {
             }
         }
         if remapped {
-            self.mapping_request = None;
+            *mapping_request = None;
         }
     }
 }

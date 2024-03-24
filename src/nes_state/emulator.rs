@@ -9,6 +9,7 @@ use crate::{
     fps::RateCounter,
     gameloop::GameLoop,
     input::JoypadState,
+    netplay::{gui::NetplayGui, NetplayBuildConfiguration, NetplayStateHandler},
     settings::{gui::GuiComponent, Settings, MAX_PLAYERS},
     window::egui_winit_wgpu::VideoFramePool,
     FPS,
@@ -17,8 +18,9 @@ use crate::{
 use super::NesStateHandler;
 
 pub struct Emulator {
-    jh: JoinHandle<()>,
-    nes_state: Arc<Mutex<dyn NesStateHandler>>,
+    _jh: JoinHandle<()>,
+    nes_state: Arc<Mutex<NetplayStateHandler>>,
+    netplay_config: NetplayBuildConfiguration,
 }
 
 impl Emulator {
@@ -41,12 +43,7 @@ impl Emulator {
                 .get_or_insert_with(|| Uuid::new_v4().to_string())
                 .to_string();
             let netplay_rom = bundle.netplay_rom.clone();
-            crate::netplay::NetplayStateHandler::new(
-                rom,
-                netplay_rom,
-                bundle.config.netplay.clone(),
-                netplay_id,
-            )
+            crate::netplay::NetplayStateHandler::new(rom, netplay_rom, netplay_id)
         };
         let nes_state = Arc::new(Mutex::new(nes_state));
         let mut game_loop = GameLoop::new(nes_state.clone(), FPS);
@@ -82,40 +79,75 @@ impl Emulator {
                 tokio::task::yield_now().await
             }
         });
-        Self { jh, nes_state }
+        Self {
+            _jh: jh,
+            nes_state,
+            netplay_config: bundle.config.netplay.clone(),
+        }
     }
 
     pub fn save_state(&self) -> Option<Vec<u8>> {
         self.nes_state.lock().unwrap().save()
     }
+
     pub fn load_state(&mut self, data: &mut Vec<u8>) {
         self.nes_state.lock().unwrap().load(data);
     }
+
+    pub fn new_gui(&self) -> EmulatorGui {
+        EmulatorGui::Netplay(NetplayGui::new(self.netplay_config.clone()))
+    }
 }
-impl GuiComponent for Emulator {
-    fn ui(&mut self, ui: &mut egui::Ui, settings: &mut Settings) {
-        self.nes_state
-            .lock()
-            .unwrap()
-            .get_gui()
-            .unwrap()
-            .ui(ui, settings);
+
+#[allow(dead_code)]
+pub enum EmulatorGui {
+    Local,
+    Netplay(NetplayGui),
+}
+impl EmulatorGui {
+    fn to_gui(&self) -> Option<&NetplayGui> {
+        match self {
+            EmulatorGui::Local => None,
+            EmulatorGui::Netplay(gui) => Some(gui),
+        }
+    }
+    fn to_gui_mut(&mut self) -> Option<&mut NetplayGui> {
+        match self {
+            EmulatorGui::Local => None,
+            EmulatorGui::Netplay(gui) => Some(gui),
+        }
+    }
+}
+impl GuiComponent<Emulator> for EmulatorGui {
+    fn ui(&mut self, instance: &mut Emulator, ui: &mut egui::Ui, settings: &mut Settings) {
+        if let Some(gui) = self.to_gui_mut() {
+            gui.ui(&mut instance.nes_state.lock().unwrap(), ui, settings)
+        }
+    }
+    fn event(
+        &mut self,
+        instance: &mut Emulator,
+        event: &crate::settings::gui::GuiEvent,
+        settings: &mut Settings,
+    ) {
+        if let Some(gui) = self.to_gui_mut() {
+            gui.event(&mut instance.nes_state.lock().unwrap(), event, settings);
+        }
     }
 
-    fn messages(&self) -> Vec<String> {
-        self.nes_state.lock().unwrap().get_gui().unwrap().messages()
-    }
-
-    fn event(&mut self, event: &crate::settings::gui::GuiEvent, settings: &mut Settings) {
-        self.nes_state
-            .lock()
-            .unwrap()
-            .get_gui()
-            .unwrap()
-            .event(event, settings);
+    fn messages(&self, instance: &Emulator) -> Vec<String> {
+        if let Some(gui) = self.to_gui() {
+            gui.messages(&instance.nes_state.lock().unwrap())
+        } else {
+            [].to_vec()
+        }
     }
 
     fn name(&self) -> Option<String> {
-        self.nes_state.lock().unwrap().get_gui().unwrap().name()
+        if let Some(gui) = self.to_gui() {
+            gui.name()
+        } else {
+            None
+        }
     }
 }

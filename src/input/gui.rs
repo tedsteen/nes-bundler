@@ -8,8 +8,17 @@ use crate::{
 use egui::{Color32, Grid, RichText, Ui};
 
 use super::{settings::InputConfigurationRef, MapRequest};
+pub struct InputsGui {
+    mapping_request: Option<MapRequest>,
+}
 
-impl Inputs {
+impl InputsGui {
+    pub fn new() -> Self {
+        Self {
+            mapping_request: None,
+        }
+    }
+
     fn key_map_ui(
         ui: &mut Ui,
         joypad_state: JoypadState,
@@ -100,24 +109,24 @@ impl Inputs {
     }
 }
 
-impl GuiComponent for Inputs {
-    fn event(&mut self, event: &GuiEvent, settings: &mut Settings) {
-        self.advance(event, settings);
+impl GuiComponent<Inputs> for InputsGui {
+    fn event(&mut self, instance: &mut Inputs, event: &GuiEvent, settings: &mut Settings) {
+        instance.advance(event, settings);
     }
 
-    fn ui(&mut self, ui: &mut Ui, settings: &mut Settings) {
+    fn ui(&mut self, instance: &mut Inputs, ui: &mut Ui, settings: &mut Settings) {
         let input_settings = &mut settings.input;
         let available_configurations = &mut input_settings
             .configurations
             .values()
-            .filter(|e| self.is_connected(&e.borrow()))
+            .filter(|e| instance.is_connected(&e.borrow()))
             .cloned()
             .collect::<Vec<InputConfigurationRef>>();
 
         available_configurations.sort_by(|a, b| a.borrow().id.cmp(&b.borrow().id));
 
-        let joypad_0 = self.get_joypad(0);
-        let joypad_1 = self.get_joypad(1);
+        let joypad_0 = instance.get_joypad(0);
+        let joypad_1 = instance.get_joypad(1);
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 Self::key_map_ui(
@@ -141,14 +150,10 @@ impl GuiComponent for Inputs {
             });
         });
 
-        self.remap_configuration();
+        instance.remap_configuration(&mut self.mapping_request);
     }
 
     fn name(&self) -> Option<String> {
         Some("Input".to_string())
-    }
-
-    fn messages(&self) -> Vec<String> {
-        [].to_vec()
     }
 }

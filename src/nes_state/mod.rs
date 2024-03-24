@@ -1,8 +1,4 @@
-use crate::{
-    input::JoypadState,
-    settings::{gui::GuiComponent, MAX_PLAYERS},
-    Fps, NES_HEIGHT, NES_WIDTH,
-};
+use crate::{input::JoypadState, settings::MAX_PLAYERS, Fps, NES_HEIGHT, NES_WIDTH};
 
 use self::rusticnes::RusticNesState;
 
@@ -25,6 +21,5 @@ pub trait NesStateHandler: Send {
     ) -> Option<FrameData>;
     fn save(&self) -> Option<Vec<u8>>;
     fn load(&mut self, data: &mut Vec<u8>);
-    fn get_gui(&mut self) -> Option<&mut dyn GuiComponent>;
     fn discard_samples(&mut self);
 }

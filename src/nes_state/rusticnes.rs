@@ -2,11 +2,7 @@ use anyhow::Context;
 use rusticnes_core::cartridge::mapper_from_file;
 
 use super::{FrameData, LocalNesState, NesStateHandler, VideoFrame};
-use crate::{
-    input::JoypadState,
-    settings::{gui::GuiComponent, MAX_PLAYERS},
-    FPS,
-};
+use crate::{input::JoypadState, settings::MAX_PLAYERS, FPS};
 
 pub struct RusticNesState {
     nes: rusticnes_core::nes::NesState,
@@ -80,10 +76,6 @@ impl NesStateHandler for RusticNesState {
     }
     fn load(&mut self, data: &mut Vec<u8>) {
         self.nes.load_state(data);
-    }
-
-    fn get_gui(&mut self) -> Option<&mut dyn GuiComponent> {
-        None
     }
 
     fn discard_samples(&mut self) {

@@ -6,9 +6,17 @@ use egui::{
 };
 
 use crate::{
-    input::{buttons::GamepadButton, gamepad::GamepadEvent, keys::KeyCode, KeyEvent},
+    audio::{gui::AudioGui, Audio},
+    debug::{Debug, DebugGui},
+    input::{
+        buttons::GamepadButton, gamepad::GamepadEvent, gui::InputsGui, keys::KeyCode, Inputs,
+        KeyEvent,
+    },
     integer_scaling::{calculate_size_corrected, Size},
-    nes_state::VideoFrame,
+    nes_state::{
+        emulator::{Emulator, EmulatorGui},
+        VideoFrame,
+    },
     MINIMUM_INTEGER_SCALING_SIZE, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3,
 };
 
@@ -24,14 +32,70 @@ pub enum GuiEvent {
     Gamepad(GamepadEvent),
 }
 
-pub trait GuiComponent {
-    fn ui(&mut self, ui: &mut Ui, settings: &mut Settings);
-    fn messages(&self) -> Vec<String>;
-    fn event(&mut self, event: &GuiEvent, settings: &mut Settings);
-    fn name(&self) -> Option<String>;
+pub trait GuiComponent<T> {
+    fn ui(&mut self, instance: &mut T, ui: &mut Ui, settings: &mut Settings);
+
+    //TODO: remove from gui component. Has nothing to do with a gui
+    fn event(&mut self, _instance: &mut T, _event: &GuiEvent, _settings: &mut Settings) {}
+
+    fn messages(&self, _instance: &T) -> Vec<String> {
+        [].to_vec() //TODO: don't allocate all the time. Make it an Option<Vec<String>>
+    }
+    fn name(&self) -> Option<String> {
+        None
+    }
+}
+
+enum GuiWithState<'a> {
+    Inputs(&'a mut InputsGui, &'a mut Inputs),
+    Debug(&'a mut DebugGui, &'a mut Debug),
+    Audio(&'a mut AudioGui, &'a mut Audio),
+    Emulator(&'a mut EmulatorGui, &'a mut Emulator),
+}
+
+impl GuiWithState<'_> {
+    fn ui(&mut self, ui: &mut Ui, settings: &mut Settings) {
+        match self {
+            GuiWithState::Inputs(gui, instance) => gui.ui(instance, ui, settings),
+            GuiWithState::Debug(gui, instance) => gui.ui(instance, ui, settings),
+            GuiWithState::Audio(gui, instance) => gui.ui(instance, ui, settings),
+            GuiWithState::Emulator(gui, instance) => gui.ui(instance, ui, settings),
+        }
+    }
+    fn event(&mut self, event: &GuiEvent, settings: &mut Settings) {
+        match self {
+            GuiWithState::Inputs(gui, instance) => gui.event(instance, event, settings),
+            GuiWithState::Debug(gui, instance) => gui.event(instance, event, settings),
+            GuiWithState::Audio(gui, instance) => gui.event(instance, event, settings),
+            GuiWithState::Emulator(gui, instance) => gui.event(instance, event, settings),
+        }
+    }
+
+    fn messages(&self) -> Vec<String> {
+        match self {
+            GuiWithState::Inputs(gui, instance) => gui.messages(instance),
+            GuiWithState::Debug(gui, instance) => gui.messages(instance),
+            GuiWithState::Audio(gui, instance) => gui.messages(instance),
+            GuiWithState::Emulator(gui, instance) => gui.messages(instance),
+        }
+    }
+
+    fn name(&self) -> Option<String> {
+        match self {
+            GuiWithState::Inputs(gui, _) => gui.name(),
+            GuiWithState::Debug(gui, _) => gui.name(),
+            GuiWithState::Audio(gui, _) => gui.name(),
+            GuiWithState::Emulator(gui, _) => gui.name(),
+        }
+    }
 }
 
 pub struct Gui {
+    inputs_gui: InputsGui,
+    debug_gui: DebugGui,
+    audio_gui: AudioGui,
+    emulator_gui: EmulatorGui,
+
     start_time: Instant,
     visible: bool,
     pub nes_texture_handle: TextureHandle,
@@ -39,13 +103,17 @@ pub struct Gui {
 }
 
 impl Gui {
-    pub fn new(ctx: &Context) -> Self {
+    pub fn new(ctx: &Context, emulator: &Emulator) -> Self {
         let nes_texture_options = TextureOptions {
             magnification: egui::TextureFilter::Nearest,
             minification: egui::TextureFilter::Nearest,
             wrap_mode: egui::TextureWrapMode::ClampToEdge,
         };
         Self {
+            inputs_gui: InputsGui::new(),
+            debug_gui: DebugGui {},
+            audio_gui: AudioGui {},
+            emulator_gui: emulator.new_gui(),
             start_time: Instant::now(),
             visible: false,
             nes_texture_handle: ctx.load_texture(
@@ -60,7 +128,12 @@ impl Gui {
     pub fn handle_event(
         &mut self,
         event: &GuiEvent,
-        guis: &mut [Option<&mut dyn GuiComponent>],
+
+        debug: &mut Debug,
+        inputs: &mut Inputs,
+        audio: &mut Audio,
+        emulator: &mut Emulator,
+
         settings: &mut Settings,
     ) {
         match &event {
@@ -72,8 +145,14 @@ impl Gui {
                 self.toggle_visibility();
             }
             _ => {
-                for gui in guis.iter_mut().flatten() {
-                    gui.event(event, settings);
+                let guis = &mut [
+                    GuiWithState::Debug(&mut self.debug_gui, debug),
+                    GuiWithState::Audio(&mut self.audio_gui, audio),
+                    GuiWithState::Inputs(&mut self.inputs_gui, inputs),
+                    GuiWithState::Emulator(&mut self.emulator_gui, emulator),
+                ];
+                for gui in guis {
+                    gui.event(event, settings)
                 }
             }
         }
@@ -82,7 +161,12 @@ impl Gui {
     pub fn ui(
         &mut self,
         ctx: &Context,
-        guis: &mut [Option<&mut dyn GuiComponent>],
+
+        debug: &mut Debug,
+        inputs: &mut Inputs,
+        audio: &mut Audio,
+        emulator: &mut Emulator,
+
         settings: &mut Settings,
     ) {
         egui::Area::new("game_area")
@@ -124,13 +208,20 @@ impl Gui {
                     }
                 }
             });
+        let guis = &mut [
+            GuiWithState::Debug(&mut self.debug_gui, debug),
+            GuiWithState::Audio(&mut self.audio_gui, audio),
+            GuiWithState::Inputs(&mut self.inputs_gui, inputs),
+            GuiWithState::Emulator(&mut self.emulator_gui, emulator),
+        ];
         egui::Area::new("message_area")
             .fixed_pos([0.0, 0.0])
             .order(Order::Middle)
             .show(ctx, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add_space(50.0);
-                    for gui in guis.iter_mut().flatten() {
+
+                    for gui in guis.iter() {
                         if gui.name().is_some() {
                             for message in gui.messages() {
                                 ui.heading(message);
@@ -161,7 +252,7 @@ impl Gui {
                 MINIMUM_INTEGER_SCALING_SIZE.1 as f32 / 2.0,
             ])
             .show(ctx, |ui| {
-                for (idx, gui) in guis.iter_mut().flatten().enumerate() {
+                for (idx, gui) in guis.iter_mut().enumerate() {
                     if let Some(name) = gui.name() {
                         if idx != 0 {
                             ui.separator();

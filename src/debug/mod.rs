@@ -1,10 +1,7 @@
 use egui::{Slider, Ui};
 
 use crate::{
-    settings::{
-        gui::{GuiComponent, GuiEvent},
-        Settings,
-    },
+    settings::{gui::GuiComponent, Settings},
     Fps, FPS,
 };
 
@@ -21,18 +18,19 @@ impl Debug {
         }
     }
 }
+pub struct DebugGui {}
 
-impl GuiComponent for Debug {
-    fn ui(&mut self, ui: &mut Ui, _settings: &mut Settings) {
+impl GuiComponent<Debug> for DebugGui {
+    fn ui(&mut self, instance: &mut Debug, ui: &mut Ui, _settings: &mut Settings) {
         ui.horizontal(|ui| {
             egui::Grid::new("debug_grid")
                 .num_columns(2)
                 .spacing([10.0, 4.0])
                 .striped(true)
                 .show(ui, |ui| {
-                    ui.checkbox(&mut self.override_fps, "Override FPS");
-                    if self.override_fps {
-                        ui.add(Slider::new(&mut self.fps, 0.5..=180.0).suffix("FPS"));
+                    ui.checkbox(&mut instance.override_fps, "Override FPS");
+                    if instance.override_fps {
+                        ui.add(Slider::new(&mut instance.fps, 0.5..=180.0).suffix("FPS"));
                     }
                     ui.end_row();
                 });
@@ -41,10 +39,5 @@ impl GuiComponent for Debug {
 
     fn name(&self) -> Option<String> {
         Some("Debug".to_string())
-    }
-
-    fn event(&mut self, _event: &GuiEvent, _settings: &mut Settings) {}
-    fn messages(&self) -> Vec<String> {
-        [].to_vec()
     }
 }
