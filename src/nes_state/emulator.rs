@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+use egui::Slider;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
@@ -12,7 +13,7 @@ use crate::{
     netplay::{gui::NetplayGui, NetplayBuildConfiguration, NetplayStateHandler},
     settings::{gui::GuiComponent, Settings, MAX_PLAYERS},
     window::egui_winit_wgpu::VideoFramePool,
-    FPS,
+    Fps, FPS,
 };
 
 use super::NesStateHandler;
@@ -20,9 +21,14 @@ use super::NesStateHandler;
 pub struct Emulator {
     _jh: JoinHandle<()>,
     nes_state: Arc<Mutex<NetplayStateHandler>>,
+    debug: Arc<Mutex<EmulatorDebug>>,
     netplay_config: NetplayBuildConfiguration,
 }
-
+struct EmulatorDebug {
+    // Debug
+    pub override_fps: bool,
+    pub fps: Fps,
+}
 impl Emulator {
     pub fn new(
         bundle: &Bundle,
@@ -45,44 +51,59 @@ impl Emulator {
             let netplay_rom = bundle.netplay_rom.clone();
             crate::netplay::NetplayStateHandler::new(rom, netplay_rom, netplay_id)
         };
+        let debug = Arc::new(Mutex::new(EmulatorDebug {
+            override_fps: false,
+            fps: FPS,
+        }));
+
         let nes_state = Arc::new(Mutex::new(nes_state));
         let mut game_loop = GameLoop::new(nes_state.clone(), FPS);
         let mut loop_counter = RateCounter::new();
-        let jh = tokio::spawn(async move {
-            loop {
-                loop_counter.tick("LPS");
+        let jh = tokio::spawn({
+            let debug = debug.clone();
+            async move {
+                loop {
+                    loop_counter.tick("LPS");
 
-                //println!("LOOP");
-                game_loop.next_frame(|game_loop| {
-                    //println!("FRAME");
-                    if let Some(report) = loop_counter.tick("FPS").report() {
-                        println!("{report}");
-                    }
-                    let _ = frame_pool.push_with(|video_frame| {
-                        let nes_state = &mut game_loop.game;
-                        let joypads = joypads.lock().unwrap();
-
-                        let mut frame_data = nes_state
-                            .lock()
-                            .unwrap()
-                            .advance([joypads[0], joypads[1]], video_frame);
-                        if let Some(frame_data) = &mut frame_data {
-                            //TODO: Testa detta -> audio_tx.push_iter(&mut frame_data.audio.drain(..audio_tx.free_len()));
-
-                            audio_tx.push_slice(&frame_data.audio);
-                            //println!("AUDIO LENGTH: {}", audio_tx.len());
-                            game_loop.set_updates_per_second(frame_data.fps)
+                    //println!("LOOP");
+                    game_loop.next_frame(|game_loop| {
+                        //println!("FRAME");
+                        if let Some(report) = loop_counter.tick("FPS").report() {
+                            println!("{report}");
                         }
+                        let _ = frame_pool.push_with(|video_frame| {
+                            let nes_state = &mut game_loop.game;
+                            let joypads = joypads.lock().unwrap();
+
+                            let mut frame_data = nes_state
+                                .lock()
+                                .unwrap()
+                                .advance([joypads[0], joypads[1]], video_frame);
+                            if let Some(frame_data) = &mut frame_data {
+                                //TODO: Testa detta -> audio_tx.push_iter(&mut frame_data.audio.drain(..audio_tx.free_len()));
+
+                                audio_tx.push_slice(&frame_data.audio);
+                                //println!("AUDIO LENGTH: {}", audio_tx.len());
+                                let debug = debug.lock().unwrap();
+                                let fps = if debug.override_fps {
+                                    debug.fps
+                                } else {
+                                    frame_data.fps
+                                };
+                                game_loop.set_updates_per_second(fps);
+                            }
+                        });
                     });
-                });
-                //sleep(Duration::from_millis(15)).await;
-                tokio::task::yield_now().await
+                    //sleep(Duration::from_millis(15)).await;
+                    tokio::task::yield_now().await
+                }
             }
         });
         Self {
             _jh: jh,
             nes_state,
             netplay_config: bundle.config.netplay.clone(),
+            debug,
         }
     }
 
@@ -95,34 +116,38 @@ impl Emulator {
     }
 
     pub fn new_gui(&self) -> EmulatorGui {
-        EmulatorGui::Netplay(NetplayGui::new(self.netplay_config.clone()))
+        EmulatorGui::new(NetplayGui::new(self.netplay_config.clone()))
     }
 }
 
 #[allow(dead_code)]
-pub enum EmulatorGui {
-    Local,
-    Netplay(NetplayGui),
+pub struct EmulatorGui {
+    netplay_gui: NetplayGui,
 }
+
 impl EmulatorGui {
-    fn to_gui(&self) -> Option<&NetplayGui> {
-        match self {
-            EmulatorGui::Local => None,
-            EmulatorGui::Netplay(gui) => Some(gui),
-        }
-    }
-    fn to_gui_mut(&mut self) -> Option<&mut NetplayGui> {
-        match self {
-            EmulatorGui::Local => None,
-            EmulatorGui::Netplay(gui) => Some(gui),
-        }
+    fn new(netplay_gui: NetplayGui) -> Self {
+        Self { netplay_gui }
     }
 }
 impl GuiComponent<Emulator> for EmulatorGui {
     fn ui(&mut self, instance: &mut Emulator, ui: &mut egui::Ui, settings: &mut Settings) {
-        if let Some(gui) = self.to_gui_mut() {
-            gui.ui(&mut instance.nes_state.lock().unwrap(), ui, settings)
-        }
+        self.netplay_gui
+            .ui(&mut instance.nes_state.lock().unwrap(), ui, settings);
+
+        #[cfg(feature = "debug")]
+        egui::Grid::new("debug_grid")
+            .num_columns(2)
+            .spacing([10.0, 4.0])
+            .striped(true)
+            .show(ui, |ui| {
+                let mut debug = instance.debug.lock().unwrap();
+                ui.checkbox(&mut debug.override_fps, "Override FPS");
+                if debug.override_fps {
+                    ui.add(Slider::new(&mut debug.fps, 0.5..=180.0).suffix("FPS"));
+                }
+                ui.end_row();
+            });
     }
     fn event(
         &mut self,
@@ -130,24 +155,16 @@ impl GuiComponent<Emulator> for EmulatorGui {
         event: &crate::settings::gui::GuiEvent,
         settings: &mut Settings,
     ) {
-        if let Some(gui) = self.to_gui_mut() {
-            gui.event(&mut instance.nes_state.lock().unwrap(), event, settings);
-        }
+        self.netplay_gui
+            .event(&mut instance.nes_state.lock().unwrap(), event, settings);
     }
 
-    fn messages(&self, instance: &Emulator) -> Vec<String> {
-        if let Some(gui) = self.to_gui() {
-            gui.messages(&instance.nes_state.lock().unwrap())
-        } else {
-            [].to_vec()
-        }
+    fn messages(&self, instance: &Emulator) -> Option<Vec<String>> {
+        self.netplay_gui
+            .messages(&instance.nes_state.lock().unwrap())
     }
 
     fn name(&self) -> Option<String> {
-        if let Some(gui) = self.to_gui() {
-            gui.name()
-        } else {
-            None
-        }
+        self.netplay_gui.name()
     }
 }

@@ -24,8 +24,6 @@ use winit::event_loop::{ControlFlow, EventLoop};
 
 mod audio;
 mod bundle;
-#[cfg(feature = "debug")]
-mod debug;
 mod fps;
 mod game;
 mod gameloop;

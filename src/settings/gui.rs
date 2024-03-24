@@ -7,7 +7,6 @@ use egui::{
 
 use crate::{
     audio::{gui::AudioGui, Audio},
-    debug::{Debug, DebugGui},
     input::{
         buttons::GamepadButton, gamepad::GamepadEvent, gui::InputsGui, keys::KeyCode, Inputs,
         KeyEvent,
@@ -38,8 +37,8 @@ pub trait GuiComponent<T> {
     //TODO: remove from gui component. Has nothing to do with a gui
     fn event(&mut self, _instance: &mut T, _event: &GuiEvent, _settings: &mut Settings) {}
 
-    fn messages(&self, _instance: &T) -> Vec<String> {
-        [].to_vec() //TODO: don't allocate all the time. Make it an Option<Vec<String>>
+    fn messages(&self, _instance: &T) -> Option<Vec<String>> {
+        None
     }
     fn name(&self) -> Option<String> {
         None
@@ -48,7 +47,6 @@ pub trait GuiComponent<T> {
 
 enum GuiWithState<'a> {
     Inputs(&'a mut InputsGui, &'a mut Inputs),
-    Debug(&'a mut DebugGui, &'a mut Debug),
     Audio(&'a mut AudioGui, &'a mut Audio),
     Emulator(&'a mut EmulatorGui, &'a mut Emulator),
 }
@@ -57,7 +55,6 @@ impl GuiWithState<'_> {
     fn ui(&mut self, ui: &mut Ui, settings: &mut Settings) {
         match self {
             GuiWithState::Inputs(gui, instance) => gui.ui(instance, ui, settings),
-            GuiWithState::Debug(gui, instance) => gui.ui(instance, ui, settings),
             GuiWithState::Audio(gui, instance) => gui.ui(instance, ui, settings),
             GuiWithState::Emulator(gui, instance) => gui.ui(instance, ui, settings),
         }
@@ -65,16 +62,14 @@ impl GuiWithState<'_> {
     fn event(&mut self, event: &GuiEvent, settings: &mut Settings) {
         match self {
             GuiWithState::Inputs(gui, instance) => gui.event(instance, event, settings),
-            GuiWithState::Debug(gui, instance) => gui.event(instance, event, settings),
             GuiWithState::Audio(gui, instance) => gui.event(instance, event, settings),
             GuiWithState::Emulator(gui, instance) => gui.event(instance, event, settings),
         }
     }
 
-    fn messages(&self) -> Vec<String> {
+    fn messages(&self) -> Option<Vec<String>> {
         match self {
             GuiWithState::Inputs(gui, instance) => gui.messages(instance),
-            GuiWithState::Debug(gui, instance) => gui.messages(instance),
             GuiWithState::Audio(gui, instance) => gui.messages(instance),
             GuiWithState::Emulator(gui, instance) => gui.messages(instance),
         }
@@ -83,7 +78,6 @@ impl GuiWithState<'_> {
     fn name(&self) -> Option<String> {
         match self {
             GuiWithState::Inputs(gui, _) => gui.name(),
-            GuiWithState::Debug(gui, _) => gui.name(),
             GuiWithState::Audio(gui, _) => gui.name(),
             GuiWithState::Emulator(gui, _) => gui.name(),
         }
@@ -92,7 +86,6 @@ impl GuiWithState<'_> {
 
 pub struct Gui {
     inputs_gui: InputsGui,
-    debug_gui: DebugGui,
     audio_gui: AudioGui,
     emulator_gui: EmulatorGui,
 
@@ -111,7 +104,6 @@ impl Gui {
         };
         Self {
             inputs_gui: InputsGui::new(),
-            debug_gui: DebugGui {},
             audio_gui: AudioGui {},
             emulator_gui: emulator.new_gui(),
             start_time: Instant::now(),
@@ -129,7 +121,6 @@ impl Gui {
         &mut self,
         event: &GuiEvent,
 
-        debug: &mut Debug,
         inputs: &mut Inputs,
         audio: &mut Audio,
         emulator: &mut Emulator,
@@ -146,7 +137,6 @@ impl Gui {
             }
             _ => {
                 let guis = &mut [
-                    GuiWithState::Debug(&mut self.debug_gui, debug),
                     GuiWithState::Audio(&mut self.audio_gui, audio),
                     GuiWithState::Inputs(&mut self.inputs_gui, inputs),
                     GuiWithState::Emulator(&mut self.emulator_gui, emulator),
@@ -162,7 +152,6 @@ impl Gui {
         &mut self,
         ctx: &Context,
 
-        debug: &mut Debug,
         inputs: &mut Inputs,
         audio: &mut Audio,
         emulator: &mut Emulator,
@@ -209,7 +198,6 @@ impl Gui {
                 }
             });
         let guis = &mut [
-            GuiWithState::Debug(&mut self.debug_gui, debug),
             GuiWithState::Audio(&mut self.audio_gui, audio),
             GuiWithState::Inputs(&mut self.inputs_gui, inputs),
             GuiWithState::Emulator(&mut self.emulator_gui, emulator),
@@ -223,8 +211,10 @@ impl Gui {
 
                     for gui in guis.iter() {
                         if gui.name().is_some() {
-                            for message in gui.messages() {
-                                ui.heading(message);
+                            if let Some(messages) = gui.messages() {
+                                for message in messages {
+                                    ui.heading(message);
+                                }
                             }
                         }
                     }

@@ -95,15 +95,19 @@ impl NetplayGui {
 }
 
 impl GuiComponent<NetplayStateHandler> for NetplayGui {
-    fn messages(&self, instance: &NetplayStateHandler) -> Vec<String> {
-        match &instance.netplay {
-            Some(NetplayState::Connecting(_)) => Some("Netplay is connecting"),
-            Some(NetplayState::Resuming(_)) => Some("Netplay connection lost, trying to reconnect"),
-            _ => None,
-        }
-        .iter()
-        .map(|message| format!("{message} - see settings for details"))
-        .collect()
+    fn messages(&self, instance: &NetplayStateHandler) -> Option<Vec<String>> {
+        Some(
+            match &instance.netplay {
+                Some(NetplayState::Connecting(_)) => Some("Netplay is connecting"),
+                Some(NetplayState::Resuming(_)) => {
+                    Some("Netplay connection lost, trying to reconnect")
+                }
+                _ => None,
+            }
+            .iter()
+            .map(|message| format!("{message} - see settings for details"))
+            .collect(),
+        )
     }
     fn ui(&mut self, instance: &mut NetplayStateHandler, ui: &mut Ui, _settings: &mut Settings) {
         instance.netplay = Some(match instance.netplay.take().unwrap() {
