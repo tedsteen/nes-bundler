@@ -7,7 +7,7 @@ use self::{
 };
 use crate::{
     bundle,
-    settings::{gui::GuiEvent, MAX_PLAYERS},
+    settings::{gui::GuiEvent, Settings, MAX_PLAYERS},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -175,7 +175,7 @@ impl Inputs {
                 self.gamepads.advance(gamepad_event);
             }
         }
-        let input_settings = &mut crate::settings2().input;
+        let input_settings = &mut Settings::current().input;
         input_settings.reset_selected_disconnected_inputs(self);
 
         let pad1 =

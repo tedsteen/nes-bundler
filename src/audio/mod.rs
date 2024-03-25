@@ -9,7 +9,7 @@ use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
 use sdl2::{AudioSubsystem, Sdl};
 use serde::{Deserialize, Serialize};
 
-use crate::settings2;
+use crate::settings::Settings;
 
 pub mod gui;
 
@@ -40,7 +40,7 @@ impl AudioCallback for AudioReceiverCallback {
 
         // I don't want to hold the lock during the whole sample copy
         #[allow(clippy::clone_on_copy)]
-        let volume = settings2().audio.volume.clone() as f32 / 100.0;
+        let volume = Settings::current().audio.volume.clone() as f32 / 100.0;
         for (sample, value) in out.iter_mut().zip(
             consumer
                 .pop_iter()
@@ -54,7 +54,7 @@ impl AudioCallback for AudioReceiverCallback {
 
 impl Stream {
     pub(crate) fn new(audio_subsystem: &AudioSubsystem, audio_rx: AudioReceiver) -> Result<Self> {
-        let audio_settings = &settings2().audio;
+        let audio_settings = &Settings::current().audio;
         Ok(Self {
             output_device_name: audio_settings.output_device.clone(),
             audio_device: Some(Stream::new_audio_device(
@@ -154,7 +154,7 @@ impl Audio {
 
         let available_device_names = self.get_available_output_device_names();
 
-        let selected_device = &mut settings2().audio.output_device;
+        let selected_device = &mut Settings::current().audio.output_device;
         if let Some(name) = selected_device {
             if !available_device_names.contains(name) {
                 *selected_device = None;

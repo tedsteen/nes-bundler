@@ -13,8 +13,10 @@ use crate::{
         emulator::{Emulator, EmulatorGui},
         VideoFrame,
     },
-    settings::gui::{GuiEvent, SettingsGui},
-    settings2,
+    settings::{
+        gui::{GuiEvent, SettingsGui},
+        Settings,
+    },
     window::{egui_winit_wgpu::Renderer, Fullscreen},
     MINIMUM_INTEGER_SCALING_SIZE, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3,
 };
@@ -72,7 +74,7 @@ impl MainGui {
                 true
             }
             Keyboard(KeyEvent::Pressed(key_code)) => {
-                let settings = &mut crate::settings2();
+                let settings = &mut Settings::current();
                 //let nes_state = &mut self.nes_state;
 
                 use crate::input::keys::KeyCode::*;
@@ -110,11 +112,7 @@ impl MainGui {
         }
         let render_result = renderer.render(move |ctx| {
             self.emulator.audio.sync_audio_devices();
-            let settings_hash_before = settings2().get_hash();
             self.ui(ctx);
-            if settings_hash_before != settings2().get_hash() {
-                settings2().save();
-            }
         });
 
         match render_result {

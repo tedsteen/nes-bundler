@@ -2,7 +2,7 @@ use super::buttons::ToGamepadButton;
 use super::{buttons::GamepadButton, InputId, JoypadState};
 use super::{InputConfiguration, ToInputId};
 use crate::input::{self, InputConfigurationKind};
-use crate::settings2;
+use crate::settings::Settings;
 use std::collections::{HashMap, HashSet};
 
 use sdl2::{controller::GameController, GameControllerSubsystem};
@@ -65,7 +65,7 @@ impl Gamepads for Sdl2Gamepads {
     }
 
     fn advance(&mut self, gamepad_event: &GamepadEvent) {
-        let input_settings = &mut settings2().input;
+        let input_settings = &mut Settings::current().input;
         match gamepad_event {
             GamepadEvent::ControllerAdded { which, .. } => {
                 if let Some(conf) = self.setup_gamepad_config(which.clone()) {
@@ -144,7 +144,7 @@ impl Sdl2Gamepads {
                 gamepad_id.clone(),
                 Box::new(Sdl2GamepadState::new(found_controller)),
             );
-            let input_settings = &mut settings2().input;
+            let input_settings = &mut Settings::current().input;
             let conf = input_settings.get_or_create_config(
                 gamepad_id.clone(),
                 input::InputConfiguration {

@@ -1,4 +1,4 @@
-use crate::{settings::gui::GuiComponent, settings2};
+use crate::settings::{gui::GuiComponent, Settings};
 use egui::{Slider, Ui};
 
 use super::Audio;
@@ -13,7 +13,7 @@ impl GuiComponent<Audio> for AudioGui {
                 .spacing([10.0, 4.0])
                 .striped(true)
                 .show(ui, |ui| {
-                    let audio_settings = &mut settings2().audio;
+                    let audio_settings = &mut Settings::current().audio;
 
                     ui.label("Output");
                     let selected_device = &mut audio_settings.output_device;

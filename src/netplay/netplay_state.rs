@@ -4,8 +4,7 @@ use crate::{
     bundle,
     input::JoypadState,
     nes_state::{FrameData, LocalNesState, NesStateHandler, VideoFrame},
-    settings::MAX_PLAYERS,
-    settings2,
+    settings::{Settings, MAX_PLAYERS},
 };
 
 use super::{
@@ -89,7 +88,7 @@ impl Resuming {
     }
 }
 pub fn get_netplay_id() -> String {
-    settings2()
+    Settings::current()
         .netplay_id
         .get_or_insert_with(|| Uuid::new_v4().to_string())
         .to_string()

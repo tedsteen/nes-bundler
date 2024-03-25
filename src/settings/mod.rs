@@ -11,10 +11,49 @@ use std::{
     fs::File,
     hash::{Hash, Hasher},
     io::{BufReader, BufWriter},
+    ops::{Deref, DerefMut},
+    sync::{Mutex, MutexGuard, OnceLock},
 };
 pub mod gui;
 
 pub const MAX_PLAYERS: usize = 2;
+
+pub struct AutoSavingSettings<'a> {
+    inner: MutexGuard<'a, Settings>,
+    hash_before: u64,
+}
+
+impl<'a> AutoSavingSettings<'a> {
+    fn new(inner: &'a Mutex<Settings>) -> Self {
+        let inner = inner.lock().unwrap();
+        AutoSavingSettings {
+            hash_before: inner.get_hash(),
+            inner,
+        }
+    }
+}
+
+impl Deref for AutoSavingSettings<'_> {
+    type Target = Settings;
+
+    fn deref(&self) -> &Settings {
+        &self.inner
+    }
+}
+
+impl DerefMut for AutoSavingSettings<'_> {
+    fn deref_mut(&mut self) -> &mut Settings {
+        &mut self.inner
+    }
+}
+
+impl Drop for AutoSavingSettings<'_> {
+    fn drop(&mut self) {
+        if self.hash_before != self.inner.get_hash() {
+            self.inner.save()
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct Settings {
@@ -25,6 +64,12 @@ pub struct Settings {
 }
 
 impl Settings {
+    pub fn current<'a>() -> AutoSavingSettings<'a> {
+        static MEM: OnceLock<Mutex<Settings>> = OnceLock::new();
+        let settings = MEM.get_or_init(|| Mutex::new(Settings::load()));
+        AutoSavingSettings::new(settings)
+    }
+
     pub fn load() -> Settings {
         let bundle = bundle();
         let settings_path = &bundle.settings_path;

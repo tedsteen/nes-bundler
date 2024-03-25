@@ -2,7 +2,7 @@
 #![allow(unsafe_code)]
 #![deny(clippy::all)]
 
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 use crate::bundle::Bundle;
 use crate::settings::gui::ToGuiEvent;
@@ -15,7 +15,6 @@ use gui::MainGui;
 
 use nes_state::emulator::Emulator;
 
-use settings::Settings;
 use window::egui_winit_wgpu::VideoFramePool;
 use window::{create_state, Size};
 use winit::event::{Event, WindowEvent};
@@ -45,14 +44,6 @@ const MINIMUM_INTEGER_SCALING_SIZE: (u32, u32) = (1024, 720);
 pub fn bundle() -> &'static Bundle {
     static MEM: OnceLock<Bundle> = OnceLock::new();
     MEM.get_or_init(|| Bundle::load().expect("Could not load bundle"))
-}
-
-pub fn settings() -> &'static Mutex<Settings> {
-    static MEM: OnceLock<Mutex<Settings>> = OnceLock::new();
-    MEM.get_or_init(|| Mutex::new(Settings::load()))
-}
-pub fn settings2<'a>() -> std::sync::MutexGuard<'a, settings::Settings> {
-    settings().lock().unwrap()
 }
 
 #[tokio::main]
