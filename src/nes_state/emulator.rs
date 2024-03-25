@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::bundle;
 use crate::nes_state::NesStateHandler;
+use crate::window::VideoFramePool;
 use crate::{
     audio::Audio,
     fps::RateCounter,
@@ -9,7 +10,6 @@ use crate::{
     input::{Inputs, JoypadState},
     netplay::{gui::NetplayGui, NetplayStateHandler},
     settings::{gui::GuiComponent, MAX_PLAYERS},
-    window::egui_winit_wgpu::VideoFramePool,
     Fps, FPS,
 };
 use anyhow::Result;
