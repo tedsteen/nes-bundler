@@ -98,10 +98,6 @@ impl Emulator {
     pub fn load_state(&mut self, data: &mut Vec<u8>) {
         self.nes_state.lock().unwrap().load(data);
     }
-
-    pub fn new_gui(&self) -> EmulatorGui {
-        EmulatorGui::new(NetplayGui::new(bundle().config.netplay.clone()))
-    }
 }
 
 #[allow(dead_code)]
@@ -110,8 +106,10 @@ pub struct EmulatorGui {
 }
 
 impl EmulatorGui {
-    fn new(netplay_gui: NetplayGui) -> Self {
-        Self { netplay_gui }
+    pub fn new() -> Self {
+        Self {
+            netplay_gui: NetplayGui::new(bundle().config.netplay.clone()),
+        }
     }
 }
 impl GuiComponent<Emulator> for EmulatorGui {

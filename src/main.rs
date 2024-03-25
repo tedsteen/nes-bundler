@@ -16,7 +16,7 @@ use gui::MainGui;
 
 use input::sdl2_impl::Sdl2Gamepads;
 use input::Inputs;
-use nes_state::emulator::Emulator;
+use nes_state::emulator::{Emulator, EmulatorGui};
 
 use window::{create_state, Size};
 use winit::event::{Event, WindowEvent};
@@ -103,7 +103,7 @@ async fn run() -> anyhow::Result<()> {
 
     let mut main_gui = MainGui::new(
         &state.egui.context,
-        emulator.new_gui(),
+        EmulatorGui::new(),
         emulator,
         inputs,
         audio,
