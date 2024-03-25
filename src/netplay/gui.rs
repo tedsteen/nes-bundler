@@ -10,12 +10,19 @@ use super::{
     ConnectingState, NetplayBuildConfiguration, NetplayStateHandler,
 };
 pub struct NetplayGui {
+    #[cfg(feature = "debug")]
+    pub stats: [super::stats::NetplayStats; MAX_PLAYERS],
     room_name: String,
 }
 
 impl NetplayGui {
     pub fn new(netplay_build_config: NetplayBuildConfiguration) -> Self {
         Self {
+            #[cfg(feature = "debug")]
+            stats: [
+                super::stats::NetplayStats::new(),
+                super::stats::NetplayStats::new(),
+            ],
             room_name: netplay_build_config.default_room_name.clone(),
         }
     }
@@ -93,6 +100,21 @@ impl NetplayGui {
 }
 
 impl GuiComponent<NetplayStateHandler> for NetplayGui {
+    #[cfg(feature = "debug")]
+    fn prepare(&mut self, instance: &mut NetplayStateHandler) {
+        if let Some(NetplayState::Connected(netplay)) = &instance.netplay {
+            let sess = &netplay.state.netplay_session.p2p_session;
+            if netplay.state.netplay_session.game_state.frame % 30 == 0 {
+                for i in 0..MAX_PLAYERS {
+                    if let Ok(stats) = sess.network_stats(i) {
+                        if !sess.local_player_handles().contains(&i) {
+                            self.stats[i].push_stats(stats);
+                        }
+                    }
+                }
+            };
+        }
+    }
     fn messages(&self, instance: &NetplayStateHandler) -> Option<Vec<String>> {
         Some(
             match &instance.netplay {
@@ -231,8 +253,8 @@ impl GuiComponent<NetplayStateHandler> for NetplayGui {
                 #[cfg(feature = "debug")]
                 let fake_lost_connection_clicked = {
                     ui.collapsing("Stats", |ui| {
-                        Self::stats_ui(ui, &netplay_connected.state.netplay_session.stats[0], 0);
-                        Self::stats_ui(ui, &netplay_connected.state.netplay_session.stats[1], 1);
+                        Self::stats_ui(ui, &self.stats[0], 0);
+                        Self::stats_ui(ui, &self.stats[1], 1);
                     });
                     ui.button("Fake connection lost").clicked()
                 };

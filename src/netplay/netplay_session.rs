@@ -23,8 +23,6 @@ pub struct NetplaySession {
     pub game_state: NetplayNesState,
     pub last_handled_frame: i32,
     pub last_confirmed_game_states: [NetplayNesState; 2],
-    #[cfg(feature = "debug")]
-    pub stats: [super::stats::NetplayStats; MAX_PLAYERS],
     last_frame_data: Option<FrameData>,
 }
 
@@ -43,11 +41,6 @@ impl NetplaySession {
             game_state: game_state.clone(),
             last_confirmed_game_states: [game_state.clone(), game_state],
             last_handled_frame: -1,
-            #[cfg(feature = "debug")]
-            stats: [
-                super::stats::NetplayStats::new(),
-                super::stats::NetplayStats::new(),
-            ],
             last_frame_data: None,
         }
     }
@@ -127,17 +120,6 @@ impl NetplaySession {
                 log::warn!("Frame {} skipped: {:?}", self.game_state.frame, e)
             }
         }
-
-        #[cfg(feature = "debug")]
-        if self.game_state.frame % 30 == 0 {
-            for i in 0..MAX_PLAYERS {
-                if let Ok(stats) = sess.network_stats(i) {
-                    if !sess.local_player_handles().contains(&i) {
-                        self.stats[i].push_stats(stats);
-                    }
-                }
-            }
-        };
 
         if sess.frames_ahead() > 0 {
             if let Some(frame_data) = &mut self.last_frame_data {

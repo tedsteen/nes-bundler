@@ -22,7 +22,7 @@ pub enum GuiEvent {
 
 pub trait GuiComponent<T> {
     // Runs every frame
-    fn prepare(&self, _instance: &mut T) {}
+    fn prepare(&mut self, _instance: &mut T) {}
 
     // Runs if gui is visible
     fn ui(&mut self, instance: &mut T, ui: &mut Ui);

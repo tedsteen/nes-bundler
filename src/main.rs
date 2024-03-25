@@ -108,7 +108,7 @@ async fn run() -> anyhow::Result<()> {
     event_loop
         .run(|winit_event, control_flow| {
             if let Some(report) = rate_counter.tick("EPS").report() {
-                println!("{report}");
+                log::debug!("{report}");
             }
             let mut should_render = false;
             let window_event = match winit_event {

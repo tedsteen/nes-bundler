@@ -55,9 +55,7 @@ impl Emulator {
                 loop {
                     loop_counter.tick("LPS");
 
-                    //println!("LOOP");
                     game_loop.next_frame(|game_loop| {
-                        //println!("FRAME");
                         if let Some(report) = loop_counter.tick("FPS").report() {
                             println!("{report}");
                         }
@@ -73,7 +71,6 @@ impl Emulator {
                                 //TODO: Testa detta -> audio_tx.push_iter(&mut frame_data.audio.drain(..audio_tx.free_len()));
 
                                 audio_tx.push_slice(&frame_data.audio);
-                                //println!("AUDIO LENGTH: {}", audio_tx.len());
                                 let debug = debug.lock().unwrap();
                                 let fps = if debug.override_fps {
                                     debug.fps
@@ -139,5 +136,9 @@ impl GuiComponent<Emulator> for EmulatorGui {
 
     fn name(&self) -> Option<String> {
         self.netplay_gui.name()
+    }
+    fn prepare(&mut self, instance: &mut Emulator) {
+        self.netplay_gui
+            .prepare(&mut instance.nes_state.lock().unwrap());
     }
 }
