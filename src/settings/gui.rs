@@ -21,6 +21,10 @@ pub enum GuiEvent {
 }
 
 pub trait GuiComponent<T> {
+    // Runs every frame
+    fn prepare(&self, _instance: &mut T) {}
+
+    // Runs if gui is visible
     fn ui(&mut self, instance: &mut T, ui: &mut Ui);
 
     fn messages(&self, _instance: &T) -> Option<Vec<String>> {
@@ -61,6 +65,13 @@ impl GuiWithState<'_> {
             GuiWithState::Emulator(gui, _) => gui.name(),
         }
     }
+    fn prepare(&mut self) {
+        match self {
+            GuiWithState::Inputs(gui, instance) => gui.prepare(instance),
+            GuiWithState::Audio(gui, instance) => gui.prepare(instance),
+            GuiWithState::Emulator(gui, instance) => gui.prepare(instance),
+        }
+    }
 }
 
 pub struct SettingsGui {
@@ -73,11 +84,11 @@ pub struct SettingsGui {
 }
 
 impl SettingsGui {
-    pub fn new(emulator_gui: EmulatorGui) -> Self {
+    pub fn new() -> Self {
         Self {
             inputs_gui: InputsGui::new(),
             audio_gui: AudioGui {},
-            emulator_gui,
+            emulator_gui: EmulatorGui::new(),
             start_time: Instant::now(),
             visible: false,
         }
@@ -102,7 +113,8 @@ impl SettingsGui {
                 ui.vertical_centered(|ui| {
                     ui.add_space(50.0);
 
-                    for gui in guis.iter() {
+                    for gui in guis.iter_mut() {
+                        gui.prepare();
                         if gui.name().is_some() {
                             if let Some(messages) = gui.messages() {
                                 for message in messages {

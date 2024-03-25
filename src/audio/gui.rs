@@ -5,6 +5,10 @@ use super::Audio;
 pub struct AudioGui {}
 
 impl GuiComponent<Audio> for AudioGui {
+    fn prepare(&self, instance: &mut Audio) {
+        instance.sync_audio_devices();
+    }
+
     fn ui(&mut self, instance: &mut Audio, ui: &mut Ui) {
         let available_device_names =
             Audio::get_available_output_device_names_for_subsystem(&instance.audio_subsystem);

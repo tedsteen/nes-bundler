@@ -16,7 +16,7 @@ use gui::MainGui;
 
 use input::sdl2_impl::Sdl2Gamepads;
 use input::Inputs;
-use nes_state::emulator::{Emulator, EmulatorGui};
+use nes_state::emulator::Emulator;
 
 use window::{create_state, Size};
 use winit::event::{Event, WindowEvent};
@@ -101,13 +101,7 @@ async fn run() -> anyhow::Result<()> {
         std::process::exit(0);
     }
 
-    let mut main_gui = MainGui::new(
-        &state.egui.context,
-        EmulatorGui::new(),
-        emulator,
-        inputs,
-        audio,
-    );
+    let mut main_gui = MainGui::new(&state.egui.context, emulator, inputs, audio);
 
     let mut rate_counter = RateCounter::new();
     event_loop.set_control_flow(ControlFlow::Poll);
@@ -178,7 +172,6 @@ async fn run() -> anyhow::Result<()> {
             for gui_event in &gui_events {
                 main_gui.handle_event(gui_event, &state.window);
             }
-            main_gui.audio.sync_audio_devices();
 
             if should_render {
                 //println!("RENDER: {:?}", std::time::Instant::now());

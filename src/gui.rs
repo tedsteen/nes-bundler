@@ -10,10 +10,7 @@ use crate::{
         Inputs, KeyEvent,
     },
     integer_scaling::{calculate_size_corrected, Size},
-    nes_state::{
-        emulator::{Emulator, EmulatorGui},
-        VideoFrame,
-    },
+    nes_state::{emulator::Emulator, VideoFrame},
     settings::{
         gui::{GuiEvent, SettingsGui},
         Settings,
@@ -23,7 +20,7 @@ use crate::{
 };
 
 pub struct MainGui {
-    pub settings_gui: SettingsGui,
+    settings_gui: SettingsGui,
     pub nes_texture_handle: TextureHandle,
     nes_texture_options: TextureOptions,
 
@@ -33,13 +30,7 @@ pub struct MainGui {
     modifiers: Modifiers,
 }
 impl MainGui {
-    pub fn new(
-        ctx: &Context,
-        emulator_gui: EmulatorGui,
-        emulator: Emulator,
-        inputs: Inputs,
-        audio: Audio,
-    ) -> Self {
+    pub fn new(ctx: &Context, emulator: Emulator, inputs: Inputs, audio: Audio) -> Self {
         let nes_texture_options = TextureOptions {
             magnification: egui::TextureFilter::Nearest,
             minification: egui::TextureFilter::Nearest,
@@ -47,7 +38,7 @@ impl MainGui {
         };
 
         Self {
-            settings_gui: SettingsGui::new(emulator_gui),
+            settings_gui: SettingsGui::new(),
             nes_texture_handle: ctx.load_texture(
                 "nes",
                 ColorImage::new([NES_WIDTH as usize, NES_HEIGHT as usize], Color32::BLACK),
