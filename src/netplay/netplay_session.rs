@@ -58,7 +58,7 @@ impl NetplaySession {
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
         joypad_mapping: &JoypadMapping,
-        video_frame: &mut VideoFrame,
+        video_frame: &mut Option<&mut VideoFrame>,
     ) -> anyhow::Result<Option<FrameData>> {
         let local_player_idx = self.get_local_player_idx();
         let sess = &mut self.p2p_session;

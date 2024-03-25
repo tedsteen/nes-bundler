@@ -56,33 +56,44 @@ impl Emulator {
                     loop_counter.tick("LPS");
 
                     game_loop.next_frame(|game_loop| {
-                        if let Some(report) = loop_counter.tick("FPS").report() {
-                            println!("{report}");
-                        }
-                        let _ = frame_pool.push_with(|video_frame| {
-                            let nes_state = &mut game_loop.game;
-                            let joypads = joypads.lock().unwrap();
-
-                            let mut frame_data = nes_state
+                        loop_counter.tick("FPS");
+                        let nes_state = &mut game_loop.game;
+                        let joypads = joypads.lock().unwrap();
+                        let mut frame_data = match frame_pool.push_with(|video_frame| {
+                            nes_state
                                 .lock()
                                 .unwrap()
-                                .advance([joypads[0], joypads[1]], video_frame);
-                            if let Some(frame_data) = &mut frame_data {
-                                //TODO: Testa detta -> audio_tx.push_iter(&mut frame_data.audio.drain(..audio_tx.free_len()));
-
-                                audio_tx.push_slice(&frame_data.audio);
-                                let debug = debug.lock().unwrap();
-                                let fps = if debug.override_fps {
-                                    debug.fps
-                                } else {
-                                    frame_data.fps
-                                };
-                                game_loop.set_updates_per_second(fps);
+                                .advance([joypads[0], joypads[1]], &mut Some(video_frame))
+                        }) {
+                            Ok(frame_data) => frame_data,
+                            Err(_) => {
+                                loop_counter.tick("DFPS");
+                                //log::warn!("Frame dropped");
+                                nes_state
+                                    .lock()
+                                    .unwrap()
+                                    .advance([joypads[0], joypads[1]], &mut None)
                             }
-                        });
+                        };
+
+                        if let Some(frame_data) = &mut frame_data {
+                            //TODO: Testa detta -> audio_tx.push_iter(&mut frame_data.audio.drain(..audio_tx.free_len()));
+
+                            audio_tx.push_slice(&frame_data.audio);
+                            let debug = debug.lock().unwrap();
+                            let fps = if debug.override_fps {
+                                debug.fps
+                            } else {
+                                frame_data.fps
+                            };
+                            game_loop.set_updates_per_second(fps);
+                        }
                     });
                     //sleep(Duration::from_millis(15)).await;
-                    tokio::task::yield_now().await
+                    tokio::task::yield_now().await;
+                    if let Some(report) = loop_counter.report() {
+                        log::debug!("Emulator: {report}");
+                    }
                 }
             }
         });

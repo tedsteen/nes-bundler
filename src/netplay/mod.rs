@@ -95,7 +95,7 @@ impl NesStateHandler for NetplayStateHandler {
     fn advance(
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        video_frame: &mut VideoFrame,
+        video_frame: &mut Option<&mut VideoFrame>,
     ) -> Option<FrameData> {
         if let Some((new_state, frame_data)) = self
             .netplay

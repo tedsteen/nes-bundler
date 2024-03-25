@@ -27,17 +27,21 @@ impl NetplayState {
     pub fn advance(
         self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        video_frame: &mut VideoFrame,
+        video_frame: &mut Option<&mut VideoFrame>,
     ) -> (Self, Option<FrameData>) {
         use NetplayState::*;
         match self {
             Connecting(netplay) => {
-                video_frame.fill(0); //Black screen while connecting
+                if let Some(video_frame) = video_frame {
+                    video_frame.fill(0); //Black screen while connecting
+                }
                 netplay.advance()
             }
             Connected(netplay) => netplay.advance(joypad_state, video_frame),
             Resuming(netplay) => {
-                video_frame.fill(0); //Black screen while resuming
+                if let Some(video_frame) = video_frame {
+                    video_frame.fill(0); //Black screen while resuming
+                }
                 netplay.advance()
             }
             Disconnected(netplay) => netplay.advance(joypad_state, video_frame),
@@ -134,7 +138,7 @@ impl Netplay<LocalNesState> {
     fn advance(
         mut self,
         joypad_state: [JoypadState; 2],
-        video_frame: &mut VideoFrame,
+        video_frame: &mut Option<&mut VideoFrame>,
     ) -> (NetplayState, Option<FrameData>) {
         let frame_data = self.state.advance(joypad_state, video_frame);
         (NetplayState::Disconnected(Box::new(self)), frame_data)
@@ -194,7 +198,7 @@ impl Netplay<Connected> {
     fn advance(
         mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        video_frame: &mut VideoFrame,
+        video_frame: &mut Option<&mut VideoFrame>,
     ) -> (NetplayState, Option<FrameData>) {
         //log::trace!("Advancing Netplay<Connected>");
         let netplay_session = &mut self.state.netplay_session;

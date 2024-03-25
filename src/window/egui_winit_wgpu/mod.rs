@@ -19,7 +19,7 @@ pub struct Renderer {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
-    // NEW!
+
     pub window: Arc<Window>,
     pub egui: gui::EguiRenderer,
 }
@@ -75,8 +75,8 @@ impl Renderer {
             format: surface_format,
             width: size.width,
             height: size.height,
-            //present_mode: PresentMode::AutoVsync,
-            present_mode: PresentMode::AutoNoVsync,
+            present_mode: PresentMode::AutoVsync,
+            //present_mode: PresentMode::AutoNoVsync,
             //present_mode: surface_caps.present_modes[0],
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],

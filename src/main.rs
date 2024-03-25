@@ -107,9 +107,7 @@ async fn run() -> anyhow::Result<()> {
     event_loop.set_control_flow(ControlFlow::Poll);
     event_loop
         .run(|winit_event, control_flow| {
-            if let Some(report) = rate_counter.tick("EPS").report() {
-                log::debug!("{report}");
-            }
+            rate_counter.tick("EPS");
             let mut should_render = false;
             let window_event = match winit_event {
                 Event::WindowEvent {
@@ -174,9 +172,11 @@ async fn run() -> anyhow::Result<()> {
             }
 
             if should_render {
-                //println!("RENDER: {:?}", std::time::Instant::now());
+                rate_counter.tick("RENDER");
                 main_gui.render_gui(&mut state);
-                //thread::sleep(std::time::Duration::from_millis(10));
+            }
+            if let Some(report) = rate_counter.report() {
+                log::debug!("Event loop: {report}");
             }
         })
         .map_err(anyhow::Error::msg)

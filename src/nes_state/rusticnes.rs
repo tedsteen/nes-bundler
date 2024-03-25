@@ -38,26 +38,27 @@ impl NesStateHandler for RusticNesState {
     fn advance(
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        video_frame: &mut VideoFrame,
+        video_frame: &mut Option<&mut VideoFrame>,
     ) -> Option<FrameData> {
         self.nes.p1_input = *joypad_state[0];
         self.nes.p2_input = *joypad_state[1];
         self.nes.run_until_vblank();
-
-        self.nes
-            .ppu
-            .screen
-            .iter()
-            .enumerate()
-            .for_each(|(idx, &palette_index)| {
-                let palette_index = palette_index as usize * 3;
-                let pixel_index = idx * 3;
-                video_frame[pixel_index..pixel_index + 3].clone_from_slice(
-                    NTSC_PAL[palette_index..palette_index + 3]
-                        .try_into()
-                        .unwrap(),
-                );
-            });
+        if let Some(video_frame) = video_frame {
+            self.nes
+                .ppu
+                .screen
+                .iter()
+                .enumerate()
+                .for_each(|(idx, &palette_index)| {
+                    let palette_index = palette_index as usize * 3;
+                    let pixel_index = idx * 3;
+                    video_frame[pixel_index..pixel_index + 3].clone_from_slice(
+                        NTSC_PAL[palette_index..palette_index + 3]
+                            .try_into()
+                            .unwrap(),
+                    );
+                });
+        }
 
         Some(FrameData {
             audio: self

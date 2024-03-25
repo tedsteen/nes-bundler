@@ -17,7 +17,7 @@ pub trait NesStateHandler: Send {
     fn advance(
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        video_frame: &mut VideoFrame,
+        video_frame: &mut Option<&mut VideoFrame>,
     ) -> Option<FrameData>;
     fn save(&self) -> Option<Vec<u8>>;
     fn load(&mut self, data: &mut Vec<u8>);
