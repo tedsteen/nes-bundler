@@ -1,23 +1,25 @@
 use std::sync::{Arc, Mutex};
 
 use crate::bundle;
-use crate::nes_state::NesStateHandler;
 use crate::window::VideoFramePool;
 use crate::{
     audio::Audio,
     fps::RateCounter,
     gameloop::GameLoop,
     input::{Inputs, JoypadState},
-    netplay::{gui::NetplayGui, NetplayStateHandler},
     settings::{gui::GuiComponent, MAX_PLAYERS},
     Fps, FPS,
 };
 use anyhow::Result;
-use egui::Slider;
+
+use crate::nes_state::NesStateHandler;
 
 pub struct Emulator {
     pub frame_pool: VideoFramePool,
-    nes_state: Arc<Mutex<NetplayStateHandler>>,
+    #[cfg(feature = "netplay")]
+    nes_state: Arc<Mutex<crate::netplay::NetplayStateHandler>>,
+    #[cfg(not(feature = "netplay"))]
+    nes_state: Arc<Mutex<crate::nes_state::LocalNesState>>,
     debug: Arc<Mutex<EmulatorDebug>>,
     joypads: Arc<Mutex<[JoypadState; MAX_PLAYERS]>>,
 }
@@ -108,18 +110,23 @@ impl Emulator {
     }
 }
 
-#[allow(dead_code)]
 pub struct EmulatorGui {
-    netplay_gui: NetplayGui,
+    #[cfg(feature = "netplay")]
+    netplay_gui: crate::netplay::gui::NetplayGui,
 }
 
 impl EmulatorGui {
     pub fn new() -> Self {
         Self {
-            netplay_gui: NetplayGui::new(bundle().config.netplay.clone()),
+            #[cfg(feature = "netplay")]
+            netplay_gui: crate::netplay::gui::NetplayGui::new(bundle().config.netplay.clone()),
         }
     }
 }
+#[cfg(not(feature = "netplay"))]
+impl GuiComponent<Emulator> for EmulatorGui {}
+
+#[cfg(feature = "netplay")]
 impl GuiComponent<Emulator> for EmulatorGui {
     fn ui(&mut self, instance: &mut Emulator, ui: &mut egui::Ui) {
         self.netplay_gui
@@ -134,7 +141,7 @@ impl GuiComponent<Emulator> for EmulatorGui {
                 let mut debug = instance.debug.lock().unwrap();
                 ui.checkbox(&mut debug.override_fps, "Override FPS");
                 if debug.override_fps {
-                    ui.add(Slider::new(&mut debug.fps, 0.5..=180.0).suffix("FPS"));
+                    ui.add(egui::Slider::new(&mut debug.fps, 0.5..=180.0).suffix("FPS"));
                 }
                 ui.end_row();
             });
@@ -148,6 +155,7 @@ impl GuiComponent<Emulator> for EmulatorGui {
     fn name(&self) -> Option<String> {
         self.netplay_gui.name()
     }
+
     fn prepare(&mut self, instance: &mut Emulator) {
         self.netplay_gui
             .prepare(&mut instance.nes_state.lock().unwrap());

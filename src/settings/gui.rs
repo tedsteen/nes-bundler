@@ -25,7 +25,7 @@ pub trait GuiComponent<T> {
     fn prepare(&mut self, _instance: &mut T) {}
 
     // Runs if gui is visible
-    fn ui(&mut self, instance: &mut T, ui: &mut Ui);
+    fn ui(&mut self, _instance: &mut T, _ui: &mut Ui) {}
 
     fn messages(&self, _instance: &T) -> Option<Vec<String>> {
         None
