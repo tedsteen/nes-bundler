@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::settings::Settings;
 
+// #[cfg(feature = "debug")]
+// mod debug;
 pub mod gui;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]

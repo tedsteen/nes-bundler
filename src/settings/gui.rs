@@ -87,7 +87,7 @@ impl SettingsGui {
     pub fn new() -> Self {
         Self {
             inputs_gui: InputsGui::new(),
-            audio_gui: AudioGui {},
+            audio_gui: AudioGui::new(),
             emulator_gui: EmulatorGui::new(),
             start_time: Instant::now(),
             visible: false,
