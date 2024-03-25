@@ -5,7 +5,7 @@ use egui::{Align2, Color32, Context, Order, RichText, Ui, Window};
 use crate::{
     audio::{gui::AudioGui, Audio},
     input::{gamepad::GamepadEvent, gui::InputsGui, Inputs, KeyEvent},
-    nes_state::emulator::{Emulator, EmulatorGui, SharedState},
+    nes_state::emulator::{Emulator, EmulatorGui},
     MINIMUM_INTEGER_SCALING_SIZE,
 };
 
@@ -34,7 +34,7 @@ pub trait GuiComponent<T> {
 enum GuiWithState<'a> {
     Inputs(&'a mut InputsGui, &'a mut Inputs),
     Audio(&'a mut AudioGui, &'a mut Audio),
-    Emulator(&'a mut EmulatorGui, &'a mut SharedState),
+    Emulator(&'a mut EmulatorGui, &'a mut Emulator),
 }
 
 impl GuiWithState<'_> {
@@ -83,11 +83,17 @@ impl SettingsGui {
         }
     }
 
-    pub fn ui(&mut self, ctx: &Context, emulator: &mut Emulator) {
+    pub fn ui(
+        &mut self,
+        ctx: &Context,
+        audio: &mut Audio,
+        inputs: &mut Inputs,
+        emulator: &mut Emulator,
+    ) {
         let guis = &mut [
-            GuiWithState::Audio(&mut self.audio_gui, &mut emulator.audio),
-            GuiWithState::Inputs(&mut self.inputs_gui, &mut emulator.inputs),
-            GuiWithState::Emulator(&mut self.emulator_gui, &mut emulator.shared_state),
+            GuiWithState::Audio(&mut self.audio_gui, audio),
+            GuiWithState::Inputs(&mut self.inputs_gui, inputs),
+            GuiWithState::Emulator(&mut self.emulator_gui, emulator),
         ];
         egui::Area::new("message_area")
             .fixed_pos([0.0, 0.0])

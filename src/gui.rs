@@ -3,10 +3,11 @@ use egui::{
 };
 
 use crate::{
+    audio::Audio,
     input::{
         buttons::GamepadButton,
         keys::{KeyCode, Modifiers},
-        KeyEvent,
+        Inputs, KeyEvent,
     },
     integer_scaling::{calculate_size_corrected, Size},
     nes_state::{
@@ -27,10 +28,18 @@ pub struct MainGui {
     nes_texture_options: TextureOptions,
 
     pub emulator: Emulator,
+    pub audio: Audio,
+    inputs: Inputs,
     modifiers: Modifiers,
 }
 impl MainGui {
-    pub fn new(ctx: &Context, emulator_gui: EmulatorGui, emulator: Emulator) -> Self {
+    pub fn new(
+        ctx: &Context,
+        emulator_gui: EmulatorGui,
+        emulator: Emulator,
+        inputs: Inputs,
+        audio: Audio,
+    ) -> Self {
         let nes_texture_options = TextureOptions {
             magnification: egui::TextureFilter::Nearest,
             minification: egui::TextureFilter::Nearest,
@@ -46,6 +55,8 @@ impl MainGui {
             ),
             nes_texture_options,
             emulator,
+            inputs,
+            audio,
             modifiers: Modifiers::empty(),
         }
     }
@@ -102,7 +113,7 @@ impl MainGui {
             _ => false,
         };
         if !consumed {
-            self.emulator.inputs.advance(gui_event);
+            self.inputs.advance(gui_event);
         }
     }
 
@@ -111,7 +122,6 @@ impl MainGui {
             self.update_nes_texture(&frame_buffer);
         }
         let render_result = renderer.render(move |ctx| {
-            self.emulator.audio.sync_audio_devices();
             self.ui(ctx);
         });
 
@@ -172,6 +182,7 @@ impl MainGui {
                 }
             });
 
-        self.settings_gui.ui(ctx, &mut self.emulator);
+        self.settings_gui
+            .ui(ctx, &mut self.audio, &mut self.inputs, &mut self.emulator);
     }
 }

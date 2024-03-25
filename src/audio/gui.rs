@@ -6,7 +6,8 @@ pub struct AudioGui {}
 
 impl GuiComponent<Audio> for AudioGui {
     fn ui(&mut self, instance: &mut Audio, ui: &mut Ui) {
-        let available_device_names = instance.get_available_output_device_names();
+        let available_device_names =
+            Audio::get_available_output_device_names_for_subsystem(&instance.audio_subsystem);
         ui.horizontal(|ui| {
             egui::Grid::new("netplay_grid")
                 .num_columns(2)

@@ -9,13 +9,15 @@ use crate::settings::gui::ToGuiEvent;
 
 use crate::{input::gamepad::ToGamepadEvent, settings::gui::GuiEvent};
 
+use audio::Audio;
 use fps::RateCounter;
 
 use gui::MainGui;
 
+use input::sdl2_impl::Sdl2Gamepads;
+use input::Inputs;
 use nes_state::emulator::Emulator;
 
-use window::egui_winit_wgpu::VideoFramePool;
 use window::{create_state, Size};
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -66,13 +68,16 @@ async fn run() -> anyhow::Result<()> {
     let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
     let mut sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
 
-    let bundle = bundle();
-    let frame_pool = VideoFramePool::new();
+    let mut audio = Audio::new(&sdl_context)?;
 
-    let mut emulator = Emulator::new(frame_pool.clone(), &sdl_context)?;
-    emulator.start()?;
+    let inputs = Inputs::new(Sdl2Gamepads::new(
+        sdl_context.game_controller().map_err(anyhow::Error::msg)?,
+    ));
+
+    let emulator = Emulator::start(&inputs, &mut audio)?;
 
     let event_loop = EventLoop::new()?;
+    let bundle = bundle();
     let mut state = create_state(
         &bundle.config.name,
         Size::new(
@@ -81,7 +86,7 @@ async fn run() -> anyhow::Result<()> {
         ),
         Size::new(NES_WIDTH_4_3 as f64, NES_HEIGHT as f64),
         &event_loop,
-        frame_pool,
+        emulator.frame_pool.clone(),
     )
     .await?;
 
@@ -96,7 +101,13 @@ async fn run() -> anyhow::Result<()> {
         std::process::exit(0);
     }
 
-    let mut main_gui = MainGui::new(&state.egui.context, emulator.new_gui(), emulator);
+    let mut main_gui = MainGui::new(
+        &state.egui.context,
+        emulator.new_gui(),
+        emulator,
+        inputs,
+        audio,
+    );
 
     let mut rate_counter = RateCounter::new();
     event_loop.set_control_flow(ControlFlow::Poll);
@@ -105,7 +116,6 @@ async fn run() -> anyhow::Result<()> {
             if let Some(report) = rate_counter.tick("EPS").report() {
                 println!("{report}");
             }
-            ////println!("EVENT: {:?}", winit_event);
             let mut should_render = false;
             let window_event = match winit_event {
                 Event::WindowEvent {
@@ -168,6 +178,7 @@ async fn run() -> anyhow::Result<()> {
             for gui_event in &gui_events {
                 main_gui.handle_event(gui_event, &state.window);
             }
+            main_gui.audio.sync_audio_devices();
 
             if should_render {
                 //println!("RENDER: {:?}", std::time::Instant::now());

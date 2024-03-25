@@ -3,9 +3,9 @@ use std::ops::Add;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use ringbuf::{Consumer, HeapRb, Producer};
-use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
+use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired, AudioStatus};
 use sdl2::{AudioSubsystem, Sdl};
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +20,7 @@ pub struct AudioSettings {
 }
 
 pub struct Stream {
+    tx: Option<AudioSender>,
     output_device_name: Option<String>,
     audio_device: Option<AudioDevice<AudioReceiverCallback>>,
 }
@@ -53,9 +54,13 @@ impl AudioCallback for AudioReceiverCallback {
 }
 
 impl Stream {
-    pub(crate) fn new(audio_subsystem: &AudioSubsystem, audio_rx: AudioReceiver) -> Result<Self> {
+    pub(crate) fn new(audio_subsystem: &AudioSubsystem) -> Result<Self> {
+        //TODO: Figure out a good buffer here..
+        let (tx, audio_rx) = HeapRb::<f32>::new(1024 * 8).split();
+
         let audio_settings = &Settings::current().audio;
         Ok(Self {
+            tx: Some(tx),
             output_device_name: audio_settings.output_device.clone(),
             audio_device: Some(Stream::new_audio_device(
                 audio_subsystem,
@@ -63,6 +68,13 @@ impl Stream {
                 audio_rx,
             )?),
         })
+    }
+
+    pub fn start(&mut self) -> Result<AudioSender> {
+        if let Some(device) = &self.audio_device {
+            device.resume();
+        }
+        self.tx.take().ok_or(anyhow!("Stream already started"))
     }
 
     fn new_audio_device(
@@ -78,19 +90,21 @@ impl Stream {
             samples: None,
         };
 
+        // Make sure the device exists, otherwise default to first available
+        let output_device = output_device
+            .clone()
+            .filter(|name| {
+                Audio::get_available_output_device_names_for_subsystem(audio_subsystem)
+                    .contains(name)
+            })
+            .or_else(|| Audio::get_default_device_name_for_subsystem(audio_subsystem));
+
         let output_device = audio_subsystem
             .open_playback(output_device.as_deref(), &desired_spec, |_| {
                 AudioReceiverCallback(audio_rx)
             })
-            // .or_else(|_| {
-            //     audio_subsystem.open_playback(None, &desired_spec, |_| {
-            //         AudioReceiverCallback(audio_rx, volume)
-            //     })
-            // })
             .map_err(anyhow::Error::msg)?;
         log::debug!("Starting audio: {:?}", output_device.spec());
-
-        output_device.resume();
         Ok(output_device)
     }
 
@@ -98,9 +112,14 @@ impl Stream {
         if self.output_device_name != output_device_name {
             if let Some(audio_device) = self.audio_device.take() {
                 let subsystem = audio_device.subsystem().clone();
+                let old_device_status = audio_device.status();
                 let old_callback = audio_device.close_and_get_callback();
+
                 match Stream::new_audio_device(&subsystem, &output_device_name, old_callback.0) {
                     Ok(audio_device) => {
+                        if old_device_status == AudioStatus::Playing {
+                            audio_device.resume();
+                        }
                         self.output_device_name = output_device_name;
                         self.audio_device = Some(audio_device);
                     }
@@ -121,22 +140,33 @@ pub struct Audio {
 }
 
 impl Audio {
-    pub fn new(sdl_context: &Sdl, audio_rx: AudioReceiver) -> Result<Self> {
+    pub fn new(sdl_context: &Sdl) -> Result<Self> {
         let audio_subsystem = sdl_context.audio().map_err(anyhow::Error::msg)?;
 
         Ok(Audio {
-            stream: Stream::new(&audio_subsystem, audio_rx)?,
+            stream: Stream::new(&audio_subsystem)?,
             available_device_names: vec![],
             next_device_names_clear: Instant::now(),
             audio_subsystem,
         })
     }
-    pub fn get_default_device_name(&self) -> Option<String> {
-        self.get_available_output_device_names().first().cloned()
+
+    pub fn get_default_device_name_for_subsystem(subsystem: &AudioSubsystem) -> Option<String> {
+        Self::get_available_output_device_names_for_subsystem(subsystem)
+            .first()
+            .cloned()
     }
 
-    pub fn get_available_output_device_names(&self) -> Vec<String> {
+    pub fn get_default_device_name(&self) -> Option<String> {
         let subsystem = &self.audio_subsystem;
+        Self::get_available_output_device_names_for_subsystem(subsystem)
+            .first()
+            .cloned()
+    }
+
+    pub fn get_available_output_device_names_for_subsystem(
+        subsystem: &AudioSubsystem,
+    ) -> Vec<String> {
         if let Some(num_devices) = subsystem.num_audio_playback_devices() {
             (0..num_devices)
                 .flat_map(|i| subsystem.audio_playback_device_name(i))
@@ -147,12 +177,12 @@ impl Audio {
     }
 
     pub fn sync_audio_devices(&mut self) {
+        let available_device_names =
+            Self::get_available_output_device_names_for_subsystem(&self.audio_subsystem);
         if self.next_device_names_clear < Instant::now() {
             self.next_device_names_clear = Instant::now().add(Duration::new(1, 0));
-            self.available_device_names = self.get_available_output_device_names();
+            self.available_device_names = available_device_names.clone();
         }
-
-        let available_device_names = self.get_available_output_device_names();
 
         let selected_device = &mut Settings::current().audio.output_device;
         if let Some(name) = selected_device {
