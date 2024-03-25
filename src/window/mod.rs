@@ -33,7 +33,7 @@ impl From<Size> for winit::dpi::Size {
     }
 }
 
-pub async fn create_state(
+pub async fn create_renderer(
     title: &str,
     inner_size: Size,
     min_inner_size: Size,

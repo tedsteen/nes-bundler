@@ -120,7 +120,7 @@ impl MainGui {
             Ok(_) => {}
             Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
                 // Reconfigure the surface if it's lost or outdated
-
+                log::warn!("Surface lost or outdated, recreating.");
                 renderer.resize(renderer.size);
             }
             // The system is out of memory, we should probably quit

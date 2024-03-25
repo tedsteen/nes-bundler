@@ -18,7 +18,7 @@ use input::sdl2_impl::Sdl2Gamepads;
 use input::Inputs;
 use nes_state::emulator::Emulator;
 
-use window::{create_state, Size};
+use window::{create_renderer, Size};
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 
@@ -78,7 +78,7 @@ async fn run() -> anyhow::Result<()> {
 
     let event_loop = EventLoop::new()?;
     let bundle = bundle();
-    let mut state = create_state(
+    let mut renderer = create_renderer(
         &bundle.config.name,
         Size::new(
             MINIMUM_INTEGER_SCALING_SIZE.0 as f64,
@@ -101,7 +101,7 @@ async fn run() -> anyhow::Result<()> {
         std::process::exit(0);
     }
 
-    let mut main_gui = MainGui::new(&state.egui.context, emulator, inputs, audio);
+    let mut main_gui = MainGui::new(&renderer.egui.context, emulator, inputs, audio);
 
     let mut rate_counter = RateCounter::new();
     event_loop.set_control_flow(ControlFlow::Poll);
@@ -122,19 +122,19 @@ async fn run() -> anyhow::Result<()> {
                         WindowEvent::RedrawRequested => {
                             // Windows needs this to not freeze the windown when resizing or moving
                             #[cfg(windows)]
-                            state.window.request_redraw();
+                            renderer.window.request_redraw();
 
                             should_render = true;
                             None
                         }
                         winit::event::WindowEvent::Resized(physical_size) => {
-                            state.resize(physical_size);
+                            renderer.resize(physical_size);
                             None
                         }
                         _ => {
-                            if !state
+                            if !renderer
                                 .egui
-                                .handle_input(&state.window, &window_event)
+                                .handle_input(&renderer.window, &window_event)
                                 .consumed
                             {
                                 Some(window_event)
@@ -168,12 +168,12 @@ async fn run() -> anyhow::Result<()> {
             }
 
             for gui_event in &gui_events {
-                main_gui.handle_event(gui_event, &state.window);
+                main_gui.handle_event(gui_event, &renderer.window);
             }
 
             if should_render {
                 rate_counter.tick("RENDER");
-                main_gui.render_gui(&mut state);
+                main_gui.render_gui(&mut renderer);
             }
             if let Some(report) = rate_counter.report() {
                 log::debug!("Event loop: {report}");
