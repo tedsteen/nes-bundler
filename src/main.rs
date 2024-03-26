@@ -86,7 +86,6 @@ async fn run() -> anyhow::Result<()> {
         ),
         Size::new(NES_WIDTH_4_3 as f64, NES_HEIGHT as f64),
         &event_loop,
-        emulator.frame_pool.clone(),
     )
     .await?;
 
@@ -101,7 +100,13 @@ async fn run() -> anyhow::Result<()> {
         std::process::exit(0);
     }
 
-    let mut main_gui = MainGui::new(&renderer.egui.context, emulator, inputs, audio);
+    let mut main_gui = MainGui::new(
+        &mut renderer,
+        emulator.frame_pool.clone(),
+        emulator,
+        inputs,
+        audio,
+    );
 
     let mut rate_counter = RateCounter::new();
     event_loop.set_control_flow(ControlFlow::Poll);

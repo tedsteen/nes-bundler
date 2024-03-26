@@ -9,14 +9,12 @@ use gui::EguiRenderer;
 use wgpu::{PresentMode, TextureViewDescriptor};
 use winit::window::Window;
 
-use super::VideoFramePool;
+pub mod texture;
 
 pub struct Renderer {
-    pub frame_pool: VideoFramePool,
-
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
-    queue: wgpu::Queue,
+    pub queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
 
@@ -25,7 +23,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub async fn new(window: Arc<Window>, frame_pool: VideoFramePool) -> Result<Self> {
+    pub async fn new(window: Arc<Window>) -> Result<Self> {
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -94,7 +92,6 @@ impl Renderer {
         );
 
         Ok(Self {
-            frame_pool,
             surface,
             device,
             queue,

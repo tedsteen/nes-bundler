@@ -66,12 +66,9 @@ impl NesStateHandler for RusticNesState {
                 .enumerate()
                 .for_each(|(idx, &palette_index)| {
                     let palette_index = palette_index as usize * 3;
-                    let pixel_index = idx * 3;
-                    video_frame[pixel_index..pixel_index + 3].clone_from_slice(
-                        NTSC_PAL[palette_index..palette_index + 3]
-                            .try_into()
-                            .unwrap(),
-                    );
+                    let pixel_index = idx * 4;
+                    video_frame[pixel_index..pixel_index + 3]
+                        .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
                 });
         }
 

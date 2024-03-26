@@ -1,10 +1,16 @@
-use std::{mem::size_of, ops::Deref, sync::Arc};
+use std::{
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
 
 use anyhow::Result;
 use thingbuf::{Recycle, ThingBuf};
 use winit::event_loop::EventLoop;
 
-use crate::input::keys::{KeyCode, Modifiers};
+use crate::{
+    input::keys::{KeyCode, Modifiers},
+    NES_HEIGHT, NES_WIDTH,
+};
 
 use self::egui_winit_wgpu::Renderer;
 pub mod egui_winit_wgpu;
@@ -38,7 +44,6 @@ pub async fn create_renderer(
     inner_size: Size,
     min_inner_size: Size,
     event_loop: &EventLoop<()>,
-    frame_pool: VideoFramePool,
 ) -> Result<Renderer> {
     let window_builder = winit::window::WindowBuilder::new()
         .with_resizable(true)
@@ -53,47 +58,81 @@ pub async fn create_renderer(
         window_builder.with_window_icon(Some(winit::window::Icon::from_resource(1, None)?))
     };
 
-    Renderer::new(Arc::new(window_builder.build(event_loop)?), frame_pool).await
+    Renderer::new(Arc::new(window_builder.build(event_loop)?)).await
 }
 
-use crate::nes_state::VideoFrame;
+#[derive(Debug, Clone)]
+#[must_use]
+pub struct NESFrame(Vec<u8>);
 
-#[derive(Debug)]
-pub struct TFrameRecycle<const N: usize>;
-impl<const N: usize> Recycle<[u8; N]> for TFrameRecycle<N> {
-    fn new_element(&self) -> [u8; N] {
-        [0; N]
-    }
+impl NESFrame {
+    pub const SIZE: usize = (NES_WIDTH * NES_HEIGHT * 4) as usize;
 
-    fn recycle(&self, _frame: &mut [u8; N]) {}
-}
-#[derive(Debug)]
-pub struct BytePool<const N: usize>(Arc<ThingBuf<[u8; N], TFrameRecycle<N>>>);
-
-impl<const N: usize> BytePool<N> {
+    /// Allocate a new frame for video output.
     pub fn new() -> Self {
-        Self(Arc::new(ThingBuf::with_recycle(2, TFrameRecycle)))
+        let mut frame = vec![0; Self::SIZE];
+        frame
+            .iter_mut()
+            .skip(3)
+            .step_by(4)
+            .for_each(|alpha| *alpha = 255);
+        Self(frame)
     }
 }
 
-impl<const N: usize> Deref for BytePool<N> {
-    type Target = Arc<ThingBuf<[u8; N], TFrameRecycle<N>>>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<const N: usize> Clone for BytePool<N> {
-    fn clone(&self) -> Self {
-        Self(Arc::clone(&self.0))
-    }
-}
-
-impl<const N: usize> Default for BytePool<N> {
+impl Default for NESFrame {
     fn default() -> Self {
         Self::new()
     }
 }
 
-const VIDEO_FRAME_SIZE: usize = size_of::<VideoFrame>();
-pub type VideoFramePool = BytePool<VIDEO_FRAME_SIZE>;
+impl Deref for NESFrame {
+    type Target = Vec<u8>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for NESFrame {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+#[derive(Debug)]
+pub struct NESFramePool(Arc<ThingBuf<NESFrame, NESFrameRecycle>>);
+#[derive(Debug)]
+pub struct NESFrameRecycle;
+
+impl Recycle<NESFrame> for NESFrameRecycle {
+    fn new_element(&self) -> NESFrame {
+        NESFrame::new()
+    }
+
+    fn recycle(&self, _frame: &mut NESFrame) {}
+}
+
+impl NESFramePool {
+    pub fn new() -> Self {
+        Self(Arc::new(ThingBuf::with_recycle(2, NESFrameRecycle)))
+    }
+}
+
+impl Default for NESFramePool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Deref for NESFramePool {
+    type Target = ThingBuf<NESFrame, NESFrameRecycle>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Clone for NESFramePool {
+    fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0))
+    }
+}

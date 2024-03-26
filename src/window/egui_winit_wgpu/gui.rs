@@ -8,9 +8,9 @@ use winit::event::WindowEvent;
 use winit::window::Window;
 
 pub struct EguiRenderer {
-    pub context: Context,
+    context: Context,
     state: State,
-    renderer: Renderer,
+    pub renderer: Renderer,
 }
 
 impl EguiRenderer {

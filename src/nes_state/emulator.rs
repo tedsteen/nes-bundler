@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::bundle;
-use crate::window::VideoFramePool;
+use crate::window::NESFramePool;
 use crate::{
     audio::Audio,
     fps::RateCounter,
@@ -13,7 +13,7 @@ use anyhow::Result;
 use crate::nes_state::NesStateHandler;
 
 pub struct Emulator {
-    pub frame_pool: VideoFramePool,
+    pub frame_pool: NESFramePool,
     #[cfg(feature = "netplay")]
     nes_state: Arc<Mutex<crate::netplay::NetplayStateHandler>>,
     #[cfg(not(feature = "netplay"))]
@@ -30,7 +30,7 @@ impl Emulator {
 
         let audio_tx = audio.stream.start()?;
 
-        let frame_pool = VideoFramePool::new();
+        let frame_pool = NESFramePool::new();
         let shared_state = Emulator {
             frame_pool: frame_pool.clone(),
             nes_state: Arc::new(Mutex::new(nes_state)),
