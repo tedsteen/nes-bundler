@@ -57,9 +57,17 @@ impl NetplaySession {
         joypad_mapping: &JoypadMapping,
         video_frame: &mut Option<&mut VideoFrame>,
     ) -> anyhow::Result<Option<FrameData>> {
+        #[cfg(feature = "debug")]
+        puffin::profile_function!();
+
         let local_player_idx = self.get_local_player_idx();
         let sess = &mut self.p2p_session;
-        sess.poll_remote_clients();
+
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("ggrs advance_frame");
+            sess.poll_remote_clients();
+        }
 
         for event in sess.events() {
             if let ggrs::GgrsEvent::Disconnected { addr } = event {
@@ -72,52 +80,58 @@ impl NetplaySession {
         }
 
         let mut new_frame = None;
-        match sess.advance_frame() {
-            Ok(requests) => {
-                for request in requests {
-                    match request {
-                        GgrsRequest::LoadGameState { cell, frame } => {
-                            log::debug!("Loading (frame {:?})", frame);
-                            self.game_state = cell.load().expect("No data found.");
-                        }
-                        GgrsRequest::SaveGameState { cell, frame } => {
-                            assert_eq!(self.game_state.frame, frame);
-                            cell.save(frame, Some(self.game_state.clone()), None);
-                        }
-                        GgrsRequest::AdvanceFrame { inputs } => {
-                            let is_replay = self.game_state.frame <= self.last_handled_frame;
-                            let mut n = None;
-                            let this_frame_data = self.game_state.advance(
-                                joypad_mapping.map(
-                                    [JoypadState(inputs[0].0), JoypadState(inputs[1].0)],
-                                    local_player_idx,
-                                ),
-                                if is_replay { &mut n } else { video_frame },
-                            );
-
-                            if is_replay {
-                                //This is a replay
-                                // Discard the samples for this frame since it's a replay from ggrs. Audio has already been produced and pushed for it.
-                                self.game_state.discard_samples();
-                            } else {
-                                new_frame = this_frame_data;
-                                //This is not a replay
-                                self.last_handled_frame = self.game_state.frame;
-                                if self.game_state.frame % (sess.max_prediction() * 2) as i32 == 0 {
-                                    self.last_confirmed_game_states = [
-                                        self.last_confirmed_game_states[1].clone(),
-                                        self.game_state.clone(),
-                                    ];
-                                }
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("ggrs advance_frame");
+            match sess.advance_frame() {
+                Ok(requests) => {
+                    for request in requests {
+                        match request {
+                            GgrsRequest::LoadGameState { cell, frame } => {
+                                log::debug!("Loading (frame {:?})", frame);
+                                self.game_state = cell.load().expect("No data found.");
                             }
+                            GgrsRequest::SaveGameState { cell, frame } => {
+                                assert_eq!(self.game_state.frame, frame);
+                                cell.save(frame, Some(self.game_state.clone()), None);
+                            }
+                            GgrsRequest::AdvanceFrame { inputs } => {
+                                let is_replay = self.game_state.frame <= self.last_handled_frame;
+                                let mut n = None;
+                                let this_frame_data = self.game_state.advance(
+                                    joypad_mapping.map(
+                                        [JoypadState(inputs[0].0), JoypadState(inputs[1].0)],
+                                        local_player_idx,
+                                    ),
+                                    if is_replay { &mut n } else { video_frame },
+                                );
 
-                            self.game_state.frame += 1;
+                                if is_replay {
+                                    //This is a replay
+                                    // Discard the samples for this frame since it's a replay from ggrs. Audio has already been produced and pushed for it.
+                                    self.game_state.discard_samples();
+                                } else {
+                                    new_frame = this_frame_data;
+                                    //This is not a replay
+                                    self.last_handled_frame = self.game_state.frame;
+                                    if self.game_state.frame % (sess.max_prediction() * 2) as i32
+                                        == 0
+                                    {
+                                        self.last_confirmed_game_states = [
+                                            self.last_confirmed_game_states[1].clone(),
+                                            self.game_state.clone(),
+                                        ];
+                                    }
+                                }
+
+                                self.game_state.frame += 1;
+                            }
                         }
                     }
                 }
-            }
-            Err(e) => {
-                log::warn!("Frame {} skipped: {:?}", self.game_state.frame, e)
+                Err(e) => {
+                    log::warn!("Frame {} skipped: {:?}", self.game_state.frame, e)
+                }
             }
         }
 

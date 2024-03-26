@@ -45,10 +45,20 @@ impl NesStateHandler for RusticNesState {
         joypad_state: [JoypadState; MAX_PLAYERS],
         video_frame: &mut Option<&mut VideoFrame>,
     ) -> Option<FrameData> {
+        #[cfg(feature = "debug")]
+        puffin::profile_function!();
         self.nes.p1_input = *joypad_state[0];
         self.nes.p2_input = *joypad_state[1];
-        self.nes.run_until_vblank();
+
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("run_until_vblank");
+            self.nes.run_until_vblank();
+        }
+
         if let Some(video_frame) = video_frame {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("copy video_frame");
             self.nes
                 .ppu
                 .screen
