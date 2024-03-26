@@ -1,10 +1,12 @@
 use crate::{input::JoypadState, settings::MAX_PLAYERS, window::NESFrame};
 
-use self::rusticnes::RusticNesState;
-
 pub mod emulator;
-pub mod rusticnes;
-pub type LocalNesState = RusticNesState;
+// pub mod rusticnes;
+//use self::rusticnes::RusticNesState;
+// pub type LocalNesState = RusticNesState;
+pub mod tetanes;
+use self::tetanes::TetanesNesState;
+pub type LocalNesState = TetanesNesState;
 
 #[derive(Clone)]
 pub struct FrameData {

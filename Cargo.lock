@@ -577,6 +577,9 @@ name = "bitflags"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf4b9d6a944f767f8e5e0db018570623c85f3d925ac718db4e06d0187adb21c1"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "block"
@@ -921,6 +924,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19d374276b40fb8bbdee95aef7c7fa6b5316ec764510eb64b8dd0e2ed0d7e7f5"
 
 [[package]]
+name = "crc32fast"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3855a8a784b474f333699ef2bbca9db2c4a1f6d9088a90a2d25b1eb53111eaa"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "crossbeam-utils"
 version = "0.8.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1077,6 +1089,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "dirs"
+version = "5.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44c45a9d03d6676652bcb5e724c7e988de1acad23a711b5217ab9cbecbec2225"
+dependencies = [
+ "dirs-sys",
+]
+
+[[package]]
 name = "dirs-sys"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1177,7 +1198,7 @@ dependencies = [
  "log",
  "thiserror",
  "type-map",
- "web-time",
+ "web-time 0.2.4",
  "wgpu",
 ]
 
@@ -1192,7 +1213,7 @@ dependencies = [
  "log",
  "raw-window-handle 0.6.0",
  "smithay-clipboard",
- "web-time",
+ "web-time 0.2.4",
  "webbrowser",
  "winit",
 ]
@@ -1243,6 +1264,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7268b386296a025e474d5140678f75d6de9493ae55a5d709eeb9dd08149945e1"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "enum_dispatch"
+version = "0.3.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f33313078bb8d4d05a2733a94ac4c2d8a0df9a2b84424ebf4f33bfc224a890e"
+dependencies = [
+ "once_cell",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.55",
 ]
 
 [[package]]
@@ -1406,6 +1439,16 @@ name = "fiat-crypto"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c007b1ae3abe1cb6f85a16305acd418b7ca6343b953633fee2b76d8f108b830f"
+
+[[package]]
+name = "flate2"
+version = "1.0.28"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46303f565772937ffe1d394a4fac6f411c6013172fadde9dcdb1e147a086940e"
+dependencies = [
+ "crc32fast",
+ "miniz_oxide",
+]
 
 [[package]]
 name = "fnv"
@@ -2436,6 +2479,7 @@ version = "1.1.8"
 dependencies = [
  "anyhow",
  "base64 0.22.0",
+ "bincode",
  "bitflags 2.5.0",
  "directories",
  "egui",
@@ -2453,10 +2497,10 @@ dependencies = [
  "puffin_egui",
  "raw-window-handle 0.6.0",
  "reqwest",
- "rusticnes-core",
  "sdl2",
  "serde",
  "serde_yaml",
+ "tetanes-core",
  "thingbuf",
  "tinytemplate",
  "tokio",
@@ -2936,6 +2980,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "pollster"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22686f4785f02a4fcc856d3b3bb19bf6c8160d103f7a99cc258bddd0251dc7f2"
+
+[[package]]
 name = "polyval"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3028,7 +3078,7 @@ dependencies = [
  "puffin",
  "time",
  "vec1",
- "web-time",
+ "web-time 0.2.4",
 ]
 
 [[package]]
@@ -3318,11 +3368,6 @@ checksum = "faf0c4a6ece9950b9abdb62b1cfcf2a68b3b67a10ba445b3bb85be2a293d0632"
 dependencies = [
  "nom",
 ]
-
-[[package]]
-name = "rusticnes-core"
-version = "0.2.0"
-source = "git+https://github.com/tedsteen/rusticnes-core?branch=for-nes-bundler#5167ec1b101780103b1e5fda47832402b7183717"
 
 [[package]]
 name = "rustix"
@@ -3884,6 +3929,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "tetanes-core"
+version = "0.10.0"
+source = "git+https://github.com/lukexor/tetanes.git?branch=engine-rework#e5d4f4a21cb96bf0051b8827150f76f1b3a579bc"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "bitflags 2.5.0",
+ "dirs",
+ "enum_dispatch",
+ "rand",
+ "serde",
+ "tetanes-util",
+ "tracing",
+]
+
+[[package]]
+name = "tetanes-util"
+version = "0.10.0"
+source = "git+https://github.com/lukexor/tetanes.git?branch=engine-rework#e5d4f4a21cb96bf0051b8827150f76f1b3a579bc"
+dependencies = [
+ "anyhow",
+ "flate2",
+ "pollster",
+ "serde",
+ "tracing",
+ "wasm-bindgen-futures",
+ "web-time 1.1.0",
 ]
 
 [[package]]
@@ -4565,6 +4640,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "web-time"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "webbrowser"
 version = "0.8.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5205,7 +5290,7 @@ dependencies = [
  "wayland-protocols",
  "wayland-protocols-plasma",
  "web-sys",
- "web-time",
+ "web-time 0.2.4",
  "windows-sys 0.48.0",
  "x11-dl",
  "x11rb",
