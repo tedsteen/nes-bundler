@@ -1,4 +1,4 @@
-//#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 #![allow(unsafe_code)]
 #![deny(clippy::all)]
 
@@ -180,26 +180,26 @@ async fn run() -> anyhow::Result<()> {
 }
 
 fn init_logger() {
-    // #[cfg(windows)]
-    // {
-    //     match std::fs::OpenOptions::new()
-    //         .create(true)
-    //         .write(true)
-    //         .truncate(true)
-    //         .open("nes-bundler-log.txt")
-    //     {
-    //         Ok(log_file) => {
-    //             env_logger::Builder::from_env(env_logger::Env::default())
-    //                 .target(env_logger::Target::Pipe(Box::new(log_file)))
-    //                 .init();
-    //         }
-    //         Err(e) => {
-    //             eprintln!("Could not open nes-bundler-log.txt for writing, {:?}", e);
-    //             env_logger::init();
-    //         }
-    //     }
-    // }
-    // #[cfg(not(windows))]
+    #[cfg(windows)]
+    {
+        match std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open("nes-bundler-log.txt")
+        {
+            Ok(log_file) => {
+                env_logger::Builder::from_env(env_logger::Env::default())
+                    .target(env_logger::Target::Pipe(Box::new(log_file)))
+                    .init();
+            }
+            Err(e) => {
+                eprintln!("Could not open nes-bundler-log.txt for writing, {:?}", e);
+                env_logger::init();
+            }
+        }
+    }
+    #[cfg(not(windows))]
     {
         env_logger::init();
     }
