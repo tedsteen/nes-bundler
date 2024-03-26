@@ -5,7 +5,6 @@ use crate::{
     input::JoypadState,
     nes_state::{FrameData, NesStateHandler, VideoFrame},
     settings::MAX_PLAYERS,
-    FPS,
 };
 
 use super::{connecting_state::StartMethod, JoypadMapping, NetplayNesState};
@@ -23,7 +22,6 @@ pub struct NetplaySession {
     pub game_state: NetplayNesState,
     pub last_handled_frame: i32,
     pub last_confirmed_game_states: [NetplayNesState; 2],
-    last_frame_data: Option<FrameData>,
 }
 
 impl NetplaySession {
@@ -41,7 +39,6 @@ impl NetplaySession {
             game_state: game_state.clone(),
             last_confirmed_game_states: [game_state.clone(), game_state],
             last_handled_frame: -1,
-            last_frame_data: None,
         }
     }
 
@@ -74,6 +71,7 @@ impl NetplaySession {
             sess.add_local_input(handle, *joypad_state[0])?;
         }
 
+        let mut new_frame = None;
         match sess.advance_frame() {
             Ok(requests) => {
                 for request in requests {
@@ -87,20 +85,22 @@ impl NetplaySession {
                             cell.save(frame, Some(self.game_state.clone()), None);
                         }
                         GgrsRequest::AdvanceFrame { inputs } => {
+                            let is_replay = self.game_state.frame <= self.last_handled_frame;
+                            let mut n = None;
                             let this_frame_data = self.game_state.advance(
                                 joypad_mapping.map(
                                     [JoypadState(inputs[0].0), JoypadState(inputs[1].0)],
                                     local_player_idx,
                                 ),
-                                video_frame,
+                                if is_replay { &mut n } else { video_frame },
                             );
 
-                            if self.game_state.frame <= self.last_handled_frame {
+                            if is_replay {
                                 //This is a replay
                                 // Discard the samples for this frame since it's a replay from ggrs. Audio has already been produced and pushed for it.
                                 self.game_state.discard_samples();
                             } else {
-                                self.last_frame_data = this_frame_data;
+                                new_frame = this_frame_data;
                                 //This is not a replay
                                 self.last_handled_frame = self.game_state.frame;
                                 if self.game_state.frame % (sess.max_prediction() * 2) as i32 == 0 {
@@ -121,20 +121,15 @@ impl NetplaySession {
             }
         }
 
-        if sess.frames_ahead() > 0 {
-            if let Some(frame_data) = &mut self.last_frame_data {
-                let percentage = sess.frames_ahead() as f32 / sess.max_prediction() as f32;
-                //https://www.desmos.com/calculator/uqhv6bvasr
-                let factor = (0.9 - percentage.powi(3)).max(0.3);
-                frame_data.fps = FPS * factor;
+        Ok(new_frame.map(|new_frame| {
+            if sess.frames_ahead() > 0 {
+                FrameData {
+                    //Since we are driving emulation using the audio clock, just push some extra audio to slow down.
+                    audio: new_frame.audio, //new_frame.audio.repeat(2) //TODO: Figure out why it's not working..
+                }
+            } else {
+                new_frame
             }
-        }
-        let res = Ok(self.last_frame_data.clone());
-
-        //In case the last frame is repeated multiple times, make sure to fade out the audio to avoid a screetching sound.
-        if let Some(last_frame_data) = &mut self.last_frame_data {
-            last_frame_data.audio.iter_mut().for_each(|s| *s *= 0.9);
-        }
-        res
+        }))
     }
 }

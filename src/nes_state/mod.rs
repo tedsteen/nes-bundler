@@ -1,4 +1,4 @@
-use crate::{input::JoypadState, settings::MAX_PLAYERS, Fps, NES_HEIGHT, NES_WIDTH};
+use crate::{input::JoypadState, settings::MAX_PLAYERS, NES_HEIGHT, NES_WIDTH};
 
 use self::rusticnes::RusticNesState;
 
@@ -9,11 +9,10 @@ pub type LocalNesState = RusticNesState;
 #[derive(Clone)]
 pub struct FrameData {
     pub audio: Vec<f32>,
-    pub fps: Fps,
 }
 pub type VideoFrame = [u8; (NES_WIDTH * NES_HEIGHT * 3) as usize];
 
-pub trait NesStateHandler: Send {
+pub trait NesStateHandler {
     fn advance(
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],

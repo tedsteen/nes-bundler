@@ -1985,6 +1985,7 @@ checksum = "168fb715dda47215e360912c096649d23d58bf392ac62f73919e831745e40f26"
 dependencies = [
  "equivalent",
  "hashbrown",
+ "serde",
 ]
 
 [[package]]
@@ -2209,6 +2210,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "lz4_flex"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "912b45c753ff5f7f5208307e8ace7d2a2e30d024e26d3509f3dce546c044ce15"
+
+[[package]]
 name = "malloc_buf"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2388,6 +2395,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "natord"
+version = "1.0.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "308d96db8debc727c3fd9744aac51751243420e46edf401010908da7f8d5e57c"
+
+[[package]]
 name = "ndk"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2436,9 +2449,10 @@ dependencies = [
  "log",
  "matchbox_socket",
  "md5",
+ "puffin",
+ "puffin_egui",
  "raw-window-handle 0.6.0",
  "reqwest",
- "ringbuf",
  "rusticnes-core",
  "sdl2",
  "serde",
@@ -2985,6 +2999,39 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43d84d1d7a6ac92673717f9f6d1518374ef257669c24ebc5ac25d5033828be58"
 
 [[package]]
+name = "puffin"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9f76ad4bb049fded4e572df72cbb6381ff5d1f41f85c3a04b56e4eca287a02f"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "byteorder",
+ "cfg-if",
+ "lz4_flex",
+ "once_cell",
+ "parking_lot 0.12.1",
+ "serde",
+]
+
+[[package]]
+name = "puffin_egui"
+version = "0.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49058d85ba61f403263d90fe72df1da7f60522a2fcd3a44a4f6acd5459106081"
+dependencies = [
+ "egui",
+ "indexmap",
+ "natord",
+ "once_cell",
+ "parking_lot 0.12.1",
+ "puffin",
+ "time",
+ "vec1",
+ "web-time",
+]
+
+[[package]]
 name = "quick-xml"
 version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3216,15 +3263,6 @@ dependencies = [
  "spin 0.9.8",
  "untrusted 0.9.0",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "ringbuf"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79abed428d1fd2a128201cec72c5f6938e2da607c6f3745f769fabea399d950a"
-dependencies = [
- "crossbeam-utils",
 ]
 
 [[package]]
@@ -4270,6 +4308,12 @@ name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
+
+[[package]]
+name = "vec1"
+version = "1.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4d26f532c492acf7d7f1b03dcbfa81ff820ab26f69207da3e152f4e1bb4e0274"
 
 [[package]]
 name = "version-compare"

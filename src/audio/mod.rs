@@ -1,15 +1,15 @@
 use std::ops::Add;
 
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Result};
-use ringbuf::{Consumer, HeapRb, Producer};
 use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired, AudioStatus};
 use sdl2::{AudioSubsystem, Sdl};
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::settings::Settings;
+use crate::FPS;
 
 // #[cfg(feature = "debug")]
 // mod debug;
@@ -19,15 +19,10 @@ pub mod gui;
 pub struct AudioSettings {
     pub volume: u8,
     pub output_device: Option<String>,
+    #[serde(skip)]
+    pub sample_rate: u32,
 }
 
-pub struct Stream {
-    tx: Option<AudioSender>,
-    output_device_name: Option<String>,
-    audio_device: Option<AudioDevice<AudioReceiverCallback>>,
-}
-pub type AudioSender = Producer<f32, Arc<HeapRb<f32>>>;
-pub type AudioReceiver = Consumer<f32, Arc<HeapRb<f32>>>;
 struct AudioReceiverCallback(AudioReceiver);
 
 impl AudioCallback for AudioReceiverCallback {
@@ -35,41 +30,74 @@ impl AudioCallback for AudioReceiverCallback {
 
     fn callback(&mut self, out: &mut [f32]) {
         let consumer = &mut self.0;
-        if consumer.len() < out.len() {
-            log::warn!("audio underrun: {} < {}", consumer.len(), out.len());
+
+        let volume = Settings::current().audio.volume as f32 / 100.0;
+        let mut missing_samples = 0;
+        for s in out {
+            if let Some(new_sample) = consumer.blocking_recv() {
+                *s = new_sample * volume;
+            } else {
+                missing_samples += 1;
+                *s = 0.0; //TODO: Use a kernel for audio stretching?
+            }
         }
-
-        log::trace!("playing audio samples: {}", out.len().min(consumer.len()));
-
-        // I don't want to hold the lock during the whole sample copy
-        #[allow(clippy::clone_on_copy)]
-        let volume = Settings::current().audio.volume.clone() as f32 / 100.0;
-        for (sample, value) in out.iter_mut().zip(
-            consumer
-                .pop_iter()
-                .map(|s| s * volume) //Set volume
-                .chain(core::iter::repeat(0.0)),
-        ) {
-            *sample = value;
+        if missing_samples > 0 {
+            log::warn!("Buffer underrun: {missing_samples} samples");
         }
     }
 }
+pub type AudioSender = Sender<f32>;
+pub type AudioReceiver = Receiver<f32>;
+
+pub struct Stream {
+    tx: Option<AudioSender>,
+    output_device_name: Option<String>,
+    audio_device: Option<AudioDevice<AudioReceiverCallback>>,
+}
 
 impl Stream {
-    pub(crate) fn new(audio_subsystem: &AudioSubsystem) -> Result<Self> {
-        //TODO: Figure out a good buffer here..
-        let (tx, audio_rx) = HeapRb::<f32>::new(1024 * 8).split();
+    pub(crate) fn new(
+        audio_subsystem: &AudioSubsystem,
+        latency_in_frames: u8,
+        desired_sample_rate: u32,
+    ) -> Result<Self> {
+        //let latency_in_samples = Self::latency_to_sample_count(latency, sample_rate);
+        let latency_in_samples =
+            Self::frame_count_to_sample_count(latency_in_frames, desired_sample_rate);
+        let latency_in_secs =
+            Self::sample_count_to_latency(latency_in_samples, desired_sample_rate);
 
-        let audio_settings = &Settings::current().audio;
+        log::info!("Starting audio stream: sample rate={desired_sample_rate}, latency={latency_in_secs:?} ({latency_in_frames} frames)");
+        let (tx, audio_rx) = tokio::sync::mpsc::channel(latency_in_samples as usize);
+
+        let output_device = &Settings::current().audio.output_device.clone();
+        let audio_device = Stream::new_audio_device(
+            desired_sample_rate,
+            audio_subsystem,
+            output_device,
+            audio_rx,
+        )?;
         Ok(Self {
             tx: Some(tx),
-            output_device_name: audio_settings.output_device.clone(),
-            audio_device: Some(Stream::new_audio_device(
-                audio_subsystem,
-                &audio_settings.output_device,
-                audio_rx,
-            )?),
+            output_device_name: output_device.clone(),
+            audio_device: Some(audio_device),
         })
+    }
+
+    fn frame_count_to_sample_count(sample_count: u8, sample_rate: u32) -> u16 {
+        sample_count as u16 * ((1.0 / FPS) * sample_rate as f32) as u16
+    }
+
+    // fn latency_to_sample_count(latency: Duration, sample_rate: u32) -> u16 {
+    //     let channel_count = 1;
+    //     ((latency.as_secs() as f64 + latency.subsec_nanos() as f64 / 1_000_000_000.0)
+    //         * sample_rate as f64
+    //         * channel_count as f64) as u16
+    // }
+
+    fn sample_count_to_latency(count: u16, sample_rate: u32) -> Duration {
+        let channel_count = 1;
+        Duration::from_secs_f32(count as f32 / sample_rate as f32 / channel_count as f32)
     }
 
     pub fn start(&mut self) -> Result<AudioSender> {
@@ -80,16 +108,17 @@ impl Stream {
     }
 
     fn new_audio_device(
+        desired_sample_rate: u32,
         audio_subsystem: &AudioSubsystem,
         output_device: &Option<String>,
         audio_rx: AudioReceiver,
     ) -> Result<AudioDevice<AudioReceiverCallback>> {
         let channels = 1;
-        let sample_rate = 44100;
+
         let desired_spec = AudioSpecDesired {
-            freq: Some(sample_rate),
+            freq: Some(desired_sample_rate as i32),
             channels: Some(channels),
-            samples: None,
+            samples: Some(Self::frame_count_to_sample_count(1, desired_sample_rate)),
         };
 
         // Make sure the device exists, otherwise default to first available
@@ -107,6 +136,7 @@ impl Stream {
             })
             .map_err(anyhow::Error::msg)?;
         log::debug!("Starting audio: {:?}", output_device.spec());
+        Settings::current().audio.sample_rate = output_device.spec().freq as u32;
         Ok(output_device)
     }
 
@@ -115,9 +145,15 @@ impl Stream {
             if let Some(audio_device) = self.audio_device.take() {
                 let subsystem = audio_device.subsystem().clone();
                 let old_device_status = audio_device.status();
+                let desired_sample_rate = audio_device.spec().freq as u32;
                 let old_callback = audio_device.close_and_get_callback();
 
-                match Stream::new_audio_device(&subsystem, &output_device_name, old_callback.0) {
+                match Stream::new_audio_device(
+                    desired_sample_rate,
+                    &subsystem,
+                    &output_device_name,
+                    old_callback.0,
+                ) {
                     Ok(audio_device) => {
                         if old_device_status == AudioStatus::Playing {
                             audio_device.resume();
@@ -142,11 +178,11 @@ pub struct Audio {
 }
 
 impl Audio {
-    pub fn new(sdl_context: &Sdl) -> Result<Self> {
+    pub fn new(sdl_context: &Sdl, latency_in_frames: u8, desired_sample_rate: u32) -> Result<Self> {
         let audio_subsystem = sdl_context.audio().map_err(anyhow::Error::msg)?;
 
         Ok(Audio {
-            stream: Stream::new(&audio_subsystem)?,
+            stream: Stream::new(&audio_subsystem, latency_in_frames, desired_sample_rate)?,
             available_device_names: vec![],
             next_device_names_clear: Instant::now(),
             audio_subsystem,

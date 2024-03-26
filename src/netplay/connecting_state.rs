@@ -90,9 +90,9 @@ impl ConnectingState {
         }
     }
 }
-pub struct Connecting<S> {
+pub struct Connecting<T> {
     pub start_method: StartMethod,
-    pub state: S,
+    pub state: T,
 }
 
 impl<T> Connecting<T> {

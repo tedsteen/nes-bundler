@@ -70,7 +70,7 @@ impl Settings {
         AutoSavingSettings::new(settings)
     }
 
-    pub fn load() -> Settings {
+    fn load() -> Settings {
         let bundle = bundle();
         let settings_path = &bundle.settings_path;
         let default_settings = bundle.config.default_settings.clone();
@@ -100,7 +100,7 @@ impl Settings {
         //eprintln!("Failed to load config ({err}), falling back to default settings");
         settings.unwrap_or(default_settings)
     }
-    pub fn save(&self) {
+    fn save(&self) {
         let settings_path = &bundle().settings_path;
         if let Err(e) = File::create(settings_path)
             .map_err(anyhow::Error::msg)
@@ -114,7 +114,7 @@ impl Settings {
         }
     }
 
-    pub fn get_hash(&self) -> u64 {
+    fn get_hash(&self) -> u64 {
         let hasher = &mut DefaultHasher::new();
         self.hash(hasher);
         hasher.finish()

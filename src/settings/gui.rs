@@ -160,6 +160,13 @@ impl SettingsGui {
                         gui.ui(ui);
                     }
                 }
+                #[cfg(feature = "debug")]
+                {
+                    ui.separator();
+                    let mut profile = puffin::are_scopes_on();
+                    ui.checkbox(&mut profile, "Toggle profiling");
+                    puffin::set_scopes_on(profile);
+                }
             });
     }
 

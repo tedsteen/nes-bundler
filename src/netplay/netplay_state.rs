@@ -50,9 +50,10 @@ impl NetplayState {
     }
 }
 
-pub struct Netplay<S> {
-    pub state: S,
+pub struct Netplay<T> {
+    pub state: T,
 }
+unsafe impl<T> Send for Netplay<T> {}
 
 impl<T> Netplay<T> {
     fn from(state: T) -> Self {
@@ -144,8 +145,6 @@ impl Netplay<LocalNesState> {
         (NetplayState::Disconnected(Box::new(self)), frame_data)
     }
 }
-
-unsafe impl<T> Send for Netplay<T> {}
 
 impl Netplay<ConnectingState> {
     pub fn cancel(self) -> Box<Netplay<LocalNesState>> {

@@ -44,7 +44,7 @@ impl Renderer {
                 force_fallback_adapter: false,
             })
             .await
-            .unwrap();
+            .expect("Adapter to be crated");
 
         let (device, queue) = adapter
             .request_device(
@@ -68,6 +68,7 @@ impl Renderer {
             // egui prefers Rgba8Unorm or Bgra8Unorm
             .find(|f| !f.is_srgb())
             .unwrap_or(surface_caps.formats[0]);
+        log::info!("Surface format: {surface_format:?}");
 
         let config = wgpu::SurfaceConfiguration {
             desired_maximum_frame_latency: 1,
@@ -118,41 +119,73 @@ impl Renderer {
     }
 
     pub fn render(&mut self, run_ui: impl FnOnce(&Context)) -> Result<(), wgpu::SurfaceError> {
-        let output = self.surface.get_current_texture()?;
-        let view = output.texture.create_view(&TextureViewDescriptor {
-            label: None,
-            format: None,
-            dimension: None,
-            aspect: wgpu::TextureAspect::All,
-            base_mip_level: 0,
-            mip_level_count: None,
-            base_array_layer: 0,
-            array_layer_count: None,
-        });
+        #[cfg(feature = "debug")]
+        puffin::profile_function!();
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
+        let output = {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("get_current_texture");
+            self.surface.get_current_texture()?
+        };
+        let view = {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("create_view");
+            output.texture.create_view(&TextureViewDescriptor {
+                label: None,
+                format: None,
+                dimension: None,
+                aspect: wgpu::TextureAspect::All,
+                base_mip_level: 0,
+                mip_level_count: None,
+                base_array_layer: 0,
+                array_layer_count: None,
+            })
+        };
+
+        let mut encoder = {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("create_command_encoder");
+            self.device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Render Encoder"),
+                })
+        };
 
         let screen_descriptor = ScreenDescriptor {
             size_in_pixels: [self.config.width, self.config.height],
             pixels_per_point: self.window().scale_factor() as f32,
         };
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("draw");
+            self.egui.draw(
+                &self.device,
+                &self.queue,
+                &mut encoder,
+                &self.window,
+                &view,
+                screen_descriptor,
+                |ui| {
+                    #[cfg(feature = "debug")]
+                    {
+                        puffin::GlobalProfiler::lock().new_frame();
+                        puffin_egui::show_viewport_if_enabled(ui);
+                    }
 
-        self.egui.draw(
-            &self.device,
-            &self.queue,
-            &mut encoder,
-            &self.window,
-            &view,
-            screen_descriptor,
-            |ui| run_ui(ui),
-        );
-
-        self.queue.submit(iter::once(encoder.finish()));
-        output.present();
+                    run_ui(ui)
+                },
+            );
+        }
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("queue.submit");
+            self.queue.submit(iter::once(encoder.finish()));
+        }
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("output.present");
+            output.present();
+        }
 
         Ok(())
     }

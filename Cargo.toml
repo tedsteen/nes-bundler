@@ -11,7 +11,7 @@ default = []
 #default = ["netplay", "debug"]
 
 netplay = ["matchbox_socket", "ggrs", "futures-timer", "futures", "uuid", "reqwest", "md5"]
-debug = ["egui_plot"]
+debug = ["egui_plot", "puffin", "puffin_egui"]
 
 # Playable framerates in development
 [profile.dev]
@@ -36,11 +36,13 @@ serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 bitflags = "2"
 
-tokio = { version = "1", features = ["rt", "macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["rt", "macros", "rt-multi-thread", "sync"] }
 egui = { version = "0.26", default-features = false, features = [
   "bytemuck", "default_fonts"
 ] }
 egui_plot = { version = "0.26", optional = true }
+puffin = { version = "0.19", optional = true }
+puffin_egui = { version = "0.26", optional = true }
 egui-winit = "0.26"
 egui-wgpu = "0.26"
 winit = "0.29"
@@ -48,7 +50,6 @@ wgpu = "0.19"
 raw-window-handle = "0.6"
 
 thingbuf = "0.1"
-ringbuf = "0.3"
 
 # sdl2 = { version = "0.36", features = ["bundled", "static-link"] }
 sdl2 = { git = "https://github.com/tedsteen/rust-sdl2.git", branch = "rust-sdl2-for-nes-bundler", features = ["bundled", "static-link"] }

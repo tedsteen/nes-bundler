@@ -25,7 +25,6 @@ use winit::event_loop::{ControlFlow, EventLoop};
 mod audio;
 mod bundle;
 mod fps;
-mod gameloop;
 mod gui;
 mod input;
 mod integer_scaling;
@@ -68,7 +67,8 @@ async fn run() -> anyhow::Result<()> {
     let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
     let mut sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
 
-    let mut audio = Audio::new(&sdl_context)?;
+    //TODO: Figure out a resonable latency
+    let mut audio = Audio::new(&sdl_context, 2, 41100)?;
 
     let inputs = Inputs::new(Sdl2Gamepads::new(
         sdl_context.game_controller().map_err(anyhow::Error::msg)?,

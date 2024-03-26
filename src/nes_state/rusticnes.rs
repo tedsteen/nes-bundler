@@ -2,7 +2,10 @@ use anyhow::Context;
 use rusticnes_core::cartridge::mapper_from_file;
 
 use super::{FrameData, LocalNesState, NesStateHandler, VideoFrame};
-use crate::{input::JoypadState, settings::MAX_PLAYERS, FPS};
+use crate::{
+    input::JoypadState,
+    settings::{Settings, MAX_PLAYERS},
+};
 
 pub struct RusticNesState {
     nes: rusticnes_core::nes::NesState,
@@ -15,6 +18,8 @@ impl RusticNesState {
             .context("Failed to load ROM")
             .unwrap();
         let mut nes = rusticnes_core::nes::NesState::new(mapper);
+        nes.apu
+            .set_sample_rate(Settings::current().audio.sample_rate as u64);
         nes.power_on();
         RusticNesState { nes }
     }
@@ -68,7 +73,6 @@ impl NesStateHandler for RusticNesState {
                 .iter()
                 .map(|&s| s as f32 / -(i16::MIN as f32))
                 .collect::<Vec<f32>>(),
-            fps: FPS,
         })
     }
 
