@@ -1,7 +1,7 @@
 use uuid::Uuid;
 
 use crate::{
-    bundle,
+    bundle::Bundle,
     input::JoypadState,
     nes_state::{FrameData, LocalNesState, NesStateHandler, VideoFrame},
     settings::{Settings, MAX_PLAYERS},
@@ -101,12 +101,12 @@ pub fn get_netplay_id() -> String {
 impl Netplay<LocalNesState> {
     pub fn new() -> Self {
         Self {
-            state: LocalNesState::load_rom(&bundle().rom),
+            state: LocalNesState::load_rom(&Bundle::current().rom),
         }
     }
 
     pub fn join_by_name(self, room_name: &str) -> NetplayState {
-        let netplay_rom = &bundle().netplay_rom;
+        let netplay_rom = &Bundle::current().netplay_rom;
         let session_id = format!("{}_{:x}", room_name, md5::compute(netplay_rom));
         let nes_state = LocalNesState::load_rom(netplay_rom);
         self.join(StartMethod::Join(
@@ -119,7 +119,7 @@ impl Netplay<LocalNesState> {
     }
 
     pub fn match_with_random(self) -> NetplayState {
-        let netplay_rom = &bundle().netplay_rom;
+        let netplay_rom = &Bundle::current().netplay_rom;
         let rom_hash = md5::compute(netplay_rom);
 
         // TODO: When resuming using this session id there might be collisions, but it's unlikely.

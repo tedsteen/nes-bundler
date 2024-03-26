@@ -8,7 +8,7 @@ use serde::Deserialize;
 use std::fmt::Debug;
 use std::time::{Duration, Instant};
 
-use crate::bundle;
+use crate::bundle::Bundle;
 use crate::netplay::netplay_state::get_netplay_id;
 use crate::{settings::MAX_PLAYERS, FPS};
 
@@ -45,7 +45,7 @@ impl ConnectingState {
 
     fn start(start_method: StartMethod) -> Self {
         let reqwest_client = reqwest::Client::new();
-        match &bundle().config.netplay.server {
+        match &Bundle::current().config.netplay.server {
             NetplayServerConfiguration::Static(conf) => {
                 Self::PeeringUp(Connecting::<PeeringState>::new(conf.clone(), start_method))
             }

@@ -6,7 +6,7 @@ use self::{
     settings::InputSettings,
 };
 use crate::{
-    bundle,
+    bundle::Bundle,
     settings::{gui::GuiEvent, Settings, MAX_PLAYERS},
 };
 use serde::{Deserialize, Serialize};
@@ -192,7 +192,7 @@ impl Inputs {
     }
 
     pub fn get_default_conf(&self, player: usize) -> &InputConfiguration {
-        bundle()
+        Bundle::current()
             .config
             .default_settings
             .input

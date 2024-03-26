@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use crate::bundle;
+use crate::bundle::Bundle;
 use crate::window::NESFramePool;
 use crate::{
     audio::Audio,
@@ -23,7 +23,7 @@ pub struct Emulator {
 impl Emulator {
     pub fn start(inputs: &Inputs, audio: &mut Audio) -> Result<Self> {
         #[cfg(not(feature = "netplay"))]
-        let nes_state = crate::nes_state::LocalNesState::load_rom(&bundle().rom);
+        let nes_state = crate::nes_state::LocalNesState::load_rom(&Bundle::current().rom);
 
         #[cfg(feature = "netplay")]
         let nes_state = { crate::netplay::NetplayStateHandler::new() };
@@ -98,7 +98,9 @@ impl EmulatorGui {
     pub fn new() -> Self {
         Self {
             #[cfg(feature = "netplay")]
-            netplay_gui: crate::netplay::gui::NetplayGui::new(bundle().config.netplay.clone()),
+            netplay_gui: crate::netplay::gui::NetplayGui::new(
+                Bundle::current().config.netplay.clone(),
+            ),
         }
     }
 }

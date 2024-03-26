@@ -1,6 +1,7 @@
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::OnceLock,
 };
 
 use anyhow::Result;
@@ -39,6 +40,11 @@ pub struct Bundle {
     pub netplay_rom: Vec<u8>,
 }
 impl Bundle {
+    pub fn current() -> &'static Bundle {
+        static MEM: OnceLock<Bundle> = OnceLock::new();
+        MEM.get_or_init(|| Bundle::load().expect("Could not load bundle"))
+    }
+
     pub fn load() -> Result<Bundle> {
         let external_config = fs::read_to_string(Path::new("config.yaml"))
             .map_err(anyhow::Error::msg)

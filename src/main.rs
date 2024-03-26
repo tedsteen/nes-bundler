@@ -2,14 +2,12 @@
 #![allow(unsafe_code)]
 #![deny(clippy::all)]
 
-use std::sync::OnceLock;
-
-use crate::bundle::Bundle;
 use crate::settings::gui::ToGuiEvent;
 
 use crate::{input::gamepad::ToGamepadEvent, settings::gui::GuiEvent};
 
 use audio::Audio;
+use bundle::Bundle;
 use fps::RateCounter;
 
 use gui::MainGui;
@@ -42,11 +40,6 @@ const NES_HEIGHT: u32 = 240;
 
 const MINIMUM_INTEGER_SCALING_SIZE: (u32, u32) = (1024, 720);
 
-pub fn bundle() -> &'static Bundle {
-    static MEM: OnceLock<Bundle> = OnceLock::new();
-    MEM.get_or_init(|| Bundle::load().expect("Could not load bundle"))
-}
-
 #[tokio::main]
 async fn main() {
     init_logger();
@@ -77,9 +70,8 @@ async fn run() -> anyhow::Result<()> {
     let emulator = Emulator::start(&inputs, &mut audio)?;
 
     let event_loop = EventLoop::new()?;
-    let bundle = bundle();
     let mut renderer = create_renderer(
-        &bundle.config.name,
+        &Bundle::current().config.name,
         Size::new(
             MINIMUM_INTEGER_SCALING_SIZE.0 as f64,
             MINIMUM_INTEGER_SCALING_SIZE.1 as f64,
@@ -94,7 +86,7 @@ async fn run() -> anyhow::Result<()> {
         .collect::<String>()
         .contains(&"--print-netplay-id".to_string())
     {
-        if let Some(id) = &bundle.config.netplay.netplay_id {
+        if let Some(id) = &Bundle::current().config.netplay.netplay_id {
             println!("{id}");
         }
         std::process::exit(0);

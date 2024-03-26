@@ -1,6 +1,6 @@
 use crate::{
     audio::AudioSettings,
-    bundle,
+    bundle::Bundle,
     input::{settings::InputSettings, InputConfigurationKind},
 };
 
@@ -71,7 +71,7 @@ impl Settings {
     }
 
     fn load() -> Settings {
-        let bundle = bundle();
+        let bundle = Bundle::current();
         let settings_path = &bundle.settings_path;
         let default_settings = bundle.config.default_settings.clone();
 
@@ -101,7 +101,7 @@ impl Settings {
         settings.unwrap_or(default_settings)
     }
     fn save(&self) {
-        let settings_path = &bundle().settings_path;
+        let settings_path = &Bundle::current().settings_path;
         if let Err(e) = File::create(settings_path)
             .map_err(anyhow::Error::msg)
             .and_then(|file| {
