@@ -3,8 +3,9 @@ use matchbox_socket::PeerId;
 
 use crate::{
     input::JoypadState,
-    nes_state::{FrameData, NesStateHandler, VideoFrame},
+    nes_state::{FrameData, NesStateHandler},
     settings::MAX_PLAYERS,
+    window::NESFrame,
 };
 
 use super::{connecting_state::StartMethod, JoypadMapping, NetplayNesState};
@@ -55,7 +56,7 @@ impl NetplaySession {
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
         joypad_mapping: &JoypadMapping,
-        video_frame: &mut Option<&mut VideoFrame>,
+        nes_frame: &mut Option<&mut NESFrame>,
     ) -> anyhow::Result<Option<FrameData>> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
@@ -103,7 +104,7 @@ impl NetplaySession {
                                         [JoypadState(inputs[0].0), JoypadState(inputs[1].0)],
                                         local_player_idx,
                                     ),
-                                    if is_replay { &mut n } else { video_frame },
+                                    if is_replay { &mut n } else { nes_frame },
                                 );
 
                                 if is_replay {

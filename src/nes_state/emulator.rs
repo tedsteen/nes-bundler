@@ -46,11 +46,11 @@ impl Emulator {
                     loop_counter.tick("Frames");
 
                     let joypads = *joypads.lock().unwrap();
-                    let mut frame_data = match frame_pool.push_with(|video_frame| {
+                    let mut frame_data = match frame_pool.push_with(|nes_frame| {
                         nes_state
                             .lock()
                             .unwrap()
-                            .advance([joypads[0], joypads[1]], &mut Some(video_frame))
+                            .advance([joypads[0], joypads[1]], &mut Some(nes_frame))
                     }) {
                         Ok(frame_data) => frame_data,
                         Err(_) => {

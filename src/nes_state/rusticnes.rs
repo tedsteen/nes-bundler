@@ -1,10 +1,12 @@
 use anyhow::Context;
 use rusticnes_core::cartridge::mapper_from_file;
 
-use super::{FrameData, LocalNesState, NesStateHandler, VideoFrame};
+use super::{FrameData, LocalNesState, NesStateHandler};
 use crate::{
     input::JoypadState,
+    nes_state::NTSC_PAL,
     settings::{Settings, MAX_PLAYERS},
+    window::NESFrame,
 };
 
 pub struct RusticNesState {
@@ -37,13 +39,11 @@ impl Clone for RusticNesState {
     }
 }
 
-static NTSC_PAL: &[u8] = include_bytes!("../../config/ntscpalette.pal");
-
 impl NesStateHandler for RusticNesState {
     fn advance(
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        video_frame: &mut Option<&mut VideoFrame>,
+        nes_frame: &mut Option<&mut NESFrame>,
     ) -> Option<FrameData> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
@@ -56,9 +56,9 @@ impl NesStateHandler for RusticNesState {
             self.nes.run_until_vblank();
         }
 
-        if let Some(video_frame) = video_frame {
+        if let Some(nes_frame) = nes_frame {
             #[cfg(feature = "debug")]
-            puffin::profile_scope!("copy video_frame");
+            puffin::profile_scope!("copy nes_frame");
             self.nes
                 .ppu
                 .screen
@@ -67,7 +67,7 @@ impl NesStateHandler for RusticNesState {
                 .for_each(|(idx, &palette_index)| {
                     let palette_index = palette_index as usize * 3;
                     let pixel_index = idx * 4;
-                    video_frame[pixel_index..pixel_index + 3]
+                    nes_frame[pixel_index..pixel_index + 3]
                         .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
                 });
         }
