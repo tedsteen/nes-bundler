@@ -24,7 +24,7 @@ If you use [`./prepare.sh`](./prepare.sh) it can do both for you (zipping and up
 If you want to build your own binaries with your own certificates you would have to fork this repository and provide some github secrets to make the builds work.
 
 ### Signing the binaries
-The GitHub action build scripts will sign the binaries. To do that they need a couple of secrets.
+The GitHub action build scripts will sign the binaries. To do that it needs a couple of secrets.
 Currently the macOS bundles and the windows binaries is digitally signed.
 
 #### Secrets needed to sign the macOS bundle
