@@ -291,12 +291,12 @@ impl Connecting<PeeringState> {
                 .with_fps(FPS as usize)
                 .unwrap()
                 .with_max_prediction_window(ggrs_config.max_prediction)
-                .expect("Could not create ggrs session");
+                .expect("ggrs session to configure");
 
             for (i, player) in players.into_iter().enumerate() {
                 sess_build = sess_build
                     .add_player(player, i)
-                    .expect("failed to add player");
+                    .expect("player to be added to ggrs session");
             }
 
             ConnectingState::Synchronizing(Box::new(Connecting {
@@ -304,7 +304,7 @@ impl Connecting<PeeringState> {
                 state: SynchonizingState::new(
                     sess_build
                         .start_p2p_session(self.state.socket)
-                        .expect("p2p session should be able to start"),
+                        .expect("ggrs session to start"),
                     self.state.unlock_url.clone(),
                 ),
             }))

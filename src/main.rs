@@ -43,7 +43,7 @@ const MINIMUM_INTEGER_SCALING_SIZE: (u32, u32) = (1024, 720);
 #[tokio::main(flavor = "multi_thread", worker_threads = 3)]
 async fn main() {
     init_logger();
-    log::info!("nes-bundler starting!");
+    log::info!("NES Bundler is starting!");
 
     if let Err(e) = run().await {
         log::error!("nes-bundler failed to run :(\n{:?}", e)

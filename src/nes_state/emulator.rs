@@ -27,10 +27,10 @@ pub struct Emulator {
 impl Emulator {
     pub fn start(inputs: &Inputs, audio: &mut Audio) -> Result<Self> {
         #[cfg(not(feature = "netplay"))]
-        let nes_state = crate::nes_state::LocalNesState::load_rom(&Bundle::current().rom);
+        let nes_state = crate::nes_state::LocalNesState::start_rom(&Bundle::current().rom)?;
 
         #[cfg(feature = "netplay")]
-        let nes_state = { crate::netplay::NetplayStateHandler::new() };
+        let nes_state = crate::netplay::NetplayStateHandler::new()?;
 
         let audio_tx = audio.stream.start()?;
 

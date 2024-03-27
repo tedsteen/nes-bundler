@@ -6,6 +6,7 @@ use crate::{
     settings::MAX_PLAYERS,
     window::NESFrame,
 };
+use anyhow::Result;
 use serde::Deserialize;
 
 use self::{
@@ -153,9 +154,9 @@ impl NesStateHandler for NetplayStateHandler {
 }
 
 impl NetplayStateHandler {
-    pub fn new() -> Self {
-        NetplayStateHandler {
-            netplay: Some(NetplayState::Disconnected(Box::new(Netplay::new()))),
-        }
+    pub fn new() -> Result<Self> {
+        Ok(NetplayStateHandler {
+            netplay: Some(NetplayState::Disconnected(Netplay::new()?)),
+        })
     }
 }

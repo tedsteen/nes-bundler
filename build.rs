@@ -63,7 +63,7 @@ fn main() -> Result<()> {
                 }
             }
         }
-        res.compile().expect("Could not attach exe icon");
+        res.compile().expect("icon exe to be attached");
     }
 
     let mut tt = TinyTemplate::new();

@@ -11,8 +11,6 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use crate::settings::Settings;
 use crate::FPS;
 
-// #[cfg(feature = "debug")]
-// mod debug;
 pub mod gui;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
@@ -135,7 +133,7 @@ impl Stream {
                 AudioReceiverCallback(audio_rx)
             })
             .map_err(anyhow::Error::msg)?;
-        log::info!("Audio started: {:?}", output_device.spec());
+        log::info!("Audio started with {:?}", output_device.spec());
         Settings::current().audio.sample_rate = output_device.spec().freq as u32;
         Ok(output_device)
     }

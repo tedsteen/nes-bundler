@@ -172,9 +172,13 @@ impl GuiComponent<NetplayStateHandler> for NetplayGui {
                         ui.end_row();
                     });
                 if do_join {
-                    netplay_disconnected.join_by_name(&self.room_name)
+                    netplay_disconnected
+                        .join_by_name(&self.room_name)
+                        .expect("join to work")
                 } else if random_clicked {
-                    netplay_disconnected.match_with_random()
+                    netplay_disconnected
+                        .match_with_random()
+                        .expect("random match to work")
                 } else {
                     NetplayState::Disconnected(netplay_disconnected)
                 }

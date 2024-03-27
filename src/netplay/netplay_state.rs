@@ -1,3 +1,4 @@
+use anyhow::Result;
 use uuid::Uuid;
 
 use crate::{
@@ -13,7 +14,7 @@ use super::{
 };
 
 pub enum NetplayState {
-    Disconnected(Box<Netplay<LocalNesState>>),
+    Disconnected(Netplay<LocalNesState>),
     Connecting(Netplay<ConnectingState>),
     Connected(Box<Netplay<Connected>>),
     Resuming(Netplay<Resuming>),
@@ -61,9 +62,9 @@ impl<T> Netplay<T> {
         Self { state }
     }
 
-    pub fn disconnect(self) -> Box<Netplay<LocalNesState>> {
+    pub fn disconnect(self) -> Netplay<LocalNesState> {
         log::debug!("Disconnecting");
-        Box::new(Netplay::new())
+        Netplay::new().expect("disconnect to work")
     }
 }
 
@@ -100,37 +101,37 @@ pub fn get_netplay_id() -> String {
         .to_string()
 }
 impl Netplay<LocalNesState> {
-    pub fn new() -> Self {
-        Self {
-            state: LocalNesState::load_rom(&Bundle::current().rom),
-        }
+    pub fn new() -> Result<Self> {
+        Ok(Self {
+            state: LocalNesState::start_rom(&Bundle::current().rom)?,
+        })
     }
 
-    pub fn join_by_name(self, room_name: &str) -> NetplayState {
+    pub fn join_by_name(self, room_name: &str) -> Result<NetplayState> {
         let netplay_rom = &Bundle::current().netplay_rom;
         let session_id = format!("{}_{:x}", room_name, md5::compute(netplay_rom));
-        let nes_state = LocalNesState::load_rom(netplay_rom);
-        self.join(StartMethod::Join(
+        let nes_state = LocalNesState::start_rom(netplay_rom)?;
+        Ok(self.join(StartMethod::Join(
             StartState {
                 game_state: super::NetplayNesState::new(nes_state),
                 session_id,
             },
             room_name.to_string(),
-        ))
+        )))
     }
 
-    pub fn match_with_random(self) -> NetplayState {
+    pub fn match_with_random(self) -> Result<NetplayState> {
         let netplay_rom = &Bundle::current().netplay_rom;
         let rom_hash = md5::compute(netplay_rom);
 
         // TODO: When resuming using this session id there might be collisions, but it's unlikely.
         //       Should be fixed though.
         let session_id = format!("{:x}", rom_hash);
-        let nes_state = LocalNesState::load_rom(netplay_rom);
-        self.join(StartMethod::MatchWithRandom(StartState {
+        let nes_state = LocalNesState::start_rom(netplay_rom)?;
+        Ok(self.join(StartMethod::MatchWithRandom(StartState {
             game_state: super::NetplayNesState::new(nes_state),
             session_id,
-        }))
+        })))
     }
 
     pub fn join(self, start_method: StartMethod) -> NetplayState {
@@ -143,12 +144,12 @@ impl Netplay<LocalNesState> {
         nes_frame: &mut Option<&mut NESFrame>,
     ) -> (NetplayState, Option<FrameData>) {
         let frame_data = self.state.advance(joypad_state, nes_frame);
-        (NetplayState::Disconnected(Box::new(self)), frame_data)
+        (NetplayState::Disconnected(self), frame_data)
     }
 }
 
 impl Netplay<ConnectingState> {
-    pub fn cancel(self) -> Box<Netplay<LocalNesState>> {
+    pub fn cancel(self) -> Netplay<LocalNesState> {
         log::debug!("Connection cancelled by user");
         self.disconnect()
     }
@@ -247,14 +248,14 @@ impl Netplay<Resuming> {
         )
     }
 
-    pub fn cancel(self) -> Box<Netplay<LocalNesState>> {
+    pub fn cancel(self) -> Netplay<LocalNesState> {
         log::debug!("Resume cancelled by user");
         self.disconnect()
     }
 }
 
 impl Netplay<Failed> {
-    pub fn restart(self) -> Box<Netplay<LocalNesState>> {
+    pub fn restart(self) -> Netplay<LocalNesState> {
         self.disconnect()
     }
 

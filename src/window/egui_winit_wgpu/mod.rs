@@ -42,7 +42,7 @@ impl Renderer {
                 force_fallback_adapter: false,
             })
             .await
-            .expect("Adapter to be crated");
+            .expect("adapter to be crated");
 
         let (device, queue) = adapter
             .request_device(

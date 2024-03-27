@@ -21,7 +21,7 @@ impl RateCounter {
     fn calc_next_report(window: &Duration) -> Instant {
         Instant::now()
             .checked_add(*window)
-            .expect("Could not calculate next_report")
+            .expect("report instance to compute?..")
     }
     pub fn tick(&mut self, name: &str) -> &mut Self {
         *self.counters.entry(name.to_string()).or_insert(0) += 1;

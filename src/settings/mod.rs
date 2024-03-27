@@ -72,10 +72,10 @@ impl Settings {
 
     fn load() -> Settings {
         let bundle = Bundle::current();
-        let settings_path = &bundle.settings_path;
+        let settings_file_path = &bundle.settings_path.join("settings.yaml");
         let default_settings = bundle.config.default_settings.clone();
 
-        let mut settings: Result<Settings> = File::open(settings_path)
+        let mut settings: Result<Settings> = File::open(settings_file_path)
             .map_err(anyhow::Error::msg)
             .and_then(|f| serde_yaml::from_reader(BufReader::new(f)).map_err(anyhow::Error::msg));
 
@@ -94,15 +94,19 @@ impl Settings {
                     settings.input.selected[1] = default_selected[1].clone();
                 }
             }
-            Err(e) => log::warn!("Could not load settings ({:?}): {:?}", settings_path, e),
+            Err(e) => log::warn!(
+                "Could not load settings ({:?}): {:?}",
+                settings_file_path,
+                e
+            ),
         }
         //TODO: Check if the error is something else than file not found and log
         //eprintln!("Failed to load config ({err}), falling back to default settings");
         settings.unwrap_or(default_settings)
     }
     fn save(&self) {
-        let settings_path = &Bundle::current().settings_path;
-        if let Err(e) = File::create(settings_path)
+        let settings_file_path = &Bundle::current().settings_path.join("settings.yaml");
+        if let Err(e) = File::create(settings_file_path)
             .map_err(anyhow::Error::msg)
             .and_then(|file| {
                 serde_yaml::to_writer(BufWriter::new(file), self).map_err(anyhow::Error::msg)

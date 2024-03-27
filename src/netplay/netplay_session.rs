@@ -90,7 +90,7 @@ impl NetplaySession {
                         match request {
                             GgrsRequest::LoadGameState { cell, frame } => {
                                 log::debug!("Loading (frame {:?})", frame);
-                                self.game_state = cell.load().expect("No data found.");
+                                self.game_state = cell.load().expect("ggrs state to load");
                             }
                             GgrsRequest::SaveGameState { cell, frame } => {
                                 assert_eq!(self.game_state.frame, frame);

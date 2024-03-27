@@ -1,18 +1,19 @@
 use std::io::Cursor;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 
 use tetanes_core::{
     self,
-    bus::Bus,
-    cart::Cart,
-    common::{Clock, NesRegion, Regional, Reset, ResetKind},
-    cpu::Cpu,
-    input::{Joypad, Player},
+    common::{NesRegion, Regional},
+    control_deck::{Config, ControlDeck},
+    input::{FourPlayer, Joypad, Player},
+    mem::RamState,
+    video::VideoFilter,
 };
 
 use super::{FrameData, NesStateHandler, NTSC_PAL};
 use crate::{
+    bundle::Bundle,
     input::JoypadState,
     settings::{Settings, MAX_PLAYERS},
     window::NESFrame,
@@ -20,49 +21,51 @@ use crate::{
 
 #[derive(Clone)]
 pub struct TetanesNesState {
-    cpu: Cpu,
+    control_deck: ControlDeck,
     speed: f32,
 }
 
+pub trait ToTetanesRegion {
+    fn to_tetanes_region(&self) -> NesRegion;
+}
+
+impl ToTetanesRegion for crate::bundle::NesRegion {
+    fn to_tetanes_region(&self) -> NesRegion {
+        match self {
+            crate::bundle::NesRegion::Pal => NesRegion::Pal,
+            crate::bundle::NesRegion::Ntsc => NesRegion::Ntsc,
+            crate::bundle::NesRegion::Dendy => NesRegion::Dendy,
+        }
+    }
+}
+
 impl TetanesNesState {
-    pub fn load_rom(rom: &[u8]) -> Self {
-        let mut cpu = Cpu::new(Bus::new(
-            tetanes_core::mem::RamState::Random,
-            Settings::current().audio.sample_rate as f32,
-        ));
-        cpu.set_region(NesRegion::default());
-        cpu.bus
-            .input
-            .set_four_player(tetanes_core::input::FourPlayer::Disabled);
-        cpu.bus.input.connect_zapper(false);
+    pub fn start_rom(rom: &[u8]) -> Result<Self> {
+        let region = Bundle::current().config.nes_region.to_tetanes_region();
+        let config = Config {
+            dir: Bundle::current().settings_path.clone(),
+            filter: VideoFilter::Pixellate,
+            sample_rate: Settings::current().audio.sample_rate as f32,
+            region,
+            ram_state: RamState::Random,
+            four_player: FourPlayer::Disabled,
+            zapper: false,
+            genie_codes: vec![],
+            load_on_start: true,
+            save_on_exit: true,
+            save_slot: 1,
+            concurrent_dpad: false,
+            channels_enabled: [true; 5],
+        };
 
-        let cart = Cart::from_rom("Name", &mut Cursor::new(rom), cpu.bus.ram_state)
-            .expect("Could not load cart");
-        cpu.set_region(cart.region());
-        cpu.bus.load_cart(cart);
-        cpu.reset(ResetKind::Hard);
-
-        Self { cpu, speed: 1.0 }
-    }
-
-    pub const fn frame_number(&self) -> u32 {
-        self.cpu.bus.ppu.frame_number()
-    }
-    pub fn clock_instr(&mut self) -> Result<usize> {
-        let cycles = self.cpu.clock();
-        if self.cpu.corrupted {
-            bail!("cpu corrupted")
-        }
-        Ok(cycles)
-    }
-
-    pub fn clock_frame(&mut self) -> Result<usize> {
-        let mut total_cycles = 0;
-        let frame = self.frame_number();
-        while frame == self.frame_number() {
-            total_cycles += self.clock_instr()?;
-        }
-        Ok(total_cycles)
+        let mut control_deck = ControlDeck::with_config(config);
+        let _ =
+            control_deck.load_rom(Bundle::current().config.name.clone(), &mut Cursor::new(rom))?;
+        control_deck.set_region(region);
+        Ok(Self {
+            control_deck,
+            speed: 1.0,
+        })
     }
 }
 
@@ -72,18 +75,20 @@ impl NesStateHandler for TetanesNesState {
         joypad_state: [JoypadState; MAX_PLAYERS],
         nes_frame: &mut Option<&mut NESFrame>,
     ) -> Option<FrameData> {
-        let input = &mut self.cpu.bus.input;
-        *input.joypad_mut(Player::One) = Joypad::signature((*joypad_state[0]).into());
-        *input.joypad_mut(Player::Two) = Joypad::signature((*joypad_state[1]).into());
+        *self.control_deck.joypad_mut(Player::One) = Joypad::signature((*joypad_state[0]).into());
+        *self.control_deck.joypad_mut(Player::Two) = Joypad::signature((*joypad_state[1]).into());
 
-        self.cpu.bus.clear_audio_samples();
+        self.control_deck.clear_audio_samples();
 
-        self.clock_frame().expect("Failed to clock the NES");
+        self.control_deck
+            .clock_frame()
+            .expect("NES to clock a frame");
 
-        let audio = self.cpu.bus.audio_samples();
+        let audio = self.control_deck.audio_samples();
 
         if let Some(nes_frame) = nes_frame {
-            self.cpu
+            self.control_deck
+                .cpu()
                 .bus
                 .ppu
                 .frame_buffer()
@@ -102,23 +107,22 @@ impl NesStateHandler for TetanesNesState {
     }
 
     fn save(&self) -> Option<Vec<u8>> {
-        Some(bincode::serialize(&self.cpu).expect("Could not save state"))
+        Some(bincode::serialize(&self.control_deck.cpu()).expect("NES state to serialize"))
     }
     fn load(&mut self, data: &mut Vec<u8>) {
-        self.cpu = bincode::deserialize(data).expect("Could not load state");
+        *self.control_deck.cpu_mut() =
+            bincode::deserialize(data).expect("NES state to deserialize");
     }
 
     fn discard_samples(&mut self) {
-        self.cpu.bus.clear_audio_samples();
+        self.control_deck.clear_audio_samples();
     }
 
     fn set_speed(&mut self, speed: f32) {
         let speed = speed.max(0.01);
         if self.speed != speed {
             log::debug!("Setting emulation speed: {speed}");
-            self.cpu
-                .bus
-                .apu
+            self.control_deck
                 .set_sample_rate(Settings::current().audio.sample_rate as f32 * (1.0 / speed));
             self.speed = speed;
         }
