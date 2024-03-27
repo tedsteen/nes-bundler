@@ -3934,7 +3934,7 @@ dependencies = [
 [[package]]
 name = "tetanes-core"
 version = "0.10.0"
-source = "git+https://github.com/lukexor/tetanes.git?branch=engine-rework#e5d4f4a21cb96bf0051b8827150f76f1b3a579bc"
+source = "git+https://github.com/tedsteen/tetanes.git?branch=for-nes-bundler#f0b5fe37f0e652826ab8294351db621227ff58e5"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3950,7 +3950,7 @@ dependencies = [
 [[package]]
 name = "tetanes-util"
 version = "0.10.0"
-source = "git+https://github.com/lukexor/tetanes.git?branch=engine-rework#e5d4f4a21cb96bf0051b8827150f76f1b3a579bc"
+source = "git+https://github.com/tedsteen/tetanes.git?branch=for-nes-bundler#f0b5fe37f0e652826ab8294351db621227ff58e5"
 dependencies = [
  "anyhow",
  "flate2",

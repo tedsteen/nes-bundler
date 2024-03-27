@@ -38,7 +38,7 @@ impl AudioCallback for AudioReceiverCallback {
                 *s = new_sample * volume;
             } else {
                 missing_samples += 1;
-                *s = 0.0; //TODO: Use a kernel for audio stretching?
+                *s = 0.0;
             }
         }
         if missing_samples > 0 {
