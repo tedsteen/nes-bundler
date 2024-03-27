@@ -67,7 +67,7 @@ impl Stream {
         let latency_in_secs =
             Self::sample_count_to_latency(latency_in_samples, desired_sample_rate);
 
-        log::info!("Trying to start audio: sample rate={desired_sample_rate}, latency={latency_in_secs:?} ({latency_in_frames} frames)");
+        log::debug!("Trying to start audio: sample rate={desired_sample_rate}, latency={latency_in_secs:?} ({latency_in_frames} frames)");
         let (tx, audio_rx) = tokio::sync::mpsc::channel(latency_in_samples as usize);
 
         let output_device = &Settings::current().audio.output_device.clone();
@@ -135,7 +135,7 @@ impl Stream {
                 AudioReceiverCallback(audio_rx)
             })
             .map_err(anyhow::Error::msg)?;
-        log::debug!("Audio started: {:?}", output_device.spec());
+        log::info!("Audio started: {:?}", output_device.spec());
         Settings::current().audio.sample_rate = output_device.spec().freq as u32;
         Ok(output_device)
     }

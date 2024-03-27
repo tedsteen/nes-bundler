@@ -66,7 +66,7 @@ impl Renderer {
             // egui prefers Rgba8Unorm or Bgra8Unorm
             .find(|f| !f.is_srgb())
             .unwrap_or(surface_caps.formats[0]);
-        log::info!("Surface format: {surface_format:?}");
+        log::debug!("Surface format: {surface_format:?}");
 
         let config = wgpu::SurfaceConfiguration {
             desired_maximum_frame_latency: 1,
