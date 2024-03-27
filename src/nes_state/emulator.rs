@@ -66,12 +66,12 @@ impl Emulator {
                     } {
                         log::trace!("Pushing {:} audio samples", audio.len());
                         for s in audio {
-                            audio_tx.send(s).await.unwrap();
+                            let _ = audio_tx.send(s).await;
                         }
                     } else {
                         log::trace!("No frame, pushing silence to keep frame count down");
                         for _ in 0..200 {
-                            audio_tx.send(0.0).await.unwrap();
+                            let _ = audio_tx.send(0.0).await;
                         }
                     }
 
