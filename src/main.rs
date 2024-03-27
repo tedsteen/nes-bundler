@@ -40,7 +40,7 @@ const NES_HEIGHT: u32 = 240;
 
 const MINIMUM_INTEGER_SCALING_SIZE: (u32, u32) = (1024, 720);
 
-#[tokio::main]
+#[tokio::main] //(flavor = "multi_thread", worker_threads = 10)] //(flavor = "multi_thread", worker_threads = 3) (flavor = "current_thread")
 async fn main() {
     init_logger();
     log::info!("nes-bundler starting!");

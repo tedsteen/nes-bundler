@@ -12,12 +12,16 @@ use anyhow::Result;
 
 use crate::nes_state::NesStateHandler;
 
+use super::FrameData;
+
+#[cfg(feature = "netplay")]
+type StateHandler = crate::netplay::NetplayStateHandler;
+#[cfg(not(feature = "netplay"))]
+type StateHandler = crate::nes_state::LocalNesState;
+
 pub struct Emulator {
     pub frame_pool: NESFramePool,
-    #[cfg(feature = "netplay")]
-    nes_state: Arc<Mutex<crate::netplay::NetplayStateHandler>>,
-    #[cfg(not(feature = "netplay"))]
-    nes_state: Arc<Mutex<crate::nes_state::LocalNesState>>,
+    nes_state: Arc<Mutex<StateHandler>>,
     joypads: Arc<Mutex<[JoypadState; MAX_PLAYERS]>>,
 }
 impl Emulator {
@@ -46,30 +50,29 @@ impl Emulator {
                     loop_counter.tick("Frames");
 
                     let joypads = *joypads.lock().unwrap();
-                    let mut frame_data = match frame_pool.push_with(|nes_frame| {
+                    let push_result = frame_pool.push_with(|nes_frame| {
                         nes_state
                             .lock()
                             .unwrap()
-                            .advance([joypads[0], joypads[1]], &mut Some(nes_frame))
-                    }) {
-                        Ok(frame_data) => frame_data,
+                            .advance(joypads, &mut Some(nes_frame))
+                    });
+
+                    if let Some(FrameData { audio }) = match push_result {
+                        Ok(audio) => audio,
                         Err(_) => {
                             loop_counter.tick("Dropped Frames");
-                            nes_state
-                                .lock()
-                                .unwrap()
-                                .advance([joypads[0], joypads[1]], &mut None)
+                            nes_state.lock().unwrap().advance(joypads, &mut None)
                         }
-                    };
-
-                    if let Some(frame_data) = &mut frame_data {
-                        log::trace!("Pushing {:} audio samples", frame_data.audio.len());
-                        for &s in &frame_data.audio {
-                            let _ = audio_tx.send(s).await;
+                    } {
+                        log::trace!("Pushing {:} audio samples", audio.len());
+                        for s in audio {
+                            audio_tx.send(s).await.unwrap();
                         }
                     } else {
-                        log::trace!("No frame, pushing silence");
-                        let _ = audio_tx.send(0.0).await;
+                        log::trace!("No frame, pushing silence to keep frame count down");
+                        for _ in 0..200 {
+                            audio_tx.send(0.0).await.unwrap();
+                        }
                     }
 
                     if let Some(report) = loop_counter.report() {
@@ -80,6 +83,7 @@ impl Emulator {
         });
         Ok(shared_state)
     }
+
     pub fn save_state(&self) -> Option<Vec<u8>> {
         self.nes_state.lock().unwrap().save()
     }
