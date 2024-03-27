@@ -24,4 +24,5 @@ pub trait NesStateHandler {
     fn save(&self) -> Option<Vec<u8>>;
     fn load(&mut self, data: &mut Vec<u8>);
     fn discard_samples(&mut self);
+    fn set_speed(&mut self, speed: f32);
 }

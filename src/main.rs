@@ -40,7 +40,7 @@ const NES_HEIGHT: u32 = 240;
 
 const MINIMUM_INTEGER_SCALING_SIZE: (u32, u32) = (1024, 720);
 
-#[tokio::main] //(flavor = "multi_thread", worker_threads = 10)] //(flavor = "multi_thread", worker_threads = 3) (flavor = "current_thread")
+#[tokio::main(flavor = "multi_thread", worker_threads = 3)]
 async fn main() {
     init_logger();
     log::info!("nes-bundler starting!");
@@ -61,7 +61,7 @@ async fn run() -> anyhow::Result<()> {
     let mut sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
 
     //TODO: Figure out a resonable latency
-    let mut audio = Audio::new(&sdl_context, 2, 41100)?;
+    let mut audio = Audio::new(&sdl_context, 2, 41000)?;
 
     let inputs = Inputs::new(Sdl2Gamepads::new(
         sdl_context.game_controller().map_err(anyhow::Error::msg)?,

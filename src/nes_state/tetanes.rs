@@ -21,6 +21,7 @@ use crate::{
 #[derive(Clone)]
 pub struct TetanesNesState {
     cpu: Cpu,
+    speed: f32,
 }
 
 impl TetanesNesState {
@@ -41,7 +42,7 @@ impl TetanesNesState {
         cpu.bus.load_cart(cart);
         cpu.reset(ResetKind::Hard);
 
-        Self { cpu }
+        Self { cpu, speed: 1.0 }
     }
 
     pub const fn frame_number(&self) -> u32 {
@@ -109,5 +110,17 @@ impl NesStateHandler for TetanesNesState {
 
     fn discard_samples(&mut self) {
         self.cpu.bus.clear_audio_samples();
+    }
+
+    fn set_speed(&mut self, speed: f32) {
+        let speed = speed.max(0.01);
+        if self.speed != speed {
+            log::debug!("Setting emulation speed: {speed}");
+            self.cpu
+                .bus
+                .apu
+                .set_sample_rate(Settings::current().audio.sample_rate as f32 * (1.0 / speed));
+            self.speed = speed;
+        }
     }
 }

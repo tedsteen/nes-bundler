@@ -93,9 +93,47 @@ impl Emulator {
     }
 }
 
+#[cfg(feature = "debug")]
+pub struct DebugGui {
+    speed: f32,
+    override_speed: bool,
+}
+
 pub struct EmulatorGui {
     #[cfg(feature = "netplay")]
     netplay_gui: crate::netplay::gui::NetplayGui,
+    #[cfg(feature = "debug")]
+    debug_gui: DebugGui,
+}
+
+#[cfg(feature = "debug")]
+impl GuiComponent<Emulator> for DebugGui {
+    fn ui(&mut self, instance: &mut Emulator, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            egui::Grid::new("debug_grid")
+                .num_columns(2)
+                .spacing([10.0, 4.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    if ui
+                        .checkbox(&mut self.override_speed, "Override emulation speed")
+                        .changed()
+                    {
+                        let speed = if self.override_speed { self.speed } else { 1.0 };
+                        instance.nes_state.lock().unwrap().set_speed(speed);
+                    }
+                    if self.override_speed {
+                        let speed_changed = ui
+                            .add(egui::Slider::new(&mut self.speed, 0.01..=2.5).suffix("x"))
+                            .changed();
+                        if speed_changed {
+                            instance.nes_state.lock().unwrap().set_speed(self.speed);
+                        };
+                    }
+                    ui.end_row();
+                });
+        });
+    }
 }
 
 impl EmulatorGui {
@@ -105,28 +143,44 @@ impl EmulatorGui {
             netplay_gui: crate::netplay::gui::NetplayGui::new(
                 Bundle::current().config.netplay.clone(),
             ),
+            #[cfg(feature = "debug")]
+            debug_gui: DebugGui {
+                speed: 1.0,
+                override_speed: false,
+            },
         }
     }
 }
-#[cfg(not(feature = "netplay"))]
-impl GuiComponent<Emulator> for EmulatorGui {}
 
-#[cfg(feature = "netplay")]
 impl GuiComponent<Emulator> for EmulatorGui {
+    #[allow(unused_variables)]
     fn ui(&mut self, instance: &mut Emulator, ui: &mut egui::Ui) {
+        #[cfg(feature = "debug")]
+        self.debug_gui.ui(instance, ui);
+
+        #[cfg(feature = "netplay")]
         self.netplay_gui
             .ui(&mut instance.nes_state.lock().unwrap(), ui);
     }
 
+    #[cfg(feature = "netplay")]
     fn messages(&self, instance: &Emulator) -> Option<Vec<String>> {
         self.netplay_gui
             .messages(&instance.nes_state.lock().unwrap())
     }
 
     fn name(&self) -> Option<String> {
-        self.netplay_gui.name()
+        if cfg!(feature = "netplay") {
+            #[cfg(feature = "netplay")]
+            return self.netplay_gui.name();
+        } else if cfg!(feature = "debug") {
+            return Some("Debug".to_string());
+        }
+
+        None
     }
 
+    #[cfg(feature = "netplay")]
     fn prepare(&mut self, instance: &mut Emulator) {
         self.netplay_gui
             .prepare(&mut instance.nes_state.lock().unwrap());

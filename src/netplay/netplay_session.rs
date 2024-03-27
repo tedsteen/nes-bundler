@@ -136,15 +136,15 @@ impl NetplaySession {
             }
         }
 
-        Ok(new_frame.map(|new_frame| {
-            if sess.frames_ahead() > 0 {
-                FrameData {
-                    //Since we are driving emulation using the audio clock, just push some extra audio to slow down.
-                    audio: new_frame.audio, //new_frame.audio.repeat(2) //TODO: Figure out why it's not working..
-                }
-            } else {
-                new_frame
-            }
-        }))
+        if sess.frames_ahead() > 0 {
+            log::debug!(
+                "Frames ahead: {:?}, slowing down emulation",
+                sess.frames_ahead()
+            );
+            self.game_state.set_speed(0.986);
+        } else {
+            self.game_state.set_speed(1.0);
+        }
+        Ok(new_frame)
     }
 }
