@@ -106,7 +106,8 @@ async fn run() -> anyhow::Result<()> {
         .run(|winit_event, control_flow| {
             rate_counter.tick("EPS");
             let mut should_render = false;
-            let window_event = match winit_event {
+            let mut gui_events = Vec::new();
+            match winit_event {
                 Event::WindowEvent {
                     event: window_event,
                     ..
@@ -114,7 +115,6 @@ async fn run() -> anyhow::Result<()> {
                     match window_event {
                         WindowEvent::CloseRequested | WindowEvent::Destroyed => {
                             control_flow.exit();
-                            None
                         }
                         WindowEvent::RedrawRequested => {
                             // Windows needs this to not freeze the windown when resizing or moving
@@ -122,11 +122,10 @@ async fn run() -> anyhow::Result<()> {
                             renderer.window.request_redraw();
 
                             should_render = true;
-                            None
                         }
                         winit::event::WindowEvent::Resized(physical_size) => {
                             renderer.resize(physical_size);
-                            None
+                            should_render = true;
                         }
                         _ => {
                             if !renderer
@@ -134,34 +133,26 @@ async fn run() -> anyhow::Result<()> {
                                 .handle_input(&renderer.window, &window_event)
                                 .consumed
                             {
-                                Some(window_event)
-                            } else {
-                                None
+                                if let Some(winit_gui_event) = window_event.to_gui_event() {
+                                    gui_events.push(winit_gui_event);
+                                }
                             }
                         }
                     }
                 }
                 winit::event::Event::AboutToWait => {
                     should_render = true;
-                    None
                 }
 
-                Event::LoopExiting => None,
-                _ => None,
+                _ => {}
             };
 
-            let mut gui_events = Vec::new();
             for sdl_gui_event in sdl_event_pump
                 .poll_iter()
                 .flat_map(|e| e.to_gamepad_event())
                 .map(GuiEvent::Gamepad)
             {
                 gui_events.push(sdl_gui_event);
-            }
-            if let Some(window_event) = window_event {
-                if let Some(winit_gui_event) = window_event.to_gui_event() {
-                    gui_events.push(winit_gui_event);
-                }
             }
 
             for gui_event in &gui_events {
