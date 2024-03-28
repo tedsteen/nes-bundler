@@ -122,17 +122,13 @@ impl GuiComponent<Emulator> for DebugGui {
                     if ui
                         .checkbox(&mut self.override_speed, "Override emulation speed")
                         .changed()
+                        && !self.override_speed
                     {
-                        let speed = if self.override_speed { self.speed } else { 1.0 };
-                        instance.nes_state.lock().unwrap().set_speed(speed);
-                    }
+                        instance.nes_state.lock().unwrap().set_speed(1.0);
+                    };
                     if self.override_speed {
-                        let speed_changed = ui
-                            .add(egui::Slider::new(&mut self.speed, 0.001..=2.5).suffix("x"))
-                            .changed();
-                        if speed_changed {
-                            instance.nes_state.lock().unwrap().set_speed(self.speed);
-                        };
+                        ui.add(egui::Slider::new(&mut self.speed, 0.001..=2.5).suffix("x"));
+                        instance.nes_state.lock().unwrap().set_speed(self.speed);
                     }
                     ui.end_row();
                 });

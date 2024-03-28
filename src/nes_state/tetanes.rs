@@ -121,7 +121,7 @@ impl NesStateHandler for TetanesNesState {
     fn set_speed(&mut self, speed: f32) {
         let speed = speed.max(0.001);
         if self.speed != speed {
-            log::debug!("Setting emulation speed: {speed}");
+            log::debug!("Change emulation speed to {speed}x");
             self.control_deck
                 .set_sample_rate(Settings::current().audio.sample_rate as f32 * (1.0 / speed));
             self.speed = speed;
