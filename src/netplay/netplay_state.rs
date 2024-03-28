@@ -16,9 +16,9 @@ use super::{
 pub enum NetplayState {
     Disconnected(Netplay<LocalNesState>),
     Connecting(Netplay<ConnectingState>),
-    Connected(Box<Netplay<Connected>>),
+    Connected(Netplay<Connected>),
     Resuming(Netplay<Resuming>),
-    Failed(Box<Netplay<Failed>>),
+    Failed(Netplay<Failed>),
 }
 
 pub struct Failed {
@@ -161,7 +161,7 @@ impl Netplay<ConnectingState> {
             match self.state {
                 ConnectingState::Connected(connected) => {
                     log::debug!("Connected! Starting netplay session");
-                    NetplayState::Connected(Box::new(Netplay {
+                    NetplayState::Connected(Netplay {
                         state: Connected {
                             netplay_session: connected.state,
                             session_id: match connected.start_method {
@@ -170,11 +170,11 @@ impl Netplay<ConnectingState> {
                                 | StartMethod::Resume(StartState { session_id, .. }) => session_id,
                             },
                         },
-                    }))
+                    })
                 }
-                ConnectingState::Failed(reason) => NetplayState::Failed(Box::new(Netplay {
+                ConnectingState::Failed(reason) => NetplayState::Failed(Netplay {
                     state: Failed { reason },
-                })),
+                }),
                 _ => NetplayState::Connecting(self),
             },
             None,
@@ -206,7 +206,7 @@ impl Netplay<Connected> {
 
         if let Some(joypad_mapping) = &mut netplay_session.game_state.joypad_mapping.clone() {
             match netplay_session.advance(joypad_state, joypad_mapping, nes_frame) {
-                Ok(frame_data) => (NetplayState::Connected(Box::new(self)), frame_data),
+                Ok(frame_data) => (NetplayState::Connected(self), frame_data),
                 Err(e) => {
                     log::error!("Resuming due to error: {:?}", e);
                     //TODO: Popup/info about the error? Or perhaps put the reason for the resume in the resume state below?
@@ -221,7 +221,7 @@ impl Netplay<Connected> {
                 } else {
                     JoypadMapping::P2
                 });
-            (NetplayState::Connected(Box::new(self)), None)
+            (NetplayState::Connected(self), None)
         }
     }
 }
@@ -260,6 +260,6 @@ impl Netplay<Failed> {
     }
 
     fn advance(self) -> (NetplayState, Option<FrameData>) {
-        (NetplayState::Failed(Box::new(self)), None)
+        (NetplayState::Failed(self), None)
     }
 }
