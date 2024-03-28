@@ -3,9 +3,10 @@ use rusticnes_core::cartridge::mapper_from_file;
 
 use super::{FrameData, LocalNesState, NesStateHandler};
 use crate::{
-    input::JoypadInput,
-    settings::{gui::GuiComponent, MAX_PLAYERS},
-    FPS,
+    input::JoypadState,
+    nes_state::NTSC_PAL,
+    settings::{Settings, MAX_PLAYERS},
+    window::NESFrame,
 };
 
 pub struct RusticNesState {
@@ -19,6 +20,8 @@ impl RusticNesState {
             .context("Failed to load ROM")
             .unwrap();
         let mut nes = rusticnes_core::nes::NesState::new(mapper);
+        nes.apu
+            .set_sample_rate(Settings::current().audio.sample_rate as u64);
         nes.power_on();
         RusticNesState { nes }
     }
@@ -36,38 +39,47 @@ impl Clone for RusticNesState {
     }
 }
 
-static NTSC_PAL: &[u8] = include_bytes!("../../config/ntscpalette.pal");
-
 impl NesStateHandler for RusticNesState {
-    fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Option<FrameData> {
-        self.nes.p1_input = *inputs[0];
-        self.nes.p2_input = *inputs[1];
-        self.nes.run_until_vblank();
+    fn advance(
+        &mut self,
+        joypad_state: [JoypadState; MAX_PLAYERS],
+        nes_frame: &mut Option<&mut NESFrame>,
+    ) -> Option<FrameData> {
+        #[cfg(feature = "debug")]
+        puffin::profile_function!();
+        self.nes.p1_input = *joypad_state[0];
+        self.nes.p2_input = *joypad_state[1];
 
-        let video = self
-            .nes
-            .ppu
-            .screen
-            .iter()
-            .flat_map(|&palette_index| {
-                let palette_index = palette_index as usize * 3;
-                let rgba: [u8; 3] = NTSC_PAL[palette_index..palette_index + 3]
-                    .try_into()
-                    .unwrap();
-                rgba
-            })
-            .collect::<Vec<u8>>();
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("run_until_vblank");
+            self.nes.run_until_vblank();
+        }
+
+        if let Some(nes_frame) = nes_frame {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("copy nes_frame");
+            self.nes
+                .ppu
+                .screen
+                .iter()
+                .enumerate()
+                .for_each(|(idx, &palette_index)| {
+                    let palette_index = palette_index as usize * 3;
+                    let pixel_index = idx * 4;
+                    nes_frame[pixel_index..pixel_index + 3]
+                        .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
+                });
+        }
 
         Some(FrameData {
-            video,
             audio: self
                 .nes
                 .apu
                 .consume_samples()
                 .iter()
                 .map(|&s| s as f32 / -(i16::MIN as f32))
-                .collect(),
-            fps: FPS,
+                .collect::<Vec<f32>>(),
         })
     }
 
@@ -76,10 +88,6 @@ impl NesStateHandler for RusticNesState {
     }
     fn load(&mut self, data: &mut Vec<u8>) {
         self.nes.load_state(data);
-    }
-
-    fn get_gui(&mut self) -> Option<&mut dyn GuiComponent> {
-        None
     }
 
     fn discard_samples(&mut self) {

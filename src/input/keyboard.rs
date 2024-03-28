@@ -1,4 +1,4 @@
-use super::{JoypadInput, JoypadMapping, KeyCode, KeyEvent};
+use super::{JoypadMapping, JoypadState, KeyCode, KeyEvent};
 use std::collections::HashSet;
 
 pub type JoypadKeyboardMapping = JoypadMapping<KeyCode>;
@@ -25,7 +25,7 @@ impl Keyboards {
         };
     }
 
-    pub fn get_joypad(&mut self, mapping: &JoypadKeyboardMapping) -> JoypadInput {
+    pub fn get_joypad(&mut self, mapping: &JoypadKeyboardMapping) -> JoypadState {
         mapping.calculate_state(&self.pressed_keys)
     }
 }
