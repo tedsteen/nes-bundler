@@ -24,11 +24,13 @@ impl EguiRenderer {
         let egui_context = Context::default();
         let id = egui_context.viewport_id();
 
-        const BORDER_RADIUS: f32 = 2.0;
+        const BORDER_RADIUS: f32 = 1.3;
 
         let visuals = Visuals {
             window_rounding: egui::Rounding::same(BORDER_RADIUS),
             window_shadow: Shadow::NONE,
+            slider_trailing_fill: true,
+            handle_shape: egui::style::HandleShape::Rect { aspect_ratio: 0.6 },
             ..Default::default()
         };
 
