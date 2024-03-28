@@ -32,11 +32,15 @@ impl RateCounter {
         if Instant::now().ge(&self.next_report) {
             self.next_report = Self::calc_next_report(&self.window);
             let window_in_sec = self.window.as_secs_f32();
-            let res = Some(self.counters.iter().fold("".to_string(), |a, b| {
-                format!("{}{}={} ", a, b.0, *b.1 as f32 / window_in_sec)
-            }));
+
+            let mut res = Vec::from_iter(self.counters.iter());
+            res.sort_by_key(|(key, _)| key.len());
+
+            let res = res.iter().fold("".to_string(), |a, (name, &value)| {
+                format!("{a}{name}={} ", value as f32 / window_in_sec)
+            });
             self.counters.clear();
-            res
+            Some(res)
         } else {
             None
         }

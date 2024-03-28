@@ -141,7 +141,9 @@ impl NetplaySession {
                 "Frames ahead: {:?}, slowing down emulation",
                 sess.frames_ahead()
             );
-            self.game_state.set_speed(0.986);
+            //https://www.desmos.com/calculator/zbntsowijd
+            self.game_state
+                .set_speed(0.8_f32.max(1.0 - 0.1 * (0.2 * sess.frames_ahead() as f32).powf(2.0)));
         } else {
             self.game_state.set_speed(1.0);
         }

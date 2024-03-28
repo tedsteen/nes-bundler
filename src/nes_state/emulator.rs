@@ -109,6 +109,10 @@ pub struct EmulatorGui {
 #[cfg(feature = "debug")]
 impl GuiComponent<Emulator> for DebugGui {
     fn ui(&mut self, instance: &mut Emulator, ui: &mut egui::Ui) {
+        ui.label(format!(
+            "Frame: {}",
+            instance.nes_state.lock().unwrap().frame()
+        ));
         ui.horizontal(|ui| {
             egui::Grid::new("debug_grid")
                 .num_columns(2)
@@ -124,7 +128,7 @@ impl GuiComponent<Emulator> for DebugGui {
                     }
                     if self.override_speed {
                         let speed_changed = ui
-                            .add(egui::Slider::new(&mut self.speed, 0.01..=2.5).suffix("x"))
+                            .add(egui::Slider::new(&mut self.speed, 0.001..=2.5).suffix("x"))
                             .changed();
                         if speed_changed {
                             instance.nes_state.lock().unwrap().set_speed(self.speed);

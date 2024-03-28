@@ -114,7 +114,7 @@ impl Recycle<NESFrame> for NESFrameRecycle {
 
 impl NESFramePool {
     pub fn new() -> Self {
-        Self(Arc::new(ThingBuf::with_recycle(2, NESFrameRecycle)))
+        Self(Arc::new(ThingBuf::with_recycle(1, NESFrameRecycle)))
     }
 }
 

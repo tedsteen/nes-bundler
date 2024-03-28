@@ -61,7 +61,7 @@ async fn run() -> anyhow::Result<()> {
     let mut sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
 
     //TODO: Figure out a resonable latency
-    let mut audio = Audio::new(&sdl_context, 2, 41000)?;
+    let mut audio = Audio::new(&sdl_context, 1, 41000)?;
 
     let inputs = Inputs::new(Sdl2Gamepads::new(
         sdl_context.game_controller().map_err(anyhow::Error::msg)?,
@@ -105,46 +105,32 @@ async fn run() -> anyhow::Result<()> {
     event_loop
         .run(|winit_event, control_flow| {
             rate_counter.tick("EPS");
-            let mut should_render = false;
             let mut gui_events = Vec::new();
-            match winit_event {
-                Event::WindowEvent {
-                    event: window_event,
-                    ..
-                } => {
-                    match window_event {
-                        WindowEvent::CloseRequested | WindowEvent::Destroyed => {
-                            control_flow.exit();
-                        }
-                        WindowEvent::RedrawRequested => {
-                            // Windows needs this to not freeze the windown when resizing or moving
-                            #[cfg(windows)]
-                            renderer.window.request_redraw();
-
-                            should_render = true;
-                        }
-                        winit::event::WindowEvent::Resized(physical_size) => {
-                            renderer.resize(physical_size);
-                            should_render = true;
-                        }
-                        _ => {
-                            if !renderer
-                                .egui
-                                .handle_input(&renderer.window, &window_event)
-                                .consumed
-                            {
-                                if let Some(winit_gui_event) = window_event.to_gui_event() {
-                                    gui_events.push(winit_gui_event);
-                                }
+            if let Event::WindowEvent { event, .. } = winit_event {
+                match event {
+                    WindowEvent::CloseRequested | WindowEvent::Destroyed => {
+                        control_flow.exit();
+                    }
+                    WindowEvent::RedrawRequested => {
+                        // Windows needs this to not freeze the windown when resizing or moving
+                        #[cfg(windows)]
+                        renderer.window.request_redraw();
+                    }
+                    winit::event::WindowEvent::Resized(physical_size) => {
+                        renderer.resize(physical_size);
+                    }
+                    _ => {
+                        if !renderer
+                            .egui
+                            .handle_input(&renderer.window, &event)
+                            .consumed
+                        {
+                            if let Some(winit_gui_event) = event.to_gui_event() {
+                                gui_events.push(winit_gui_event);
                             }
                         }
                     }
                 }
-                winit::event::Event::AboutToWait => {
-                    should_render = true;
-                }
-
-                _ => {}
             };
 
             for sdl_gui_event in sdl_event_pump
@@ -159,10 +145,7 @@ async fn run() -> anyhow::Result<()> {
                 main_gui.handle_event(gui_event, &renderer.window);
             }
 
-            if should_render {
-                rate_counter.tick("RENDER");
-                main_gui.render_gui(&mut renderer);
-            }
+            main_gui.render_gui(&mut renderer);
             if let Some(report) = rate_counter.report() {
                 log::debug!("Event loop: {report}");
             }

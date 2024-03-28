@@ -151,6 +151,14 @@ impl NesStateHandler for NetplayStateHandler {
             _ => {}
         }
     }
+
+    fn frame(&self) -> u32 {
+        match &self.netplay {
+            Some(NetplayState::Connected(s)) => s.state.netplay_session.game_state.frame(),
+            Some(NetplayState::Disconnected(s)) => s.state.frame(),
+            _ => 0,
+        }
+    }
 }
 
 impl NetplayStateHandler {

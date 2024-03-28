@@ -97,28 +97,31 @@ impl MainGui {
     }
 
     pub fn render_gui(&mut self, renderer: &mut Renderer) {
+        let mut needs_render = false;
         if let Some(frame_buffer) = self.frame_pool.pop_ref() {
+            needs_render = true;
             self.nes_texture.update(&renderer.queue, &frame_buffer);
         }
+        if needs_render {
+            let render_result = renderer.render(move |ctx| {
+                self.ui(ctx);
+            });
 
-        let render_result = renderer.render(move |ctx| {
-            self.ui(ctx);
-        });
-
-        match render_result {
-            Ok(_) => {}
-            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                // Reconfigure the surface if it's lost or outdated
-                log::warn!("Surface lost or outdated, recreating.");
-                renderer.resize(renderer.size);
-            }
-            // The system is out of memory, we should probably quit
-            Err(wgpu::SurfaceError::OutOfMemory) => {
-                log::warn!("Out of memory when rendering")
-                // control_flow.exit(),
-            }
-            Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
-        };
+            match render_result {
+                Ok(_) => {}
+                Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                    // Reconfigure the surface if it's lost or outdated
+                    log::warn!("Surface lost or outdated, recreating.");
+                    renderer.resize(renderer.size);
+                }
+                // The system is out of memory, we should probably quit
+                Err(wgpu::SurfaceError::OutOfMemory) => {
+                    log::warn!("Out of memory when rendering")
+                    // control_flow.exit(),
+                }
+                Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
+            };
+        }
     }
 
     fn ui(&mut self, ctx: &Context) {
