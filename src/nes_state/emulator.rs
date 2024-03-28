@@ -153,36 +153,36 @@ impl EmulatorGui {
 }
 
 impl GuiComponent<Emulator> for EmulatorGui {
-    #[allow(unused_variables)]
-    fn ui(&mut self, instance: &mut Emulator, ui: &mut egui::Ui) {
-        #[cfg(feature = "debug")]
-        self.debug_gui.ui(instance, ui);
+    // #[allow(unused_variables)]
+    // fn ui(&mut self, instance: &mut Emulator, ui: &mut egui::Ui) {
+    //     #[cfg(feature = "debug")]
+    //     self.debug_gui.ui(instance, ui);
 
-        #[cfg(feature = "netplay")]
-        self.netplay_gui
-            .ui(&mut instance.nes_state.lock().unwrap(), ui);
-    }
+    //     #[cfg(feature = "netplay")]
+    //     self.netplay_gui
+    //         .ui(&mut instance.nes_state.lock().unwrap(), ui);
+    // }
 
-    #[cfg(feature = "netplay")]
-    fn messages(&self, instance: &Emulator) -> Option<Vec<String>> {
-        self.netplay_gui
-            .messages(&instance.nes_state.lock().unwrap())
-    }
+    // #[cfg(feature = "netplay")]
+    // fn messages(&self, instance: &Emulator) -> Option<Vec<String>> {
+    //     self.netplay_gui
+    //         .messages(&instance.nes_state.lock().unwrap())
+    // }
 
-    fn name(&self) -> Option<String> {
-        if cfg!(feature = "netplay") {
-            #[cfg(feature = "netplay")]
-            return self.netplay_gui.name();
-        } else if cfg!(feature = "debug") {
-            return Some("Debug".to_string());
-        }
+    // fn name(&self) -> Option<String> {
+    //     if cfg!(feature = "netplay") {
+    //         #[cfg(feature = "netplay")]
+    //         return self.netplay_gui.name();
+    //     } else if cfg!(feature = "debug") {
+    //         return Some("Debug".to_string());
+    //     }
 
-        None
-    }
+    //     None
+    // }
 
-    #[cfg(feature = "netplay")]
-    fn prepare(&mut self, instance: &mut Emulator) {
-        self.netplay_gui
-            .prepare(&mut instance.nes_state.lock().unwrap());
-    }
+    // #[cfg(feature = "netplay")]
+    // fn prepare(&mut self, instance: &mut Emulator) {
+    //     self.netplay_gui
+    //         .prepare(&mut instance.nes_state.lock().unwrap());
+    // }
 }
