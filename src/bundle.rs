@@ -16,6 +16,16 @@ pub enum NesRegion {
     Ntsc,
     Dendy,
 }
+
+impl NesRegion {
+    pub fn to_fps(&self) -> f32 {
+        match self {
+            NesRegion::Pal => 1662607.0 / 33247.5,
+            NesRegion::Ntsc => 3579545.5 / 227.333 / 262.0,
+            NesRegion::Dendy => todo!(),
+        }
+    }
+}
 #[derive(Deserialize, Debug)]
 pub struct BuildConfiguration {
     pub name: String,

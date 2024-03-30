@@ -1,10 +1,7 @@
-use std::{
-    ops::{Deref, DerefMut},
-    sync::Arc,
-};
+use std::ops::{Deref, DerefMut};
 
 use anyhow::Result;
-use thingbuf::{Recycle, ThingBuf};
+
 use winit::event_loop::EventLoop;
 
 use crate::{
@@ -12,7 +9,6 @@ use crate::{
     NES_HEIGHT, NES_WIDTH,
 };
 
-use self::egui_winit_wgpu::Renderer;
 pub mod egui_winit_wgpu;
 mod winit_impl;
 
@@ -39,12 +35,12 @@ impl From<Size> for winit::dpi::Size {
     }
 }
 
-pub async fn create_renderer(
+pub fn create_window(
     title: &str,
     inner_size: Size,
     min_inner_size: Size,
     event_loop: &EventLoop<()>,
-) -> Result<Renderer> {
+) -> Result<winit::window::Window> {
     let window_builder = winit::window::WindowBuilder::new()
         .with_resizable(true)
         .with_inner_size(inner_size)
@@ -57,8 +53,7 @@ pub async fn create_renderer(
         use winit::platform::windows::IconExtWindows;
         window_builder.with_window_icon(Some(winit::window::Icon::from_resource(1, None)?))
     };
-
-    Renderer::new(Arc::new(window_builder.build(event_loop)?)).await
+    Ok(window_builder.build(event_loop)?)
 }
 
 #[derive(Debug, Clone)]
@@ -96,43 +91,5 @@ impl Deref for NESFrame {
 impl DerefMut for NESFrame {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
-    }
-}
-
-#[derive(Debug)]
-pub struct NESFramePool(Arc<ThingBuf<NESFrame, NESFrameRecycle>>);
-#[derive(Debug)]
-pub struct NESFrameRecycle;
-
-impl Recycle<NESFrame> for NESFrameRecycle {
-    fn new_element(&self) -> NESFrame {
-        NESFrame::new()
-    }
-
-    fn recycle(&self, _frame: &mut NESFrame) {}
-}
-
-impl NESFramePool {
-    pub fn new() -> Self {
-        Self(Arc::new(ThingBuf::with_recycle(1, NESFrameRecycle)))
-    }
-}
-
-impl Default for NESFramePool {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Deref for NESFramePool {
-    type Target = ThingBuf<NESFrame, NESFrameRecycle>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl Clone for NESFramePool {
-    fn clone(&self) -> Self {
-        Self(Arc::clone(&self.0))
     }
 }

@@ -4,6 +4,7 @@ use matchbox_socket::PeerId;
 use crate::{
     input::JoypadState,
     nes_state::{FrameData, NesStateHandler},
+    netplay::NetplayStateHandler,
     settings::MAX_PLAYERS,
     window::NESFrame,
 };
@@ -136,17 +137,16 @@ impl NetplaySession {
             }
         }
 
-        if sess.frames_ahead() > 0 {
+        *NetplayStateHandler::emulation_speed().lock().unwrap() = if sess.frames_ahead() > 0 {
             log::debug!(
                 "Frames ahead: {:?}, slowing down emulation",
                 sess.frames_ahead()
             );
             //https://www.desmos.com/calculator/zbntsowijd
-            self.game_state
-                .set_speed(0.8_f32.max(1.0 - 0.1 * (0.2 * sess.frames_ahead() as f32).powf(2.0)));
+            0.8_f32.max(1.0 - 0.1 * (0.2 * sess.frames_ahead() as f32).powf(2.0))
         } else {
-            self.game_state.set_speed(1.0);
-        }
+            1.0
+        };
         Ok(new_frame)
     }
 }

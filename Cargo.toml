@@ -7,7 +7,7 @@ edition = "2021"
 publish = false
 
 [features]
-default = []
+default = ["netplay", "debug"]
 #default = ["netplay", "debug"]
 
 netplay = ["matchbox_socket", "ggrs", "futures-timer", "futures", "uuid", "reqwest", "md5"]
@@ -48,8 +48,7 @@ egui-wgpu = "0.26"
 winit = "0.29"
 wgpu = "0.19"
 raw-window-handle = "0.6"
-
-thingbuf = "0.1"
+ringbuf = "0.3"
 
 # sdl2 = { version = "0.36", features = ["bundled", "static-link"] }
 sdl2 = { git = "https://github.com/tedsteen/rust-sdl2.git", branch = "rust-sdl2-for-nes-bundler", features = ["bundled", "static-link"] }

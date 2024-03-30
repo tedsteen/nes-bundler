@@ -77,7 +77,7 @@ impl GuiWithState<'_> {
 pub struct SettingsGui {
     inputs_gui: InputsGui,
     audio_gui: AudioGui,
-    emulator_gui: EmulatorGui,
+    pub emulator_gui: EmulatorGui,
 
     start_time: Instant,
     visible: bool,

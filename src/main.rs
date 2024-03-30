@@ -2,27 +2,36 @@
 #![allow(unsafe_code)]
 #![deny(clippy::all)]
 
-use crate::settings::gui::ToGuiEvent;
+use std::sync::mpsc::channel;
+use std::sync::Arc;
+use std::time::Duration;
 
+use crate::settings::gui::ToGuiEvent;
 use crate::{input::gamepad::ToGamepadEvent, settings::gui::GuiEvent};
 
-use audio::Audio;
+use anyhow::Result;
+use audio::{Audio, AudioSender};
 use bundle::Bundle;
-use fps::RateCounter;
 
+use fps::RateCounter;
+use gameloop::GameLoop;
 use gui::MainGui;
 
 use input::sdl2_impl::Sdl2Gamepads;
 use input::Inputs;
 use nes_state::emulator::Emulator;
 
-use window::{create_renderer, Size};
+use nes_state::FrameData;
+use sdl2::EventPump;
+use window::egui_winit_wgpu::Renderer;
+use window::{create_window, NESFrame, Size};
 use winit::event::{Event, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event_loop::EventLoop;
 
 mod audio;
 mod bundle;
 mod fps;
+mod gameloop;
 mod gui;
 mod input;
 mod integer_scaling;
@@ -33,54 +42,15 @@ mod settings;
 mod window;
 
 type Fps = f32;
-const FPS: Fps = 3579545.5 / 227.333 / 262.0;
 const NES_WIDTH: u32 = 256;
 const NES_WIDTH_4_3: u32 = (NES_WIDTH as f32 * (4.0 / 3.0)) as u32;
 const NES_HEIGHT: u32 = 240;
 
 const MINIMUM_INTEGER_SCALING_SIZE: (u32, u32) = (1024, 720);
 
-#[tokio::main(flavor = "multi_thread", worker_threads = 3)]
+#[tokio::main]
 async fn main() {
     init_logger();
-    log::info!("NES Bundler is starting!");
-
-    if let Err(e) = run().await {
-        log::error!("nes-bundler failed to run :(\n{:?}", e)
-    }
-    std::process::exit(0);
-}
-
-async fn run() -> anyhow::Result<()> {
-    // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
-    sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
-    // TODO: Perhaps do this to fix this issue: https://github.com/libsdl-org/SDL/issues/7896#issuecomment-1616700934
-    //sdl2::hint::set("SDL_JOYSTICK_RAWINPUT", "0");
-
-    let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
-    let mut sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
-
-    //TODO: Figure out a resonable latency
-    let mut audio = Audio::new(&sdl_context, 1, 41000)?;
-
-    let inputs = Inputs::new(Sdl2Gamepads::new(
-        sdl_context.game_controller().map_err(anyhow::Error::msg)?,
-    ));
-
-    let emulator = Emulator::start(&inputs, &mut audio)?;
-
-    let event_loop = EventLoop::new()?;
-    let mut renderer = create_renderer(
-        &Bundle::current().config.name,
-        Size::new(
-            MINIMUM_INTEGER_SCALING_SIZE.0 as f64,
-            MINIMUM_INTEGER_SCALING_SIZE.1 as f64,
-        ),
-        Size::new(NES_WIDTH_4_3 as f64, NES_HEIGHT as f64),
-        &event_loop,
-    )
-    .await?;
-
     #[cfg(feature = "netplay")]
     if std::env::args()
         .collect::<String>()
@@ -92,65 +62,165 @@ async fn run() -> anyhow::Result<()> {
         std::process::exit(0);
     }
 
-    let mut main_gui = MainGui::new(
-        &mut renderer,
-        emulator.frame_pool.clone(),
-        emulator,
-        inputs,
-        audio,
-    );
+    log::info!("NES Bundler is starting!");
 
-    let mut rate_counter = RateCounter::new();
-    event_loop.set_control_flow(ControlFlow::Poll);
-    event_loop
-        .run(|winit_event, control_flow| {
-            rate_counter.tick("EPS");
-            let mut gui_events = Vec::new();
-            if let Event::WindowEvent { event, .. } = winit_event {
-                match event {
-                    WindowEvent::CloseRequested | WindowEvent::Destroyed => {
-                        control_flow.exit();
-                    }
-                    WindowEvent::RedrawRequested => {
-                        // Windows needs this to not freeze the windown when resizing or moving
-                        #[cfg(windows)]
-                        renderer.window.request_redraw();
-                    }
-                    winit::event::WindowEvent::Resized(physical_size) => {
-                        renderer.resize(physical_size);
-                    }
-                    _ => {
-                        if !renderer
-                            .egui
-                            .handle_input(&renderer.window, &event)
-                            .consumed
-                        {
-                            if let Some(winit_gui_event) = event.to_gui_event() {
-                                gui_events.push(winit_gui_event);
+    if let Err(e) = run().await {
+        log::error!("nes-bundler failed to run :(\n{:?}", e)
+    }
+    std::process::exit(0);
+}
+
+fn init(renderer: &mut Renderer) -> Result<(MainGui, EventPump, AudioSender)> {
+    // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
+    sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
+    // TODO: Perhaps do this to fix this issue: https://github.com/libsdl-org/SDL/issues/7896#issuecomment-1616700934
+    //sdl2::hint::set("SDL_JOYSTICK_RAWINPUT", "0");
+
+    let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
+    let sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
+
+    //TODO: Figure out a resonable latency
+    let mut audio = Audio::new(&sdl_context, Duration::from_millis(40), 44100)?;
+
+    let inputs = Inputs::new(Sdl2Gamepads::new(
+        sdl_context.game_controller().map_err(anyhow::Error::msg)?,
+    ));
+
+    let emulator = Emulator::start()?;
+    let audio_tx = audio.stream.start()?;
+
+    let main_gui = MainGui::new(renderer, emulator, inputs, audio);
+    Ok((main_gui, sdl_event_pump, audio_tx))
+}
+
+async fn run() -> anyhow::Result<()> {
+    let event_loop = EventLoop::new()?;
+    let window = Arc::new(create_window(
+        &Bundle::current().config.name,
+        Size::new(
+            MINIMUM_INTEGER_SCALING_SIZE.0 as f64,
+            MINIMUM_INTEGER_SCALING_SIZE.1 as f64,
+        ),
+        Size::new(NES_WIDTH_4_3 as f64, NES_HEIGHT as f64),
+        &event_loop,
+    )?);
+    let mut renderer = Renderer::new(window.clone()).await.expect("TED");
+    let (event_tx, event_rx) = channel();
+    let _ = std::thread::Builder::new()
+        .name("Emulator".into())
+        .spawn(move || {
+            let (main_gui, mut sdl_event_pump, mut audio_tx) = init(&mut renderer).expect("TODO");
+            let mut nes_frame = NESFrame::new();
+            let mut rate_counter = RateCounter::new();
+            let mut game_loop =
+                GameLoop::new(main_gui, Bundle::current().config.nes_region.to_fps(), 1.0);
+
+            loop {
+                rate_counter.tick("Loop");
+                puffin::GlobalProfiler::lock().new_frame();
+                #[cfg(feature = "debug")]
+                puffin::profile_function!("Render");
+                for sdl_gui_event in sdl_event_pump
+                    .poll_iter()
+                    .flat_map(|e| e.to_gamepad_event())
+                    .map(GuiEvent::Gamepad)
+                {
+                    game_loop
+                        .game
+                        .handle_event(&sdl_gui_event, &renderer.window);
+                }
+
+                for winit_window_event in event_rx.try_iter() {
+                    match &winit_window_event {
+                        WindowEvent::Resized(physical_size) => {
+                            renderer.resize(*physical_size);
+                        }
+                        winit_window_event => {
+                            if !renderer
+                                .egui
+                                .handle_input(&renderer.window, winit_window_event)
+                                .consumed
+                            {
+                                if let Some(winit_gui_event) = winit_window_event.to_gui_event() {
+                                    game_loop
+                                        .game
+                                        .handle_event(&winit_gui_event, &renderer.window);
+                                }
                             }
                         }
                     }
                 }
-            };
 
-            for sdl_gui_event in sdl_event_pump
-                .poll_iter()
-                .flat_map(|e| e.to_gamepad_event())
-                .map(GuiEvent::Gamepad)
-            {
-                gui_events.push(sdl_gui_event);
-            }
+                {
+                    use crate::nes_state::NesStateHandler;
 
-            for gui_event in &gui_events {
-                main_gui.handle_event(gui_event, &renderer.window);
-            }
+                    #[cfg(feature = "debug")]
+                    puffin::profile_scope!("next_frame");
+                    let debug_gui = &game_loop.game.settings_gui.emulator_gui.debug_gui;
+                    let speed = if debug_gui.override_speed {
+                        debug_gui.speed
+                    } else {
+                        game_loop.game.emulator.get_emulation_speed()
+                    };
+                    game_loop.set_updates_per_second(
+                        Bundle::current().config.nes_region.to_fps() * speed,
+                    );
 
-            main_gui.render_gui(&mut renderer);
-            if let Some(report) = rate_counter.report() {
-                log::debug!("Event loop: {report}");
+                    game_loop.next_frame(|this| {
+                        let joypads = &this.game.inputs.joypads;
+                        #[cfg(feature = "debug")]
+                        puffin::profile_scope!("advance");
+                        let mut frame_data = this
+                            .game
+                            .emulator
+                            .nes_state
+                            .advance(*joypads, &mut Some(&mut nes_frame));
+                        {
+                            #[cfg(feature = "debug")]
+                            puffin::profile_scope!("push audio");
+                            if let Some(FrameData { audio }) = &mut frame_data {
+                                log::trace!("Pushing {:} audio samples", audio.len());
+                                audio_tx.push_iter(
+                                    &mut audio.drain(..audio.len().min(audio_tx.free_len())),
+                                );
+                                if !audio.is_empty() {
+                                    log::warn!("Buffer overrun: {} samples", audio.len());
+                                }
+                            }
+                        }
+                    });
+                };
+                {
+                    rate_counter.tick("Render");
+                    #[cfg(feature = "debug")]
+                    puffin::profile_scope!("render");
+                    game_loop.game.render_gui(&mut renderer, &nes_frame);
+                }
+                if let Some(report) = rate_counter.report() {
+                    println!("{report}");
+                }
             }
-        })
-        .map_err(anyhow::Error::msg)
+        });
+
+    Ok(event_loop.run(|winit_event, control_flow| {
+        if let Event::WindowEvent {
+            event: window_event,
+            ..
+        } = &winit_event
+        {
+            match window_event {
+                WindowEvent::CloseRequested | WindowEvent::Destroyed => {
+                    control_flow.exit();
+                }
+                WindowEvent::RedrawRequested => {
+                    // Windows needs this to not freeze the window when resizing or moving
+                    #[cfg(windows)]
+                    window.request_redraw();
+                }
+                window_event => event_tx.send(window_event.clone()).expect("TODO"),
+            }
+        };
+    })?)
 }
 
 fn init_logger() {

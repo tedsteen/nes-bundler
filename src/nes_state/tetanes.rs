@@ -12,17 +12,11 @@ use tetanes_core::{
 };
 
 use super::{FrameData, NesStateHandler, NTSC_PAL};
-use crate::{
-    bundle::Bundle,
-    input::JoypadState,
-    settings::{Settings, MAX_PLAYERS},
-    window::NESFrame,
-};
+use crate::{bundle::Bundle, input::JoypadState, settings::MAX_PLAYERS, window::NESFrame};
 
 #[derive(Clone)]
 pub struct TetanesNesState {
     control_deck: ControlDeck,
-    speed: f32,
 }
 
 pub trait ToTetanesRegion {
@@ -43,29 +37,23 @@ impl TetanesNesState {
     pub fn start_rom(rom: &[u8]) -> Result<Self> {
         let region = Bundle::current().config.nes_region.to_tetanes_region();
         let config = Config {
-            dir: Bundle::current().settings_path.clone(),
             filter: VideoFilter::Pixellate,
-            sample_rate: Settings::current().audio.sample_rate as f32,
             region,
             ram_state: RamState::Random,
             four_player: FourPlayer::Disabled,
             zapper: false,
             genie_codes: vec![],
-            load_on_start: true,
-            save_on_exit: true,
-            save_slot: 1,
             concurrent_dpad: false,
             channels_enabled: [true; 5],
         };
-
+        log::debug!("Starting ROM with configuration {config:?}");
         let mut control_deck = ControlDeck::with_config(config);
-        let _ =
-            control_deck.load_rom(Bundle::current().config.name.clone(), &mut Cursor::new(rom))?;
+
+        control_deck.load_rom(Bundle::current().config.name.clone(), &mut Cursor::new(rom))?;
+
         control_deck.set_region(region);
-        Ok(Self {
-            control_deck,
-            speed: 1.0,
-        })
+
+        Ok(Self { control_deck })
     }
 }
 
@@ -75,8 +63,8 @@ impl NesStateHandler for TetanesNesState {
         joypad_state: [JoypadState; MAX_PLAYERS],
         nes_frame: &mut Option<&mut NESFrame>,
     ) -> Option<FrameData> {
-        *self.control_deck.joypad_mut(Player::One) = Joypad::signature((*joypad_state[0]).into());
-        *self.control_deck.joypad_mut(Player::Two) = Joypad::signature((*joypad_state[1]).into());
+        *self.control_deck.joypad_mut(Player::One) = Joypad::from_bytes((*joypad_state[0]).into());
+        *self.control_deck.joypad_mut(Player::Two) = Joypad::from_bytes((*joypad_state[1]).into());
 
         self.control_deck.clear_audio_samples();
 
@@ -116,16 +104,6 @@ impl NesStateHandler for TetanesNesState {
 
     fn discard_samples(&mut self) {
         self.control_deck.clear_audio_samples();
-    }
-
-    fn set_speed(&mut self, speed: f32) {
-        let speed = speed.max(0.001);
-        if self.speed != speed {
-            log::debug!("Change emulation speed to {speed}x");
-            self.control_deck
-                .set_sample_rate(Settings::current().audio.sample_rate as f32 * (1.0 / speed));
-            self.speed = speed;
-        }
     }
 
     fn frame(&self) -> u32 {

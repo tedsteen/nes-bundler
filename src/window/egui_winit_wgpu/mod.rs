@@ -25,16 +25,12 @@ pub struct Renderer {
 impl Renderer {
     pub async fn new(window: Arc<Window>) -> Result<Self> {
         let size = window.inner_size();
-
-        // The instance is a handle to our GPU
-        // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             ..Default::default()
         });
-
         let surface = instance.create_surface(Arc::clone(&window))?;
-
+        println!("HEJ2");
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
@@ -43,7 +39,7 @@ impl Renderer {
             })
             .await
             .expect("adapter to be crated");
-
+        println!("HEJ3");
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
@@ -56,7 +52,7 @@ impl Renderer {
                 None, // Trace path
             )
             .await?;
-
+        println!("HEJ4");
         let surface_caps = surface.get_capabilities(&adapter);
 
         let surface_format = surface_caps
@@ -116,73 +112,47 @@ impl Renderer {
     }
 
     pub fn render(&mut self, run_ui: impl FnOnce(&Context)) -> Result<(), wgpu::SurfaceError> {
-        #[cfg(feature = "debug")]
-        puffin::profile_function!();
+        let output = self.surface.get_current_texture()?;
+        let view = output.texture.create_view(&TextureViewDescriptor {
+            label: None,
+            format: None,
+            dimension: None,
+            aspect: wgpu::TextureAspect::All,
+            base_mip_level: 0,
+            mip_level_count: None,
+            base_array_layer: 0,
+            array_layer_count: None,
+        });
 
-        let output = {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("get_current_texture");
-            self.surface.get_current_texture()?
-        };
-        let view = {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("create_view");
-            output.texture.create_view(&TextureViewDescriptor {
-                label: None,
-                format: None,
-                dimension: None,
-                aspect: wgpu::TextureAspect::All,
-                base_mip_level: 0,
-                mip_level_count: None,
-                base_array_layer: 0,
-                array_layer_count: None,
-            })
-        };
-
-        let mut encoder = {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("create_command_encoder");
-            self.device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Render Encoder"),
-                })
-        };
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
 
         let screen_descriptor = ScreenDescriptor {
             size_in_pixels: [self.config.width, self.config.height],
             pixels_per_point: self.window().scale_factor() as f32,
         };
-        {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("draw");
-            self.egui.draw(
-                &self.device,
-                &self.queue,
-                &mut encoder,
-                &self.window,
-                &view,
-                screen_descriptor,
-                |ui| {
-                    #[cfg(feature = "debug")]
-                    {
-                        puffin::GlobalProfiler::lock().new_frame();
-                        puffin_egui::show_viewport_if_enabled(ui);
-                    }
 
-                    run_ui(ui)
-                },
-            );
-        }
-        {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("queue.submit");
-            self.queue.submit(iter::once(encoder.finish()));
-        }
-        {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("output.present");
-            output.present();
-        }
+        self.egui.draw(
+            &self.device,
+            &self.queue,
+            &mut encoder,
+            &self.window,
+            &view,
+            screen_descriptor,
+            |ui| {
+                #[cfg(feature = "debug")]
+                {
+                    puffin_egui::show_viewport_if_enabled(ui);
+                }
+
+                run_ui(ui)
+            },
+        );
+        self.queue.submit(iter::once(encoder.finish()));
+        output.present();
 
         Ok(())
     }

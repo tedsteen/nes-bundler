@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use egui::{load::SizedTexture, Context, Image, Order, Vec2};
 
 use crate::{
@@ -17,39 +15,29 @@ use crate::{
     },
     window::{
         egui_winit_wgpu::{texture::Texture, Renderer},
-        Fullscreen, NESFramePool,
+        Fullscreen, NESFrame,
     },
     MINIMUM_INTEGER_SCALING_SIZE, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3,
 };
 
 pub struct MainGui {
-    last_render: Instant,
-    settings_gui: SettingsGui,
-    emulator: Emulator,
+    pub settings_gui: SettingsGui,
+    pub emulator: Emulator,
     audio: Audio,
-    inputs: Inputs,
+    pub inputs: Inputs,
     modifiers: Modifiers,
 
-    frame_pool: NESFramePool,
     nes_texture: Texture,
 }
 impl MainGui {
-    pub fn new(
-        renderer: &mut Renderer,
-        frame_pool: NESFramePool,
-        emulator: Emulator,
-        inputs: Inputs,
-        audio: Audio,
-    ) -> Self {
+    pub fn new(renderer: &mut Renderer, emulator: Emulator, inputs: Inputs, audio: Audio) -> Self {
         Self {
-            last_render: Instant::now(),
             settings_gui: SettingsGui::new(),
             emulator,
             inputs,
             audio,
             modifiers: Modifiers::empty(),
 
-            frame_pool,
             nes_texture: Texture::new(renderer, NES_WIDTH, NES_HEIGHT, Some("nes frame")),
         }
     }
@@ -100,36 +88,25 @@ impl MainGui {
         }
     }
 
-    pub fn render_gui(&mut self, renderer: &mut Renderer) {
-        let now = Instant::now();
-        // If emulation speed is low make sure to render the UI at least once every 20ms
-        let mut needs_render = now.duration_since(self.last_render).as_millis() > 20;
-
-        if let Some(frame_buffer) = self.frame_pool.pop_ref() {
-            needs_render = true;
-            self.nes_texture.update(&renderer.queue, &frame_buffer);
-        }
-        if needs_render {
-            self.last_render = now;
-            let render_result = renderer.render(move |ctx| {
-                self.ui(ctx);
-            });
-
-            match render_result {
-                Ok(_) => {}
-                Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                    // Reconfigure the surface if it's lost or outdated
-                    log::warn!("Surface lost or outdated, recreating.");
-                    renderer.resize(renderer.size);
-                }
-                // The system is out of memory, we should probably quit
-                Err(wgpu::SurfaceError::OutOfMemory) => {
-                    log::warn!("Out of memory when rendering")
-                    // control_flow.exit(),
-                }
-                Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
-            };
-        }
+    pub fn render_gui(&mut self, renderer: &mut Renderer, nes_frame: &NESFrame) {
+        self.nes_texture.update(&renderer.queue, nes_frame);
+        let render_result = renderer.render(move |ctx| {
+            self.ui(ctx);
+        });
+        match render_result {
+            Ok(_) => {}
+            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                // Reconfigure the surface if it's lost or outdated
+                log::warn!("Surface lost or outdated, recreating.");
+                renderer.resize(renderer.size);
+            }
+            // The system is out of memory, we should probably quit
+            Err(wgpu::SurfaceError::OutOfMemory) => {
+                log::warn!("Out of memory when rendering")
+                // control_flow.exit(),
+            }
+            Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
+        };
     }
 
     fn ui(&mut self, ctx: &Context) {

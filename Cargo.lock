@@ -2497,11 +2497,11 @@ dependencies = [
  "puffin_egui",
  "raw-window-handle 0.6.0",
  "reqwest",
+ "ringbuf",
  "sdl2",
  "serde",
  "serde_yaml",
  "tetanes-core",
- "thingbuf",
  "tinytemplate",
  "tokio",
  "uuid",
@@ -2980,12 +2980,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pollster"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22686f4785f02a4fcc856d3b3bb19bf6c8160d103f7a99cc258bddd0251dc7f2"
-
-[[package]]
 name = "polyval"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3313,6 +3307,15 @@ dependencies = [
  "spin 0.9.8",
  "untrusted 0.9.0",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "ringbuf"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "79abed428d1fd2a128201cec72c5f6938e2da607c6f3745f769fabea399d950a"
+dependencies = [
+ "crossbeam-utils",
 ]
 
 [[package]]
@@ -3934,41 +3937,20 @@ dependencies = [
 [[package]]
 name = "tetanes-core"
 version = "0.10.0"
-source = "git+https://github.com/tedsteen/tetanes.git?branch=for-nes-bundler#f0b5fe37f0e652826ab8294351db621227ff58e5"
+source = "git+https://github.com/tedsteen/tetanes.git?branch=for-nes-bundler#770e9d44f81e8df1b43fb6d0c8e8b7cb044db166"
 dependencies = [
  "anyhow",
  "bincode",
  "bitflags 2.5.0",
+ "cfg-if",
  "dirs",
  "enum_dispatch",
+ "flate2",
  "rand",
  "serde",
- "tetanes-util",
+ "thiserror",
  "tracing",
-]
-
-[[package]]
-name = "tetanes-util"
-version = "0.10.0"
-source = "git+https://github.com/tedsteen/tetanes.git?branch=for-nes-bundler#f0b5fe37f0e652826ab8294351db621227ff58e5"
-dependencies = [
- "anyhow",
- "flate2",
- "pollster",
- "serde",
- "tracing",
- "wasm-bindgen-futures",
  "web-time 1.1.0",
-]
-
-[[package]]
-name = "thingbuf"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4706f1bfb859af03f099ada2de3cea3e515843c2d3e93b7893f16d94a37f9415"
-dependencies = [
- "parking_lot 0.12.1",
- "pin-project",
 ]
 
 [[package]]

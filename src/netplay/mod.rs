@@ -1,4 +1,7 @@
-use std::ops::{Deref, DerefMut};
+use std::{
+    ops::{Deref, DerefMut},
+    sync::{Mutex, OnceLock},
+};
 
 use crate::{
     input::JoypadState,
@@ -136,22 +139,6 @@ impl NesStateHandler for NetplayStateHandler {
         }
     }
 
-    fn set_speed(&mut self, speed: f32) {
-        match &mut self.netplay {
-            Some(NetplayState::Disconnected(s)) => {
-                s.state.set_speed(speed);
-            }
-            Some(NetplayState::Connected(s)) => {
-                s.state
-                    .netplay_session
-                    .game_state
-                    .nes_state
-                    .set_speed(speed);
-            }
-            _ => {}
-        }
-    }
-
     fn frame(&self) -> u32 {
         match &self.netplay {
             Some(NetplayState::Connected(s)) => s.state.netplay_session.game_state.frame(),
@@ -166,5 +153,9 @@ impl NetplayStateHandler {
         Ok(NetplayStateHandler {
             netplay: Some(NetplayState::Disconnected(Netplay::new()?)),
         })
+    }
+    pub fn emulation_speed() -> &'static Mutex<f32> {
+        static MEM: OnceLock<Mutex<f32>> = OnceLock::new();
+        MEM.get_or_init(|| Mutex::new(1_f32))
     }
 }

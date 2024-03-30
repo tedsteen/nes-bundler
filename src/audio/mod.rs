@@ -1,15 +1,15 @@
 use std::ops::Add;
 
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Result};
+use ringbuf::{Consumer, HeapRb, Producer};
 use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired, AudioStatus};
 use sdl2::{AudioSubsystem, Sdl};
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::settings::Settings;
-use crate::FPS;
 
 pub mod gui;
 
@@ -17,8 +17,6 @@ pub mod gui;
 pub struct AudioSettings {
     pub volume: u8,
     pub output_device: Option<String>,
-    #[serde(skip)]
-    pub sample_rate: u32,
 }
 
 struct AudioReceiverCallback(AudioReceiver);
@@ -32,7 +30,7 @@ impl AudioCallback for AudioReceiverCallback {
         let volume = Settings::current().audio.volume as f32 / 100.0;
         let mut missing_samples = 0;
         for s in out {
-            if let Some(new_sample) = consumer.blocking_recv() {
+            if let Some(new_sample) = consumer.pop() {
                 *s = new_sample * volume;
             } else {
                 missing_samples += 1;
@@ -44,29 +42,30 @@ impl AudioCallback for AudioReceiverCallback {
         }
     }
 }
-pub type AudioSender = Sender<f32>;
-pub type AudioReceiver = Receiver<f32>;
+type AudioRb = Arc<HeapRb<f32>>;
+pub type AudioSender = Producer<f32, AudioRb>;
+pub type AudioReceiver = Consumer<f32, AudioRb>;
 
 pub struct Stream {
     tx: Option<AudioSender>,
     output_device_name: Option<String>,
     audio_device: Option<AudioDevice<AudioReceiverCallback>>,
+    sample_latency: u16,
 }
 
 impl Stream {
     pub(crate) fn new(
         audio_subsystem: &AudioSubsystem,
-        latency_in_frames: u8,
+        latency: Duration,
         desired_sample_rate: u32,
     ) -> Result<Self> {
-        //let latency_in_samples = Self::latency_to_sample_count(latency, sample_rate);
-        let latency_in_samples =
-            Self::frame_count_to_sample_count(latency_in_frames, desired_sample_rate);
-        let latency_in_secs =
-            Self::sample_count_to_latency(latency_in_samples, desired_sample_rate);
-
-        log::debug!("Trying to start audio: sample rate={desired_sample_rate}, latency={latency_in_secs:?} ({latency_in_frames} frames)");
-        let (tx, audio_rx) = tokio::sync::mpsc::channel(latency_in_samples as usize);
+        log::debug!(
+            "Trying to start audio: sample rate={desired_sample_rate}, latency={latency:?}"
+        );
+        let sample_latency =
+            (latency.as_secs_f32() * desired_sample_rate as f32 * 1.0).ceil() as u16;
+        let buffer = HeapRb::<f32>::new(2 * sample_latency as usize);
+        let (tx, audio_rx) = buffer.split();
 
         let output_device = &Settings::current().audio.output_device.clone();
         let audio_device = Stream::new_audio_device(
@@ -74,28 +73,14 @@ impl Stream {
             audio_subsystem,
             output_device,
             audio_rx,
+            sample_latency,
         )?;
         Ok(Self {
             tx: Some(tx),
             output_device_name: output_device.clone(),
             audio_device: Some(audio_device),
+            sample_latency,
         })
-    }
-
-    fn frame_count_to_sample_count(sample_count: u8, sample_rate: u32) -> u16 {
-        sample_count as u16 * ((1.0 / FPS) * sample_rate as f32) as u16
-    }
-
-    // fn latency_to_sample_count(latency: Duration, sample_rate: u32) -> u16 {
-    //     let channel_count = 1;
-    //     ((latency.as_secs() as f64 + latency.subsec_nanos() as f64 / 1_000_000_000.0)
-    //         * sample_rate as f64
-    //         * channel_count as f64) as u16
-    // }
-
-    fn sample_count_to_latency(count: u16, sample_rate: u32) -> Duration {
-        let channel_count = 1;
-        Duration::from_secs_f32(count as f32 / sample_rate as f32 / channel_count as f32)
     }
 
     pub fn start(&mut self) -> Result<AudioSender> {
@@ -110,13 +95,14 @@ impl Stream {
         audio_subsystem: &AudioSubsystem,
         output_device: &Option<String>,
         audio_rx: AudioReceiver,
+        sample_latency: u16,
     ) -> Result<AudioDevice<AudioReceiverCallback>> {
         let channels = 1;
 
         let desired_spec = AudioSpecDesired {
             freq: Some(desired_sample_rate as i32),
             channels: Some(channels),
-            samples: Some(Self::frame_count_to_sample_count(1, desired_sample_rate)),
+            samples: Some(sample_latency),
         };
 
         // Make sure the device exists, otherwise default to first available
@@ -134,7 +120,6 @@ impl Stream {
             })
             .map_err(anyhow::Error::msg)?;
         log::info!("Audio started with {:?}", output_device.spec());
-        Settings::current().audio.sample_rate = output_device.spec().freq as u32;
         Ok(output_device)
     }
 
@@ -151,6 +136,7 @@ impl Stream {
                     &subsystem,
                     &output_device_name,
                     old_callback.0,
+                    self.sample_latency,
                 ) {
                     Ok(audio_device) => {
                         if old_device_status == AudioStatus::Playing {
@@ -176,11 +162,11 @@ pub struct Audio {
 }
 
 impl Audio {
-    pub fn new(sdl_context: &Sdl, latency_in_frames: u8, desired_sample_rate: u32) -> Result<Self> {
+    pub fn new(sdl_context: &Sdl, latency: Duration, desired_sample_rate: u32) -> Result<Self> {
         let audio_subsystem = sdl_context.audio().map_err(anyhow::Error::msg)?;
 
         Ok(Audio {
-            stream: Stream::new(&audio_subsystem, latency_in_frames, desired_sample_rate)?,
+            stream: Stream::new(&audio_subsystem, latency, desired_sample_rate)?,
             available_device_names: vec![],
             next_device_names_clear: Instant::now(),
             audio_subsystem,
