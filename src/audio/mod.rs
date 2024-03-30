@@ -100,7 +100,7 @@ impl Stream {
         let desired_spec = AudioSpecDesired {
             freq: Some(desired_sample_rate as i32),
             channels: Some(channels),
-            samples: Some(sample_latency.div_ceil(2)),
+            samples: Some(sample_latency.div_ceil(4)),
         };
 
         // Make sure the device exists, otherwise default to first available

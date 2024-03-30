@@ -50,7 +50,7 @@ impl TetanesNesState {
         };
         log::debug!("Starting ROM with configuration {config:?}");
         let mut control_deck = ControlDeck::with_config(config);
-
+        //control_deck.set_cycle_accurate(false); //TODO: Add as a bundle config?
         control_deck.load_rom(Bundle::current().config.name.clone(), &mut Cursor::new(rom))?;
 
         control_deck.set_region(region);

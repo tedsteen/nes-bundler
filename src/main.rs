@@ -33,6 +33,9 @@ const MINIMUM_INTEGER_SCALING_SIZE: (u32, u32) = (1024, 720);
 #[tokio::main]
 async fn main() {
     init_logger();
+    #[cfg(feature = "debug")]
+    puffin::set_scopes_on(true);
+
     #[cfg(feature = "netplay")]
     if std::env::args()
         .collect::<String>()

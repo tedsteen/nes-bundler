@@ -49,7 +49,6 @@ impl Emulator {
 
                 loop {
                     rate_counter.tick("Loop");
-                    puffin::GlobalProfiler::lock().new_frame();
                     #[cfg(feature = "debug")]
                     puffin::profile_function!("Render");
 
@@ -82,29 +81,29 @@ impl Emulator {
                     }
 
                     let joypads = &main_gui.inputs.joypads;
-                    {
+                    let mut frame_data = {
                         #[cfg(feature = "debug")]
                         puffin::profile_scope!("advance");
-                        let mut frame_data = main_gui
+                        main_gui
                             .emulator
                             .nes_state
-                            .advance(*joypads, &mut Some(&mut nes_frame));
-                        {
-                            #[cfg(feature = "debug")]
-                            puffin::profile_scope!("push audio");
-                            if let Some(FrameData { audio }) = &mut frame_data {
-                                log::trace!("Pushing {:} audio samples", audio.len());
-                                for s in audio {
-                                    let _ = audio_tx.send(*s);
-                                }
-                            }
-                        }
-                    }
+                            .advance(*joypads, &mut Some(&mut nes_frame))
+                    };
                     {
                         rate_counter.tick("Render");
                         #[cfg(feature = "debug")]
                         puffin::profile_scope!("render");
                         main_gui.render_gui(&mut renderer, &nes_frame);
+                    }
+                    {
+                        #[cfg(feature = "debug")]
+                        puffin::profile_scope!("push audio");
+                        if let Some(FrameData { audio }) = &mut frame_data {
+                            log::trace!("Pushing {:} audio samples", audio.len());
+                            for s in audio {
+                                let _ = audio_tx.send(*s);
+                            }
+                        }
                     }
                     if let Some(report) = rate_counter.report() {
                         println!("{report}");
@@ -123,8 +122,7 @@ impl Emulator {
         let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
         let sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
 
-        //TODO: Figure out a resonable latency
-        let mut audio = Audio::new(&sdl_context, Duration::from_millis(40), 44100)?;
+        let mut audio = Audio::new(&sdl_context, Duration::from_millis(20), 44100)?;
 
         let inputs = Inputs::new(Sdl2Gamepads::new(
             sdl_context.game_controller().map_err(anyhow::Error::msg)?,
