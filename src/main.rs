@@ -6,11 +6,18 @@ use std::sync::Arc;
 
 use bundle::Bundle;
 
+use fps::RateCounter;
 use nes_state::emulator::Emulator;
 
-use window::{create_window, Size};
+use settings::gui::ToGuiEvent;
+use window::egui_winit_wgpu::Renderer;
+use window::{create_window, NESFrame, Size};
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::EventLoop;
+
+use crate::input::gamepad::ToGamepadEvent;
+use crate::nes_state::{FrameData, NesStateHandler};
+use crate::settings::gui::GuiEvent;
 
 mod audio;
 mod bundle;
@@ -66,29 +73,101 @@ async fn run() -> anyhow::Result<()> {
         Size::new(NES_WIDTH_4_3 as f64, NES_HEIGHT as f64),
         &event_loop,
     )?);
-    let event_tx = Emulator::start(window.clone()).await?;
+    let emulator = Emulator::new()?;
+    let mut renderer = Renderer::new(window.clone()).await?;
 
-    Ok(event_loop.run(|winit_event, control_flow| {
-        if let Event::WindowEvent {
-            event: window_event,
-            ..
-        } = &winit_event
-        {
-            match window_event {
-                WindowEvent::CloseRequested | WindowEvent::Destroyed => {
-                    control_flow.exit();
-                }
-                WindowEvent::RedrawRequested => {
-                    // Windows needs this to not freeze the window when resizing or moving
-                    #[cfg(windows)]
-                    window.request_redraw();
-                }
-                window_event => {
-                    let _ = event_tx.send(window_event.clone());
+    let (mut main_gui, mut sdl_event_pump, audio_tx) =
+        Emulator::init(&mut renderer, emulator).expect("the emulator to be able to initialise");
+    let mut nes_frame = NESFrame::new();
+    let mut rate_counter = RateCounter::new();
+
+    event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+    event_loop.run(|winit_event, control_flow| {
+        let mut render_needed = false;
+        match &winit_event {
+            Event::WindowEvent {
+                event: window_event,
+                ..
+            } => {
+                match window_event {
+                    WindowEvent::CloseRequested | WindowEvent::Destroyed => {
+                        control_flow.exit();
+                    }
+                    WindowEvent::RedrawRequested => {
+                        // Windows needs this to not freeze the window when resizing or moving
+                        #[cfg(windows)]
+                        window.request_redraw();
+                        render_needed = true;
+                    }
+                    window_event => match &window_event {
+                        WindowEvent::Resized(physical_size) => {
+                            renderer.resize(*physical_size);
+                            render_needed = true;
+                        }
+                        winit_window_event => {
+                            if !renderer
+                                .egui
+                                .handle_input(&renderer.window, winit_window_event)
+                                .consumed
+                            {
+                                if let Some(winit_gui_event) = winit_window_event.to_gui_event() {
+                                    main_gui.handle_event(&winit_gui_event, &renderer.window);
+                                }
+                            }
+                        }
+                    },
                 }
             }
+            Event::AboutToWait => {
+                render_needed = true;
+            }
+            _ => {}
         };
-    })?)
+        if render_needed {
+            rate_counter.tick("Loop");
+            #[cfg(feature = "debug")]
+            puffin::profile_function!("Render");
+
+            for sdl_gui_event in sdl_event_pump
+                .poll_iter()
+                .flat_map(|e| e.to_gamepad_event())
+                .map(GuiEvent::Gamepad)
+            {
+                main_gui.handle_event(&sdl_gui_event, &renderer.window);
+            }
+
+            let joypads = &main_gui.inputs.joypads;
+            let mut frame_data = {
+                #[cfg(feature = "debug")]
+                puffin::profile_scope!("advance");
+                main_gui
+                    .emulator
+                    .nes_state
+                    .advance(*joypads, &mut Some(&mut nes_frame))
+            };
+            {
+                rate_counter.tick("Render");
+                #[cfg(feature = "debug")]
+                puffin::profile_scope!("render");
+                main_gui.render_gui(&mut renderer, &nes_frame);
+            }
+            {
+                #[cfg(feature = "debug")]
+                puffin::profile_scope!("push audio");
+                if let Some(FrameData { audio }) = &mut frame_data {
+                    log::trace!("Pushing {:} audio samples", audio.len());
+                    for s in audio {
+                        let _ = audio_tx.send(*s);
+                    }
+                }
+            }
+            if let Some(report) = rate_counter.report() {
+                println!("{report}");
+            }
+        }
+    })?;
+
+    Ok(())
 }
 
 fn init_logger() {

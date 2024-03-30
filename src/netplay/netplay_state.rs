@@ -1,7 +1,4 @@
-use std::sync::OnceLock;
-
 use anyhow::Result;
-use tokio::runtime::Runtime;
 use uuid::Uuid;
 
 use crate::{
@@ -59,17 +56,6 @@ pub struct Netplay<T> {
     pub state: T,
 }
 unsafe impl<T> Send for Netplay<T> {}
-
-pub fn netplay_runtime() -> &'static Runtime {
-    static MEM: OnceLock<Runtime> = OnceLock::new();
-    MEM.get_or_init(|| {
-        tokio::runtime::Builder::new_multi_thread()
-            .thread_name("Netplay")
-            .enable_io()
-            .build()
-            .expect("to build a tokio runtime")
-    })
-}
 
 impl<T> Netplay<T> {
     fn from(state: T) -> Self {

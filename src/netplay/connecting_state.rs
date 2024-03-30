@@ -9,7 +9,7 @@ use std::fmt::Debug;
 use std::time::{Duration, Instant};
 
 use crate::bundle::Bundle;
-use crate::netplay::netplay_state::{get_netplay_id, netplay_runtime};
+use crate::netplay::netplay_state::get_netplay_id;
 use crate::settings::MAX_PLAYERS;
 
 use super::netplay_session::{GGRSConfig, NetplaySession};
@@ -56,7 +56,7 @@ impl ConnectingState {
                 let req = reqwest_client.get(format!("{server}/{netplay_id}")).send();
                 let (sender, result) =
                     futures::channel::oneshot::channel::<Result<TurnOnResponse, TurnOnError>>();
-                netplay_runtime().spawn(async move {
+                tokio::spawn(async move {
                     if let Err(e) = match req.await {
                         Ok(res) => {
                             log::trace!("Received response from TurnOn server: {:?}", res);
@@ -177,7 +177,7 @@ impl PeeringState {
 
         let loop_fut = loop_fut.fuse();
         let timeout = Delay::new(Duration::from_millis(100));
-        netplay_runtime().spawn(async move {
+        tokio::spawn(async move {
             futures::pin_mut!(loop_fut, timeout);
             loop {
                 select! {

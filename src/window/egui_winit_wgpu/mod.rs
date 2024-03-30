@@ -30,7 +30,7 @@ impl Renderer {
             ..Default::default()
         });
         let surface = instance.create_surface(Arc::clone(&window))?;
-        println!("HEJ2");
+
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
@@ -39,7 +39,7 @@ impl Renderer {
             })
             .await
             .expect("adapter to be crated");
-        println!("HEJ3");
+
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
@@ -52,7 +52,7 @@ impl Renderer {
                 None, // Trace path
             )
             .await?;
-        println!("HEJ4");
+
         let surface_caps = surface.get_capabilities(&adapter);
 
         let surface_format = surface_caps

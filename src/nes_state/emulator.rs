@@ -1,22 +1,17 @@
-use std::sync::mpsc::{channel, Sender};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use crate::audio::{Audio, AudioSender};
 use crate::bundle::Bundle;
-use crate::fps::RateCounter;
 use crate::gui::MainGui;
-use crate::input::gamepad::ToGamepadEvent;
 use crate::input::sdl2_impl::Sdl2Gamepads;
 use crate::input::Inputs;
-use crate::settings::gui::{GuiComponent, GuiEvent, ToGuiEvent};
+use crate::settings::gui::GuiComponent;
 use crate::window::egui_winit_wgpu::Renderer;
-use crate::window::NESFrame;
 use anyhow::Result;
 use sdl2::EventPump;
-use winit::event::WindowEvent;
 
-use crate::nes_state::{FrameData, NesStateHandler};
+use crate::nes_state::NesStateHandler;
 
 #[cfg(feature = "netplay")]
 type StateHandler = crate::netplay::NetplayStateHandler;
@@ -27,7 +22,7 @@ pub struct Emulator {
     pub nes_state: StateHandler,
 }
 impl Emulator {
-    pub async fn start(window: Arc<winit::window::Window>) -> Result<Sender<WindowEvent>> {
+    pub fn new() -> Result<Emulator> {
         #[cfg(not(feature = "netplay"))]
         let nes_state = crate::nes_state::LocalNesState::start_rom(&Bundle::current().rom)?;
 
@@ -36,84 +31,13 @@ impl Emulator {
 
         let this = Self { nes_state };
 
-        let mut renderer = Renderer::new(window.clone()).await?;
-
-        let (event_tx, event_rx) = channel();
-        let _ = std::thread::Builder::new()
-            .name("Emulator".into())
-            .spawn(move || {
-                let (mut main_gui, mut sdl_event_pump, audio_tx) =
-                    Self::init(&mut renderer, this).expect("the emulator to be able to initialise");
-                let mut nes_frame = NESFrame::new();
-                let mut rate_counter = RateCounter::new();
-
-                loop {
-                    rate_counter.tick("Loop");
-                    #[cfg(feature = "debug")]
-                    puffin::profile_function!("Render");
-
-                    for sdl_gui_event in sdl_event_pump
-                        .poll_iter()
-                        .flat_map(|e| e.to_gamepad_event())
-                        .map(GuiEvent::Gamepad)
-                    {
-                        main_gui.handle_event(&sdl_gui_event, &renderer.window);
-                    }
-
-                    for winit_window_event in event_rx.try_iter() {
-                        match &winit_window_event {
-                            WindowEvent::Resized(physical_size) => {
-                                renderer.resize(*physical_size);
-                            }
-                            winit_window_event => {
-                                if !renderer
-                                    .egui
-                                    .handle_input(&renderer.window, winit_window_event)
-                                    .consumed
-                                {
-                                    if let Some(winit_gui_event) = winit_window_event.to_gui_event()
-                                    {
-                                        main_gui.handle_event(&winit_gui_event, &renderer.window);
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    let joypads = &main_gui.inputs.joypads;
-                    let mut frame_data = {
-                        #[cfg(feature = "debug")]
-                        puffin::profile_scope!("advance");
-                        main_gui
-                            .emulator
-                            .nes_state
-                            .advance(*joypads, &mut Some(&mut nes_frame))
-                    };
-                    {
-                        rate_counter.tick("Render");
-                        #[cfg(feature = "debug")]
-                        puffin::profile_scope!("render");
-                        main_gui.render_gui(&mut renderer, &nes_frame);
-                    }
-                    {
-                        #[cfg(feature = "debug")]
-                        puffin::profile_scope!("push audio");
-                        if let Some(FrameData { audio }) = &mut frame_data {
-                            log::trace!("Pushing {:} audio samples", audio.len());
-                            for s in audio {
-                                let _ = audio_tx.send(*s);
-                            }
-                        }
-                    }
-                    if let Some(report) = rate_counter.report() {
-                        println!("{report}");
-                    }
-                }
-            });
-        Ok(event_tx)
+        Ok(this)
     }
 
-    fn init(renderer: &mut Renderer, emulator: Self) -> Result<(MainGui, EventPump, AudioSender)> {
+    pub fn init(
+        renderer: &mut Renderer,
+        emulator: Self,
+    ) -> Result<(MainGui, EventPump, AudioSender)> {
         // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
         sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
         // TODO: Perhaps do this to fix this issue: https://github.com/libsdl-org/SDL/issues/7896#issuecomment-1616700934
