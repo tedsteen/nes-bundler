@@ -20,9 +20,9 @@ pub enum NesRegion {
 impl NesRegion {
     pub fn to_fps(&self) -> f32 {
         match self {
-            NesRegion::Pal => 1662607.0 / 33247.5,
-            NesRegion::Ntsc => 3579545.5 / 227.333 / 262.0,
-            NesRegion::Dendy => todo!(),
+            NesRegion::Pal => 50.006_977,
+            NesRegion::Ntsc => 60.098_812,
+            NesRegion::Dendy => 50.006_977,
         }
     }
 }
