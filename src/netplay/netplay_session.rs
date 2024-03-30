@@ -3,8 +3,7 @@ use matchbox_socket::PeerId;
 
 use crate::{
     input::JoypadState,
-    nes_state::{FrameData, NesStateHandler},
-    netplay::NetplayStateHandler,
+    nes_state::{emulator::Emulator, FrameData, NesStateHandler},
     settings::MAX_PLAYERS,
     window::NESFrame,
 };
@@ -137,7 +136,7 @@ impl NetplaySession {
             }
         }
 
-        *NetplayStateHandler::emulation_speed().lock().unwrap() = if sess.frames_ahead() > 0 {
+        *Emulator::emulation_speed().lock().unwrap() = if sess.frames_ahead() > 0 {
             log::debug!(
                 "Frames ahead: {:?}, slowing down emulation",
                 sess.frames_ahead()

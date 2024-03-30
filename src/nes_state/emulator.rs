@@ -1,5 +1,6 @@
+use std::sync::{Mutex, OnceLock};
+
 use crate::bundle::Bundle;
-use crate::netplay::NetplayStateHandler;
 use crate::settings::gui::GuiComponent;
 use anyhow::Result;
 
@@ -34,8 +35,9 @@ impl Emulator {
         self.nes_state.load(data);
     }
 
-    pub fn get_emulation_speed(&self) -> f32 {
-        *NetplayStateHandler::emulation_speed().lock().unwrap()
+    pub fn emulation_speed() -> &'static Mutex<f32> {
+        static MEM: OnceLock<Mutex<f32>> = OnceLock::new();
+        MEM.get_or_init(|| Mutex::new(1_f32))
     }
 }
 
@@ -62,10 +64,17 @@ impl GuiComponent<Emulator> for DebugGui {
                 .spacing([10.0, 4.0])
                 .striped(true)
                 .show(ui, |ui| {
-                    ui.checkbox(&mut self.override_speed, "Override emulation speed");
+                    if ui
+                        .checkbox(&mut self.override_speed, "Override emulation speed")
+                        .changed()
+                        && !self.override_speed
+                    {
+                        *Emulator::emulation_speed().lock().unwrap() = 1.0;
+                    }
 
                     if self.override_speed {
-                        ui.add(egui::Slider::new(&mut self.speed, 0.01..=4.0).suffix("x"));
+                        ui.add(egui::Slider::new(&mut self.speed, 0.01..=2.0).suffix("x"));
+                        *Emulator::emulation_speed().lock().unwrap() = self.speed;
                     }
                     ui.end_row();
                 });

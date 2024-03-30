@@ -14,7 +14,7 @@ use audio::{Audio, AudioSender};
 use bundle::Bundle;
 
 use fps::RateCounter;
-use gameloop::GameLoop;
+
 use gui::MainGui;
 
 use input::sdl2_impl::Sdl2Gamepads;
@@ -31,7 +31,6 @@ use winit::event_loop::EventLoop;
 mod audio;
 mod bundle;
 mod fps;
-mod gameloop;
 mod gui;
 mod input;
 mod integer_scaling;
@@ -41,7 +40,6 @@ mod netplay;
 mod settings;
 mod window;
 
-type Fps = f32;
 const NES_WIDTH: u32 = 256;
 const NES_WIDTH_4_3: u32 = (NES_WIDTH as f32 * (4.0 / 3.0)) as u32;
 const NES_HEIGHT: u32 = 240;
@@ -109,25 +107,22 @@ async fn run() -> anyhow::Result<()> {
     let _ = std::thread::Builder::new()
         .name("Emulator".into())
         .spawn(move || {
-            let (main_gui, mut sdl_event_pump, mut audio_tx) = init(&mut renderer).expect("TODO");
+            let (mut main_gui, mut sdl_event_pump, audio_tx) = init(&mut renderer).expect("TODO");
             let mut nes_frame = NESFrame::new();
             let mut rate_counter = RateCounter::new();
-            let mut game_loop =
-                GameLoop::new(main_gui, Bundle::current().config.nes_region.to_fps(), 1.0);
 
             loop {
                 rate_counter.tick("Loop");
                 puffin::GlobalProfiler::lock().new_frame();
                 #[cfg(feature = "debug")]
                 puffin::profile_function!("Render");
+
                 for sdl_gui_event in sdl_event_pump
                     .poll_iter()
                     .flat_map(|e| e.to_gamepad_event())
                     .map(GuiEvent::Gamepad)
                 {
-                    game_loop
-                        .game
-                        .handle_event(&sdl_gui_event, &renderer.window);
+                    main_gui.handle_event(&sdl_gui_event, &renderer.window);
                 }
 
                 for winit_window_event in event_rx.try_iter() {
@@ -142,59 +137,39 @@ async fn run() -> anyhow::Result<()> {
                                 .consumed
                             {
                                 if let Some(winit_gui_event) = winit_window_event.to_gui_event() {
-                                    game_loop
-                                        .game
-                                        .handle_event(&winit_gui_event, &renderer.window);
+                                    main_gui.handle_event(&winit_gui_event, &renderer.window);
                                 }
                             }
                         }
                     }
                 }
 
+                use crate::nes_state::NesStateHandler;
+
+                let joypads = &main_gui.inputs.joypads;
                 {
-                    use crate::nes_state::NesStateHandler;
-
                     #[cfg(feature = "debug")]
-                    puffin::profile_scope!("next_frame");
-                    let debug_gui = &game_loop.game.settings_gui.emulator_gui.debug_gui;
-                    let speed = if debug_gui.override_speed {
-                        debug_gui.speed
-                    } else {
-                        game_loop.game.emulator.get_emulation_speed()
-                    };
-                    game_loop.set_updates_per_second(
-                        Bundle::current().config.nes_region.to_fps() * speed,
-                    );
-
-                    game_loop.next_frame(|this| {
-                        let joypads = &this.game.inputs.joypads;
+                    puffin::profile_scope!("advance");
+                    let mut frame_data = main_gui
+                        .emulator
+                        .nes_state
+                        .advance(*joypads, &mut Some(&mut nes_frame));
+                    {
                         #[cfg(feature = "debug")]
-                        puffin::profile_scope!("advance");
-                        let mut frame_data = this
-                            .game
-                            .emulator
-                            .nes_state
-                            .advance(*joypads, &mut Some(&mut nes_frame));
-                        {
-                            #[cfg(feature = "debug")]
-                            puffin::profile_scope!("push audio");
-                            if let Some(FrameData { audio }) = &mut frame_data {
-                                log::trace!("Pushing {:} audio samples", audio.len());
-                                audio_tx.push_iter(
-                                    &mut audio.drain(..audio.len().min(audio_tx.free_len())),
-                                );
-                                if !audio.is_empty() {
-                                    log::warn!("Buffer overrun: {} samples", audio.len());
-                                }
+                        puffin::profile_scope!("push audio");
+                        if let Some(FrameData { audio }) = &mut frame_data {
+                            log::trace!("Pushing {:} audio samples", audio.len());
+                            for s in audio {
+                                let _ = audio_tx.send(*s);
                             }
                         }
-                    });
-                };
+                    }
+                }
                 {
                     rate_counter.tick("Render");
                     #[cfg(feature = "debug")]
                     puffin::profile_scope!("render");
-                    game_loop.game.render_gui(&mut renderer, &nes_frame);
+                    main_gui.render_gui(&mut renderer, &nes_frame);
                 }
                 if let Some(report) = rate_counter.report() {
                     println!("{report}");

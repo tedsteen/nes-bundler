@@ -4,14 +4,16 @@ use anyhow::Result;
 
 use tetanes_core::{
     self,
+    apu::filter::FilterChain,
     common::{NesRegion, Regional},
     control_deck::{Config, ControlDeck},
+    cpu::Cpu,
     input::{FourPlayer, Joypad, Player},
     mem::RamState,
     video::VideoFilter,
 };
 
-use super::{FrameData, NesStateHandler, NTSC_PAL};
+use super::{emulator::Emulator, FrameData, NesStateHandler, NTSC_PAL};
 use crate::{bundle::Bundle, input::JoypadState, settings::MAX_PLAYERS, window::NESFrame};
 
 #[derive(Clone)]
@@ -55,6 +57,18 @@ impl TetanesNesState {
 
         Ok(Self { control_deck })
     }
+
+    fn set_speed(&mut self, speed: f32) {
+        let apu = &mut self.control_deck.cpu_mut().bus.apu;
+        let new_sample_rate = 44100.0 * (1.0 / speed);
+        let new_sample_period = Cpu::region_clock_rate(apu.region) / new_sample_rate;
+
+        if apu.sample_period != new_sample_period {
+            log::debug!("Change emulation speed to {speed}x");
+            apu.filter_chain = FilterChain::new(apu.region, new_sample_rate);
+            apu.sample_period = new_sample_period;
+        }
+    }
 }
 
 impl NesStateHandler for TetanesNesState {
@@ -63,6 +77,8 @@ impl NesStateHandler for TetanesNesState {
         joypad_state: [JoypadState; MAX_PLAYERS],
         nes_frame: &mut Option<&mut NESFrame>,
     ) -> Option<FrameData> {
+        self.set_speed(*Emulator::emulation_speed().lock().unwrap());
+
         *self.control_deck.joypad_mut(Player::One) = Joypad::from_bytes((*joypad_state[0]).into());
         *self.control_deck.joypad_mut(Player::Two) = Joypad::from_bytes((*joypad_state[1]).into());
 

@@ -1,7 +1,4 @@
-use std::{
-    ops::{Deref, DerefMut},
-    sync::{Mutex, OnceLock},
-};
+use std::ops::{Deref, DerefMut};
 
 use crate::{
     input::JoypadState,
@@ -153,9 +150,5 @@ impl NetplayStateHandler {
         Ok(NetplayStateHandler {
             netplay: Some(NetplayState::Disconnected(Netplay::new()?)),
         })
-    }
-    pub fn emulation_speed() -> &'static Mutex<f32> {
-        static MEM: OnceLock<Mutex<f32>> = OnceLock::new();
-        MEM.get_or_init(|| Mutex::new(1_f32))
     }
 }

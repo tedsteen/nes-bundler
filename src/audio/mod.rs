@@ -1,10 +1,9 @@
 use std::ops::Add;
 
-use std::sync::Arc;
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Result};
-use ringbuf::{Consumer, HeapRb, Producer};
 use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired, AudioStatus};
 use sdl2::{AudioSubsystem, Sdl};
 use serde::{Deserialize, Serialize};
@@ -30,7 +29,7 @@ impl AudioCallback for AudioReceiverCallback {
         let volume = Settings::current().audio.volume as f32 / 100.0;
         let mut missing_samples = 0;
         for s in out {
-            if let Some(new_sample) = consumer.pop() {
+            if let Ok(new_sample) = consumer.try_recv() {
                 *s = new_sample * volume;
             } else {
                 missing_samples += 1;
@@ -42,9 +41,8 @@ impl AudioCallback for AudioReceiverCallback {
         }
     }
 }
-type AudioRb = Arc<HeapRb<f32>>;
-pub type AudioSender = Producer<f32, AudioRb>;
-pub type AudioReceiver = Consumer<f32, AudioRb>;
+pub type AudioSender = SyncSender<f32>;
+pub type AudioReceiver = Receiver<f32>;
 
 pub struct Stream {
     tx: Option<AudioSender>,
@@ -64,8 +62,8 @@ impl Stream {
         );
         let sample_latency =
             (latency.as_secs_f32() * desired_sample_rate as f32 * 1.0).ceil() as u16;
-        let buffer = HeapRb::<f32>::new(2 * sample_latency as usize);
-        let (tx, audio_rx) = buffer.split();
+
+        let (tx, audio_rx) = sync_channel(sample_latency as usize);
 
         let output_device = &Settings::current().audio.output_device.clone();
         let audio_device = Stream::new_audio_device(
@@ -102,7 +100,7 @@ impl Stream {
         let desired_spec = AudioSpecDesired {
             freq: Some(desired_sample_rate as i32),
             channels: Some(channels),
-            samples: Some(sample_latency),
+            samples: Some(sample_latency.div_ceil(2)),
         };
 
         // Make sure the device exists, otherwise default to first available
