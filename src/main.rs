@@ -77,12 +77,13 @@ async fn run() -> anyhow::Result<()> {
     let emulator = Emulator::new()?;
     let mut renderer = Renderer::new(window.clone()).await?;
 
-    let (mut main_gui, mut sdl_event_pump, audio_tx) =
+    let (mut main_gui, mut sdl_event_pump) =
         Emulator::init(&mut renderer, emulator).expect("the emulator to be able to initialise");
     let mut nes_frame = NESFrame::new();
     let mut rate_counter = RateCounter::new();
 
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+    let audio_tx = main_gui.audio.stream.start()?;
     event_loop.run(|winit_event, control_flow| {
         rate_counter.tick("Event");
         let mut render_needed = false;

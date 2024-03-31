@@ -1,11 +1,12 @@
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
-use crate::audio::{Audio, AudioSender};
+use crate::audio::Audio;
 use crate::gui::MainGui;
 use crate::input::sdl2_impl::Sdl2Gamepads;
 use crate::input::Inputs;
 use crate::settings::gui::GuiComponent;
+use crate::settings::Settings;
 use crate::window::egui_winit_wgpu::Renderer;
 use anyhow::Result;
 use sdl2::EventPump;
@@ -34,10 +35,7 @@ impl Emulator {
         Ok(this)
     }
 
-    pub fn init(
-        renderer: &mut Renderer,
-        emulator: Self,
-    ) -> Result<(MainGui, EventPump, AudioSender)> {
+    pub fn init(renderer: &mut Renderer, emulator: Self) -> Result<(MainGui, EventPump)> {
         // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
         sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
         // TODO: Perhaps do this to fix this issue: https://github.com/libsdl-org/SDL/issues/7896#issuecomment-1616700934
@@ -46,16 +44,15 @@ impl Emulator {
         let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
         let sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
 
-        let mut audio = Audio::new(&sdl_context, Duration::from_millis(20), SAMPLE_RATE as u32)?;
+        let audio_latency = Duration::from_millis(Settings::current().audio.latency as u64);
+        let audio = Audio::new(&sdl_context, audio_latency, SAMPLE_RATE as u32)?;
 
         let inputs = Inputs::new(Sdl2Gamepads::new(
             sdl_context.game_controller().map_err(anyhow::Error::msg)?,
         ));
 
-        let audio_tx = audio.stream.start()?;
-
         let main_gui = MainGui::new(renderer, emulator, inputs, audio);
-        Ok((main_gui, sdl_event_pump, audio_tx))
+        Ok((main_gui, sdl_event_pump))
     }
 
     pub fn emulation_speed() -> &'static Mutex<f32> {

@@ -20,7 +20,7 @@ use crate::{
 pub struct MainGui {
     pub settings_gui: SettingsGui,
     pub emulator: Emulator,
-    audio: Audio,
+    pub audio: Audio,
     pub inputs: Inputs,
     modifiers: Modifiers,
 

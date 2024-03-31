@@ -26,6 +26,7 @@ nes_region: Pal
 default_settings:
     audio:
         volume: 100 #in %
+        latency: 20 #in ms
     input:
         # Two ids that corresponds to the selected input mapping configuration of P1 and P2. Should only be keyboard mappings as they're guaranteed to be available.
         selected:

@@ -15,9 +15,15 @@ pub mod gui;
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct AudioSettings {
     pub volume: u8,
+    #[serde(default = "AudioSettings::default_latency")]
+    pub latency: u8,
     pub output_device: Option<String>,
 }
-
+impl AudioSettings {
+    fn default_latency() -> u8 {
+        20
+    }
+}
 struct AudioReceiverCallback(AudioReceiver);
 
 impl AudioCallback for AudioReceiverCallback {
@@ -37,7 +43,7 @@ impl AudioCallback for AudioReceiverCallback {
             }
         }
         if missing_samples > 0 {
-            log::warn!("Buffer underrun: {missing_samples} samples");
+            log::trace!("Buffer underrun: {missing_samples} samples");
         }
     }
 }
@@ -48,7 +54,6 @@ pub struct Stream {
     tx: Option<AudioSender>,
     output_device_name: Option<String>,
     audio_device: Option<AudioDevice<AudioReceiverCallback>>,
-    sample_latency: u16,
 }
 
 impl Stream {
@@ -64,6 +69,10 @@ impl Stream {
             (latency.as_secs_f32() * desired_sample_rate as f32 * 1.0).ceil() as u16;
 
         let (tx, audio_rx) = sync_channel(sample_latency as usize);
+        // Fill with silence
+        for _ in 0..sample_latency {
+            let _ = tx.send(0.0);
+        }
 
         let output_device = &Settings::current().audio.output_device.clone();
         let audio_device = Stream::new_audio_device(
@@ -71,13 +80,11 @@ impl Stream {
             audio_subsystem,
             output_device,
             audio_rx,
-            sample_latency,
         )?;
         Ok(Self {
             tx: Some(tx),
             output_device_name: output_device.clone(),
             audio_device: Some(audio_device),
-            sample_latency,
         })
     }
 
@@ -93,14 +100,14 @@ impl Stream {
         audio_subsystem: &AudioSubsystem,
         output_device: &Option<String>,
         audio_rx: AudioReceiver,
-        sample_latency: u16,
     ) -> Result<AudioDevice<AudioReceiverCallback>> {
         let channels = 1;
 
         let desired_spec = AudioSpecDesired {
             freq: Some(desired_sample_rate as i32),
             channels: Some(channels),
-            samples: Some(sample_latency.div_ceil(4)),
+            //Keep this low for a smoother framerate
+            samples: Some(10),
         };
 
         // Make sure the device exists, otherwise default to first available
@@ -134,7 +141,6 @@ impl Stream {
                     &subsystem,
                     &output_device_name,
                     old_callback.0,
-                    self.sample_latency,
                 ) {
                     Ok(audio_device) => {
                         if old_device_status == AudioStatus::Playing {
