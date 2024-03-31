@@ -2,6 +2,7 @@
 name: "NES Bundler Demo"
 
 # Optional version of your game, will default to the nes-bundler version if omitted
+# NOTE: Must be semver
 version: "1.0.0"
 
 # Short description used when creating linux and Windows installers
@@ -30,7 +31,7 @@ default_settings:
         selected:
             - 00-keyboard-1
             - 00-keyboard-2
-        # A list of input mapping configurations. For more key mappings see https://docs.rs/winit/latest/winit/event/enum.VirtualKeyCode.html.
+        # A list of input mapping configurations. For more key mappings see https://github.com/tedsteen/nes-bundler/blob/master/src/input/keys.rs#L28.
         # To add a gamepad configuration use the kind `Gamepad` and id `01-gamepad-0` for the first gamepad that connects, `01-gamepad-1` for the second and so on.
         configurations:
             00-keyboard-1:
@@ -69,7 +70,7 @@ default_settings:
                     select: Back
                     b: X
                     a: A
-        # The default mapping for newly connected gamepads. For more gamepad button mappings see https://docs.rs/sdl2/latest/sdl2/controller/enum.Button.html.
+        # The default mapping for newly connected gamepads. For more gamepad button mappings see https://github.com/tedsteen/nes-bundler/blob/master/src/input/buttons.rs#L8.
         default_gamepad_mapping:
             up: DPadUp
             down: DPadDown
@@ -82,8 +83,6 @@ default_settings:
 
 # Netplay configuration. You can remove this if the netplay feature is disabled.
 netplay:
-    # The default room name when starting a new netplay game
-    default_room_name: ""
     # GGRS and Matchbox server configuration. You can read more about them over here https://github.com/johanhelsing/matchbox and here https://github.com/gschup/ggrs
     # This config can be either fetched from an external service (TurnOn) or configured statically (Static)
     server:

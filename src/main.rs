@@ -84,6 +84,7 @@ async fn run() -> anyhow::Result<()> {
 
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     event_loop.run(|winit_event, control_flow| {
+        rate_counter.tick("Event");
         let mut render_needed = false;
         match &winit_event {
             Event::WindowEvent {
@@ -124,18 +125,19 @@ async fn run() -> anyhow::Result<()> {
             }
             _ => {}
         };
+
+        for sdl_gui_event in sdl_event_pump
+            .poll_iter()
+            .flat_map(|e| e.to_gamepad_event())
+            .map(GuiEvent::Gamepad)
+        {
+            main_gui.handle_event(&sdl_gui_event, &renderer.window);
+        }
+
         if render_needed {
-            rate_counter.tick("Loop");
+            rate_counter.tick("Render");
             #[cfg(feature = "debug")]
             puffin::profile_function!("Render");
-
-            for sdl_gui_event in sdl_event_pump
-                .poll_iter()
-                .flat_map(|e| e.to_gamepad_event())
-                .map(GuiEvent::Gamepad)
-            {
-                main_gui.handle_event(&sdl_gui_event, &renderer.window);
-            }
 
             let joypads = &main_gui.inputs.joypads;
             let mut frame_data = {
@@ -162,17 +164,17 @@ async fn run() -> anyhow::Result<()> {
                     }
                 }
             }
-            if let Some(report) = rate_counter.report() {
-                // Hitch-hike on the one per second reporting to save the sram.
-                use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
-                use base64::Engine;
-                Settings::current().save_state = main_gui
-                    .emulator
-                    .nes_state
-                    .save_sram()
-                    .map(|s| b64.encode(s));
-                log::debug!("{report}");
-            }
+        }
+        if let Some(report) = rate_counter.report() {
+            // Hitch-hike on the one per second reporting to save the sram.
+            use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+            use base64::Engine;
+            Settings::current().save_state = main_gui
+                .emulator
+                .nes_state
+                .save_sram()
+                .map(|s| b64.encode(s));
+            log::debug!("{report}");
         }
     })?;
 

@@ -63,7 +63,7 @@ fn main() -> Result<()> {
                 }
             }
         }
-        res.compile().expect("icon exe to be attached");
+        res.compile().expect("windows resource file to compile");
     }
 
     let mut tt = TinyTemplate::new();

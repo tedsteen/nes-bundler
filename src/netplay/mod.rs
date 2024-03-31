@@ -54,7 +54,6 @@ impl JoypadMapping {
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct NetplayBuildConfiguration {
-    pub default_room_name: String,
     pub netplay_id: Option<String>,
     pub server: NetplayServerConfiguration,
 }

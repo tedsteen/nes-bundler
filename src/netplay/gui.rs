@@ -7,7 +7,7 @@ use crate::settings::{gui::GuiComponent, MAX_PLAYERS};
 use super::{
     connecting_state::{Connecting, PeeringState},
     netplay_state::NetplayState,
-    ConnectingState, NetplayBuildConfiguration, NetplayStateHandler,
+    ConnectingState, NetplayStateHandler,
 };
 pub struct NetplayGui {
     #[cfg(feature = "debug")]
@@ -16,14 +16,14 @@ pub struct NetplayGui {
 }
 
 impl NetplayGui {
-    pub fn new(netplay_build_config: NetplayBuildConfiguration) -> Self {
+    pub fn new() -> Self {
         Self {
             #[cfg(feature = "debug")]
             stats: [
                 super::stats::NetplayStats::new(),
                 super::stats::NetplayStats::new(),
             ],
-            room_name: netplay_build_config.default_room_name.clone(),
+            room_name: "".to_owned(),
         }
     }
 }

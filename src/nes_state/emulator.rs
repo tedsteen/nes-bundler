@@ -2,7 +2,6 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use crate::audio::{Audio, AudioSender};
-use crate::bundle::Bundle;
 use crate::gui::MainGui;
 use crate::input::sdl2_impl::Sdl2Gamepads;
 use crate::input::Inputs;
@@ -24,7 +23,8 @@ pub const SAMPLE_RATE: f32 = 44_100.0;
 impl Emulator {
     pub fn new() -> Result<Emulator> {
         #[cfg(not(feature = "netplay"))]
-        let nes_state = crate::nes_state::LocalNesState::start_rom(&Bundle::current().rom)?;
+        let nes_state =
+            crate::nes_state::LocalNesState::start_rom(&crate::bundle::Bundle::current().rom)?;
 
         #[cfg(feature = "netplay")]
         let nes_state = crate::netplay::NetplayStateHandler::new()?;
@@ -112,9 +112,7 @@ impl EmulatorGui {
     pub fn new() -> Self {
         Self {
             #[cfg(feature = "netplay")]
-            netplay_gui: crate::netplay::gui::NetplayGui::new(
-                Bundle::current().config.netplay.clone(),
-            ),
+            netplay_gui: crate::netplay::gui::NetplayGui::new(),
             #[cfg(feature = "debug")]
             debug_gui: DebugGui {
                 speed: 1.0,
