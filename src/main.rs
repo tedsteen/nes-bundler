@@ -41,8 +41,6 @@ const MINIMUM_INTEGER_SCALING_SIZE: (u32, u32) = (1024, 720);
 #[tokio::main]
 async fn main() {
     init_logger();
-    #[cfg(feature = "debug")]
-    puffin::set_scopes_on(true);
 
     #[cfg(feature = "netplay")]
     if std::env::args()
@@ -136,9 +134,9 @@ async fn run() -> anyhow::Result<()> {
         }
 
         if render_needed {
-            rate_counter.tick("Render");
             #[cfg(feature = "debug")]
-            puffin::profile_function!("Render");
+            puffin::profile_function!("Main render loop");
+            rate_counter.tick("Render");
 
             let joypads = &main_gui.inputs.joypads;
             let mut frame_data = {
@@ -152,16 +150,14 @@ async fn run() -> anyhow::Result<()> {
             {
                 #[cfg(feature = "debug")]
                 puffin::profile_scope!("render");
+
                 main_gui.render_gui(&mut renderer, &nes_frame);
             }
-            {
-                #[cfg(feature = "debug")]
-                puffin::profile_scope!("push audio");
-                if let Some(FrameData { audio }) = &mut frame_data {
-                    log::trace!("Pushing {:} audio samples", audio.len());
-                    for s in audio {
-                        let _ = audio_tx.send(*s);
-                    }
+            // Since pushing audio is happening after the render we can't profile with puffin, but the remaining time is spent there so it's possible to see.
+            if let Some(FrameData { audio }) = &mut frame_data {
+                log::trace!("Pushing {:} audio samples", audio.len());
+                for s in audio {
+                    let _ = audio_tx.send(*s);
                 }
             }
         }
