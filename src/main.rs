@@ -150,7 +150,6 @@ async fn run() -> anyhow::Result<()> {
                     .advance(*joypads, &mut Some(&mut nes_frame))
             };
             {
-                rate_counter.tick("Render");
                 #[cfg(feature = "debug")]
                 puffin::profile_scope!("render");
                 main_gui.render_gui(&mut renderer, &nes_frame);
