@@ -62,7 +62,17 @@ impl Renderer {
             // egui prefers Rgba8Unorm or Bgra8Unorm
             .find(|f| !f.is_srgb())
             .unwrap_or(surface_caps.formats[0]);
-        log::debug!("Surface format: {surface_format:?}");
+
+        // We can't wait for vsync since we need to guarantee that the NES will be clocked in the speed it is configured to run (Pal, Ntsc or Dendy)
+        // If we wait for vblank the monitor might have an update frequency lower than the NES required frames per second.
+        let best_mode = [
+            PresentMode::Mailbox,
+            PresentMode::Immediate,
+            PresentMode::Fifo,
+        ]
+        .into_iter()
+        .find(|mode| surface_caps.present_modes.contains(mode))
+        .unwrap_or(PresentMode::AutoNoVsync);
 
         let config = wgpu::SurfaceConfiguration {
             desired_maximum_frame_latency: 1,
@@ -70,22 +80,14 @@ impl Renderer {
             format: surface_format,
             width: size.width,
             height: size.height,
-            //present_mode: PresentMode::AutoVsync,
-            present_mode: PresentMode::AutoNoVsync,
-            //present_mode: surface_caps.present_modes[0],
+            present_mode: best_mode,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
+        log::debug!("Surface configuration: {config:?}");
         surface.configure(&device, &config);
 
-        // ...
-        let egui = EguiRenderer::new(
-            &device,       // wgpu Device
-            config.format, // TextureFormat
-            None,          // this can be None
-            1,             // samples
-            &window,       // winit Window
-        );
+        let egui = EguiRenderer::new(&device, config.format, None, 1, &window);
 
         Ok(Self {
             surface,
