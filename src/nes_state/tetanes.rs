@@ -14,7 +14,7 @@ use tetanes_core::{
 
 use super::{
     emulator::{Emulator, SAMPLE_RATE},
-    NESAudioFrame, NESVideoFrame, NesStateHandler, NTSC_PAL,
+    NESBuffers, NesStateHandler, NTSC_PAL,
 };
 use crate::{
     bundle::Bundle,
@@ -96,8 +96,8 @@ impl NesStateHandler for TetanesNesState {
     fn advance(
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        video: &mut Option<&mut NESVideoFrame>,
-    ) -> Option<NESAudioFrame> {
+        buffers: &mut Option<&mut NESBuffers>,
+    ) {
         self.set_speed(*Emulator::emulation_speed().lock().unwrap());
 
         *self.control_deck.joypad_mut(Player::One) = Joypad::from_bytes((*joypad_state[0]).into());
@@ -109,9 +109,7 @@ impl NesStateHandler for TetanesNesState {
             .clock_frame()
             .expect("NES to clock a frame");
 
-        let audio = self.control_deck.audio_samples();
-
-        if let Some(video) = video {
+        if let Some(NESBuffers { video, audio }) = buffers {
             self.control_deck
                 .cpu()
                 .bus
@@ -125,9 +123,8 @@ impl NesStateHandler for TetanesNesState {
                     video[pixel_index..pixel_index + 3]
                         .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
                 });
+            audio.extend_from_slice(self.control_deck.audio_samples());
         }
-        // TODO: Figure out how to not allocate here
-        Some(audio.to_vec())
     }
 
     fn save_sram(&self) -> Option<Vec<u8>> {
@@ -142,10 +139,6 @@ impl NesStateHandler for TetanesNesState {
             *self.control_deck.cpu_mut() =
                 bincode::deserialize(data).expect("NES state to deserialize");
         }
-    }
-
-    fn discard_samples(&mut self) {
-        self.control_deck.clear_audio_samples();
     }
 
     fn frame(&self) -> u32 {

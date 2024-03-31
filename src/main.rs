@@ -9,7 +9,7 @@ use bundle::Bundle;
 use fps::RateCounter;
 use nes_state::emulator::Emulator;
 
-use nes_state::NESVideoFrame;
+use nes_state::NESBuffers;
 use settings::gui::ToGuiEvent;
 use window::egui_winit_wgpu::Renderer;
 use window::{create_window, Size};
@@ -78,7 +78,7 @@ async fn run() -> anyhow::Result<()> {
 
     let (mut main_gui, mut sdl_event_pump) =
         Emulator::init(&mut renderer, emulator).expect("the emulator to be able to initialise");
-    let mut video_buffer = NESVideoFrame::new();
+    let mut buffers = NESBuffers::new();
     let mut rate_counter = RateCounter::new();
 
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
@@ -142,26 +142,24 @@ async fn run() -> anyhow::Result<()> {
             puffin::profile_function!("Main render loop");
             rate_counter.tick("Render");
 
-            let audio = {
-                #[cfg(feature = "debug")]
-                puffin::profile_scope!("advance");
-                main_gui
-                    .emulator
-                    .nes_state
-                    .advance(main_gui.inputs.joypads, &mut Some(&mut video_buffer))
-            };
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("advance");
+            buffers.audio.clear();
+            main_gui
+                .emulator
+                .nes_state
+                .advance(main_gui.inputs.joypads, &mut Some(&mut buffers));
             {
                 #[cfg(feature = "debug")]
                 puffin::profile_scope!("render");
 
-                main_gui.render_gui(&mut renderer, &video_buffer);
+                main_gui.render_gui(&mut renderer, &buffers.video);
             }
             // Since pushing audio is happening after the render we can't profile with puffin, but the remaining time is spent there so it's possible to see.
-            if let Some(audio) = audio {
-                log::trace!("Pushing {:} audio samples", audio.len());
-                for s in audio {
-                    let _ = audio_tx.send(s);
-                }
+            let audio = &buffers.audio;
+            log::trace!("Pushing {:} audio samples", audio.len());
+            for s in audio.iter() {
+                let _ = audio_tx.send(*s);
             }
         }
         if let Some(report) = rate_counter.report() {

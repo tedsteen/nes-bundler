@@ -3,7 +3,7 @@ use matchbox_socket::PeerId;
 
 use crate::{
     input::JoypadState,
-    nes_state::{emulator::Emulator, NESAudioFrame, NESVideoFrame, NesStateHandler},
+    nes_state::{emulator::Emulator, NESBuffers, NesStateHandler},
     settings::MAX_PLAYERS,
 };
 
@@ -55,8 +55,8 @@ impl NetplaySession {
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
         joypad_mapping: &JoypadMapping,
-        video: &mut Option<&mut NESVideoFrame>,
-    ) -> anyhow::Result<Option<NESAudioFrame>> {
+        buffers: &mut Option<&mut NESBuffers>,
+    ) -> anyhow::Result<()> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
@@ -79,60 +79,50 @@ impl NetplaySession {
             sess.add_local_input(handle, *joypad_state[0])?;
         }
 
-        let mut new_audio = None;
-        {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("ggrs advance_frame");
-            match sess.advance_frame() {
-                Ok(requests) => {
-                    for request in requests {
-                        match request {
-                            GgrsRequest::LoadGameState { cell, frame } => {
-                                log::debug!("Loading (frame {:?})", frame);
-                                self.game_state = cell.load().expect("ggrs state to load");
-                            }
-                            GgrsRequest::SaveGameState { cell, frame } => {
-                                assert_eq!(self.game_state.frame, frame);
-                                cell.save(frame, Some(self.game_state.clone()), None);
-                            }
-                            GgrsRequest::AdvanceFrame { inputs } => {
-                                let is_replay = self.game_state.frame <= self.last_handled_frame;
+        #[cfg(feature = "debug")]
+        puffin::profile_scope!("ggrs advance_frame");
+        match sess.advance_frame() {
+            Ok(requests) => {
+                for request in requests {
+                    match request {
+                        GgrsRequest::LoadGameState { cell, frame } => {
+                            log::debug!("Loading (frame {:?})", frame);
+                            self.game_state = cell.load().expect("ggrs state to load");
+                        }
+                        GgrsRequest::SaveGameState { cell, frame } => {
+                            assert_eq!(self.game_state.frame, frame);
+                            cell.save(frame, Some(self.game_state.clone()), None);
+                        }
+                        GgrsRequest::AdvanceFrame { inputs } => {
+                            let is_replay = self.game_state.frame <= self.last_handled_frame;
 
-                                let mut none = None;
-                                let this_audio = self.game_state.advance(
-                                    joypad_mapping.map(
-                                        [JoypadState(inputs[0].0), JoypadState(inputs[1].0)],
-                                        local_player_idx,
-                                    ),
-                                    if is_replay { &mut none } else { video },
-                                );
+                            let mut none = None;
+                            self.game_state.advance(
+                                joypad_mapping.map(
+                                    [JoypadState(inputs[0].0), JoypadState(inputs[1].0)],
+                                    local_player_idx,
+                                ),
+                                if is_replay { &mut none } else { buffers },
+                            );
 
-                                if is_replay {
-                                    //This is a replay
-                                    // Discard the samples for this frame since it's a replay from ggrs. Audio has already been produced and pushed for it.
-                                    self.game_state.discard_samples();
-                                } else {
-                                    new_audio = this_audio;
-                                    //This is not a replay
-                                    self.last_handled_frame = self.game_state.frame;
-                                    if self.game_state.frame % (sess.max_prediction() * 2) as i32
-                                        == 0
-                                    {
-                                        self.last_confirmed_game_states = [
-                                            self.last_confirmed_game_states[1].clone(),
-                                            self.game_state.clone(),
-                                        ];
-                                    }
+                            if !is_replay {
+                                //This is not a replay
+                                self.last_handled_frame = self.game_state.frame;
+                                if self.game_state.frame % (sess.max_prediction() * 2) as i32 == 0 {
+                                    self.last_confirmed_game_states = [
+                                        self.last_confirmed_game_states[1].clone(),
+                                        self.game_state.clone(),
+                                    ];
                                 }
-
-                                self.game_state.frame += 1;
                             }
+
+                            self.game_state.frame += 1;
                         }
                     }
                 }
-                Err(e) => {
-                    log::warn!("Frame {} skipped: {:?}", self.game_state.frame, e)
-                }
+            }
+            Err(e) => {
+                log::warn!("Frame {} skipped: {:?}", self.game_state.frame, e)
             }
         }
 
@@ -146,6 +136,6 @@ impl NetplaySession {
         } else {
             1.0
         };
-        Ok(new_audio)
+        Ok(())
     }
 }

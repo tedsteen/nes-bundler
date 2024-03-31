@@ -89,8 +89,4 @@ impl NesStateHandler for RusticNesState {
     fn load(&mut self, data: &mut Vec<u8>) {
         self.nes.load_state(data);
     }
-
-    fn discard_samples(&mut self) {
-        self.nes.apu.consume_samples();
-    }
 }

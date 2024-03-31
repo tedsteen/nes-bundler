@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::{
     input::JoypadState,
-    nes_state::{LocalNesState, NESAudioFrame, NESVideoFrame, NesStateHandler},
+    nes_state::{LocalNesState, NESBuffers, NesStateHandler},
     settings::MAX_PLAYERS,
 };
 use anyhow::Result;
@@ -95,17 +95,14 @@ impl NesStateHandler for NetplayStateHandler {
     fn advance(
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        video: &mut Option<&mut NESVideoFrame>,
-    ) -> Option<NESAudioFrame> {
-        if let Some((new_state, audio)) = self
+        buffers: &mut Option<&mut NESBuffers>,
+    ) {
+        if let Some(new_state) = self
             .netplay
             .take()
-            .map(|netplay| netplay.advance(joypad_state, video))
+            .map(|netplay| netplay.advance(joypad_state, buffers))
         {
             self.netplay = Some(new_state);
-            audio
-        } else {
-            None
         }
     }
 
@@ -121,16 +118,6 @@ impl NesStateHandler for NetplayStateHandler {
         // Loading is only supported when disconnected
         if let Some(NetplayState::Disconnected(s)) = &mut self.netplay {
             s.state.load_sram(data);
-        }
-    }
-
-    fn discard_samples(&mut self) {
-        if let Some(NetplayState::Connected(s)) = &mut self.netplay {
-            s.state
-                .netplay_session
-                .game_state
-                .nes_state
-                .discard_samples()
         }
     }
 
