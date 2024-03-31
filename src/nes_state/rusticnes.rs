@@ -43,7 +43,7 @@ impl NesStateHandler for RusticNesState {
     fn advance(
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        nes_frame: &mut Option<&mut NESFrame>,
+        video: &mut Option<&mut NESFrame>,
     ) -> Option<FrameData> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
@@ -56,9 +56,9 @@ impl NesStateHandler for RusticNesState {
             self.nes.run_until_vblank();
         }
 
-        if let Some(nes_frame) = nes_frame {
+        if let Some(video) = video {
             #[cfg(feature = "debug")]
-            puffin::profile_scope!("copy nes_frame");
+            puffin::profile_scope!("copy nes video frame");
             self.nes
                 .ppu
                 .screen
@@ -67,7 +67,7 @@ impl NesStateHandler for RusticNesState {
                 .for_each(|(idx, &palette_index)| {
                     let palette_index = palette_index as usize * 3;
                     let pixel_index = idx * 4;
-                    nes_frame[pixel_index..pixel_index + 3]
+                    video[pixel_index..pixel_index + 3]
                         .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
                 });
         }

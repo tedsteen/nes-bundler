@@ -4,9 +4,8 @@ use uuid::Uuid;
 use crate::{
     bundle::Bundle,
     input::JoypadState,
-    nes_state::{FrameData, LocalNesState, NesStateHandler},
+    nes_state::{LocalNesState, NESAudioFrame, NESVideoFrame, NesStateHandler},
     settings::{Settings, MAX_PLAYERS},
-    window::NESFrame,
 };
 
 use super::{
@@ -29,24 +28,24 @@ impl NetplayState {
     pub fn advance(
         self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        nes_frame: &mut Option<&mut NESFrame>,
-    ) -> (Self, Option<FrameData>) {
+        video: &mut Option<&mut NESVideoFrame>,
+    ) -> (Self, Option<NESAudioFrame>) {
         use NetplayState::*;
         match self {
             Connecting(netplay) => {
-                if let Some(nes_frame) = nes_frame {
-                    nes_frame.fill(0); //Black screen while connecting
+                if let Some(video) = video {
+                    video.fill(0); //Black screen while connecting
                 }
                 netplay.advance()
             }
-            Connected(netplay) => netplay.advance(joypad_state, nes_frame),
+            Connected(netplay) => netplay.advance(joypad_state, video),
             Resuming(netplay) => {
-                if let Some(nes_frame) = nes_frame {
-                    nes_frame.fill(0); //Black screen while resuming
+                if let Some(video) = video {
+                    video.fill(0); //Black screen while resuming
                 }
                 netplay.advance()
             }
-            Disconnected(netplay) => netplay.advance(joypad_state, nes_frame),
+            Disconnected(netplay) => netplay.advance(joypad_state, video),
             Failed(netplay) => netplay.advance(),
         }
     }
@@ -141,10 +140,10 @@ impl Netplay<LocalNesState> {
     fn advance(
         mut self,
         joypad_state: [JoypadState; 2],
-        nes_frame: &mut Option<&mut NESFrame>,
-    ) -> (NetplayState, Option<FrameData>) {
-        let frame_data = self.state.advance(joypad_state, nes_frame);
-        (NetplayState::Disconnected(self), frame_data)
+        video: &mut Option<&mut NESVideoFrame>,
+    ) -> (NetplayState, Option<NESAudioFrame>) {
+        let audio = self.state.advance(joypad_state, video);
+        (NetplayState::Disconnected(self), audio)
     }
 }
 
@@ -154,7 +153,7 @@ impl Netplay<ConnectingState> {
         self.disconnect()
     }
 
-    fn advance(mut self) -> (NetplayState, Option<FrameData>) {
+    fn advance(mut self) -> (NetplayState, Option<NESAudioFrame>) {
         //log::trace!("Advancing Netplay<ConnectingState>");
         self.state = self.state.advance();
         (
@@ -199,14 +198,14 @@ impl Netplay<Connected> {
     fn advance(
         mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        nes_frame: &mut Option<&mut NESFrame>,
-    ) -> (NetplayState, Option<FrameData>) {
+        video: &mut Option<&mut NESVideoFrame>,
+    ) -> (NetplayState, Option<NESAudioFrame>) {
         //log::trace!("Advancing Netplay<Connected>");
         let netplay_session = &mut self.state.netplay_session;
 
         if let Some(joypad_mapping) = &mut netplay_session.game_state.joypad_mapping.clone() {
-            match netplay_session.advance(joypad_state, joypad_mapping, nes_frame) {
-                Ok(frame_data) => (NetplayState::Connected(self), frame_data),
+            match netplay_session.advance(joypad_state, joypad_mapping, video) {
+                Ok(audio) => (NetplayState::Connected(self), audio),
                 Err(e) => {
                     log::error!("Resuming due to error: {:?}", e);
                     //TODO: Popup/info about the error? Or perhaps put the reason for the resume in the resume state below?
@@ -227,7 +226,7 @@ impl Netplay<Connected> {
 }
 
 impl Netplay<Resuming> {
-    fn advance(mut self) -> (NetplayState, Option<FrameData>) {
+    fn advance(mut self) -> (NetplayState, Option<NESAudioFrame>) {
         //log::trace!("Advancing Netplay<Resuming>");
         self.state.attempt1 = self.state.attempt1.advance();
         self.state.attempt2 = self.state.attempt2.advance();
@@ -259,7 +258,7 @@ impl Netplay<Failed> {
         self.disconnect()
     }
 
-    fn advance(self) -> (NetplayState, Option<FrameData>) {
+    fn advance(self) -> (NetplayState, Option<NESAudioFrame>) {
         (NetplayState::Failed(self), None)
     }
 }

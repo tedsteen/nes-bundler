@@ -1,13 +1,6 @@
-use std::ops::{Deref, DerefMut};
-
+use crate::input::keys::{KeyCode, Modifiers};
 use anyhow::Result;
-
 use winit::event_loop::EventLoop;
-
-use crate::{
-    input::keys::{KeyCode, Modifiers},
-    NES_HEIGHT, NES_WIDTH,
-};
 
 pub mod egui_winit_wgpu;
 mod winit_impl;
@@ -54,42 +47,4 @@ pub fn create_window(
         window_builder.with_window_icon(Some(winit::window::Icon::from_resource(1, None)?))
     };
     Ok(window_builder.build(event_loop)?)
-}
-
-#[derive(Debug, Clone)]
-#[must_use]
-pub struct NESFrame(Vec<u8>);
-
-impl NESFrame {
-    pub const SIZE: usize = (NES_WIDTH * NES_HEIGHT * 4) as usize;
-
-    /// Allocate a new frame for video output.
-    pub fn new() -> Self {
-        let mut frame = vec![0; Self::SIZE];
-        frame
-            .iter_mut()
-            .skip(3)
-            .step_by(4)
-            .for_each(|alpha| *alpha = 255);
-        Self(frame)
-    }
-}
-
-impl Default for NESFrame {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Deref for NESFrame {
-    type Target = Vec<u8>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for NESFrame {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
 }

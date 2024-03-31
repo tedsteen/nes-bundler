@@ -14,13 +14,12 @@ use tetanes_core::{
 
 use super::{
     emulator::{Emulator, SAMPLE_RATE},
-    FrameData, NesStateHandler, NTSC_PAL,
+    NESAudioFrame, NESVideoFrame, NesStateHandler, NTSC_PAL,
 };
 use crate::{
     bundle::Bundle,
     input::JoypadState,
     settings::{Settings, MAX_PLAYERS},
-    window::NESFrame,
 };
 
 #[derive(Clone)]
@@ -97,8 +96,8 @@ impl NesStateHandler for TetanesNesState {
     fn advance(
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        nes_frame: &mut Option<&mut NESFrame>,
-    ) -> Option<FrameData> {
+        video: &mut Option<&mut NESVideoFrame>,
+    ) -> Option<NESAudioFrame> {
         self.set_speed(*Emulator::emulation_speed().lock().unwrap());
 
         *self.control_deck.joypad_mut(Player::One) = Joypad::from_bytes((*joypad_state[0]).into());
@@ -112,7 +111,7 @@ impl NesStateHandler for TetanesNesState {
 
         let audio = self.control_deck.audio_samples();
 
-        if let Some(nes_frame) = nes_frame {
+        if let Some(video) = video {
             self.control_deck
                 .cpu()
                 .bus
@@ -123,13 +122,12 @@ impl NesStateHandler for TetanesNesState {
                 .for_each(|(idx, &palette_index)| {
                     let palette_index = palette_index as usize * 3;
                     let pixel_index = idx * 4;
-                    nes_frame[pixel_index..pixel_index + 3]
+                    video[pixel_index..pixel_index + 3]
                         .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
                 });
         }
-        Some(FrameData {
-            audio: audio.to_vec(),
-        })
+        // TODO: Figure out how to not allocate here
+        Some(audio.to_vec())
     }
 
     fn save_sram(&self) -> Option<Vec<u8>> {

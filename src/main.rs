@@ -9,14 +9,15 @@ use bundle::Bundle;
 use fps::RateCounter;
 use nes_state::emulator::Emulator;
 
+use nes_state::NESVideoFrame;
 use settings::gui::ToGuiEvent;
 use window::egui_winit_wgpu::Renderer;
-use window::{create_window, NESFrame, Size};
+use window::{create_window, Size};
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::EventLoop;
 
 use crate::input::gamepad::ToGamepadEvent;
-use crate::nes_state::{FrameData, NesStateHandler};
+use crate::nes_state::NesStateHandler;
 use crate::settings::gui::GuiEvent;
 use crate::settings::Settings;
 
@@ -77,7 +78,7 @@ async fn run() -> anyhow::Result<()> {
 
     let (mut main_gui, mut sdl_event_pump) =
         Emulator::init(&mut renderer, emulator).expect("the emulator to be able to initialise");
-    let mut nes_frame = NESFrame::new();
+    let mut video_buffer = NESVideoFrame::new();
     let mut rate_counter = RateCounter::new();
 
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
@@ -99,6 +100,9 @@ async fn run() -> anyhow::Result<()> {
                         #[cfg(windows)]
                         window.request_redraw();
                         render_needed = true;
+                    }
+                    WindowEvent::Occluded(_) => {
+                        //println!("Occluded {o}");
                     }
                     window_event => match &window_event {
                         WindowEvent::Resized(physical_size) => {
@@ -138,26 +142,25 @@ async fn run() -> anyhow::Result<()> {
             puffin::profile_function!("Main render loop");
             rate_counter.tick("Render");
 
-            let joypads = &main_gui.inputs.joypads;
-            let mut frame_data = {
+            let audio = {
                 #[cfg(feature = "debug")]
                 puffin::profile_scope!("advance");
                 main_gui
                     .emulator
                     .nes_state
-                    .advance(*joypads, &mut Some(&mut nes_frame))
+                    .advance(main_gui.inputs.joypads, &mut Some(&mut video_buffer))
             };
             {
                 #[cfg(feature = "debug")]
                 puffin::profile_scope!("render");
 
-                main_gui.render_gui(&mut renderer, &nes_frame);
+                main_gui.render_gui(&mut renderer, &video_buffer);
             }
             // Since pushing audio is happening after the render we can't profile with puffin, but the remaining time is spent there so it's possible to see.
-            if let Some(FrameData { audio }) = &mut frame_data {
+            if let Some(audio) = audio {
                 log::trace!("Pushing {:} audio samples", audio.len());
                 for s in audio {
-                    let _ = audio_tx.send(*s);
+                    let _ = audio_tx.send(s);
                 }
             }
         }

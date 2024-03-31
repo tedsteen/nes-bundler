@@ -1,4 +1,6 @@
-use crate::{input::JoypadState, settings::MAX_PLAYERS, window::NESFrame};
+use std::ops::{Deref, DerefMut};
+
+use crate::{input::JoypadState, settings::MAX_PLAYERS, NES_HEIGHT, NES_WIDTH};
 
 pub mod emulator;
 // pub mod rusticnes;
@@ -8,10 +10,45 @@ pub mod tetanes;
 use self::tetanes::TetanesNesState;
 pub type LocalNesState = TetanesNesState;
 
-#[derive(Clone)]
-pub struct FrameData {
-    pub audio: Vec<f32>,
+#[derive(Debug, Clone)]
+#[must_use]
+pub struct NESVideoFrame(Vec<u8>);
+
+impl NESVideoFrame {
+    pub const SIZE: usize = (NES_WIDTH * NES_HEIGHT * 4) as usize;
+
+    /// Allocate a new frame for video output.
+    pub fn new() -> Self {
+        let mut frame = vec![0; Self::SIZE];
+        frame
+            .iter_mut()
+            .skip(3)
+            .step_by(4)
+            .for_each(|alpha| *alpha = 255);
+        Self(frame)
+    }
 }
+
+impl Default for NESVideoFrame {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Deref for NESVideoFrame {
+    type Target = Vec<u8>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for NESVideoFrame {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+pub type NESAudioFrame = Vec<f32>;
 
 static NTSC_PAL: &[u8] = include_bytes!("../../config/ntscpalette.pal");
 
@@ -19,8 +56,8 @@ pub trait NesStateHandler {
     fn advance(
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        nes_frame: &mut Option<&mut NESFrame>,
-    ) -> Option<FrameData>;
+        video: &mut Option<&mut NESVideoFrame>,
+    ) -> Option<NESAudioFrame>;
     fn save_sram(&self) -> Option<Vec<u8>>;
     fn load_sram(&mut self, data: &mut Vec<u8>);
     fn discard_samples(&mut self);

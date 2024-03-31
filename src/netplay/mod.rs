@@ -2,9 +2,8 @@ use std::ops::{Deref, DerefMut};
 
 use crate::{
     input::JoypadState,
-    nes_state::{FrameData, LocalNesState, NesStateHandler},
+    nes_state::{LocalNesState, NESAudioFrame, NESVideoFrame, NesStateHandler},
     settings::MAX_PLAYERS,
-    window::NESFrame,
 };
 use anyhow::Result;
 use serde::Deserialize;
@@ -96,15 +95,15 @@ impl NesStateHandler for NetplayStateHandler {
     fn advance(
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        nes_frame: &mut Option<&mut NESFrame>,
-    ) -> Option<FrameData> {
-        if let Some((new_state, frame_data)) = self
+        video: &mut Option<&mut NESVideoFrame>,
+    ) -> Option<NESAudioFrame> {
+        if let Some((new_state, audio)) = self
             .netplay
             .take()
-            .map(|netplay| netplay.advance(joypad_state, nes_frame))
+            .map(|netplay| netplay.advance(joypad_state, video))
         {
             self.netplay = Some(new_state);
-            frame_data
+            audio
         } else {
             None
         }

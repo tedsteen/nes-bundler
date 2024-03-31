@@ -8,11 +8,11 @@ use crate::{
         Inputs, KeyEvent,
     },
     integer_scaling::{calculate_size_corrected, Size},
-    nes_state::emulator::Emulator,
+    nes_state::{emulator::Emulator, NESVideoFrame},
     settings::gui::{GuiEvent, SettingsGui},
     window::{
         egui_winit_wgpu::{texture::Texture, Renderer},
-        Fullscreen, NESFrame,
+        Fullscreen,
     },
     MINIMUM_INTEGER_SCALING_SIZE, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3,
 };
@@ -66,8 +66,8 @@ impl MainGui {
         }
     }
 
-    pub fn render_gui(&mut self, renderer: &mut Renderer, nes_frame: &NESFrame) {
-        self.nes_texture.update(&renderer.queue, nes_frame);
+    pub fn render_gui(&mut self, renderer: &mut Renderer, video: &NESVideoFrame) {
+        self.nes_texture.update(&renderer.queue, video);
         let render_result = renderer.render(move |ctx| {
             self.ui(ctx);
         });
