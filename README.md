@@ -7,7 +7,7 @@ Add your ROM and configure NES Bundler to build for Mac, Windows and Linux.
 What you get is an executable with
 * Simple UI for settings (Show and hide with ESC).
 * Re-mappable Keyboard and Gamepad input (you bundle your default mappings).
-* Save/Restore state (F1 = Save, F2 = Load).
+* Automatic save/load of sram state
 * Netplay! (Optional feature, can be disabled if not wanted).
 
 <p align="center">

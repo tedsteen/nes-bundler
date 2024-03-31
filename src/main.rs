@@ -18,6 +18,7 @@ use winit::event_loop::EventLoop;
 use crate::input::gamepad::ToGamepadEvent;
 use crate::nes_state::{FrameData, NesStateHandler};
 use crate::settings::gui::GuiEvent;
+use crate::settings::Settings;
 
 mod audio;
 mod bundle;
@@ -162,7 +163,15 @@ async fn run() -> anyhow::Result<()> {
                 }
             }
             if let Some(report) = rate_counter.report() {
-                println!("{report}");
+                // Hitch-hike on the one per second reporting to save the sram.
+                use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+                use base64::Engine;
+                Settings::current().save_state = main_gui
+                    .emulator
+                    .nes_state
+                    .save_sram()
+                    .map(|s| b64.encode(s));
+                log::debug!("{report}");
             }
         }
     })?;

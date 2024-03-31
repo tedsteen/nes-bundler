@@ -16,7 +16,12 @@ use super::{
     emulator::{Emulator, SAMPLE_RATE},
     FrameData, NesStateHandler, NTSC_PAL,
 };
-use crate::{bundle::Bundle, input::JoypadState, settings::MAX_PLAYERS, window::NESFrame};
+use crate::{
+    bundle::Bundle,
+    input::JoypadState,
+    settings::{Settings, MAX_PLAYERS},
+    window::NESFrame,
+};
 
 #[derive(Clone)]
 pub struct TetanesNesState {
@@ -54,6 +59,21 @@ impl TetanesNesState {
         let mut control_deck = ControlDeck::with_config(config);
         //control_deck.set_cycle_accurate(false); //TODO: Add as a bundle config?
         control_deck.load_rom(Bundle::current().config.name.clone(), &mut Cursor::new(rom))?;
+
+        if let Some(true) = control_deck.cart_battery_backed() {
+            if let Some(b64_encoded_sram) = &Settings::current().save_state {
+                use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+                use base64::Engine;
+                match b64.decode(b64_encoded_sram) {
+                    Ok(sram) => {
+                        control_deck.cpu_mut().bus.load_sram(sram);
+                    }
+                    Err(err) => {
+                        log::warn!("Failed to base64 decode sram: {err:?}");
+                    }
+                }
+            }
+        }
 
         control_deck.set_region(region);
 
@@ -112,12 +132,18 @@ impl NesStateHandler for TetanesNesState {
         })
     }
 
-    fn save(&self) -> Option<Vec<u8>> {
-        Some(bincode::serialize(&self.control_deck.cpu()).expect("NES state to serialize"))
+    fn save_sram(&self) -> Option<Vec<u8>> {
+        if let Some(true) = self.control_deck.cart_battery_backed() {
+            Some(bincode::serialize(&self.control_deck.cpu()).expect("NES state to serialize"))
+        } else {
+            None
+        }
     }
-    fn load(&mut self, data: &mut Vec<u8>) {
-        *self.control_deck.cpu_mut() =
-            bincode::deserialize(data).expect("NES state to deserialize");
+    fn load_sram(&mut self, data: &mut Vec<u8>) {
+        if let Some(true) = self.control_deck.cart_battery_backed() {
+            *self.control_deck.cpu_mut() =
+                bincode::deserialize(data).expect("NES state to deserialize");
+        }
     }
 
     fn discard_samples(&mut self) {

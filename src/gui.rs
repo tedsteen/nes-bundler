@@ -9,10 +9,7 @@ use crate::{
     },
     integer_scaling::{calculate_size_corrected, Size},
     nes_state::emulator::Emulator,
-    settings::{
-        gui::{GuiEvent, SettingsGui},
-        Settings,
-    },
+    settings::gui::{GuiEvent, SettingsGui},
     window::{
         egui_winit_wgpu::{texture::Texture, Renderer},
         Fullscreen, NESFrame,
@@ -60,26 +57,7 @@ impl MainGui {
                 true
             }
             Keyboard(KeyEvent::Pressed(key_code)) => {
-                use crate::input::keys::KeyCode::*;
-                use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
-                use base64::Engine;
-                match key_code {
-                    F1 => {
-                        if let Some(save_state) = self.emulator.save_state() {
-                            Settings::current().last_save_state = Some(b64.encode(save_state));
-                        }
-                        true
-                    }
-                    F2 => {
-                        if let Some(save_state) = &Settings::current().last_save_state {
-                            if let Ok(buf) = &mut b64.decode(save_state) {
-                                self.emulator.load_state(buf);
-                            }
-                        }
-                        true
-                    }
-                    key_code => window.check_and_set_fullscreen(&self.modifiers, key_code),
-                }
+                window.check_and_set_fullscreen(&self.modifiers, key_code)
             }
             _ => false,
         };

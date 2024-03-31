@@ -111,18 +111,18 @@ impl NesStateHandler for NetplayStateHandler {
         }
     }
 
-    fn save(&self) -> Option<Vec<u8>> {
+    fn save_sram(&self) -> Option<Vec<u8>> {
+        // Saving is only supported when disconnected
         match &self.netplay {
-            Some(NetplayState::Connected(s)) => s.state.netplay_session.game_state.save(),
-            Some(NetplayState::Disconnected(s)) => s.state.save(),
+            Some(NetplayState::Disconnected(s)) => s.state.save_sram(),
             _ => None,
         }
     }
 
-    fn load(&mut self, data: &mut Vec<u8>) {
+    fn load_sram(&mut self, data: &mut Vec<u8>) {
         // Loading is only supported when disconnected
         if let Some(NetplayState::Disconnected(s)) = &mut self.netplay {
-            s.state.load(data);
+            s.state.load_sram(data);
         }
     }
 

@@ -60,7 +60,7 @@ pub struct Settings {
     pub audio: AudioSettings,
     pub input: InputSettings,
     pub netplay_id: Option<String>,
-    pub last_save_state: Option<String>,
+    pub save_state: Option<String>,
 }
 
 impl Settings {

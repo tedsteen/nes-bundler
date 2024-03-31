@@ -11,8 +11,6 @@ use crate::window::egui_winit_wgpu::Renderer;
 use anyhow::Result;
 use sdl2::EventPump;
 
-use crate::nes_state::NesStateHandler;
-
 #[cfg(feature = "netplay")]
 type StateHandler = crate::netplay::NetplayStateHandler;
 #[cfg(not(feature = "netplay"))]
@@ -60,14 +58,6 @@ impl Emulator {
         Ok((main_gui, sdl_event_pump, audio_tx))
     }
 
-    pub fn save_state(&self) -> Option<Vec<u8>> {
-        self.nes_state.save()
-    }
-
-    pub fn load_state(&mut self, data: &mut Vec<u8>) {
-        self.nes_state.load(data);
-    }
-
     pub fn emulation_speed() -> &'static Mutex<f32> {
         static MEM: OnceLock<Mutex<f32>> = OnceLock::new();
         MEM.get_or_init(|| Mutex::new(1_f32))
@@ -90,7 +80,10 @@ pub struct EmulatorGui {
 #[cfg(feature = "debug")]
 impl GuiComponent<Emulator> for DebugGui {
     fn ui(&mut self, instance: &mut Emulator, ui: &mut egui::Ui) {
-        ui.label(format!("Frame: {}", instance.nes_state.frame()));
+        ui.label(format!(
+            "Frame: {}",
+            super::NesStateHandler::frame(&instance.nes_state)
+        ));
         ui.horizontal(|ui| {
             egui::Grid::new("debug_grid")
                 .num_columns(2)
