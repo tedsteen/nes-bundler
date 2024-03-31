@@ -18,6 +18,7 @@ pub enum NesRegion {
 }
 
 impl NesRegion {
+    #[allow(dead_code)] //Needed by netplay
     pub fn to_fps(&self) -> f32 {
         match self {
             NesRegion::Pal => 50.006_977,
@@ -26,6 +27,7 @@ impl NesRegion {
         }
     }
 }
+
 #[derive(Deserialize, Debug)]
 pub struct BuildConfiguration {
     pub name: String,

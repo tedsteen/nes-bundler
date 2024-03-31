@@ -3,7 +3,6 @@ use std::io::Cursor;
 use anyhow::Result;
 
 use tetanes_core::{
-    self,
     apu::filter::FilterChain,
     common::{NesRegion, Regional},
     control_deck::{Config, ControlDeck},
@@ -13,7 +12,10 @@ use tetanes_core::{
     video::VideoFilter,
 };
 
-use super::{emulator::Emulator, FrameData, NesStateHandler, NTSC_PAL};
+use super::{
+    emulator::{Emulator, SAMPLE_RATE},
+    FrameData, NesStateHandler, NTSC_PAL,
+};
 use crate::{bundle::Bundle, input::JoypadState, settings::MAX_PLAYERS, window::NESFrame};
 
 #[derive(Clone)]
@@ -60,7 +62,7 @@ impl TetanesNesState {
 
     fn set_speed(&mut self, speed: f32) {
         let apu = &mut self.control_deck.cpu_mut().bus.apu;
-        let new_sample_rate = 44100.0 * (1.0 / speed);
+        let new_sample_rate = SAMPLE_RATE * (1.0 / speed);
         let new_sample_period = Cpu::region_clock_rate(apu.region) / new_sample_rate;
 
         if apu.sample_period != new_sample_period {

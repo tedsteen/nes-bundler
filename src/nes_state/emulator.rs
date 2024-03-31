@@ -21,6 +21,8 @@ type StateHandler = crate::nes_state::LocalNesState;
 pub struct Emulator {
     pub nes_state: StateHandler,
 }
+pub const SAMPLE_RATE: f32 = 44_100.0;
+
 impl Emulator {
     pub fn new() -> Result<Emulator> {
         #[cfg(not(feature = "netplay"))]
@@ -46,7 +48,7 @@ impl Emulator {
         let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
         let sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
 
-        let mut audio = Audio::new(&sdl_context, Duration::from_millis(20), 44100)?;
+        let mut audio = Audio::new(&sdl_context, Duration::from_millis(20), SAMPLE_RATE as u32)?;
 
         let inputs = Inputs::new(Sdl2Gamepads::new(
             sdl_context.game_controller().map_err(anyhow::Error::msg)?,
