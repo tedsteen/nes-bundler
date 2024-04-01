@@ -7,7 +7,7 @@ Here is a breakdown of what can be customised
 * [config.yaml](config.yaml) - the main configuration
 * [rom.nes](rom.nes) - your game
 * [netplay-rom.nes](netplay-rom.nes) - optional custom Netplay ROM. This will enable a different player experience for netplayers, if f.ex in a netplay session you do not want to present the player with the one player option you can bake a ROM that defaults to two players
-* [NTSC palette](ntscpalette.pal) - the current palette is generated with `palgen_persune.py --skip-plot -aps 5 -ela 0.01429 -e -hue 3.75 -sat 0.8 -o ntscpalette.pal`. Look [here](https://github.com/Gumball2415/palgen-persune) for details
+* [ntscpalette.pal](ntscpalette.pal) - the current palette is generated with `palgen_persune.py --skip-plot -aps 5 -ela 0.01429 -e -hue 3.75 -sat 0.8 -o ntscpalette.pal`. Look [here](https://github.com/Gumball2415/palgen-persune) for details
 
 The rest is only needed for a proper bundle
 * [Linux icon](linux/icon_256x256.png)
@@ -24,7 +24,7 @@ If you use [`./prepare.sh`](./prepare.sh) it can do both for you (zipping and up
 If you want to build your own binaries with your own certificates you would have to fork this repository and provide some github secrets to make the builds work.
 
 ### Signing the binaries
-The GitHub action build scripts will sign the binaries. To do that they need a couple of secrets.
+The GitHub action build scripts will sign the binaries. To do that it needs a couple of secrets.
 Currently the macOS bundles and the windows binaries is digitally signed.
 
 #### Secrets needed to sign the macOS bundle

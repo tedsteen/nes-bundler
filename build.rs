@@ -1,4 +1,4 @@
-use std::{env, fs::File, io::Write, path::PathBuf, process::Command};
+use std::{env, fs::File, io::Write};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -15,37 +15,13 @@ struct BundleConfiguration {
 }
 
 fn main() -> Result<()> {
-    let stretch_path =
-        PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("src/audio/stretch");
-    let signalsmith_path = stretch_path.join("signalsmith-stretch");
-
-    if !signalsmith_path.join("signalsmith-stretch.h").exists() {
-        Command::new("git")
-            .args(["submodule", "update", "--init"])
-            .current_dir(signalsmith_path.clone())
-            .status()
-            .expect("Git is needed to retrieve the signalsmith-stretch source files");
-    }
-
     println!("cargo:rerun-if-changed=config/config.yaml");
     println!("cargo:rerun-if-changed=config/rom.nes");
     println!("cargo:rerun-if-changed=config/netplay-rom.nes");
+    println!("cargo:rerun-if-changed=config/ntscpalette.pal");
     println!("cargo:rerun-if-changed=config/linux/bundle.desktop-template");
     println!("cargo:rerun-if-changed=config/macos/Info.plist-template");
     println!("cargo:rerun-if-changed=config/windows/wix/main.wxs-template");
-
-    println!("cargo:rerun-if-changed=src/audio/stretch");
-    let mut code = cxx_build::bridge(stretch_path.join("mod.rs"));
-    let code = code
-        .file(stretch_path.join("signalsmith-stretch-wrapper.cpp"))
-        .std("c++11");
-
-    #[cfg(not(target_os = "windows"))]
-    code.flag("-O3");
-    #[cfg(target_os = "windows")]
-    code.flag("/O2");
-
-    code.compile("signalsmith-stretch");
 
     let mut bundle_config: BundleConfiguration =
         serde_yaml::from_str(include_str!("config/config.yaml"))?;
@@ -87,7 +63,7 @@ fn main() -> Result<()> {
                 }
             }
         }
-        res.compile().expect("Could not attach exe icon");
+        res.compile().expect("windows resource file to compile");
     }
 
     let mut tt = TinyTemplate::new();

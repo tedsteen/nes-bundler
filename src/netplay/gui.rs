@@ -2,19 +2,34 @@ use std::time::{Duration, Instant};
 
 use egui::{Button, TextEdit, Ui};
 
-use crate::settings::{
-    gui::{GuiComponent, GuiEvent},
-    Settings, MAX_PLAYERS,
-};
+use crate::settings::{gui::GuiComponent, MAX_PLAYERS};
 
 use super::{
     connecting_state::{Connecting, PeeringState},
     netplay_state::NetplayState,
     ConnectingState, NetplayStateHandler,
 };
+pub struct NetplayGui {
+    #[cfg(feature = "debug")]
+    pub stats: [super::stats::NetplayStats; MAX_PLAYERS],
+    room_name: String,
+}
+
+impl NetplayGui {
+    pub fn new() -> Self {
+        Self {
+            #[cfg(feature = "debug")]
+            stats: [
+                super::stats::NetplayStats::new(),
+                super::stats::NetplayStats::new(),
+            ],
+            room_name: "".to_owned(),
+        }
+    }
+}
 
 #[cfg(feature = "debug")]
-impl NetplayStateHandler {
+impl NetplayGui {
     fn stats_ui(ui: &mut egui::Ui, stats: &super::stats::NetplayStats, player: usize) {
         if !stats.get_ping().is_empty() {
             ui.label(format!("Player {player}"));
@@ -84,19 +99,39 @@ impl NetplayStateHandler {
     }
 }
 
-impl GuiComponent for NetplayStateHandler {
-    fn messages(&self) -> Vec<String> {
-        match &self.netplay {
-            Some(NetplayState::Connecting(_)) => Some("Netplay is connecting"),
-            Some(NetplayState::Resuming(_)) => Some("Netplay connection lost, trying to reconnect"),
-            _ => None,
+impl GuiComponent<NetplayStateHandler> for NetplayGui {
+    #[cfg(feature = "debug")]
+    fn prepare(&mut self, instance: &mut NetplayStateHandler) {
+        if let Some(NetplayState::Connected(netplay)) = &instance.netplay {
+            let sess = &netplay.state.netplay_session.p2p_session;
+            if netplay.state.netplay_session.game_state.frame % 30 == 0 {
+                for i in 0..MAX_PLAYERS {
+                    if let Ok(stats) = sess.network_stats(i) {
+                        if !sess.local_player_handles().contains(&i) {
+                            self.stats[i].push_stats(stats);
+                        }
+                    }
+                }
+            };
         }
-        .iter()
-        .map(|message| format!("{message} - see settings for details"))
-        .collect()
     }
-    fn ui(&mut self, ui: &mut Ui, _settings: &mut Settings) {
-        self.netplay = Some(match self.netplay.take().unwrap() {
+    fn messages(&self, instance: &NetplayStateHandler) -> Option<Vec<String>> {
+        Some(
+            match &instance.netplay {
+                Some(NetplayState::Connecting(_)) => Some("Netplay is connecting"),
+                Some(NetplayState::Resuming(_)) => {
+                    Some("Netplay connection lost, trying to reconnect")
+                }
+                _ => None,
+            }
+            .iter()
+            .map(|message| format!("{message} - see settings for details"))
+            .collect(),
+        )
+    }
+    fn ui(&mut self, instance: &mut NetplayStateHandler, ui: &mut Ui) {
+        let netplay = &mut instance.netplay;
+        *netplay = Some(match netplay.take().unwrap() {
             NetplayState::Disconnected(netplay_disconnected) => {
                 let mut do_join = false;
                 let mut random_clicked = false;
@@ -138,9 +173,13 @@ impl GuiComponent for NetplayStateHandler {
                         ui.end_row();
                     });
                 if do_join {
-                    netplay_disconnected.join_by_name(&self.room_name)
+                    netplay_disconnected
+                        .join_by_name(&self.room_name)
+                        .expect("join to work")
                 } else if random_clicked {
-                    netplay_disconnected.match_with_random()
+                    netplay_disconnected
+                        .match_with_random()
+                        .expect("random match to work")
                 } else {
                     NetplayState::Disconnected(netplay_disconnected)
                 }
@@ -219,8 +258,8 @@ impl GuiComponent for NetplayStateHandler {
                 #[cfg(feature = "debug")]
                 let fake_lost_connection_clicked = {
                     ui.collapsing("Stats", |ui| {
-                        Self::stats_ui(ui, &netplay_connected.state.netplay_session.stats[0], 0);
-                        Self::stats_ui(ui, &netplay_connected.state.netplay_session.stats[1], 1);
+                        Self::stats_ui(ui, &self.stats[0], 0);
+                        Self::stats_ui(ui, &self.stats[1], 1);
                     });
                     ui.button("Fake connection lost").clicked()
                 };
@@ -251,10 +290,4 @@ impl GuiComponent for NetplayStateHandler {
     fn name(&self) -> Option<String> {
         Some("Netplay!".to_string())
     }
-
-    fn open(&mut self) -> &mut bool {
-        &mut self.gui_is_open
-    }
-
-    fn event(&mut self, _event: &GuiEvent, _settings: &mut Settings) {}
 }

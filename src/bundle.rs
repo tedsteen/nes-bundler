@@ -1,6 +1,7 @@
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::OnceLock,
 };
 
 use anyhow::Result;
@@ -10,10 +11,29 @@ use serde::Deserialize;
 use crate::settings::Settings;
 
 #[derive(Deserialize, Debug)]
+pub enum NesRegion {
+    Pal,
+    Ntsc,
+    Dendy,
+}
+
+impl NesRegion {
+    #[allow(dead_code)] //Needed by netplay
+    pub fn to_fps(&self) -> f32 {
+        match self {
+            NesRegion::Pal => 50.006_977,
+            NesRegion::Ntsc => 60.098_812,
+            NesRegion::Dendy => 50.006_977,
+        }
+    }
+}
+
+#[derive(Deserialize, Debug)]
 pub struct BuildConfiguration {
     pub name: String,
     pub manufacturer: String,
     pub default_settings: Settings,
+    pub nes_region: NesRegion,
     #[cfg(feature = "netplay")]
     pub netplay: crate::netplay::NetplayBuildConfiguration,
 }
@@ -39,7 +59,12 @@ pub struct Bundle {
     pub netplay_rom: Vec<u8>,
 }
 impl Bundle {
-    pub fn load() -> Result<Bundle> {
+    pub fn current() -> &'static Bundle {
+        static MEM: OnceLock<Bundle> = OnceLock::new();
+        MEM.get_or_init(|| Bundle::load().expect("bundle to load"))
+    }
+
+    fn load() -> Result<Bundle> {
         let external_config = fs::read_to_string(Path::new("config.yaml"))
             .map_err(anyhow::Error::msg)
             .and_then(|config| serde_yaml::from_str(&config).map_err(anyhow::Error::msg))
@@ -57,8 +82,7 @@ impl Bundle {
 
         let settings_path = config
             .get_config_dir()
-            .unwrap_or(Path::new("").to_path_buf())
-            .join("settings.yaml");
+            .unwrap_or(Path::new("").to_path_buf());
 
         log::debug!("Settings path: {:?}", settings_path);
 

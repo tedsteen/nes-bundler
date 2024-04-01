@@ -1,11 +1,11 @@
 use std::ops::{Deref, DerefMut};
 
 use crate::{
-    input::JoypadInput,
-    nes_state::{FrameData, LocalNesState, NesStateHandler},
+    input::JoypadState,
+    nes_state::{LocalNesState, NESBuffers, NesStateHandler},
     settings::MAX_PLAYERS,
-    Bundle,
 };
+use anyhow::Result;
 use serde::Deserialize;
 
 use self::{
@@ -29,22 +29,22 @@ pub enum JoypadMapping {
 impl JoypadMapping {
     fn map(
         &self,
-        inputs: [JoypadInput; MAX_PLAYERS],
+        joypad_state: [JoypadState; MAX_PLAYERS],
         local_player_idx: usize,
-    ) -> [JoypadInput; MAX_PLAYERS] {
+    ) -> [JoypadState; MAX_PLAYERS] {
         match self {
             JoypadMapping::P1 => {
                 if local_player_idx == 0 {
-                    [inputs[0], inputs[1]]
+                    [joypad_state[0], joypad_state[1]]
                 } else {
-                    [inputs[1], inputs[0]]
+                    [joypad_state[1], joypad_state[0]]
                 }
             }
             JoypadMapping::P2 => {
                 if local_player_idx == 0 {
-                    [inputs[1], inputs[0]]
+                    [joypad_state[1], joypad_state[0]]
                 } else {
-                    [inputs[0], inputs[1]]
+                    [joypad_state[0], joypad_state[1]]
                 }
             }
         }
@@ -53,17 +53,12 @@ impl JoypadMapping {
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct NetplayBuildConfiguration {
-    pub default_room_name: String,
     pub netplay_id: Option<String>,
     pub server: NetplayServerConfiguration,
 }
 
 pub struct NetplayStateHandler {
     netplay: Option<NetplayState>,
-
-    //Gui
-    gui_is_open: bool,
-    room_name: String,
 }
 
 #[derive(Clone)]
@@ -97,62 +92,44 @@ impl DerefMut for NetplayNesState {
 }
 
 impl NesStateHandler for NetplayStateHandler {
-    fn advance(&mut self, inputs: [JoypadInput; MAX_PLAYERS]) -> Option<FrameData> {
-        if let Some((new_state, frame_data)) =
-            self.netplay.take().map(|netplay| netplay.advance(inputs))
+    fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers) {
+        if let Some(new_state) = self
+            .netplay
+            .take()
+            .map(|netplay| netplay.advance(joypad_state, buffers))
         {
             self.netplay = Some(new_state);
-            frame_data
-        } else {
-            None
         }
     }
 
-    fn save(&self) -> Option<Vec<u8>> {
+    fn save_sram(&self) -> Option<Vec<u8>> {
+        // Saving is only supported when disconnected
         match &self.netplay {
-            Some(NetplayState::Connected(s)) => s.state.netplay_session.game_state.save(),
-            Some(NetplayState::Disconnected(s)) => s.state.save(),
+            Some(NetplayState::Disconnected(s)) => s.state.save_sram(),
             _ => None,
         }
     }
 
-    fn load(&mut self, data: &mut Vec<u8>) {
+    fn load_sram(&mut self, data: &mut Vec<u8>) {
         // Loading is only supported when disconnected
         if let Some(NetplayState::Disconnected(s)) = &mut self.netplay {
-            s.state.load(data);
+            s.state.load_sram(data);
         }
     }
 
-    fn get_gui(&mut self) -> Option<&mut dyn crate::settings::gui::GuiComponent> {
-        Some(self)
-    }
-
-    fn discard_samples(&mut self) {
-        if let Some(NetplayState::Connected(s)) = &mut self.netplay {
-            s.state
-                .netplay_session
-                .game_state
-                .nes_state
-                .discard_samples()
+    fn frame(&self) -> u32 {
+        match &self.netplay {
+            Some(NetplayState::Connected(s)) => s.state.netplay_session.game_state.frame(),
+            Some(NetplayState::Disconnected(s)) => s.state.frame(),
+            _ => 0,
         }
     }
 }
 
 impl NetplayStateHandler {
-    pub fn new(local_rom: Vec<u8>, bundle: &Bundle, netplay_id: &mut Option<String>) -> Self {
-        let netplay_build_config = &bundle.config.netplay;
-        let netplay_rom = bundle.netplay_rom.clone();
-
-        NetplayStateHandler {
-            netplay: Some(NetplayState::Disconnected(Netplay::new(
-                netplay_build_config.clone(),
-                netplay_id,
-                md5::compute(&netplay_rom),
-                local_rom,
-                netplay_rom,
-            ))),
-            gui_is_open: true,
-            room_name: netplay_build_config.default_room_name.clone(),
-        }
+    pub fn new() -> Result<Self> {
+        Ok(NetplayStateHandler {
+            netplay: Some(NetplayState::Disconnected(Netplay::new()?)),
+        })
     }
 }

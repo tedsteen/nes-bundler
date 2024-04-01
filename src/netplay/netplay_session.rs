@@ -2,10 +2,9 @@ use ggrs::{Config, GgrsRequest, P2PSession};
 use matchbox_socket::PeerId;
 
 use crate::{
-    input::JoypadInput,
-    nes_state::{FrameData, NesStateHandler},
+    input::JoypadState,
+    nes_state::{emulator::Emulator, NESBuffers, NesStateHandler},
     settings::MAX_PLAYERS,
-    FPS,
 };
 
 use super::{connecting_state::StartMethod, JoypadMapping, NetplayNesState};
@@ -23,9 +22,6 @@ pub struct NetplaySession {
     pub game_state: NetplayNesState,
     pub last_handled_frame: i32,
     pub last_confirmed_game_states: [NetplayNesState; 2],
-    #[cfg(feature = "debug")]
-    pub stats: [super::stats::NetplayStats; MAX_PLAYERS],
-    last_frame_data: Option<FrameData>,
 }
 
 impl NetplaySession {
@@ -43,12 +39,6 @@ impl NetplaySession {
             game_state: game_state.clone(),
             last_confirmed_game_states: [game_state.clone(), game_state],
             last_handled_frame: -1,
-            #[cfg(feature = "debug")]
-            stats: [
-                super::stats::NetplayStats::new(),
-                super::stats::NetplayStats::new(),
-            ],
-            last_frame_data: None,
         }
     }
 
@@ -63,12 +53,21 @@ impl NetplaySession {
 
     pub fn advance(
         &mut self,
-        inputs: [JoypadInput; MAX_PLAYERS],
+        joypad_state: [JoypadState; MAX_PLAYERS],
         joypad_mapping: &JoypadMapping,
-    ) -> anyhow::Result<Option<FrameData>> {
+        buffers: &mut NESBuffers,
+    ) -> anyhow::Result<()> {
+        #[cfg(feature = "debug")]
+        puffin::profile_function!();
+
         let local_player_idx = self.get_local_player_idx();
         let sess = &mut self.p2p_session;
-        sess.poll_remote_clients();
+
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("ggrs advance_frame");
+            sess.poll_remote_clients();
+        }
 
         for event in sess.events() {
             if let ggrs::GgrsEvent::Disconnected { addr } = event {
@@ -77,33 +76,40 @@ impl NetplaySession {
         }
 
         for handle in sess.local_player_handles() {
-            sess.add_local_input(handle, *inputs[0])?;
+            sess.add_local_input(handle, *joypad_state[0])?;
         }
 
+        #[cfg(feature = "debug")]
+        puffin::profile_scope!("ggrs advance_frame");
         match sess.advance_frame() {
             Ok(requests) => {
                 for request in requests {
                     match request {
                         GgrsRequest::LoadGameState { cell, frame } => {
                             log::debug!("Loading (frame {:?})", frame);
-                            self.game_state = cell.load().expect("No data found.");
+                            self.game_state = cell.load().expect("ggrs state to load");
                         }
                         GgrsRequest::SaveGameState { cell, frame } => {
                             assert_eq!(self.game_state.frame, frame);
                             cell.save(frame, Some(self.game_state.clone()), None);
                         }
                         GgrsRequest::AdvanceFrame { inputs } => {
-                            let this_frame_data = self.game_state.advance(joypad_mapping.map(
-                                [JoypadInput(inputs[0].0), JoypadInput(inputs[1].0)],
-                                local_player_idx,
-                            ));
+                            let is_replay = self.game_state.frame <= self.last_handled_frame;
+                            let no_buffers = &mut NESBuffers {
+                                audio: None,
+                                video: None,
+                            };
+                            let buffers = if is_replay { no_buffers } else { &mut *buffers };
 
-                            if self.game_state.frame <= self.last_handled_frame {
-                                //This is a replay
-                                // Discard the samples for this frame since it's a replay from ggrs. Audio has already been produced and pushed for it.
-                                self.game_state.discard_samples();
-                            } else {
-                                self.last_frame_data = this_frame_data;
+                            self.game_state.advance(
+                                joypad_mapping.map(
+                                    [JoypadState(inputs[0].0), JoypadState(inputs[1].0)],
+                                    local_player_idx,
+                                ),
+                                buffers,
+                            );
+
+                            if !is_replay {
                                 //This is not a replay
                                 self.last_handled_frame = self.game_state.frame;
                                 if self.game_state.frame % (sess.max_prediction() * 2) as i32 == 0 {
@@ -124,31 +130,16 @@ impl NetplaySession {
             }
         }
 
-        #[cfg(feature = "debug")]
-        if self.game_state.frame % 30 == 0 {
-            for i in 0..MAX_PLAYERS {
-                if let Ok(stats) = sess.network_stats(i) {
-                    if !sess.local_player_handles().contains(&i) {
-                        self.stats[i].push_stats(stats);
-                    }
-                }
-            }
+        *Emulator::emulation_speed().write().unwrap() = if sess.frames_ahead() > 0 {
+            log::debug!(
+                "Frames ahead: {:?}, slowing down emulation",
+                sess.frames_ahead()
+            );
+            //https://www.desmos.com/calculator/zbntsowijd
+            0.8_f32.max(1.0 - 0.1 * (0.2 * sess.frames_ahead() as f32).powf(2.0))
+        } else {
+            1.0
         };
-
-        if sess.frames_ahead() > 0 {
-            if let Some(frame_data) = &mut self.last_frame_data {
-                let percentage = sess.frames_ahead() as f32 / sess.max_prediction() as f32;
-                //https://www.desmos.com/calculator/uqhv6bvasr
-                let factor = (0.9 - percentage.powi(3)).max(0.3);
-                frame_data.fps = FPS * factor;
-            }
-        }
-        let res = Ok(self.last_frame_data.clone());
-
-        //In case the last frame is repeated multiple times, make sure to fade out the audio to avoid a screetching sound.
-        if let Some(last_frame_data) = &mut self.last_frame_data {
-            last_frame_data.audio.iter_mut().for_each(|s| *s *= 0.9);
-        }
-        res
+        Ok(())
     }
 }
