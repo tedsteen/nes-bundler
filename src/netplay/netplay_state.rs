@@ -25,34 +25,33 @@ pub struct Failed {
 }
 
 impl NetplayState {
-    pub fn advance(self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: NESBuffers) -> Self {
+    pub fn advance(
+        self,
+        joypad_state: [JoypadState; MAX_PLAYERS],
+        buffers: &mut NESBuffers,
+    ) -> Self {
         use NetplayState::*;
         match self {
             Connecting(netplay) => {
-                if let NESBuffers {
-                    video: Some(video),
-                    audio,
-                } = buffers
-                {
-                    //Black screen and no sound while connecting
-                    video.fill(0);
+                //Black screen and no sound while connecting
+                if let Some(video_buffer) = &mut buffers.video {
+                    video_buffer.fill(0);
+                }
+                if let Some(audio_buffer) = &mut buffers.audio {
                     for _ in 0..1000 {
-                        audio.push(0.0);
+                        audio_buffer.push(0.0);
                     }
                 }
                 netplay.advance()
             }
             Connected(netplay) => netplay.advance(joypad_state, buffers),
             Resuming(netplay) => {
-                if let NESBuffers {
-                    video: Some(video),
-                    audio,
-                } = buffers
-                {
-                    //Black screen and no sound while resuming
-                    video.fill(0);
+                if let Some(video_buffer) = &mut buffers.video {
+                    video_buffer.fill(0);
+                }
+                if let Some(audio_buffer) = &mut buffers.audio {
                     for _ in 0..1000 {
-                        audio.push(0.0);
+                        audio_buffer.push(0.0);
                     }
                 }
                 netplay.advance()
@@ -149,7 +148,7 @@ impl Netplay<LocalNesState> {
         log::debug!("Joining: {:?}", start_method);
         NetplayState::Connecting(Netplay::from(ConnectingState::connect(start_method)))
     }
-    fn advance(mut self, joypad_state: [JoypadState; 2], buffers: NESBuffers) -> NetplayState {
+    fn advance(mut self, joypad_state: [JoypadState; 2], buffers: &mut NESBuffers) -> NetplayState {
         self.state.advance(joypad_state, buffers);
         NetplayState::Disconnected(self)
     }
@@ -203,7 +202,7 @@ impl Netplay<Connected> {
     fn advance(
         mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        buffers: NESBuffers,
+        buffers: &mut NESBuffers,
     ) -> NetplayState {
         //log::trace!("Advancing Netplay<Connected>");
         let netplay_session = &mut self.state.netplay_session;

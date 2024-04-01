@@ -7,35 +7,36 @@ use crate::{
     audio::AudioSender,
     fps::RateCounter,
     input::JoypadState,
-    nes_state::NesStateHandler,
-    netplay::gui::Ted,
     settings::{gui::GuiComponent, Settings, MAX_PLAYERS},
 };
 use anyhow::Result;
 use thingbuf::{Recycle, ThingBuf};
 
 use super::{NESAudioFrame, NESBuffers, NESVideoFrame};
+use crate::nes_state::NesStateHandler;
 
 #[cfg(feature = "netplay")]
-type StateHandler = Ted;
+type StateHandler = crate::netplay::NetplayStateHandler;
 #[cfg(not(feature = "netplay"))]
 type StateHandler = crate::nes_state::LocalNesState;
 
 pub struct Emulator {
-    nes_state: StateHandler,
+    nes_state: Arc<Mutex<StateHandler>>,
 }
 pub const SAMPLE_RATE: f32 = 44_100.0;
 
 impl Emulator {
     pub fn new() -> Result<Self> {
         #[cfg(not(feature = "netplay"))]
-        let mut nes_state =
+        let nes_state =
             crate::nes_state::LocalNesState::start_rom(&crate::bundle::Bundle::current().rom)?;
 
         #[cfg(feature = "netplay")]
-        let nes_state = Arc::new(Mutex::new(crate::netplay::NetplayStateHandler::new()?));
+        let nes_state = crate::netplay::NetplayStateHandler::new()?;
 
-        Ok(Self { nes_state })
+        Ok(Self {
+            nes_state: Arc::new(Mutex::new(nes_state)),
+        })
     }
     pub fn start(
         &self,
@@ -47,14 +48,12 @@ impl Emulator {
         let frame_pool = frame_pool.clone();
         let joypads = joypads.clone();
         let nes_state = self.nes_state.clone();
-        tokio::spawn(async move {
+        tokio::task::spawn_blocking(move || {
             let mut audio_buffer = NESAudioFrame::new();
             let mut rate_counter = RateCounter::new();
             loop {
                 #[cfg(feature = "debug")]
                 puffin::profile_function!("Emulator loop");
-
-                //println!("TOKIO {:?}", Instant::now());
                 audio_buffer.clear();
                 {
                     #[cfg(feature = "debug")]
@@ -64,9 +63,9 @@ impl Emulator {
                         rate_counter.tick("Frame");
                         nes_state.lock().unwrap().advance(
                             *joypads.read().unwrap(),
-                            NESBuffers {
+                            &mut NESBuffers {
                                 video: Some(video_buffer),
-                                audio: &mut audio_buffer,
+                                audio: Some(&mut audio_buffer),
                             },
                         );
                     });
@@ -74,9 +73,9 @@ impl Emulator {
                         rate_counter.tick("Dropped Frame");
                         nes_state.lock().unwrap().advance(
                             *joypads.read().unwrap(),
-                            NESBuffers {
+                            &mut NESBuffers {
                                 video: None,
-                                audio: &mut audio_buffer,
+                                audio: Some(&mut audio_buffer),
                             },
                         );
                     };
@@ -215,12 +214,14 @@ impl GuiComponent<Emulator> for EmulatorGui {
         self.debug_gui.ui(instance, ui);
 
         #[cfg(feature = "netplay")]
-        self.netplay_gui.ui(&mut instance.nes_state, ui);
+        self.netplay_gui
+            .ui(&mut instance.nes_state.lock().unwrap(), ui);
     }
 
     #[cfg(feature = "netplay")]
     fn messages(&self, instance: &Emulator) -> Option<Vec<String>> {
-        self.netplay_gui.messages(&instance.nes_state)
+        self.netplay_gui
+            .messages(&instance.nes_state.lock().unwrap())
     }
 
     fn name(&self) -> Option<String> {
@@ -236,6 +237,7 @@ impl GuiComponent<Emulator> for EmulatorGui {
 
     #[cfg(feature = "netplay")]
     fn prepare(&mut self, instance: &mut Emulator) {
-        self.netplay_gui.prepare(&mut instance.nes_state);
+        self.netplay_gui
+            .prepare(&mut instance.nes_state.lock().unwrap());
     }
 }

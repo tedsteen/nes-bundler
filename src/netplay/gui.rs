@@ -1,7 +1,4 @@
-use std::{
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use egui::{Button, TextEdit, Ui};
 
@@ -101,12 +98,11 @@ impl NetplayGui {
         }
     }
 }
-pub type Ted = Arc<Mutex<NetplayStateHandler>>;
 
-impl GuiComponent<Ted> for NetplayGui {
+impl GuiComponent<NetplayStateHandler> for NetplayGui {
     #[cfg(feature = "debug")]
-    fn prepare(&mut self, instance: &mut Ted) {
-        if let Some(NetplayState::Connected(netplay)) = &instance.lock().unwrap().netplay {
+    fn prepare(&mut self, instance: &mut NetplayStateHandler) {
+        if let Some(NetplayState::Connected(netplay)) = &instance.netplay {
             let sess = &netplay.state.netplay_session.p2p_session;
             if netplay.state.netplay_session.game_state.frame % 30 == 0 {
                 for i in 0..MAX_PLAYERS {
@@ -119,9 +115,9 @@ impl GuiComponent<Ted> for NetplayGui {
             };
         }
     }
-    fn messages(&self, instance: &Ted) -> Option<Vec<String>> {
+    fn messages(&self, instance: &NetplayStateHandler) -> Option<Vec<String>> {
         Some(
-            match &instance.lock().unwrap().netplay {
+            match &instance.netplay {
                 Some(NetplayState::Connecting(_)) => Some("Netplay is connecting"),
                 Some(NetplayState::Resuming(_)) => {
                     Some("Netplay connection lost, trying to reconnect")
@@ -133,8 +129,8 @@ impl GuiComponent<Ted> for NetplayGui {
             .collect(),
         )
     }
-    fn ui(&mut self, instance: &mut Ted, ui: &mut Ui) {
-        let netplay = &mut instance.lock().unwrap().netplay;
+    fn ui(&mut self, instance: &mut NetplayStateHandler, ui: &mut Ui) {
+        let netplay = &mut instance.netplay;
         *netplay = Some(match netplay.take().unwrap() {
             NetplayState::Disconnected(netplay_disconnected) => {
                 let mut do_join = false;

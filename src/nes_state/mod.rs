@@ -11,7 +11,7 @@ use self::tetanes::TetanesNesState;
 pub type LocalNesState = TetanesNesState;
 
 pub struct NESBuffers<'a> {
-    pub audio: &'a mut NESAudioFrame,
+    pub audio: Option<&'a mut NESAudioFrame>,
     pub video: Option<&'a mut NESVideoFrame>,
 }
 
@@ -74,7 +74,7 @@ impl DerefMut for NESAudioFrame {
 static NTSC_PAL: &[u8] = include_bytes!("../../config/ntscpalette.pal");
 
 pub trait NesStateHandler {
-    fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: NESBuffers);
+    fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers);
     fn save_sram(&self) -> Option<Vec<u8>>;
     fn load_sram(&mut self, data: &mut Vec<u8>);
     fn frame(&self) -> u32;

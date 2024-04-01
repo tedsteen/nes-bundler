@@ -55,7 +55,7 @@ impl NetplaySession {
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
         joypad_mapping: &JoypadMapping,
-        buffers: NESBuffers,
+        buffers: &mut NESBuffers,
     ) -> anyhow::Result<()> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
@@ -95,16 +95,18 @@ impl NetplaySession {
                         }
                         GgrsRequest::AdvanceFrame { inputs } => {
                             let is_replay = self.game_state.frame <= self.last_handled_frame;
+                            let no_buffers = &mut NESBuffers {
+                                audio: None,
+                                video: None,
+                            };
+                            let buffers = if is_replay { no_buffers } else { &mut *buffers };
 
                             self.game_state.advance(
                                 joypad_mapping.map(
                                     [JoypadState(inputs[0].0), JoypadState(inputs[1].0)],
                                     local_player_idx,
                                 ),
-                                NESBuffers {
-                                    audio: buffers.audio,
-                                    video: None,
-                                },
+                                buffers,
                             );
 
                             if !is_replay {
@@ -116,8 +118,6 @@ impl NetplaySession {
                                         self.game_state.clone(),
                                     ];
                                 }
-                            } else {
-                                buffers.audio.clear(); //clear replay audio
                             }
 
                             self.game_state.frame += 1;
