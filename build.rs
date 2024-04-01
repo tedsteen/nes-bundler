@@ -18,7 +18,7 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=config/config.yaml");
     println!("cargo:rerun-if-changed=config/rom.nes");
     println!("cargo:rerun-if-changed=config/netplay-rom.nes");
-    println!("cargo:rerun-if-changed=config/ntscpalette.pal");
+    println!("cargo:rerun-if-changed=config/palette.pal");
     println!("cargo:rerun-if-changed=config/linux/bundle.desktop-template");
     println!("cargo:rerun-if-changed=config/macos/Info.plist-template");
     println!("cargo:rerun-if-changed=config/windows/wix/main.wxs-template");
