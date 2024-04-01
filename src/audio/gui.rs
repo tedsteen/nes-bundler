@@ -79,7 +79,7 @@ impl GuiComponent<Audio> for AudioGui {
                     let new_device = {
                         let mut new_device = None;
                         ui.label("Output");
-                        let audio_settings = &mut Settings::current().audio;
+                        let audio_settings = &mut Settings::current_mut().audio;
                         let selected_device = &mut audio_settings.output_device;
                         if selected_device.is_none() {
                             *selected_device = instance.get_default_device_name();

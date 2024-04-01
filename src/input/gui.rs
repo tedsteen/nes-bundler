@@ -111,7 +111,7 @@ impl InputsGui {
 
 impl GuiComponent<Inputs> for InputsGui {
     fn ui(&mut self, instance: &mut Inputs, ui: &mut Ui) {
-        let input_settings = &mut Settings::current().input;
+        let input_settings = &mut Settings::current_mut().input;
         let available_configurations = &mut input_settings
             .configurations
             .values()

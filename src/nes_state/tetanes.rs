@@ -93,12 +93,8 @@ impl TetanesNesState {
 }
 
 impl NesStateHandler for TetanesNesState {
-    fn advance(
-        &mut self,
-        joypad_state: [JoypadState; MAX_PLAYERS],
-        buffers: &mut Option<&mut NESBuffers>,
-    ) {
-        self.set_speed(*Emulator::emulation_speed().lock().unwrap());
+    fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: NESBuffers) {
+        self.set_speed(*Emulator::emulation_speed().read().unwrap());
 
         *self.control_deck.joypad_mut(Player::One) = Joypad::from_bytes((*joypad_state[0]).into());
         *self.control_deck.joypad_mut(Player::Two) = Joypad::from_bytes((*joypad_state[1]).into());
@@ -109,7 +105,7 @@ impl NesStateHandler for TetanesNesState {
             .clock_frame()
             .expect("NES to clock a frame");
 
-        if let Some(NESBuffers { video, audio }) = buffers {
+        if let Some(video) = buffers.video {
             self.control_deck
                 .cpu()
                 .bus
@@ -123,8 +119,10 @@ impl NesStateHandler for TetanesNesState {
                     video[pixel_index..pixel_index + 3]
                         .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
                 });
-            audio.extend_from_slice(self.control_deck.audio_samples());
         }
+        buffers
+            .audio
+            .extend_from_slice(self.control_deck.audio_samples());
     }
 
     fn save_sram(&self) -> Option<Vec<u8>> {

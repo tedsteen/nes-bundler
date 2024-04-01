@@ -74,7 +74,7 @@ impl Stream {
             let _ = tx.send(0.0);
         }
 
-        let output_device = &Settings::current().audio.output_device.clone();
+        let output_device = &Settings::current().audio.output_device;
         let audio_device = Stream::new_audio_device(
             desired_sample_rate,
             audio_subsystem,
@@ -210,7 +210,7 @@ impl Audio {
             self.available_device_names = available_device_names.clone();
         }
 
-        let selected_device = &mut Settings::current().audio.output_device;
+        let selected_device = &mut Settings::current_mut().audio.output_device;
         if let Some(name) = selected_device {
             if !available_device_names.contains(name) {
                 *selected_device = None;

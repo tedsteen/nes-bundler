@@ -1,63 +1,113 @@
-use std::sync::{Mutex, OnceLock};
-use std::time::Duration;
+use std::{
+    ops::Deref,
+    sync::{Arc, Mutex, OnceLock, RwLock},
+};
 
-use crate::audio::Audio;
-use crate::gui::MainGui;
-use crate::input::sdl2_impl::Sdl2Gamepads;
-use crate::input::Inputs;
-use crate::settings::gui::GuiComponent;
-use crate::settings::Settings;
-use crate::window::egui_winit_wgpu::Renderer;
+use crate::{
+    audio::AudioSender,
+    fps::RateCounter,
+    input::JoypadState,
+    nes_state::NesStateHandler,
+    netplay::gui::Ted,
+    settings::{gui::GuiComponent, Settings, MAX_PLAYERS},
+};
 use anyhow::Result;
-use sdl2::EventPump;
+use thingbuf::{Recycle, ThingBuf};
+
+use super::{NESAudioFrame, NESBuffers, NESVideoFrame};
 
 #[cfg(feature = "netplay")]
-type StateHandler = crate::netplay::NetplayStateHandler;
+type StateHandler = Ted;
 #[cfg(not(feature = "netplay"))]
 type StateHandler = crate::nes_state::LocalNesState;
 
 pub struct Emulator {
-    pub nes_state: StateHandler,
+    nes_state: StateHandler,
 }
 pub const SAMPLE_RATE: f32 = 44_100.0;
 
 impl Emulator {
-    pub fn new() -> Result<Emulator> {
+    pub fn new() -> Result<Self> {
         #[cfg(not(feature = "netplay"))]
-        let nes_state =
+        let mut nes_state =
             crate::nes_state::LocalNesState::start_rom(&crate::bundle::Bundle::current().rom)?;
 
         #[cfg(feature = "netplay")]
-        let nes_state = crate::netplay::NetplayStateHandler::new()?;
+        let nes_state = Arc::new(Mutex::new(crate::netplay::NetplayStateHandler::new()?));
 
-        let this = Self { nes_state };
+        Ok(Self { nes_state })
+    }
+    pub fn start(
+        &self,
+        frame_pool: BufferPool,
+        audio_tx: AudioSender,
+        joypads: Arc<RwLock<[JoypadState; MAX_PLAYERS]>>,
+    ) -> Result<()> {
+        let audio_tx = audio_tx.clone();
+        let frame_pool = frame_pool.clone();
+        let joypads = joypads.clone();
+        let nes_state = self.nes_state.clone();
+        tokio::spawn(async move {
+            let mut audio_buffer = NESAudioFrame::new();
+            let mut rate_counter = RateCounter::new();
+            loop {
+                #[cfg(feature = "debug")]
+                puffin::profile_function!("Emulator loop");
 
-        Ok(this)
+                //println!("TOKIO {:?}", Instant::now());
+                audio_buffer.clear();
+                {
+                    #[cfg(feature = "debug")]
+                    puffin::profile_scope!("advance");
+
+                    let push_frame_res = frame_pool.push_with(|video_buffer| {
+                        rate_counter.tick("Frame");
+                        nes_state.lock().unwrap().advance(
+                            *joypads.read().unwrap(),
+                            NESBuffers {
+                                video: Some(video_buffer),
+                                audio: &mut audio_buffer,
+                            },
+                        );
+                    });
+                    if push_frame_res.is_err() {
+                        rate_counter.tick("Dropped Frame");
+                        nes_state.lock().unwrap().advance(
+                            *joypads.read().unwrap(),
+                            NESBuffers {
+                                video: None,
+                                audio: &mut audio_buffer,
+                            },
+                        );
+                    };
+                }
+                #[cfg(feature = "debug")]
+                puffin::profile_scope!("push audio");
+                log::trace!("Pushing {:} audio samples", audio_buffer.len());
+                for s in audio_buffer.iter() {
+                    let _ = audio_tx.send(*s);
+                }
+                if let Some(report) = rate_counter.report() {
+                    // Hitch-hike on the once-per-second-reporting to save the sram.
+                    use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+                    use base64::Engine;
+                    Settings::current_mut().save_state = nes_state
+                        .lock()
+                        .unwrap()
+                        .save_sram()
+                        .map(|sram| b64.encode(sram));
+
+                    log::debug!("Emulation: {report}");
+                }
+            }
+        });
+
+        Ok(())
     }
 
-    pub fn init(renderer: &mut Renderer, emulator: Self) -> Result<(MainGui, EventPump)> {
-        // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
-        sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
-        // TODO: Perhaps do this to fix this issue: https://github.com/libsdl-org/SDL/issues/7896#issuecomment-1616700934
-        //sdl2::hint::set("SDL_JOYSTICK_RAWINPUT", "0");
-
-        let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
-        let sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
-
-        let audio_latency = Duration::from_millis(Settings::current().audio.latency as u64);
-        let audio = Audio::new(&sdl_context, audio_latency, SAMPLE_RATE as u32)?;
-
-        let inputs = Inputs::new(Sdl2Gamepads::new(
-            sdl_context.game_controller().map_err(anyhow::Error::msg)?,
-        ));
-
-        let main_gui = MainGui::new(renderer, emulator, inputs, audio);
-        Ok((main_gui, sdl_event_pump))
-    }
-
-    pub fn emulation_speed() -> &'static Mutex<f32> {
-        static MEM: OnceLock<Mutex<f32>> = OnceLock::new();
-        MEM.get_or_init(|| Mutex::new(1_f32))
+    pub fn emulation_speed() -> &'static RwLock<f32> {
+        static MEM: OnceLock<RwLock<f32>> = OnceLock::new();
+        MEM.get_or_init(|| RwLock::new(1_f32))
     }
 }
 
@@ -79,7 +129,7 @@ impl GuiComponent<Emulator> for DebugGui {
     fn ui(&mut self, instance: &mut Emulator, ui: &mut egui::Ui) {
         ui.label(format!(
             "Frame: {}",
-            super::NesStateHandler::frame(&instance.nes_state)
+            instance.nes_state.lock().unwrap().frame()
         ));
         ui.horizontal(|ui| {
             egui::Grid::new("debug_grid")
@@ -92,12 +142,12 @@ impl GuiComponent<Emulator> for DebugGui {
                         .changed()
                         && !self.override_speed
                     {
-                        *Emulator::emulation_speed().lock().unwrap() = 1.0;
+                        *Emulator::emulation_speed().write().unwrap() = 1.0;
                     }
 
                     if self.override_speed {
                         ui.add(egui::Slider::new(&mut self.speed, 0.01..=2.0).suffix("x"));
-                        *Emulator::emulation_speed().lock().unwrap() = self.speed;
+                        *Emulator::emulation_speed().write().unwrap() = self.speed;
                     }
                     ui.end_row();
                 });
@@ -105,8 +155,8 @@ impl GuiComponent<Emulator> for DebugGui {
     }
 }
 
-impl EmulatorGui {
-    pub fn new() -> Self {
+impl Default for EmulatorGui {
+    fn default() -> Self {
         Self {
             #[cfg(feature = "netplay")]
             netplay_gui: crate::netplay::gui::NetplayGui::new(),
@@ -116,6 +166,45 @@ impl EmulatorGui {
                 override_speed: false,
             },
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct FrameRecycle;
+
+impl Recycle<NESVideoFrame> for FrameRecycle {
+    fn new_element(&self) -> NESVideoFrame {
+        NESVideoFrame::new()
+    }
+
+    fn recycle(&self, _frame: &mut NESVideoFrame) {}
+}
+
+#[derive(Debug)]
+pub struct BufferPool(Arc<ThingBuf<NESVideoFrame, FrameRecycle>>);
+
+impl BufferPool {
+    pub fn new() -> Self {
+        Self(Arc::new(ThingBuf::with_recycle(1, FrameRecycle)))
+    }
+}
+
+impl Default for BufferPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Deref for BufferPool {
+    type Target = Arc<ThingBuf<NESVideoFrame, FrameRecycle>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Clone for BufferPool {
+    fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0))
     }
 }
 

@@ -12,20 +12,20 @@ use std::{
     hash::{Hash, Hasher},
     io::{BufReader, BufWriter},
     ops::{Deref, DerefMut},
-    sync::{Mutex, MutexGuard, OnceLock},
+    sync::{OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 pub mod gui;
 
 pub const MAX_PLAYERS: usize = 2;
 
 pub struct AutoSavingSettings<'a> {
-    inner: MutexGuard<'a, Settings>,
+    inner: RwLockWriteGuard<'a, Settings>,
     hash_before: u64,
 }
 
 impl<'a> AutoSavingSettings<'a> {
-    fn new(inner: &'a Mutex<Settings>) -> Self {
-        let inner = inner.lock().unwrap();
+    fn new(inner: &'a RwLock<Settings>) -> Self {
+        let inner = inner.write().unwrap();
         AutoSavingSettings {
             hash_before: inner.get_hash(),
             inner,
@@ -64,10 +64,17 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn current<'a>() -> AutoSavingSettings<'a> {
-        static MEM: OnceLock<Mutex<Settings>> = OnceLock::new();
-        let settings = MEM.get_or_init(|| Mutex::new(Settings::load()));
-        AutoSavingSettings::new(settings)
+    fn _current() -> &'static RwLock<Settings> {
+        static MEM: OnceLock<RwLock<Settings>> = OnceLock::new();
+        MEM.get_or_init(|| RwLock::new(Settings::load()))
+    }
+
+    pub fn current_mut<'a>() -> AutoSavingSettings<'a> {
+        AutoSavingSettings::new(Self::_current())
+    }
+
+    pub fn current<'a>() -> RwLockReadGuard<'a, Settings> {
+        Self::_current().read().unwrap()
     }
 
     fn load() -> Settings {

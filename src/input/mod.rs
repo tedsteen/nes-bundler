@@ -170,7 +170,7 @@ impl Inputs {
                 self.gamepads.advance(gamepad_event);
             }
         }
-        let input_settings = &mut Settings::current().input;
+        let input_settings = &mut Settings::current_mut().input;
         input_settings.reset_selected_disconnected_inputs(self);
 
         let pad1 =

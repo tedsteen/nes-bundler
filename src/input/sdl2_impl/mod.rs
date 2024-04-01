@@ -68,7 +68,7 @@ impl Gamepads for Sdl2Gamepads {
         match gamepad_event {
             GamepadEvent::ControllerAdded { which, .. } => {
                 if let Some(conf) = self.setup_gamepad_config(which.clone()) {
-                    let input_settings = &mut Settings::current().input;
+                    let input_settings = &mut Settings::current_mut().input;
                     // Automatically select a gamepad if it's connected and keyboard is currently selected.
                     if let InputConfigurationKind::Keyboard(_) =
                         input_settings.get_selected_configuration(0).kind
@@ -144,7 +144,7 @@ impl Sdl2Gamepads {
                 gamepad_id.clone(),
                 Box::new(Sdl2GamepadState::new(found_controller)),
             );
-            let input_settings = &mut Settings::current().input;
+            let input_settings = &mut Settings::current_mut().input;
             let conf = input_settings.get_or_create_config(
                 gamepad_id.clone(),
                 input::InputConfiguration {

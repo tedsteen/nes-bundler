@@ -84,16 +84,6 @@ pub struct SettingsGui {
 }
 
 impl SettingsGui {
-    pub fn new() -> Self {
-        Self {
-            inputs_gui: InputsGui::new(),
-            audio_gui: AudioGui::new(),
-            emulator_gui: EmulatorGui::new(),
-            start_time: Instant::now(),
-            visible: false,
-        }
-    }
-
     pub fn ui(
         &mut self,
         ctx: &Context,
@@ -172,5 +162,17 @@ impl SettingsGui {
 
     pub fn toggle_visibility(&mut self) {
         self.visible = !self.visible;
+    }
+}
+
+impl Default for SettingsGui {
+    fn default() -> Self {
+        Self {
+            inputs_gui: InputsGui::new(),
+            audio_gui: AudioGui::new(),
+            emulator_gui: EmulatorGui::default(),
+            start_time: Instant::now(),
+            visible: false,
+        }
     }
 }

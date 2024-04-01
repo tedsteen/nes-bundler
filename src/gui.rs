@@ -8,7 +8,7 @@ use crate::{
         Inputs, KeyEvent,
     },
     integer_scaling::{calculate_size_corrected, Size},
-    nes_state::{emulator::Emulator, NESVideoFrame},
+    nes_state::emulator::{BufferPool, Emulator},
     settings::gui::{GuiEvent, SettingsGui},
     window::{
         egui_winit_wgpu::{texture::Texture, Renderer},
@@ -25,17 +25,25 @@ pub struct MainGui {
     modifiers: Modifiers,
 
     nes_texture: Texture,
+    frame_pool: BufferPool,
 }
 impl MainGui {
-    pub fn new(renderer: &mut Renderer, emulator: Emulator, inputs: Inputs, audio: Audio) -> Self {
+    pub fn new(
+        renderer: &mut Renderer,
+        emulator: Emulator,
+        inputs: Inputs,
+        audio: Audio,
+        frame_pool: BufferPool,
+    ) -> Self {
         Self {
-            settings_gui: SettingsGui::new(),
+            settings_gui: SettingsGui::default(),
             emulator,
             inputs,
             audio,
             modifiers: Modifiers::empty(),
 
             nes_texture: Texture::new(renderer, NES_WIDTH, NES_HEIGHT, Some("nes frame")),
+            frame_pool,
         }
     }
 }
@@ -66,8 +74,11 @@ impl MainGui {
         }
     }
 
-    pub fn render_gui(&mut self, renderer: &mut Renderer, video: &NESVideoFrame) {
-        self.nes_texture.update(&renderer.queue, video);
+    pub fn render_gui(&mut self, renderer: &mut Renderer) {
+        if let Some(video) = self.frame_pool.pop_ref() {
+            self.nes_texture.update(&renderer.queue, &video);
+        }
+
         let render_result = renderer.render(move |ctx| {
             self.ui(ctx);
         });
