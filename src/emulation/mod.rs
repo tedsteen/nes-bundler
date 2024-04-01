@@ -34,7 +34,7 @@ pub const NES_WIDTH: u32 = 256;
 pub const NES_WIDTH_4_3: u32 = (NES_WIDTH as f32 * (4.0 / 3.0)) as u32;
 pub const NES_HEIGHT: u32 = 240;
 
-static NTSC_PAL: &[u8] = include_bytes!("../../config/ntscpalette.pal");
+static NTSC_PAL: &[u8] = include_bytes!("../../config/palette.pal");
 
 #[cfg(feature = "netplay")]
 pub type StateHandler = crate::netplay::NetplayStateHandler;
