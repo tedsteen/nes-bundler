@@ -113,14 +113,14 @@ pub fn get_netplay_id() -> String {
 impl Netplay<LocalNesState> {
     pub fn new() -> Result<Self> {
         Ok(Self {
-            state: LocalNesState::start_rom(&Bundle::current().rom)?,
+            state: LocalNesState::start_rom(&Bundle::current().rom, true)?,
         })
     }
 
     pub fn join_by_name(self, room_name: &str) -> Result<NetplayState> {
         let netplay_rom = &Bundle::current().netplay_rom;
         let session_id = format!("{}_{:x}", room_name, md5::compute(netplay_rom));
-        let nes_state = LocalNesState::start_rom(netplay_rom)?;
+        let nes_state = LocalNesState::start_rom(netplay_rom, false)?;
         Ok(self.join(StartMethod::Join(
             StartState {
                 game_state: super::NetplayNesState::new(nes_state),
@@ -137,7 +137,7 @@ impl Netplay<LocalNesState> {
         // TODO: When resuming using this session id there might be collisions, but it's unlikely.
         //       Should be fixed though.
         let session_id = format!("{:x}", rom_hash);
-        let nes_state = LocalNesState::start_rom(netplay_rom)?;
+        let nes_state = LocalNesState::start_rom(netplay_rom, false)?;
         Ok(self.join(StartMethod::MatchWithRandom(StartState {
             game_state: super::NetplayNesState::new(nes_state),
             session_id,

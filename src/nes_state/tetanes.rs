@@ -42,7 +42,7 @@ impl ToTetanesRegion for crate::bundle::NesRegion {
 }
 
 impl TetanesNesState {
-    pub fn start_rom(rom: &[u8]) -> Result<Self> {
+    pub fn start_rom(rom: &[u8], load_sram: bool) -> Result<Self> {
         let region = Bundle::current().config.nes_region.to_tetanes_region();
         let config = Config {
             filter: VideoFilter::Pixellate,
@@ -59,16 +59,18 @@ impl TetanesNesState {
         //control_deck.set_cycle_accurate(false); //TODO: Add as a bundle config?
         control_deck.load_rom(Bundle::current().config.name.clone(), &mut Cursor::new(rom))?;
 
-        if let Some(true) = control_deck.cart_battery_backed() {
-            if let Some(b64_encoded_sram) = &Settings::current().save_state {
-                use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
-                use base64::Engine;
-                match b64.decode(b64_encoded_sram) {
-                    Ok(sram) => {
-                        control_deck.cpu_mut().bus.load_sram(sram);
-                    }
-                    Err(err) => {
-                        log::warn!("Failed to base64 decode sram: {err:?}");
+        if load_sram {
+            if let Some(true) = control_deck.cart_battery_backed() {
+                if let Some(b64_encoded_sram) = &Settings::current().save_state {
+                    use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+                    use base64::Engine;
+                    match b64.decode(b64_encoded_sram) {
+                        Ok(sram) => {
+                            control_deck.cpu_mut().bus.load_sram(sram);
+                        }
+                        Err(err) => {
+                            log::warn!("Failed to base64 decode sram: {err:?}");
+                        }
                     }
                 }
             }

@@ -28,8 +28,10 @@ pub const SAMPLE_RATE: f32 = 44_100.0;
 impl Emulator {
     pub fn new() -> Result<Self> {
         #[cfg(not(feature = "netplay"))]
-        let nes_state =
-            crate::nes_state::LocalNesState::start_rom(&crate::bundle::Bundle::current().rom)?;
+        let nes_state = crate::nes_state::LocalNesState::start_rom(
+            &crate::bundle::Bundle::current().rom,
+            true,
+        )?;
 
         #[cfg(feature = "netplay")]
         let nes_state = crate::netplay::NetplayStateHandler::new()?;
@@ -154,6 +156,7 @@ impl GuiComponent<Emulator> for DebugGui {
     }
 }
 
+#[allow(clippy::derivable_impls)] //Netplay can't derive...
 impl Default for EmulatorGui {
     fn default() -> Self {
         Self {
