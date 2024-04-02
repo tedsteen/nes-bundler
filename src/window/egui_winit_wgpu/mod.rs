@@ -147,8 +147,8 @@ impl Renderer {
             |ui| {
                 #[cfg(feature = "debug")]
                 {
-                    puffin::GlobalProfiler::lock().new_frame();
                     puffin_egui::show_viewport_if_enabled(ui);
+                    puffin::GlobalProfiler::lock().new_frame();
                 }
 
                 run_ui(ui)

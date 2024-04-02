@@ -79,8 +79,6 @@ async fn run() -> anyhow::Result<()> {
         &event_loop,
     )?);
 
-    let mut renderer = Renderer::new(window.clone()).await?;
-
     // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
     sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
     // TODO: Perhaps do this to fix this issue: https://github.com/libsdl-org/SDL/issues/7896#issuecomment-1616700934
@@ -94,14 +92,15 @@ async fn run() -> anyhow::Result<()> {
         Duration::from_millis(Settings::current().audio.latency as u64),
         SAMPLE_RATE as u32,
     )?;
+    let audio_tx = audio.stream.start()?;
 
     let inputs = Inputs::new(Sdl2Gamepads::new(
         sdl_context.game_controller().map_err(anyhow::Error::msg)?,
     ));
     let joypad_state = inputs.joypads.clone();
-    let emulator = Emulator::new()?;
-    let audio_tx = audio.stream.start()?;
 
+    let emulator = Emulator::new()?;
+    let mut renderer = Renderer::new(window.clone()).await?;
     let mut main_view = MainView::new(
         &mut renderer,
         vec![
@@ -115,6 +114,9 @@ async fn run() -> anyhow::Result<()> {
 
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     event_loop.run(|winit_event, control_flow| {
+        #[cfg(feature = "debug")]
+        puffin::profile_function!("event_loop.run");
+
         let mut render_needed = false;
         let mut occluded = false;
         match &winit_event {
@@ -122,6 +124,9 @@ async fn run() -> anyhow::Result<()> {
                 event: window_event,
                 ..
             } => {
+                #[cfg(feature = "debug")]
+                puffin::profile_scope!("handle winit events");
+
                 match window_event {
                     WindowEvent::CloseRequested | WindowEvent::Destroyed => {
                         control_flow.exit();
@@ -160,14 +165,21 @@ async fn run() -> anyhow::Result<()> {
             _ => {}
         };
 
-        for sdl_gui_event in sdl_event_pump
-            .poll_iter()
-            .flat_map(|e| e.to_gamepad_event())
-            .map(GuiEvent::Gamepad)
         {
-            main_view.handle_event(&sdl_gui_event, &renderer.window);
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("poll and handle sdl events");
+            for sdl_gui_event in sdl_event_pump
+                .poll_iter()
+                .flat_map(|e| e.to_gamepad_event())
+                .map(GuiEvent::Gamepad)
+            {
+                main_view.handle_event(&sdl_gui_event, &renderer.window);
+            }
         }
+
         if render_needed && !occluded {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("render");
             main_view.render(&mut renderer);
         }
     })?;

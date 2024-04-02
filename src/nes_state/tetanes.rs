@@ -96,6 +96,9 @@ impl TetanesNesState {
 
 impl NesStateHandler for TetanesNesState {
     fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers) {
+        #[cfg(feature = "debug")]
+        puffin::profile_function!();
+
         self.set_speed(*Emulator::emulation_speed().read().unwrap());
 
         *self.control_deck.joypad_mut(Player::One) = Joypad::from_bytes((*joypad_state[0]).into());
@@ -103,27 +106,34 @@ impl NesStateHandler for TetanesNesState {
 
         self.control_deck.clear_audio_samples();
 
-        self.control_deck
-            .clock_frame()
-            .expect("NES to clock a frame");
-
-        if let Some(video_buffer) = &mut buffers.video {
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("clock frame");
             self.control_deck
-                .cpu()
-                .bus
-                .ppu
-                .frame_buffer()
-                .iter()
-                .enumerate()
-                .for_each(|(idx, &palette_index)| {
-                    let palette_index = palette_index as usize * 3;
-                    let pixel_index = idx * 4;
-                    video_buffer[pixel_index..pixel_index + 3]
-                        .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
-                });
+                .clock_frame()
+                .expect("NES to clock a frame");
         }
-        if let Some(audio_buffer) = &mut buffers.audio {
-            audio_buffer.extend_from_slice(self.control_deck.audio_samples());
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("clock frame and copy audio");
+            if let Some(video_buffer) = &mut buffers.video {
+                self.control_deck
+                    .cpu()
+                    .bus
+                    .ppu
+                    .frame_buffer()
+                    .iter()
+                    .enumerate()
+                    .for_each(|(idx, &palette_index)| {
+                        let palette_index = palette_index as usize * 3;
+                        let pixel_index = idx * 4;
+                        video_buffer[pixel_index..pixel_index + 3]
+                            .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
+                    });
+            }
+            if let Some(audio_buffer) = &mut buffers.audio {
+                audio_buffer.extend_from_slice(self.control_deck.audio_samples());
+            }
         }
     }
 
