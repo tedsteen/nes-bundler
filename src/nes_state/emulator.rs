@@ -21,7 +21,7 @@ type StateHandler = crate::netplay::NetplayStateHandler;
 type StateHandler = crate::nes_state::LocalNesState;
 
 pub struct Emulator {
-    nes_state: Arc<Mutex<StateHandler>>,
+    pub nes_state: Arc<Mutex<StateHandler>>,
 }
 pub const SAMPLE_RATE: f32 = 44_100.0;
 
@@ -114,6 +114,8 @@ impl Emulator {
 
 #[cfg(feature = "debug")]
 pub struct DebugGui {
+    nes_state: Arc<Mutex<StateHandler>>,
+
     pub speed: f32,
     pub override_speed: bool,
 }
@@ -124,14 +126,24 @@ pub struct EmulatorGui {
     #[cfg(feature = "debug")]
     pub debug_gui: DebugGui,
 }
-
+impl EmulatorGui {
+    pub fn new(nes_state: Arc<Mutex<StateHandler>>) -> Self {
+        Self {
+            #[cfg(feature = "netplay")]
+            netplay_gui: crate::netplay::gui::NetplayGui::new(nes_state.clone()),
+            #[cfg(feature = "debug")]
+            debug_gui: DebugGui {
+                speed: 1.0,
+                override_speed: false,
+                nes_state,
+            },
+        }
+    }
+}
 #[cfg(feature = "debug")]
-impl GuiComponent<Emulator> for DebugGui {
-    fn ui(&mut self, instance: &mut Emulator, ui: &mut egui::Ui) {
-        ui.label(format!(
-            "Frame: {}",
-            instance.nes_state.lock().unwrap().frame()
-        ));
+impl GuiComponent for DebugGui {
+    fn ui(&mut self, ui: &mut egui::Ui) {
+        ui.label(format!("Frame: {}", self.nes_state.lock().unwrap().frame()));
         ui.horizontal(|ui| {
             egui::Grid::new("debug_grid")
                 .num_columns(2)
@@ -153,21 +165,6 @@ impl GuiComponent<Emulator> for DebugGui {
                     ui.end_row();
                 });
         });
-    }
-}
-
-#[allow(clippy::derivable_impls)] //Netplay can't derive...
-impl Default for EmulatorGui {
-    fn default() -> Self {
-        Self {
-            #[cfg(feature = "netplay")]
-            netplay_gui: crate::netplay::gui::NetplayGui::new(),
-            #[cfg(feature = "debug")]
-            debug_gui: DebugGui {
-                speed: 1.0,
-                override_speed: false,
-            },
-        }
     }
 }
 
@@ -210,21 +207,19 @@ impl Clone for BufferPool {
     }
 }
 
-impl GuiComponent<Emulator> for EmulatorGui {
+impl GuiComponent for EmulatorGui {
     #[allow(unused_variables)]
-    fn ui(&mut self, instance: &mut Emulator, ui: &mut egui::Ui) {
+    fn ui(&mut self, ui: &mut egui::Ui) {
         #[cfg(feature = "debug")]
-        self.debug_gui.ui(instance, ui);
+        self.debug_gui.ui(ui);
 
         #[cfg(feature = "netplay")]
-        self.netplay_gui
-            .ui(&mut instance.nes_state.lock().unwrap(), ui);
+        self.netplay_gui.ui(ui);
     }
 
     #[cfg(feature = "netplay")]
-    fn messages(&self, instance: &Emulator) -> Option<Vec<String>> {
-        self.netplay_gui
-            .messages(&instance.nes_state.lock().unwrap())
+    fn messages(&self) -> Option<Vec<String>> {
+        self.netplay_gui.messages()
     }
 
     fn name(&self) -> Option<String> {
@@ -239,8 +234,7 @@ impl GuiComponent<Emulator> for EmulatorGui {
     }
 
     #[cfg(feature = "netplay")]
-    fn prepare(&mut self, instance: &mut Emulator) {
-        self.netplay_gui
-            .prepare(&mut instance.nes_state.lock().unwrap());
+    fn prepare(&mut self) {
+        self.netplay_gui.prepare();
     }
 }

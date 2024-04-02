@@ -1,15 +1,14 @@
 use egui::{load::SizedTexture, Context, Image, Order, Vec2};
 
 use crate::{
-    audio::Audio,
     input::{
         buttons::GamepadButton,
         keys::{KeyCode, Modifiers},
-        Inputs, KeyEvent,
+        KeyEvent,
     },
     integer_scaling::{calculate_size_corrected, Size},
-    nes_state::emulator::{BufferPool, Emulator},
-    settings::gui::{GuiEvent, SettingsGui},
+    nes_state::emulator::BufferPool,
+    settings::gui::{GuiComponent, GuiEvent, SettingsGui},
     window::{
         egui_winit_wgpu::{texture::Texture, Renderer},
         Fullscreen,
@@ -17,37 +16,24 @@ use crate::{
     MINIMUM_INTEGER_SCALING_SIZE, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3,
 };
 
-pub struct MainGui {
+pub struct MainView {
     pub settings_gui: SettingsGui,
-    pub emulator: Emulator,
-    pub audio: Audio,
-    pub inputs: Inputs,
     modifiers: Modifiers,
-
     nes_texture: Texture,
-    frame_pool: BufferPool,
+    pub frame_pool: BufferPool,
 }
-impl MainGui {
-    pub fn new(
-        renderer: &mut Renderer,
-        emulator: Emulator,
-        inputs: Inputs,
-        audio: Audio,
-        frame_pool: BufferPool,
-    ) -> Self {
+impl MainView {
+    pub fn new(renderer: &mut Renderer, gui_components: Vec<Box<dyn GuiComponent>>) -> Self {
         Self {
-            settings_gui: SettingsGui::default(),
-            emulator,
-            inputs,
-            audio,
+            settings_gui: SettingsGui::new(gui_components),
             modifiers: Modifiers::empty(),
 
             nes_texture: Texture::new(renderer, NES_WIDTH, NES_HEIGHT, Some("nes frame")),
-            frame_pool,
+            frame_pool: BufferPool::new(),
         }
     }
 }
-impl MainGui {
+impl MainView {
     pub fn handle_event(&mut self, gui_event: &GuiEvent, window: &winit::window::Window) {
         use crate::settings::gui::GuiEvent::Keyboard;
 
@@ -70,11 +56,11 @@ impl MainGui {
             _ => false,
         };
         if !consumed {
-            self.inputs.advance(gui_event);
+            self.settings_gui.handle_event(gui_event);
         }
     }
 
-    pub fn render_gui(&mut self, renderer: &mut Renderer) {
+    pub fn render(&mut self, renderer: &mut Renderer) {
         if let Some(video) = self.frame_pool.pop_ref() {
             self.nes_texture.update(&renderer.queue, &video);
         }
@@ -137,7 +123,6 @@ impl MainGui {
                 });
             });
 
-        self.settings_gui
-            .ui(ctx, &mut self.audio, &mut self.inputs, &mut self.emulator);
+        self.settings_gui.ui(ctx);
     }
 }

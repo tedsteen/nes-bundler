@@ -2,22 +2,20 @@
 #![allow(unsafe_code)]
 #![deny(clippy::all)]
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::Result;
+use audio::gui::AudioGui;
 use audio::Audio;
 use bundle::Bundle;
 
-use fps::RateCounter;
-use gui::MainGui;
+use input::gui::InputsGui;
 use input::sdl2_impl::Sdl2Gamepads;
-use input::{Inputs, JoypadState};
-use nes_state::emulator::{BufferPool, Emulator, SAMPLE_RATE};
+use input::Inputs;
+use main_view::MainView;
+use nes_state::emulator::{Emulator, EmulatorGui, SAMPLE_RATE};
 
-use sdl2::EventPump;
 use settings::gui::ToGuiEvent;
-use settings::MAX_PLAYERS;
 use window::egui_winit_wgpu::Renderer;
 use window::{create_window, Size};
 use winit::event::{Event, WindowEvent};
@@ -31,9 +29,9 @@ use crate::settings::Settings;
 mod audio;
 mod bundle;
 mod fps;
-mod gui;
 mod input;
 mod integer_scaling;
+mod main_view;
 mod nes_state;
 #[cfg(feature = "netplay")]
 mod netplay;
@@ -69,35 +67,6 @@ async fn main() {
     std::process::exit(0);
 }
 
-pub fn init(
-    renderer: &mut Renderer,
-    shared_input: Arc<RwLock<[JoypadState; MAX_PLAYERS]>>,
-) -> Result<(MainGui, EventPump)> {
-    // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
-    sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
-    // TODO: Perhaps do this to fix this issue: https://github.com/libsdl-org/SDL/issues/7896#issuecomment-1616700934
-    //sdl2::hint::set("SDL_JOYSTICK_RAWINPUT", "0");
-
-    let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
-    let sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
-
-    let audio_latency = Duration::from_millis(Settings::current().audio.latency as u64);
-    let audio = Audio::new(&sdl_context, audio_latency, SAMPLE_RATE as u32)?;
-
-    let inputs = Inputs::new(Sdl2Gamepads::new(
-        sdl_context.game_controller().map_err(anyhow::Error::msg)?,
-    ));
-    let emulator = Emulator::new()?;
-    let frame_pool = BufferPool::new();
-
-    let mut main_gui = MainGui::new(renderer, emulator, inputs, audio, frame_pool.clone());
-
-    let audio_tx = main_gui.audio.stream.start()?;
-    let _ = main_gui.emulator.start(frame_pool, audio_tx, shared_input);
-
-    Ok((main_gui, sdl_event_pump))
-}
-
 async fn run() -> anyhow::Result<()> {
     let event_loop = EventLoop::new()?;
     let window = Arc::new(create_window(
@@ -111,15 +80,41 @@ async fn run() -> anyhow::Result<()> {
     )?);
 
     let mut renderer = Renderer::new(window.clone()).await?;
-    let shared_input = Arc::new(RwLock::new([JoypadState(0); MAX_PLAYERS]));
-    let (mut main_gui, mut sdl_event_pump) =
-        init(&mut renderer, shared_input.clone()).expect("the emulator to be able to initialise");
 
-    let mut rate_counter = RateCounter::new();
+    // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
+    sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
+    // TODO: Perhaps do this to fix this issue: https://github.com/libsdl-org/SDL/issues/7896#issuecomment-1616700934
+    //sdl2::hint::set("SDL_JOYSTICK_RAWINPUT", "0");
+
+    let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
+    let mut sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
+
+    let mut audio = Audio::new(
+        &sdl_context,
+        Duration::from_millis(Settings::current().audio.latency as u64),
+        SAMPLE_RATE as u32,
+    )?;
+
+    let inputs = Inputs::new(Sdl2Gamepads::new(
+        sdl_context.game_controller().map_err(anyhow::Error::msg)?,
+    ));
+    let joypad_state = inputs.joypads.clone();
+    let emulator = Emulator::new()?;
+    let audio_tx = audio.stream.start()?;
+
+    let mut main_view = MainView::new(
+        &mut renderer,
+        vec![
+            Box::new(AudioGui::new(audio)),
+            Box::new(InputsGui::new(inputs)),
+            Box::new(EmulatorGui::new(emulator.nes_state.clone())),
+        ],
+    );
+
+    let _ = emulator.start(main_view.frame_pool.clone(), audio_tx, joypad_state);
 
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     event_loop.run(|winit_event, control_flow| {
-        rate_counter.tick("Event");
         let mut render_needed = false;
         let mut occluded = false;
         match &winit_event {
@@ -140,7 +135,7 @@ async fn run() -> anyhow::Result<()> {
                     WindowEvent::Occluded(o) => {
                         occluded = *o;
                     }
-                    window_event => match &window_event {
+                    window_event => match window_event {
                         WindowEvent::Resized(physical_size) => {
                             renderer.resize(*physical_size);
                             render_needed = true;
@@ -151,8 +146,8 @@ async fn run() -> anyhow::Result<()> {
                                 .handle_input(&renderer.window, winit_window_event)
                                 .consumed
                             {
-                                if let Some(winit_gui_event) = winit_window_event.to_gui_event() {
-                                    main_gui.handle_event(&winit_gui_event, &renderer.window);
+                                if let Some(winit_gui_event) = &winit_window_event.to_gui_event() {
+                                    main_view.handle_event(winit_gui_event, &renderer.window);
                                 }
                             }
                         }
@@ -170,14 +165,10 @@ async fn run() -> anyhow::Result<()> {
             .flat_map(|e| e.to_gamepad_event())
             .map(GuiEvent::Gamepad)
         {
-            main_gui.handle_event(&sdl_gui_event, &renderer.window);
+            main_view.handle_event(&sdl_gui_event, &renderer.window);
         }
-        *shared_input.write().unwrap() = main_gui.inputs.joypads;
         if render_needed && !occluded {
-            main_gui.render_gui(&mut renderer);
-        }
-        if let Some(report) = rate_counter.report() {
-            log::debug!("{report}");
+            main_view.render(&mut renderer);
         }
     })?;
 
