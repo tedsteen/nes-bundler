@@ -1,24 +1,21 @@
-use std::{
-    ops::Deref,
-    sync::{Arc, Mutex, OnceLock, RwLock},
-};
+use std::sync::{Arc, Mutex, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::{
     audio::AudioSender,
     fps::RateCounter,
     input::JoypadState,
-    settings::{gui::GuiComponent, Settings, MAX_PLAYERS},
+    main_view::BufferPool,
+    settings::{Settings, MAX_PLAYERS},
 };
 use anyhow::Result;
-use thingbuf::{Recycle, ThingBuf};
 
-use super::{NESAudioFrame, NESBuffers, NESVideoFrame};
+use super::{NESAudioFrame, NESBuffers};
 use crate::nes_state::NesStateHandler;
 
 #[cfg(feature = "netplay")]
-type StateHandler = crate::netplay::NetplayStateHandler;
+pub type StateHandler = crate::netplay::NetplayStateHandler;
 #[cfg(not(feature = "netplay"))]
-type StateHandler = crate::nes_state::LocalNesState;
+pub type StateHandler = crate::nes_state::LocalNesState;
 
 pub struct Emulator {
     pub nes_state: Arc<Mutex<StateHandler>>,
@@ -61,17 +58,19 @@ impl Emulator {
                     #[cfg(feature = "debug")]
                     puffin::profile_scope!("advance");
 
-                    let push_frame_res = frame_pool.push_with(|video_buffer| {
-                        rate_counter.tick("Frame");
-                        nes_state.lock().unwrap().advance(
-                            *joypads.read().unwrap(),
-                            &mut NESBuffers {
-                                video: Some(video_buffer),
-                                audio: Some(&mut audio_buffer),
-                            },
-                        );
-                    });
-                    if push_frame_res.is_err() {
+                    let frame_pool_full = frame_pool
+                        .push_with(|video_buffer| {
+                            rate_counter.tick("Frame");
+                            nes_state.lock().unwrap().advance(
+                                *joypads.read().unwrap(),
+                                &mut NESBuffers {
+                                    video: Some(video_buffer),
+                                    audio: Some(&mut audio_buffer),
+                                },
+                            );
+                        })
+                        .is_err();
+                    if frame_pool_full {
                         rate_counter.tick("Dropped Frame");
                         nes_state.lock().unwrap().advance(
                             *joypads.read().unwrap(),
@@ -106,135 +105,16 @@ impl Emulator {
         Ok(())
     }
 
-    pub fn emulation_speed() -> &'static RwLock<f32> {
+    fn _emulation_speed() -> &'static RwLock<f32> {
         static MEM: OnceLock<RwLock<f32>> = OnceLock::new();
         MEM.get_or_init(|| RwLock::new(1_f32))
     }
-}
 
-#[cfg(feature = "debug")]
-pub struct DebugGui {
-    nes_state: Arc<Mutex<StateHandler>>,
-
-    pub speed: f32,
-    pub override_speed: bool,
-}
-
-pub struct EmulatorGui {
-    #[cfg(feature = "netplay")]
-    netplay_gui: crate::netplay::gui::NetplayGui,
-    #[cfg(feature = "debug")]
-    pub debug_gui: DebugGui,
-}
-impl EmulatorGui {
-    pub fn new(nes_state: Arc<Mutex<StateHandler>>) -> Self {
-        Self {
-            #[cfg(feature = "netplay")]
-            netplay_gui: crate::netplay::gui::NetplayGui::new(nes_state.clone()),
-            #[cfg(feature = "debug")]
-            debug_gui: DebugGui {
-                speed: 1.0,
-                override_speed: false,
-                nes_state,
-            },
-        }
-    }
-}
-#[cfg(feature = "debug")]
-impl GuiComponent for DebugGui {
-    fn ui(&mut self, ui: &mut egui::Ui) {
-        ui.label(format!("Frame: {}", self.nes_state.lock().unwrap().frame()));
-        ui.horizontal(|ui| {
-            egui::Grid::new("debug_grid")
-                .num_columns(2)
-                .spacing([10.0, 4.0])
-                .striped(true)
-                .show(ui, |ui| {
-                    if ui
-                        .checkbox(&mut self.override_speed, "Override emulation speed")
-                        .changed()
-                        && !self.override_speed
-                    {
-                        *Emulator::emulation_speed().write().unwrap() = 1.0;
-                    }
-
-                    if self.override_speed {
-                        ui.add(egui::Slider::new(&mut self.speed, 0.01..=2.0).suffix("x"));
-                        *Emulator::emulation_speed().write().unwrap() = self.speed;
-                    }
-                    ui.end_row();
-                });
-        });
-    }
-}
-
-#[derive(Debug)]
-pub struct FrameRecycle;
-
-impl Recycle<NESVideoFrame> for FrameRecycle {
-    fn new_element(&self) -> NESVideoFrame {
-        NESVideoFrame::new()
+    pub fn emulation_speed<'a>() -> RwLockReadGuard<'a, f32> {
+        Self::_emulation_speed().read().unwrap()
     }
 
-    fn recycle(&self, _frame: &mut NESVideoFrame) {}
-}
-
-#[derive(Debug)]
-pub struct BufferPool(Arc<ThingBuf<NESVideoFrame, FrameRecycle>>);
-
-impl BufferPool {
-    pub fn new() -> Self {
-        Self(Arc::new(ThingBuf::with_recycle(1, FrameRecycle)))
-    }
-}
-
-impl Default for BufferPool {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Deref for BufferPool {
-    type Target = Arc<ThingBuf<NESVideoFrame, FrameRecycle>>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl Clone for BufferPool {
-    fn clone(&self) -> Self {
-        Self(Arc::clone(&self.0))
-    }
-}
-
-impl GuiComponent for EmulatorGui {
-    #[allow(unused_variables)]
-    fn ui(&mut self, ui: &mut egui::Ui) {
-        #[cfg(feature = "debug")]
-        self.debug_gui.ui(ui);
-
-        #[cfg(feature = "netplay")]
-        self.netplay_gui.ui(ui);
-    }
-
-    #[cfg(feature = "netplay")]
-    fn messages(&self) -> Option<Vec<String>> {
-        self.netplay_gui.messages()
-    }
-
-    fn name(&self) -> Option<String> {
-        if cfg!(feature = "netplay") {
-            #[cfg(feature = "netplay")]
-            return self.netplay_gui.name();
-        } else if cfg!(feature = "debug") {
-            return Some("Debug".to_string());
-        }
-
-        None
-    }
-
-    #[cfg(feature = "netplay")]
-    fn prepare(&mut self) {
-        self.netplay_gui.prepare();
+    pub fn emulation_speed_mut<'a>() -> RwLockWriteGuard<'a, f32> {
+        Self::_emulation_speed().write().unwrap()
     }
 }

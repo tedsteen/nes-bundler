@@ -1,4 +1,7 @@
+use std::{ops::Deref, sync::Arc};
+
 use egui::{load::SizedTexture, Context, Image, Order, Vec2};
+use thingbuf::ThingBuf;
 
 use crate::{
     input::{
@@ -6,14 +9,14 @@ use crate::{
         keys::{KeyCode, Modifiers},
         KeyEvent,
     },
-    integer_scaling::{calculate_size_corrected, Size},
-    nes_state::emulator::BufferPool,
+    integer_scaling::{calculate_size_corrected, MINIMUM_INTEGER_SCALING_SIZE},
+    nes_state::{FrameRecycle, NESVideoFrame, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3},
     settings::gui::{GuiComponent, GuiEvent, SettingsGui},
     window::{
         egui_winit_wgpu::{texture::Texture, Renderer},
         Fullscreen,
     },
-    MINIMUM_INTEGER_SCALING_SIZE, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3,
+    Size,
 };
 
 pub struct MainView {
@@ -90,17 +93,17 @@ impl MainView {
             .order(Order::Background)
             .show(ctx, |ui| {
                 let available_size = ui.available_size();
-                let new_size = if available_size.x < MINIMUM_INTEGER_SCALING_SIZE.0 as f32
-                    || available_size.y < MINIMUM_INTEGER_SCALING_SIZE.1 as f32
+                let new_size = if available_size.x < MINIMUM_INTEGER_SCALING_SIZE.width as f32
+                    || available_size.y < MINIMUM_INTEGER_SCALING_SIZE.height as f32
                 {
                     let width = NES_WIDTH_4_3;
                     let ratio_height = available_size.y / NES_HEIGHT as f32;
                     let ratio_width = available_size.x / width as f32;
                     let ratio = f32::min(ratio_height, ratio_width);
-                    Size {
-                        width: (width as f32 * ratio) as u32,
-                        height: (NES_HEIGHT as f32 * ratio) as u32,
-                    }
+                    Size::new(
+                        (width as f32 * ratio) as u32,
+                        (NES_HEIGHT as f32 * ratio) as u32,
+                    )
                 } else {
                     calculate_size_corrected(
                         available_size.x as u32,
@@ -124,5 +127,33 @@ impl MainView {
             });
 
         self.settings_gui.ui(ctx);
+    }
+}
+
+#[derive(Debug)]
+pub struct BufferPool(Arc<ThingBuf<NESVideoFrame, FrameRecycle>>);
+
+impl BufferPool {
+    pub fn new() -> Self {
+        Self(Arc::new(ThingBuf::with_recycle(1, FrameRecycle)))
+    }
+}
+
+impl Default for BufferPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Deref for BufferPool {
+    type Target = Arc<ThingBuf<NESVideoFrame, FrameRecycle>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Clone for BufferPool {
+    fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0))
     }
 }

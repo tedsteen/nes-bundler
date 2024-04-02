@@ -12,12 +12,15 @@ use bundle::Bundle;
 use input::gui::InputsGui;
 use input::sdl2_impl::Sdl2Gamepads;
 use input::Inputs;
+use integer_scaling::MINIMUM_INTEGER_SCALING_SIZE;
 use main_view::MainView;
-use nes_state::emulator::{Emulator, EmulatorGui, SAMPLE_RATE};
+use nes_state::emulator::{Emulator, SAMPLE_RATE};
 
+use nes_state::gui::EmulatorGui;
+use nes_state::{NES_HEIGHT, NES_WIDTH_4_3};
 use settings::gui::ToGuiEvent;
+use window::create_window;
 use window::egui_winit_wgpu::Renderer;
-use window::{create_window, Size};
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::EventLoop;
 
@@ -37,12 +40,6 @@ mod nes_state;
 mod netplay;
 mod settings;
 mod window;
-
-const NES_WIDTH: u32 = 256;
-const NES_WIDTH_4_3: u32 = (NES_WIDTH as f32 * (4.0 / 3.0)) as u32;
-const NES_HEIGHT: u32 = 240;
-
-const MINIMUM_INTEGER_SCALING_SIZE: (u32, u32) = (1024, 720);
 
 #[tokio::main]
 async fn main() {
@@ -71,11 +68,8 @@ async fn run() -> anyhow::Result<()> {
     let event_loop = EventLoop::new()?;
     let window = Arc::new(create_window(
         &Bundle::current().config.name,
-        Size::new(
-            MINIMUM_INTEGER_SCALING_SIZE.0 as f64,
-            MINIMUM_INTEGER_SCALING_SIZE.1 as f64,
-        ),
-        Size::new(NES_WIDTH_4_3 as f64, NES_HEIGHT as f64),
+        MINIMUM_INTEGER_SCALING_SIZE,
+        Size::new(NES_WIDTH_4_3, NES_HEIGHT),
         &event_loop,
     )?);
 
@@ -117,52 +111,40 @@ async fn run() -> anyhow::Result<()> {
         #[cfg(feature = "debug")]
         puffin::profile_function!("event_loop.run");
 
-        let mut render_needed = false;
-        let mut occluded = false;
-        match &winit_event {
-            Event::WindowEvent {
-                event: window_event,
-                ..
-            } => {
-                #[cfg(feature = "debug")]
-                puffin::profile_scope!("handle winit events");
+        if let Event::WindowEvent {
+            event: window_event,
+            ..
+        } = &winit_event
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("handle winit events");
 
-                match window_event {
-                    WindowEvent::CloseRequested | WindowEvent::Destroyed => {
-                        control_flow.exit();
+            match window_event {
+                WindowEvent::CloseRequested | WindowEvent::Destroyed => {
+                    control_flow.exit();
+                }
+                WindowEvent::RedrawRequested => {
+                    // Windows needs this to not freeze the window when resizing or moving
+                    #[cfg(windows)]
+                    window.request_redraw();
+                }
+                window_event => match window_event {
+                    WindowEvent::Resized(physical_size) => {
+                        renderer.resize(*physical_size);
                     }
-                    WindowEvent::RedrawRequested => {
-                        // Windows needs this to not freeze the window when resizing or moving
-                        #[cfg(windows)]
-                        window.request_redraw();
-                        render_needed = true;
-                    }
-                    WindowEvent::Occluded(o) => {
-                        occluded = *o;
-                    }
-                    window_event => match window_event {
-                        WindowEvent::Resized(physical_size) => {
-                            renderer.resize(*physical_size);
-                            render_needed = true;
-                        }
-                        winit_window_event => {
-                            if !renderer
-                                .egui
-                                .handle_input(&renderer.window, winit_window_event)
-                                .consumed
-                            {
-                                if let Some(winit_gui_event) = &winit_window_event.to_gui_event() {
-                                    main_view.handle_event(winit_gui_event, &renderer.window);
-                                }
+                    winit_window_event => {
+                        if !renderer
+                            .egui
+                            .handle_input(&renderer.window, winit_window_event)
+                            .consumed
+                        {
+                            if let Some(winit_gui_event) = &winit_window_event.to_gui_event() {
+                                main_view.handle_event(winit_gui_event, &renderer.window);
                             }
                         }
-                    },
-                }
+                    }
+                },
             }
-            Event::AboutToWait => {
-                render_needed = true;
-            }
-            _ => {}
         };
 
         {
@@ -177,11 +159,9 @@ async fn run() -> anyhow::Result<()> {
             }
         }
 
-        if render_needed && !occluded {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("render");
-            main_view.render(&mut renderer);
-        }
+        #[cfg(feature = "debug")]
+        puffin::profile_scope!("render");
+        main_view.render(&mut renderer);
     })?;
 
     Ok(())
@@ -210,5 +190,16 @@ fn init_logger() {
     #[cfg(not(windows))]
     {
         env_logger::init();
+    }
+}
+
+pub struct Size {
+    pub width: u32,
+    pub height: u32,
+}
+
+impl Size {
+    pub fn new(width: u32, height: u32) -> Self {
+        Self { width, height }
     }
 }

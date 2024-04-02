@@ -4,7 +4,7 @@ use egui::{Align2, Color32, Context, Order, RichText, Ui, Window};
 
 use crate::{
     input::{gamepad::GamepadEvent, KeyEvent},
-    MINIMUM_INTEGER_SCALING_SIZE,
+    integer_scaling::MINIMUM_INTEGER_SCALING_SIZE,
 };
 
 pub trait ToGuiEvent {
@@ -88,8 +88,8 @@ impl SettingsGui {
             .movable(true)
             .pivot(Align2::CENTER_CENTER)
             .default_pos([
-                MINIMUM_INTEGER_SCALING_SIZE.0 as f32 / 2.0,
-                MINIMUM_INTEGER_SCALING_SIZE.1 as f32 / 2.0,
+                MINIMUM_INTEGER_SCALING_SIZE.width as f32 / 2.0,
+                MINIMUM_INTEGER_SCALING_SIZE.height as f32 / 2.0,
             ])
             .show(ctx, |ui| {
                 for (idx, gui) in self.gui_components.iter_mut().enumerate() {

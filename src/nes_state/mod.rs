@@ -1,14 +1,27 @@
 use std::ops::{Deref, DerefMut};
 
-use crate::{input::JoypadState, settings::MAX_PLAYERS, NES_HEIGHT, NES_WIDTH};
+use thingbuf::Recycle;
+
+use crate::{input::JoypadState, settings::MAX_PLAYERS};
 
 pub mod emulator;
-// pub mod rusticnes;
-//use self::rusticnes::RusticNesState;
-// pub type LocalNesState = RusticNesState;
+pub mod gui;
 pub mod tetanes;
 use self::tetanes::TetanesNesState;
 pub type LocalNesState = TetanesNesState;
+
+pub const NES_WIDTH: u32 = 256;
+pub const NES_WIDTH_4_3: u32 = (NES_WIDTH as f32 * (4.0 / 3.0)) as u32;
+pub const NES_HEIGHT: u32 = 240;
+
+static NTSC_PAL: &[u8] = include_bytes!("../../config/ntscpalette.pal");
+
+pub trait NesStateHandler {
+    fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers);
+    fn save_sram(&self) -> Option<Vec<u8>>;
+    fn load_sram(&mut self, data: &mut Vec<u8>);
+    fn frame(&self) -> u32;
+}
 
 pub struct NESBuffers<'a> {
     pub audio: Option<&'a mut NESAudioFrame>,
@@ -71,11 +84,13 @@ impl DerefMut for NESAudioFrame {
     }
 }
 
-static NTSC_PAL: &[u8] = include_bytes!("../../config/ntscpalette.pal");
+#[derive(Debug)]
+pub struct FrameRecycle;
 
-pub trait NesStateHandler {
-    fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers);
-    fn save_sram(&self) -> Option<Vec<u8>>;
-    fn load_sram(&mut self, data: &mut Vec<u8>);
-    fn frame(&self) -> u32;
+impl Recycle<NESVideoFrame> for FrameRecycle {
+    fn new_element(&self) -> NESVideoFrame {
+        NESVideoFrame::new()
+    }
+
+    fn recycle(&self, _frame: &mut NESVideoFrame) {}
 }

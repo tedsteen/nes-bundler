@@ -1,20 +1,18 @@
-pub struct Ratios {
+use crate::Size;
+
+// The minimum size after which integer scaling is not possible
+pub const MINIMUM_INTEGER_SCALING_SIZE: Size = Size {
+    width: 1024,
+    height: 720,
+};
+
+struct Ratios {
     pub x: u32,
     pub y: u32,
 }
 
-pub struct Size {
-    pub width: u32,
-    pub height: u32,
-}
-
 /// Calculates an integer scaling ratio common for X/Y axes (square pixels).
-pub fn calculate_ratio(
-    area_width: u32,
-    area_height: u32,
-    image_width: u32,
-    image_height: u32,
-) -> u32 {
+fn calculate_ratio(area_width: u32, area_height: u32, image_width: u32, image_height: u32) -> u32 {
     let (area_size, image_size);
 
     if area_height * image_width < area_width * image_height {
@@ -36,7 +34,7 @@ pub fn calculate_ratio(
 
 /// Calculates integer scaling ratios potentially different for X/Y axes
 /// as a result of aspect-ratio correction (rectangular pixels).
-pub fn calculate_ratios(
+fn calculate_ratios(
     area_width: u32,
     area_height: u32,
     image_width: u32,

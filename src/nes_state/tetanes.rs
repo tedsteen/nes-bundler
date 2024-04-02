@@ -99,7 +99,7 @@ impl NesStateHandler for TetanesNesState {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
-        self.set_speed(*Emulator::emulation_speed().read().unwrap());
+        self.set_speed(*Emulator::emulation_speed());
 
         *self.control_deck.joypad_mut(Player::One) = Joypad::from_bytes((*joypad_state[0]).into());
         *self.control_deck.joypad_mut(Player::Two) = Joypad::from_bytes((*joypad_state[1]).into());
