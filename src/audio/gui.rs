@@ -7,7 +7,7 @@ use super::{
 };
 
 pub struct AudioGui {
-    audio: Audio,
+    pub audio: Audio,
     // #[cfg(feature = "debug")]
     // stats: AudioStats,
 }

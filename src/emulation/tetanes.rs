@@ -83,6 +83,7 @@ impl TetanesNesState {
     }
 
     fn set_speed(&mut self, speed: f32) {
+        let speed = speed.max(0.01).min(1.0);
         let apu = &mut self.control_deck.cpu_mut().bus.apu;
         let target_sample_rate = match apu.region {
             // Downsample a tiny bit extra to match the most common screen refresh rate (60hz)
@@ -121,9 +122,9 @@ impl NesStateHandler for TetanesNesState {
                 .expect("NES to clock a frame");
         }
         {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("clock frame and copy audio");
             if let Some(video_buffer) = &mut buffers.video {
+                #[cfg(feature = "debug")]
+                puffin::profile_scope!("copy video");
                 self.control_deck
                     .cpu()
                     .bus
@@ -138,7 +139,9 @@ impl NesStateHandler for TetanesNesState {
                             .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
                     });
             }
+
             if let Some(audio_buffer) = &mut buffers.audio {
+                puffin::profile_scope!("copy audio");
                 audio_buffer.extend_from_slice(self.control_deck.audio_samples());
             }
         }

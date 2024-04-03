@@ -1,41 +1,38 @@
-use crate::emulation::NesStateHandler;
-use crate::settings::gui::GuiComponent;
-use std::sync::{Arc, Mutex};
-
 use super::{Emulator, StateHandler};
+use crate::settings::gui::GuiComponent;
 
 #[cfg(feature = "debug")]
 struct DebugGui {
-    nes_state: Arc<Mutex<StateHandler>>,
-
     pub speed: f32,
     pub override_speed: bool,
 }
 
 pub struct EmulatorGui {
     #[cfg(feature = "netplay")]
-    netplay_gui: crate::netplay::gui::NetplayGui,
+    pub netplay_gui: crate::netplay::gui::NetplayGui,
     #[cfg(feature = "debug")]
     debug_gui: DebugGui,
 }
 impl EmulatorGui {
-    pub fn new(nes_state: Arc<Mutex<StateHandler>>) -> Self {
+    pub fn new(nes_state: StateHandler) -> Self {
         Self {
             #[cfg(feature = "netplay")]
-            netplay_gui: crate::netplay::gui::NetplayGui::new(nes_state.clone()),
+            netplay_gui: crate::netplay::gui::NetplayGui::new(nes_state),
             #[cfg(feature = "debug")]
             debug_gui: DebugGui {
                 speed: 1.0,
                 override_speed: false,
-                nes_state,
             },
         }
     }
 }
 #[cfg(feature = "debug")]
-impl GuiComponent for DebugGui {
-    fn ui(&mut self, ui: &mut egui::Ui) {
-        ui.label(format!("Frame: {}", self.nes_state.lock().unwrap().frame()));
+impl DebugGui {
+    fn ui(&mut self, ui: &mut egui::Ui, nes_state: &StateHandler) {
+        ui.label(format!(
+            "Frame: {}",
+            super::NesStateHandler::frame(nes_state)
+        ));
         ui.horizontal(|ui| {
             egui::Grid::new("debug_grid")
                 .num_columns(2)
@@ -51,7 +48,11 @@ impl GuiComponent for DebugGui {
                     }
 
                     if self.override_speed {
-                        ui.add(egui::Slider::new(&mut self.speed, 0.01..=2.0).suffix("x"));
+                        ui.add(
+                            egui::Slider::new(&mut self.speed, 0.01..=1.0)
+                                .suffix("x")
+                                .logarithmic(true),
+                        );
                         *Emulator::emulation_speed_mut() = self.speed;
                     }
                     ui.end_row();
@@ -64,7 +65,8 @@ impl GuiComponent for EmulatorGui {
     #[allow(unused_variables)]
     fn ui(&mut self, ui: &mut egui::Ui) {
         #[cfg(feature = "debug")]
-        self.debug_gui.ui(ui);
+        self.debug_gui
+            .ui(ui, &self.netplay_gui.netplay_state_handler);
 
         #[cfg(feature = "netplay")]
         self.netplay_gui.ui(ui);

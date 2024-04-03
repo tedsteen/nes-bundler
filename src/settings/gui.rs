@@ -35,22 +35,19 @@ pub trait GuiComponent {
 }
 
 pub struct SettingsGui {
-    gui_components: Vec<Box<dyn GuiComponent>>,
-
     start_time: Instant,
     visible: bool,
 }
 
 impl SettingsGui {
-    pub fn new(gui_components: Vec<Box<dyn GuiComponent>>) -> Self {
+    pub fn new() -> Self {
         Self {
-            gui_components,
             start_time: Instant::now(),
             visible: false,
         }
     }
 
-    pub fn ui(&mut self, ctx: &Context) {
+    pub fn ui(&mut self, ctx: &Context, gui_components: &mut [&mut dyn GuiComponent]) {
         egui::Area::new("message_area")
             .fixed_pos([0.0, 0.0])
             .order(Order::Middle)
@@ -58,7 +55,7 @@ impl SettingsGui {
                 ui.vertical_centered(|ui| {
                     ui.add_space(50.0);
 
-                    for gui in self.gui_components.iter_mut() {
+                    for gui in gui_components.iter_mut() {
                         gui.prepare();
                         if gui.name().is_some() {
                             if let Some(messages) = gui.messages() {
@@ -92,7 +89,7 @@ impl SettingsGui {
                 MINIMUM_INTEGER_SCALING_SIZE.height as f32 / 2.0,
             ])
             .show(ctx, |ui| {
-                for (idx, gui) in self.gui_components.iter_mut().enumerate() {
+                for (idx, gui) in gui_components.iter_mut().enumerate() {
                     if let Some(name) = gui.name() {
                         if idx != 0 {
                             ui.separator();
@@ -119,8 +116,12 @@ impl SettingsGui {
         self.visible = !self.visible;
     }
 
-    pub fn handle_event(&mut self, gui_event: &GuiEvent) {
-        for gui in &mut self.gui_components {
+    pub fn handle_event(
+        &mut self,
+        gui_event: &GuiEvent,
+        gui_components: &mut [&mut dyn GuiComponent],
+    ) {
+        for gui in gui_components {
             gui.handle_event(gui_event);
         }
     }

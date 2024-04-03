@@ -10,12 +10,7 @@ use crate::{
     settings::{gui::GuiEvent, Settings, MAX_PLAYERS},
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashSet,
-    fmt::Debug,
-    ops::Deref,
-    sync::{Arc, RwLock},
-};
+use std::{collections::HashSet, fmt::Debug, ops::Deref};
 
 pub mod buttons;
 pub mod gamepad;
@@ -152,7 +147,7 @@ pub struct MapRequest {
 pub struct Inputs {
     keyboards: Keyboards,
     gamepads: GamepadImpl,
-    pub joypads: Arc<RwLock<[JoypadState; MAX_PLAYERS]>>,
+    pub joypads: [JoypadState; MAX_PLAYERS],
 }
 
 impl Inputs {
@@ -162,7 +157,7 @@ impl Inputs {
         Self {
             keyboards,
             gamepads,
-            joypads: Arc::new(RwLock::new([JoypadState(0), JoypadState(0)])),
+            joypads: [JoypadState(0), JoypadState(0)],
         }
     }
 
@@ -182,13 +177,13 @@ impl Inputs {
             self.get_joypad_for_input_configuration(input_settings.get_selected_configuration(0));
         let pad2 =
             self.get_joypad_for_input_configuration(input_settings.get_selected_configuration(1));
-        let mut joypads = self.joypads.write().unwrap();
-        joypads[0] = pad1;
-        joypads[1] = pad2;
+
+        self.joypads[0] = pad1;
+        self.joypads[1] = pad2;
     }
 
     pub fn get_joypad(&self, player: usize) -> JoypadState {
-        self.joypads.read().unwrap()[player]
+        self.joypads[player]
     }
 
     pub fn get_default_conf(&self, player: usize) -> &InputConfiguration {

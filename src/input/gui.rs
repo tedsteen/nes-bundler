@@ -6,7 +6,7 @@ use egui::{Color32, Grid, RichText, Ui};
 
 use super::{settings::InputSettings, InputConfiguration, Inputs, MapRequest};
 pub struct InputsGui {
-    inputs: Inputs,
+    pub inputs: Inputs,
     mapping_request: Option<MapRequest>,
 }
 

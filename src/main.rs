@@ -2,31 +2,17 @@
 #![allow(unsafe_code)]
 #![deny(clippy::all)]
 
-use std::sync::Arc;
-use std::time::Duration;
-
-use audio::gui::AudioGui;
-use audio::Audio;
 use bundle::Bundle;
+use std::sync::mpsc::channel;
+use std::sync::Arc;
 
-use emulation::{Emulator, SAMPLE_RATE};
-use input::gui::InputsGui;
-use input::sdl2_impl::Sdl2Gamepads;
-use input::Inputs;
+use emulation::Emulator;
 use integer_scaling::MINIMUM_INTEGER_SCALING_SIZE;
-use main_view::MainView;
 
-use emulation::gui::EmulatorGui;
 use emulation::{NES_HEIGHT, NES_WIDTH_4_3};
 use window::create_window;
-use window::egui_winit_wgpu::Renderer;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::EventLoop;
-
-use crate::input::gamepad::ToGamepadEvent;
-
-use crate::settings::gui::GuiEvent;
-use crate::settings::Settings;
 
 mod audio;
 mod bundle;
@@ -71,52 +57,17 @@ async fn run() -> anyhow::Result<()> {
         Size::new(NES_WIDTH_4_3, NES_HEIGHT),
         &event_loop,
     )?);
-
-    // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
-    sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
-    // TODO: Perhaps do this to fix this issue: https://github.com/libsdl-org/SDL/issues/7896#issuecomment-1616700934
-    //sdl2::hint::set("SDL_JOYSTICK_RAWINPUT", "0");
-
-    let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
-    let mut sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
-
-    let mut audio = Audio::new(
-        &sdl_context,
-        Duration::from_millis(Settings::current().audio.latency as u64),
-        SAMPLE_RATE as u32,
-    )?;
-    let audio_tx = audio.stream.start()?;
-
-    let inputs = Inputs::new(Sdl2Gamepads::new(
-        sdl_context.game_controller().map_err(anyhow::Error::msg)?,
-    ));
-    let joypad_state = inputs.joypads.clone();
-
     let emulator = Emulator::new()?;
-    let mut main_view = MainView::new(
-        Renderer::new(window.clone()).await?,
-        vec![
-            Box::new(AudioGui::new(audio)),
-            Box::new(InputsGui::new(inputs)),
-            Box::new(EmulatorGui::new(emulator.nes_state.clone())),
-        ],
-    );
 
-    emulator.start_thread(main_view.frame_pool.clone(), audio_tx, joypad_state);
+    let (event_tx, event_rx) = channel();
+    emulator.start_thread(window.clone(), event_rx).await?;
 
-    event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     event_loop.run(|winit_event, control_flow| {
-        #[cfg(feature = "debug")]
-        puffin::profile_function!("event_loop.run");
-
         if let Event::WindowEvent {
             event: window_event,
             ..
         } = &winit_event
         {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("handle winit events");
-
             match window_event {
                 WindowEvent::CloseRequested | WindowEvent::Destroyed => {
                     control_flow.exit();
@@ -128,24 +79,10 @@ async fn run() -> anyhow::Result<()> {
                 }
                 _ => {}
             }
-            main_view.handle_window_event(window_event);
+            event_tx
+                .send(window_event.clone())
+                .expect("to be able to send the window event");
         };
-
-        {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("poll and handle sdl events");
-            for sdl_gui_event in sdl_event_pump
-                .poll_iter()
-                .flat_map(|e| e.to_gamepad_event())
-                .map(GuiEvent::Gamepad)
-            {
-                main_view.handle_gui_event(&sdl_gui_event);
-            }
-        }
-
-        #[cfg(feature = "debug")]
-        puffin::profile_scope!("render");
-        main_view.render();
     })?;
 
     Ok(())

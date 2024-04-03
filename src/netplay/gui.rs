@@ -1,7 +1,4 @@
-use std::{
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use egui::{Button, TextEdit, Ui};
 
@@ -13,7 +10,7 @@ use super::{
     ConnectingState, NetplayStateHandler,
 };
 pub struct NetplayGui {
-    netplay_state_handler: Arc<Mutex<NetplayStateHandler>>,
+    pub netplay_state_handler: NetplayStateHandler,
 
     #[cfg(feature = "debug")]
     pub stats: [super::stats::NetplayStats; MAX_PLAYERS],
@@ -21,7 +18,7 @@ pub struct NetplayGui {
 }
 
 impl NetplayGui {
-    pub fn new(netplay_state_handler: Arc<Mutex<NetplayStateHandler>>) -> Self {
+    pub fn new(netplay_state_handler: NetplayStateHandler) -> Self {
         Self {
             netplay_state_handler,
 
@@ -109,9 +106,7 @@ impl NetplayGui {
 impl GuiComponent for NetplayGui {
     #[cfg(feature = "debug")]
     fn prepare(&mut self) {
-        if let Some(NetplayState::Connected(netplay)) =
-            &self.netplay_state_handler.lock().unwrap().netplay
-        {
+        if let Some(NetplayState::Connected(netplay)) = &self.netplay_state_handler.netplay {
             let sess = &netplay.state.netplay_session.p2p_session;
             if netplay.state.netplay_session.game_state.frame % 30 == 0 {
                 for i in 0..MAX_PLAYERS {
@@ -126,7 +121,7 @@ impl GuiComponent for NetplayGui {
     }
     fn messages(&self) -> Option<Vec<String>> {
         Some(
-            match &self.netplay_state_handler.lock().unwrap().netplay {
+            match &self.netplay_state_handler.netplay {
                 Some(NetplayState::Connecting(_)) => Some("Netplay is connecting"),
                 Some(NetplayState::Resuming(_)) => {
                     Some("Netplay connection lost, trying to reconnect")
@@ -139,7 +134,7 @@ impl GuiComponent for NetplayGui {
         )
     }
     fn ui(&mut self, ui: &mut Ui) {
-        let netplay = &mut self.netplay_state_handler.lock().unwrap().netplay;
+        let netplay = &mut self.netplay_state_handler.netplay;
         *netplay = Some(match netplay.take().unwrap() {
             NetplayState::Disconnected(netplay_disconnected) => {
                 let mut do_join = false;
