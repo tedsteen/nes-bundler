@@ -12,10 +12,7 @@ use tetanes_core::{
     video::VideoFilter,
 };
 
-use super::{
-    emulator::{Emulator, SAMPLE_RATE},
-    NESBuffers, NesStateHandler, NTSC_PAL,
-};
+use super::{Emulator, NESBuffers, NesStateHandler, NTSC_PAL, SAMPLE_RATE};
 use crate::{
     bundle::Bundle,
     input::JoypadState,
@@ -27,16 +24,19 @@ pub struct TetanesNesState {
     control_deck: ControlDeck,
 }
 
-pub trait ToTetanesRegion {
+trait ToTetanesRegion {
     fn to_tetanes_region(&self) -> NesRegion;
 }
+trait ToSampleRate {
+    fn to_sample_rate(&self) -> f32;
+}
 
-impl ToTetanesRegion for crate::bundle::NesRegion {
+impl ToTetanesRegion for crate::emulation::NesRegion {
     fn to_tetanes_region(&self) -> NesRegion {
         match self {
-            crate::bundle::NesRegion::Pal => NesRegion::Pal,
-            crate::bundle::NesRegion::Ntsc => NesRegion::Ntsc,
-            crate::bundle::NesRegion::Dendy => NesRegion::Dendy,
+            crate::emulation::NesRegion::Pal => NesRegion::Pal,
+            crate::emulation::NesRegion::Ntsc => NesRegion::Ntsc,
+            crate::emulation::NesRegion::Dendy => NesRegion::Dendy,
         }
     }
 }
@@ -77,13 +77,21 @@ impl TetanesNesState {
         }
 
         control_deck.set_region(region);
-
-        Ok(Self { control_deck })
+        let mut s = Self { control_deck };
+        s.set_speed(1.0); // Trigger the correct sample rate
+        Ok(s)
     }
 
     fn set_speed(&mut self, speed: f32) {
+        let speed = speed.max(0.01).min(1.0);
         let apu = &mut self.control_deck.cpu_mut().bus.apu;
-        let new_sample_rate = SAMPLE_RATE * (1.0 / speed);
+        let target_sample_rate = match apu.region {
+            // Downsample a tiny bit extra to match the most common screen refresh rate (60hz)
+            NesRegion::Ntsc => SAMPLE_RATE * (crate::emulation::NesRegion::Ntsc.to_fps() / 60.0),
+            _ => SAMPLE_RATE,
+        };
+
+        let new_sample_rate = target_sample_rate * (1.0 / speed);
         let new_sample_period = Cpu::region_clock_rate(apu.region) / new_sample_rate;
 
         if apu.sample_period != new_sample_period {
@@ -96,34 +104,47 @@ impl TetanesNesState {
 
 impl NesStateHandler for TetanesNesState {
     fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers) {
-        self.set_speed(*Emulator::emulation_speed().read().unwrap());
+        #[cfg(feature = "debug")]
+        puffin::profile_function!();
+
+        self.set_speed(*Emulator::emulation_speed());
 
         *self.control_deck.joypad_mut(Player::One) = Joypad::from_bytes((*joypad_state[0]).into());
         *self.control_deck.joypad_mut(Player::Two) = Joypad::from_bytes((*joypad_state[1]).into());
 
         self.control_deck.clear_audio_samples();
 
-        self.control_deck
-            .clock_frame()
-            .expect("NES to clock a frame");
-
-        if let Some(video_buffer) = &mut buffers.video {
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("clock frame");
             self.control_deck
-                .cpu()
-                .bus
-                .ppu
-                .frame_buffer()
-                .iter()
-                .enumerate()
-                .for_each(|(idx, &palette_index)| {
-                    let palette_index = palette_index as usize * 3;
-                    let pixel_index = idx * 4;
-                    video_buffer[pixel_index..pixel_index + 3]
-                        .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
-                });
+                .clock_frame()
+                .expect("NES to clock a frame");
         }
-        if let Some(audio_buffer) = &mut buffers.audio {
-            audio_buffer.extend_from_slice(self.control_deck.audio_samples());
+        {
+            if let Some(video_buffer) = &mut buffers.video {
+                #[cfg(feature = "debug")]
+                puffin::profile_scope!("copy video");
+                self.control_deck
+                    .cpu()
+                    .bus
+                    .ppu
+                    .frame_buffer()
+                    .iter()
+                    .enumerate()
+                    .for_each(|(idx, &palette_index)| {
+                        let palette_index = palette_index as usize * 3;
+                        let pixel_index = idx * 4;
+                        video_buffer[pixel_index..pixel_index + 3]
+                            .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
+                    });
+            }
+
+            if let Some(audio_buffer) = &mut buffers.audio {
+                #[cfg(feature = "debug")]
+                puffin::profile_scope!("copy audio");
+                audio_buffer.extend_from_slice(self.control_deck.audio_samples());
+            }
         }
     }
 

@@ -31,7 +31,8 @@ impl RateCounter {
     pub fn report(&mut self) -> Option<String> {
         if Instant::now().ge(&self.next_report) {
             self.next_report = Self::calc_next_report(&self.window);
-            let window_in_sec = self.window.as_secs_f32();
+            let window_in_sec =
+                self.window.as_secs_f32() + (self.window.subsec_nanos() as f32 / 10_000_000.0);
 
             let mut res = Vec::from_iter(self.counters.iter());
             res.sort_by_key(|(key, _)| key.len());

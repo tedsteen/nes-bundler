@@ -63,24 +63,13 @@ impl Renderer {
             .find(|f| !f.is_srgb())
             .unwrap_or(surface_caps.formats[0]);
 
-        // We can't wait for vsync since we need to guarantee that the NES will be clocked in the speed it is configured to run (Pal, Ntsc or Dendy)
-        // If we wait for vblank the monitor might have an update frequency lower than the NES required frames per second.
-        let best_mode = [
-            PresentMode::Mailbox,
-            PresentMode::Immediate,
-            PresentMode::Fifo,
-        ]
-        .into_iter()
-        .find(|mode| surface_caps.present_modes.contains(mode))
-        .unwrap_or(PresentMode::AutoNoVsync);
-
         let config = wgpu::SurfaceConfiguration {
             desired_maximum_frame_latency: 1,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: best_mode,
+            present_mode: PresentMode::AutoVsync,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
@@ -114,48 +103,89 @@ impl Renderer {
     }
 
     pub fn render(&mut self, run_ui: impl FnOnce(&Context)) -> Result<(), wgpu::SurfaceError> {
-        let output = self.surface.get_current_texture()?;
-        let view = output.texture.create_view(&TextureViewDescriptor {
-            label: None,
-            format: None,
-            dimension: None,
-            aspect: wgpu::TextureAspect::All,
-            base_mip_level: 0,
-            mip_level_count: None,
-            base_array_layer: 0,
-            array_layer_count: None,
-        });
+        #[cfg(feature = "debug")]
+        puffin::profile_function!();
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
+        let output = {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("get_current_texture");
 
-        let screen_descriptor = ScreenDescriptor {
-            size_in_pixels: [self.config.width, self.config.height],
-            pixels_per_point: self.window().scale_factor() as f32,
+            self.surface.get_current_texture()?
         };
 
-        self.egui.draw(
-            &self.device,
-            &self.queue,
-            &mut encoder,
-            &self.window,
-            &view,
-            screen_descriptor,
-            |ui| {
-                #[cfg(feature = "debug")]
-                {
-                    puffin::GlobalProfiler::lock().new_frame();
-                    puffin_egui::show_viewport_if_enabled(ui);
-                }
+        let view = {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("create_view");
 
-                run_ui(ui)
-            },
-        );
-        self.queue.submit(iter::once(encoder.finish()));
-        output.present();
+            output.texture.create_view(&TextureViewDescriptor {
+                label: None,
+                format: None,
+                dimension: None,
+                aspect: wgpu::TextureAspect::All,
+                base_mip_level: 0,
+                mip_level_count: None,
+                base_array_layer: 0,
+                array_layer_count: None,
+            })
+        };
+
+        let mut encoder = {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("create_command_encoder");
+
+            self.device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Render Encoder"),
+                })
+        };
+
+        let screen_descriptor = {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("ScreenDescriptor");
+
+            ScreenDescriptor {
+                size_in_pixels: [self.config.width, self.config.height],
+                pixels_per_point: self.window().scale_factor() as f32,
+            }
+        };
+
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("egui.draw");
+
+            //TODO: Using a window here (and above) blocks on macos when minimizing/maximizing or occluding the window.
+            //      All the `maybe_wait_on_main` calls inside the window will block.
+            //      Figure out if we can somehow remove the dependency on the window here...
+            self.egui.draw(
+                &self.device,
+                &self.queue,
+                &mut encoder,
+                &self.window,
+                &view,
+                screen_descriptor,
+                |ui| {
+                    #[cfg(feature = "debug")]
+                    {
+                        puffin_egui::show_viewport_if_enabled(ui);
+                        puffin::GlobalProfiler::lock().new_frame();
+                    }
+
+                    run_ui(ui)
+                },
+            );
+        }
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("submit");
+
+            self.queue.submit(iter::once(encoder.finish()));
+        }
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("present");
+
+            output.present();
+        }
 
         Ok(())
     }

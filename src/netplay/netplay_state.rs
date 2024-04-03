@@ -3,8 +3,8 @@ use uuid::Uuid;
 
 use crate::{
     bundle::Bundle,
+    emulation::{LocalNesState, NESBuffers, NesStateHandler},
     input::JoypadState,
-    nes_state::{LocalNesState, NESBuffers, NesStateHandler},
     settings::{Settings, MAX_PLAYERS},
 };
 

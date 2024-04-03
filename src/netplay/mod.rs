@@ -1,8 +1,8 @@
 use std::ops::{Deref, DerefMut};
 
 use crate::{
+    emulation::{LocalNesState, NESBuffers, NesStateHandler},
     input::JoypadState,
-    nes_state::{LocalNesState, NESBuffers, NesStateHandler},
     settings::MAX_PLAYERS,
 };
 use anyhow::Result;
