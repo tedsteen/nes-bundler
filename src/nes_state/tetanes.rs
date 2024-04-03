@@ -27,16 +27,19 @@ pub struct TetanesNesState {
     control_deck: ControlDeck,
 }
 
-pub trait ToTetanesRegion {
+trait ToTetanesRegion {
     fn to_tetanes_region(&self) -> NesRegion;
 }
+trait ToSampleRate {
+    fn to_sample_rate(&self) -> f32;
+}
 
-impl ToTetanesRegion for crate::bundle::NesRegion {
+impl ToTetanesRegion for crate::nes_state::NesRegion {
     fn to_tetanes_region(&self) -> NesRegion {
         match self {
-            crate::bundle::NesRegion::Pal => NesRegion::Pal,
-            crate::bundle::NesRegion::Ntsc => NesRegion::Ntsc,
-            crate::bundle::NesRegion::Dendy => NesRegion::Dendy,
+            crate::nes_state::NesRegion::Pal => NesRegion::Pal,
+            crate::nes_state::NesRegion::Ntsc => NesRegion::Ntsc,
+            crate::nes_state::NesRegion::Dendy => NesRegion::Dendy,
         }
     }
 }
@@ -77,13 +80,20 @@ impl TetanesNesState {
         }
 
         control_deck.set_region(region);
-
-        Ok(Self { control_deck })
+        let mut s = Self { control_deck };
+        s.set_speed(1.0); // Trigger the correct sample rate
+        Ok(s)
     }
 
     fn set_speed(&mut self, speed: f32) {
         let apu = &mut self.control_deck.cpu_mut().bus.apu;
-        let new_sample_rate = SAMPLE_RATE * (1.0 / speed);
+        let target_sample_rate = match apu.region {
+            // Downsample a tiny bit extra to match the most common screen refresh rate (60hz)
+            NesRegion::Ntsc => SAMPLE_RATE * (crate::nes_state::NesRegion::Ntsc.to_fps() / 60.0),
+            _ => SAMPLE_RATE,
+        };
+
+        let new_sample_rate = target_sample_rate * (1.0 / speed);
         let new_sample_period = Cpu::region_clock_rate(apu.region) / new_sample_rate;
 
         if apu.sample_period != new_sample_period {

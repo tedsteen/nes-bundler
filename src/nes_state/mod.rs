@@ -1,5 +1,6 @@
 use std::ops::{Deref, DerefMut};
 
+use serde::Deserialize;
 use thingbuf::Recycle;
 
 use crate::{input::JoypadState, settings::MAX_PLAYERS};
@@ -21,6 +22,23 @@ pub trait NesStateHandler {
     fn save_sram(&self) -> Option<Vec<u8>>;
     fn load_sram(&mut self, data: &mut Vec<u8>);
     fn frame(&self) -> u32;
+}
+
+#[derive(Deserialize, Debug)]
+pub enum NesRegion {
+    Pal,
+    Ntsc,
+    Dendy,
+}
+
+impl NesRegion {
+    pub fn to_fps(&self) -> f32 {
+        match self {
+            NesRegion::Pal => 50.006_977,
+            NesRegion::Ntsc => 60.098_812,
+            NesRegion::Dendy => 50.006_977,
+        }
+    }
 }
 
 pub struct NESBuffers<'a> {

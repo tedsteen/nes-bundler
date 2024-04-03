@@ -8,25 +8,7 @@ use anyhow::Result;
 use directories::ProjectDirs;
 use serde::Deserialize;
 
-use crate::settings::Settings;
-
-#[derive(Deserialize, Debug)]
-pub enum NesRegion {
-    Pal,
-    Ntsc,
-    Dendy,
-}
-
-impl NesRegion {
-    #[allow(dead_code)] //Needed by netplay
-    pub fn to_fps(&self) -> f32 {
-        match self {
-            NesRegion::Pal => 50.006_977,
-            NesRegion::Ntsc => 60.098_812,
-            NesRegion::Dendy => 50.006_977,
-        }
-    }
-}
+use crate::{nes_state::NesRegion, settings::Settings};
 
 #[derive(Deserialize, Debug)]
 pub struct BuildConfiguration {
@@ -34,6 +16,7 @@ pub struct BuildConfiguration {
     pub manufacturer: String,
     pub default_settings: Settings,
     pub nes_region: NesRegion,
+
     #[cfg(feature = "netplay")]
     pub netplay: crate::netplay::NetplayBuildConfiguration,
 }
