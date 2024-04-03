@@ -1,4 +1,7 @@
-use crate::input::keys::{KeyCode, Modifiers};
+use crate::{
+    input::keys::{KeyCode, Modifiers},
+    Size,
+};
 use anyhow::Result;
 use winit::event_loop::EventLoop;
 
@@ -6,25 +9,15 @@ pub mod egui_winit_wgpu;
 mod winit_impl;
 
 pub trait Fullscreen {
-    fn check_and_set_fullscreen(&self, key_mod: &Modifiers, key_code: &KeyCode) -> bool;
-}
-
-pub struct Size {
-    pub width: f64,
-    pub height: f64,
-}
-impl Size {
-    pub(crate) fn new(width: f64, height: f64) -> Size {
-        Self { width, height }
-    }
+    fn check_and_set_fullscreen(&self, key_mod: Modifiers, key_code: KeyCode) -> bool;
 }
 
 impl From<Size> for winit::dpi::Size {
     fn from(val: Size) -> Self {
-        winit::dpi::Size::Logical(winit::dpi::LogicalSize {
-            width: val.width,
-            height: val.height,
-        })
+        winit::dpi::Size::Logical(winit::dpi::LogicalSize::new(
+            val.width as f64,
+            val.height as f64,
+        ))
     }
 }
 

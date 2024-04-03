@@ -2,8 +2,8 @@ use ggrs::{Config, GgrsRequest, P2PSession};
 use matchbox_socket::PeerId;
 
 use crate::{
+    emulation::{Emulator, NESBuffers, NesStateHandler},
     input::JoypadState,
-    nes_state::{emulator::Emulator, NESBuffers, NesStateHandler},
     settings::MAX_PLAYERS,
 };
 
@@ -130,7 +130,7 @@ impl NetplaySession {
             }
         }
 
-        *Emulator::emulation_speed().write().unwrap() = if sess.frames_ahead() > 0 {
+        *Emulator::emulation_speed_mut() = if sess.frames_ahead() > 0 {
             log::debug!(
                 "Frames ahead: {:?}, slowing down emulation",
                 sess.frames_ahead()

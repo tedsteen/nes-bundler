@@ -7,13 +7,15 @@ use super::{
 };
 
 pub struct AudioGui {
+    audio: Audio,
     // #[cfg(feature = "debug")]
     // stats: AudioStats,
 }
 
 impl AudioGui {
-    pub fn new() -> Self {
+    pub fn new(audio: Audio) -> Self {
         Self {
+            audio,
             //stats: AudioStats::new(),
         }
     }
@@ -55,21 +57,21 @@ impl AudioGui {
 //     }
 // }
 
-impl GuiComponent<Audio> for AudioGui {
-    fn prepare(&mut self, instance: &mut Audio) {
+impl GuiComponent for AudioGui {
+    fn prepare(&mut self) {
         // #[cfg(feature = "debug")]
         // if let Some(tx) = &instance.stream.tx {
         //     self.stats.push_stat(AudioStat::new(tx.len()));
         // }
 
-        instance.sync_audio_devices();
+        self.audio.sync_audio_devices();
     }
 
-    fn ui(&mut self, instance: &mut Audio, ui: &mut Ui) {
+    fn ui(&mut self, ui: &mut Ui) {
         // #[cfg(feature = "debug")]
         // Self::stats_ui(ui, &self.stats);
         let available_device_names =
-            Audio::get_available_output_device_names_for_subsystem(&instance.audio_subsystem);
+            Audio::get_available_output_device_names_for_subsystem(&self.audio.audio_subsystem);
         ui.horizontal(|ui| {
             egui::Grid::new("netplay_grid")
                 .num_columns(2)
@@ -82,7 +84,7 @@ impl GuiComponent<Audio> for AudioGui {
                         let audio_settings = &mut Settings::current_mut().audio;
                         let selected_device = &mut audio_settings.output_device;
                         if selected_device.is_none() {
-                            *selected_device = instance.get_default_device_name();
+                            *selected_device = self.audio.get_default_device_name();
                         }
                         if let Some(selected_text) = selected_device.as_deref_mut() {
                             egui::ComboBox::from_id_source("audio-output")
@@ -109,7 +111,7 @@ impl GuiComponent<Audio> for AudioGui {
                         new_device
                     };
                     if let Some(new_device) = new_device {
-                        instance.stream.set_output_device(Some(new_device));
+                        self.audio.stream.set_output_device(Some(new_device));
                     }
                 });
         });

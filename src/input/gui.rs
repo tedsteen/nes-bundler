@@ -1,18 +1,20 @@
 use crate::{
-    input::{Inputs, JoypadButton, JoypadState},
+    input::{JoypadButton, JoypadState},
     settings::{gui::GuiComponent, Settings},
 };
 use egui::{Color32, Grid, RichText, Ui};
 
-use super::{settings::InputSettings, InputConfiguration, MapRequest};
+use super::{settings::InputSettings, InputConfiguration, Inputs, MapRequest};
 pub struct InputsGui {
+    inputs: Inputs,
     mapping_request: Option<MapRequest>,
 }
 
 impl InputsGui {
-    pub fn new() -> Self {
+    pub fn new(inputs: Inputs) -> Self {
         Self {
             mapping_request: None,
+            inputs,
         }
     }
 
@@ -109,8 +111,13 @@ impl InputsGui {
     }
 }
 
-impl GuiComponent<Inputs> for InputsGui {
-    fn ui(&mut self, instance: &mut Inputs, ui: &mut Ui) {
+impl GuiComponent for InputsGui {
+    fn handle_event(&mut self, gui_event: &crate::settings::gui::GuiEvent) {
+        self.inputs.advance(gui_event);
+    }
+
+    fn ui(&mut self, ui: &mut Ui) {
+        let instance = &mut self.inputs;
         let input_settings = &mut Settings::current_mut().input;
         let available_configurations = &mut input_settings
             .configurations
@@ -146,7 +153,8 @@ impl GuiComponent<Inputs> for InputsGui {
             });
         });
 
-        instance.remap_configuration(&mut self.mapping_request, input_settings);
+        self.inputs
+            .remap_configuration(&mut self.mapping_request, input_settings);
     }
 
     fn name(&self) -> Option<String> {

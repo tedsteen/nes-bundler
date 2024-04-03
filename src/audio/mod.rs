@@ -21,7 +21,7 @@ pub struct AudioSettings {
 }
 impl AudioSettings {
     fn default_latency() -> u8 {
-        20
+        30
     }
 }
 struct AudioReceiverCallback(AudioReceiver);
