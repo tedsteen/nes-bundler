@@ -8,7 +8,7 @@ use anyhow::Result;
 use directories::ProjectDirs;
 use serde::Deserialize;
 
-use crate::{nes_state::NesRegion, settings::Settings};
+use crate::{emulation::NesRegion, settings::Settings};
 
 #[derive(Deserialize, Debug)]
 pub struct BuildConfiguration {

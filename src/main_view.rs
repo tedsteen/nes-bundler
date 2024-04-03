@@ -4,13 +4,13 @@ use egui::{load::SizedTexture, Context, Image, Order, Vec2};
 use thingbuf::ThingBuf;
 
 use crate::{
+    emulation::{FrameRecycle, NESVideoFrame, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3},
     input::{
         buttons::GamepadButton,
         keys::{KeyCode, Modifiers},
         KeyEvent,
     },
     integer_scaling::{calculate_size_corrected, MINIMUM_INTEGER_SCALING_SIZE},
-    nes_state::{FrameRecycle, NESVideoFrame, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3},
     settings::gui::{GuiComponent, GuiEvent, SettingsGui},
     window::{
         egui_winit_wgpu::{texture::Texture, Renderer},

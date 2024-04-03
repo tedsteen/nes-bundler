@@ -2,8 +2,8 @@ use ggrs::{Config, GgrsRequest, P2PSession};
 use matchbox_socket::PeerId;
 
 use crate::{
+    emulation::{Emulator, NESBuffers, NesStateHandler},
     input::JoypadState,
-    nes_state::{emulator::Emulator, NESBuffers, NesStateHandler},
     settings::MAX_PLAYERS,
 };
 

@@ -1,7 +1,8 @@
-use super::emulator::{Emulator, StateHandler};
-use crate::nes_state::NesStateHandler;
+use crate::emulation::NesStateHandler;
 use crate::settings::gui::GuiComponent;
 use std::sync::{Arc, Mutex};
+
+use super::{Emulator, StateHandler};
 
 #[cfg(feature = "debug")]
 struct DebugGui {

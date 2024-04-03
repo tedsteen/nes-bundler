@@ -9,15 +9,15 @@ use audio::gui::AudioGui;
 use audio::Audio;
 use bundle::Bundle;
 
+use emulation::{Emulator, SAMPLE_RATE};
 use input::gui::InputsGui;
 use input::sdl2_impl::Sdl2Gamepads;
 use input::Inputs;
 use integer_scaling::MINIMUM_INTEGER_SCALING_SIZE;
 use main_view::MainView;
-use nes_state::emulator::{Emulator, SAMPLE_RATE};
 
-use nes_state::gui::EmulatorGui;
-use nes_state::{NES_HEIGHT, NES_WIDTH_4_3};
+use emulation::gui::EmulatorGui;
+use emulation::{NES_HEIGHT, NES_WIDTH_4_3};
 use settings::gui::ToGuiEvent;
 use window::create_window;
 use window::egui_winit_wgpu::Renderer;
@@ -31,11 +31,11 @@ use crate::settings::Settings;
 
 mod audio;
 mod bundle;
+mod emulation;
 mod fps;
 mod input;
 mod integer_scaling;
 mod main_view;
-mod nes_state;
 #[cfg(feature = "netplay")]
 mod netplay;
 mod settings;

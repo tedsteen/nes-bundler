@@ -12,10 +12,7 @@ use tetanes_core::{
     video::VideoFilter,
 };
 
-use super::{
-    emulator::{Emulator, SAMPLE_RATE},
-    NESBuffers, NesStateHandler, NTSC_PAL,
-};
+use super::{Emulator, NESBuffers, NesStateHandler, NTSC_PAL, SAMPLE_RATE};
 use crate::{
     bundle::Bundle,
     input::JoypadState,
@@ -34,12 +31,12 @@ trait ToSampleRate {
     fn to_sample_rate(&self) -> f32;
 }
 
-impl ToTetanesRegion for crate::nes_state::NesRegion {
+impl ToTetanesRegion for crate::emulation::NesRegion {
     fn to_tetanes_region(&self) -> NesRegion {
         match self {
-            crate::nes_state::NesRegion::Pal => NesRegion::Pal,
-            crate::nes_state::NesRegion::Ntsc => NesRegion::Ntsc,
-            crate::nes_state::NesRegion::Dendy => NesRegion::Dendy,
+            crate::emulation::NesRegion::Pal => NesRegion::Pal,
+            crate::emulation::NesRegion::Ntsc => NesRegion::Ntsc,
+            crate::emulation::NesRegion::Dendy => NesRegion::Dendy,
         }
     }
 }
@@ -89,7 +86,7 @@ impl TetanesNesState {
         let apu = &mut self.control_deck.cpu_mut().bus.apu;
         let target_sample_rate = match apu.region {
             // Downsample a tiny bit extra to match the most common screen refresh rate (60hz)
-            NesRegion::Ntsc => SAMPLE_RATE * (crate::nes_state::NesRegion::Ntsc.to_fps() / 60.0),
+            NesRegion::Ntsc => SAMPLE_RATE * (crate::emulation::NesRegion::Ntsc.to_fps() / 60.0),
             _ => SAMPLE_RATE,
         };
 
