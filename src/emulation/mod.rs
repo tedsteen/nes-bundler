@@ -1,6 +1,6 @@
 use std::{
     ops::{Deref, DerefMut},
-    sync::{mpsc::Receiver, Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard},
+    sync::{mpsc::Receiver, Arc, OnceLock, RwLock, RwLockReadGuard},
     time::Duration,
 };
 
@@ -137,7 +137,7 @@ impl Emulator {
 
                     rate_counter.tick("Frame");
                     audio_buffer.clear();
-                    emulator_gui.netplay_gui.netplay_state_handler.advance(
+                    emulator_gui.nes_state.advance(
                         inputs_gui.inputs.joypads,
                         &mut NESBuffers {
                             video: Some(&mut main_view.nes_frame),
@@ -154,8 +154,7 @@ impl Emulator {
                     use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
                     use base64::Engine;
                     Settings::current_mut().save_state = emulator_gui
-                        .netplay_gui
-                        .netplay_state_handler
+                        .nes_state
                         .save_sram()
                         .map(|sram| b64.encode(sram));
 
@@ -174,7 +173,8 @@ impl Emulator {
         Self::_emulation_speed().read().unwrap()
     }
 
-    pub fn emulation_speed_mut<'a>() -> RwLockWriteGuard<'a, f32> {
+    #[cfg(any(feature = "netplay", feature = "debug"))]
+    pub fn emulation_speed_mut<'a>() -> std::sync::RwLockWriteGuard<'a, f32> {
         Self::_emulation_speed().write().unwrap()
     }
 }

@@ -1,4 +1,4 @@
-use super::{Emulator, StateHandler};
+use super::StateHandler;
 use crate::settings::gui::GuiComponent;
 
 #[cfg(feature = "debug")]
@@ -8,6 +8,7 @@ struct DebugGui {
 }
 
 pub struct EmulatorGui {
+    pub nes_state: StateHandler,
     #[cfg(feature = "netplay")]
     pub netplay_gui: crate::netplay::gui::NetplayGui,
     #[cfg(feature = "debug")]
@@ -16,8 +17,9 @@ pub struct EmulatorGui {
 impl EmulatorGui {
     pub fn new(nes_state: StateHandler) -> Self {
         Self {
+            nes_state,
             #[cfg(feature = "netplay")]
-            netplay_gui: crate::netplay::gui::NetplayGui::new(nes_state),
+            netplay_gui: crate::netplay::gui::NetplayGui::new(),
             #[cfg(feature = "debug")]
             debug_gui: DebugGui {
                 speed: 1.0,
@@ -44,7 +46,7 @@ impl DebugGui {
                         .changed()
                         && !self.override_speed
                     {
-                        *Emulator::emulation_speed_mut() = 1.0;
+                        *super::Emulator::emulation_speed_mut() = 1.0;
                     }
 
                     if self.override_speed {
@@ -53,7 +55,7 @@ impl DebugGui {
                                 .suffix("x")
                                 .logarithmic(true),
                         );
-                        *Emulator::emulation_speed_mut() = self.speed;
+                        *super::Emulator::emulation_speed_mut() = self.speed;
                     }
                     ui.end_row();
                 });
@@ -65,16 +67,15 @@ impl GuiComponent for EmulatorGui {
     #[allow(unused_variables)]
     fn ui(&mut self, ui: &mut egui::Ui) {
         #[cfg(feature = "debug")]
-        self.debug_gui
-            .ui(ui, &self.netplay_gui.netplay_state_handler);
+        self.debug_gui.ui(ui, &self.nes_state);
 
         #[cfg(feature = "netplay")]
-        self.netplay_gui.ui(ui);
+        self.netplay_gui.ui(ui, &mut self.nes_state);
     }
 
     #[cfg(feature = "netplay")]
     fn messages(&self) -> Option<Vec<String>> {
-        self.netplay_gui.messages()
+        self.netplay_gui.messages(&self.nes_state)
     }
 
     fn name(&self) -> Option<String> {
@@ -88,8 +89,8 @@ impl GuiComponent for EmulatorGui {
         None
     }
 
-    #[cfg(feature = "netplay")]
+    #[cfg(all(feature = "netplay", feature = "debug"))]
     fn prepare(&mut self) {
-        self.netplay_gui.prepare();
+        self.netplay_gui.prepare(&self.nes_state);
     }
 }
