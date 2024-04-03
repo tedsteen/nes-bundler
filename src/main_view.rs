@@ -54,7 +54,7 @@ impl MainView {
                 true
             }
             Keyboard(KeyEvent::Pressed(key_code)) => {
-                window.check_and_set_fullscreen(&self.modifiers, key_code)
+                window.check_and_set_fullscreen(self.modifiers, *key_code)
             }
             _ => false,
         };

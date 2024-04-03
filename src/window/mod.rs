@@ -9,7 +9,7 @@ pub mod egui_winit_wgpu;
 mod winit_impl;
 
 pub trait Fullscreen {
-    fn check_and_set_fullscreen(&self, key_mod: &Modifiers, key_code: &KeyCode) -> bool;
+    fn check_and_set_fullscreen(&self, key_mod: Modifiers, key_code: KeyCode) -> bool;
 }
 
 impl From<Size> for winit::dpi::Size {

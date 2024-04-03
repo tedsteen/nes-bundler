@@ -8,10 +8,8 @@ use super::Fullscreen;
 mod conversions;
 
 impl Fullscreen for winit::window::Window {
-    fn check_and_set_fullscreen(&self, key_mod: &Modifiers, key_code: &KeyCode) -> bool {
+    fn check_and_set_fullscreen(&self, key_mod: Modifiers, key_code: KeyCode) -> bool {
         let window = self;
-        let key_mod = *key_mod;
-        let key_code = *key_code;
 
         #[cfg(target_os = "macos")]
         if key_mod.contains(Modifiers::LOGO)
