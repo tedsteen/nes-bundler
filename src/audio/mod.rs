@@ -43,7 +43,7 @@ impl AudioCallback for AudioReceiverCallback {
             }
         }
         if missing_samples > 0 {
-            log::warn!("Buffer underrun: {missing_samples} samples");
+            log::trace!("Buffer underrun: {missing_samples} samples");
         }
     }
 }

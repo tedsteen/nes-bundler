@@ -141,6 +141,7 @@ impl NesStateHandler for TetanesNesState {
             }
 
             if let Some(audio_buffer) = &mut buffers.audio {
+                #[cfg(feature = "debug")]
                 puffin::profile_scope!("copy audio");
                 audio_buffer.extend_from_slice(self.control_deck.audio_samples());
             }

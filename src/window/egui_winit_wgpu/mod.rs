@@ -109,34 +109,53 @@ impl Renderer {
         let output = {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("get_current_texture");
+
             self.surface.get_current_texture()?
         };
 
-        let view = output.texture.create_view(&TextureViewDescriptor {
-            label: None,
-            format: None,
-            dimension: None,
-            aspect: wgpu::TextureAspect::All,
-            base_mip_level: 0,
-            mip_level_count: None,
-            base_array_layer: 0,
-            array_layer_count: None,
-        });
+        let view = {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("create_view");
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
+            output.texture.create_view(&TextureViewDescriptor {
+                label: None,
+                format: None,
+                dimension: None,
+                aspect: wgpu::TextureAspect::All,
+                base_mip_level: 0,
+                mip_level_count: None,
+                base_array_layer: 0,
+                array_layer_count: None,
+            })
+        };
 
-        let screen_descriptor = ScreenDescriptor {
-            size_in_pixels: [self.config.width, self.config.height],
-            pixels_per_point: self.window().scale_factor() as f32,
+        let mut encoder = {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("create_command_encoder");
+
+            self.device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Render Encoder"),
+                })
+        };
+
+        let screen_descriptor = {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("ScreenDescriptor");
+
+            ScreenDescriptor {
+                size_in_pixels: [self.config.width, self.config.height],
+                pixels_per_point: self.window().scale_factor() as f32,
+            }
         };
 
         {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("egui.draw");
+
+            //TODO: Using a window here (and above) blocks on macos when minimizing/maximizing or occluding the window.
+            //      All the `maybe_wait_on_main` calls inside the window will block.
+            //      Figure out if we can somehow remove the dependency on the window here...
             self.egui.draw(
                 &self.device,
                 &self.queue,
@@ -155,9 +174,18 @@ impl Renderer {
                 },
             );
         }
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("submit");
 
-        self.queue.submit(iter::once(encoder.finish()));
-        output.present();
+            self.queue.submit(iter::once(encoder.finish()));
+        }
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("present");
+
+            output.present();
+        }
 
         Ok(())
     }
