@@ -1,6 +1,6 @@
 use std::{ops::Deref, sync::Arc};
 
-use egui::{load::SizedTexture, Context, Image, Order, Vec2};
+use egui::{load::SizedTexture, Image, Order, Vec2};
 use thingbuf::ThingBuf;
 
 use crate::{
@@ -11,7 +11,7 @@ use crate::{
         KeyEvent,
     },
     integer_scaling::{calculate_size_corrected, MINIMUM_INTEGER_SCALING_SIZE},
-    settings::gui::{GuiComponent, GuiEvent, SettingsGui},
+    settings::gui::{GuiComponent, GuiEvent, SettingsGui, ToGuiEvent},
     window::{
         egui_winit_wgpu::{texture::Texture, Renderer},
         Fullscreen,
@@ -24,20 +24,38 @@ pub struct MainView {
     modifiers: Modifiers,
     nes_texture: Texture,
     pub frame_pool: BufferPool,
+    renderer: Renderer,
 }
+
 impl MainView {
-    pub fn new(renderer: &mut Renderer, gui_components: Vec<Box<dyn GuiComponent>>) -> Self {
+    pub fn new(mut renderer: Renderer, gui_components: Vec<Box<dyn GuiComponent>>) -> Self {
         Self {
             settings_gui: SettingsGui::new(gui_components),
             modifiers: Modifiers::empty(),
 
-            nes_texture: Texture::new(renderer, NES_WIDTH, NES_HEIGHT, Some("nes frame")),
+            nes_texture: Texture::new(&mut renderer, NES_WIDTH, NES_HEIGHT, Some("nes frame")),
             frame_pool: BufferPool::new(),
+            renderer,
         }
     }
-}
-impl MainView {
-    pub fn handle_event(&mut self, gui_event: &GuiEvent, window: &winit::window::Window) {
+
+    pub fn handle_window_event(&mut self, window_event: &winit::event::WindowEvent) {
+        if let winit::event::WindowEvent::Resized(physical_size) = window_event {
+            self.renderer.resize(*physical_size);
+        }
+        if !self
+            .renderer
+            .egui
+            .handle_input(&self.renderer.window, window_event)
+            .consumed
+        {
+            if let Some(winit_gui_event) = &window_event.to_gui_event() {
+                self.handle_gui_event(winit_gui_event);
+            }
+        }
+    }
+
+    pub fn handle_gui_event(&mut self, gui_event: &GuiEvent) {
         use crate::settings::gui::GuiEvent::Keyboard;
 
         let consumed = match gui_event {
@@ -53,9 +71,10 @@ impl MainView {
                 self.settings_gui.toggle_visibility();
                 true
             }
-            Keyboard(KeyEvent::Pressed(key_code)) => {
-                window.check_and_set_fullscreen(self.modifiers, *key_code)
-            }
+            Keyboard(KeyEvent::Pressed(key_code)) => self
+                .renderer
+                .window
+                .check_and_set_fullscreen(self.modifiers, *key_code),
             _ => false,
         };
         if !consumed {
@@ -63,20 +82,60 @@ impl MainView {
         }
     }
 
-    pub fn render(&mut self, renderer: &mut Renderer) {
+    pub fn render(&mut self) {
         if let Some(video) = self.frame_pool.pop_ref() {
-            self.nes_texture.update(&renderer.queue, &video);
+            self.nes_texture.update(&self.renderer.queue, &video);
         }
 
-        let render_result = renderer.render(move |ctx| {
-            self.ui(ctx);
+        let nes_texture_id = self.nes_texture.get_id();
+        let settings_gui = &mut self.settings_gui;
+        let render_result = self.renderer.render(move |ctx| {
+            egui::Area::new("game_area")
+                .fixed_pos([0.0, 0.0])
+                .order(Order::Background)
+                .show(ctx, |ui| {
+                    let available_size = ui.available_size();
+                    let new_size = if available_size.x < MINIMUM_INTEGER_SCALING_SIZE.width as f32
+                        || available_size.y < MINIMUM_INTEGER_SCALING_SIZE.height as f32
+                    {
+                        let width = NES_WIDTH_4_3;
+                        let ratio_height = available_size.y / NES_HEIGHT as f32;
+                        let ratio_width = available_size.x / width as f32;
+                        let ratio = f32::min(ratio_height, ratio_width);
+                        Size::new(
+                            (width as f32 * ratio) as u32,
+                            (NES_HEIGHT as f32 * ratio) as u32,
+                        )
+                    } else {
+                        calculate_size_corrected(
+                            available_size.x as u32,
+                            available_size.y as u32,
+                            NES_WIDTH,
+                            NES_HEIGHT,
+                            4.0,
+                            3.0,
+                        )
+                    };
+
+                    ui.centered_and_justified(|ui| {
+                        ui.add(Image::from_texture(SizedTexture::new(
+                            nes_texture_id,
+                            Vec2 {
+                                x: new_size.width as f32,
+                                y: new_size.height as f32,
+                            },
+                        )))
+                    });
+                });
+
+            settings_gui.ui(ctx);
         });
         match render_result {
             Ok(_) => {}
             Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
                 // Reconfigure the surface if it's lost or outdated
                 log::warn!("Surface lost or outdated, recreating.");
-                renderer.resize(renderer.size);
+                self.renderer.resize(self.renderer.size);
             }
             // The system is out of memory, we should probably quit
             Err(wgpu::SurfaceError::OutOfMemory) => {
@@ -85,48 +144,6 @@ impl MainView {
             }
             Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
         };
-    }
-
-    fn ui(&mut self, ctx: &Context) {
-        egui::Area::new("game_area")
-            .fixed_pos([0.0, 0.0])
-            .order(Order::Background)
-            .show(ctx, |ui| {
-                let available_size = ui.available_size();
-                let new_size = if available_size.x < MINIMUM_INTEGER_SCALING_SIZE.width as f32
-                    || available_size.y < MINIMUM_INTEGER_SCALING_SIZE.height as f32
-                {
-                    let width = NES_WIDTH_4_3;
-                    let ratio_height = available_size.y / NES_HEIGHT as f32;
-                    let ratio_width = available_size.x / width as f32;
-                    let ratio = f32::min(ratio_height, ratio_width);
-                    Size::new(
-                        (width as f32 * ratio) as u32,
-                        (NES_HEIGHT as f32 * ratio) as u32,
-                    )
-                } else {
-                    calculate_size_corrected(
-                        available_size.x as u32,
-                        available_size.y as u32,
-                        NES_WIDTH,
-                        NES_HEIGHT,
-                        4.0,
-                        3.0,
-                    )
-                };
-
-                ui.centered_and_justified(|ui| {
-                    ui.add(Image::from_texture(SizedTexture::new(
-                        self.nes_texture.get_id(),
-                        Vec2 {
-                            x: new_size.width as f32,
-                            y: new_size.height as f32,
-                        },
-                    )))
-                });
-            });
-
-        self.settings_gui.ui(ctx);
     }
 }
 

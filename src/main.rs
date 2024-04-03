@@ -18,7 +18,6 @@ use main_view::MainView;
 
 use emulation::gui::EmulatorGui;
 use emulation::{NES_HEIGHT, NES_WIDTH_4_3};
-use settings::gui::ToGuiEvent;
 use window::create_window;
 use window::egui_winit_wgpu::Renderer;
 use winit::event::{Event, WindowEvent};
@@ -94,9 +93,8 @@ async fn run() -> anyhow::Result<()> {
     let joypad_state = inputs.joypads.clone();
 
     let emulator = Emulator::new()?;
-    let mut renderer = Renderer::new(window.clone()).await?;
     let mut main_view = MainView::new(
-        &mut renderer,
+        Renderer::new(window.clone()).await?,
         vec![
             Box::new(AudioGui::new(audio)),
             Box::new(InputsGui::new(inputs)),
@@ -128,23 +126,9 @@ async fn run() -> anyhow::Result<()> {
                     #[cfg(windows)]
                     window.request_redraw();
                 }
-                window_event => match window_event {
-                    WindowEvent::Resized(physical_size) => {
-                        renderer.resize(*physical_size);
-                    }
-                    winit_window_event => {
-                        if !renderer
-                            .egui
-                            .handle_input(&renderer.window, winit_window_event)
-                            .consumed
-                        {
-                            if let Some(winit_gui_event) = &winit_window_event.to_gui_event() {
-                                main_view.handle_event(winit_gui_event, &renderer.window);
-                            }
-                        }
-                    }
-                },
+                _ => {}
             }
+            main_view.handle_window_event(window_event);
         };
 
         {
@@ -155,13 +139,13 @@ async fn run() -> anyhow::Result<()> {
                 .flat_map(|e| e.to_gamepad_event())
                 .map(GuiEvent::Gamepad)
             {
-                main_view.handle_event(&sdl_gui_event, &renderer.window);
+                main_view.handle_gui_event(&sdl_gui_event);
             }
         }
 
         #[cfg(feature = "debug")]
         puffin::profile_scope!("render");
-        main_view.render(&mut renderer);
+        main_view.render();
     })?;
 
     Ok(())
