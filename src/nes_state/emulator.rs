@@ -8,6 +8,7 @@ use crate::{
     settings::{Settings, MAX_PLAYERS},
 };
 use anyhow::Result;
+use tokio::task::JoinHandle;
 
 use super::{NESAudioFrame, NESBuffers};
 use crate::nes_state::NesStateHandler;
@@ -37,12 +38,12 @@ impl Emulator {
             nes_state: Arc::new(Mutex::new(nes_state)),
         })
     }
-    pub fn start(
+    pub fn start_thread(
         &self,
         frame_pool: BufferPool,
         audio_tx: AudioSender,
         joypads: Arc<RwLock<[JoypadState; MAX_PLAYERS]>>,
-    ) -> Result<()> {
+    ) -> JoinHandle<()> {
         let audio_tx = audio_tx.clone();
         let frame_pool = frame_pool.clone();
         let joypads = joypads.clone();
@@ -100,9 +101,7 @@ impl Emulator {
                     log::debug!("Emulation: {report}");
                 }
             }
-        });
-
-        Ok(())
+        })
     }
 
     fn _emulation_speed() -> &'static RwLock<f32> {

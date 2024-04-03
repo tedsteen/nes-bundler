@@ -104,7 +104,7 @@ async fn run() -> anyhow::Result<()> {
         ],
     );
 
-    let _ = emulator.start(main_view.frame_pool.clone(), audio_tx, joypad_state);
+    emulator.start_thread(main_view.frame_pool.clone(), audio_tx, joypad_state);
 
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     event_loop.run(|winit_event, control_flow| {
