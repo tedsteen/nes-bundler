@@ -92,11 +92,7 @@ impl DerefMut for NetplayNesState {
 }
 
 impl NesStateHandler for NetplayStateHandler {
-    fn advance(
-        &mut self,
-        joypad_state: [JoypadState; MAX_PLAYERS],
-        buffers: Option<&mut NESBuffers>,
-    ) {
+    fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers) {
         if let Some(new_state) = self
             .netplay
             .take()

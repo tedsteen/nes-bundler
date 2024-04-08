@@ -2,11 +2,24 @@
 #![allow(unsafe_code)]
 #![deny(clippy::all)]
 
+use audio::gui::AudioGui;
+use audio::Audio;
 use bundle::Bundle;
-use std::sync::mpsc::channel;
-use std::sync::Arc;
 
-use emulation::Emulator;
+use input::gamepad::ToGamepadEvent;
+use input::gui::InputsGui;
+use input::sdl2_impl::Sdl2Gamepads;
+use input::{Inputs, JoypadState};
+use main_view::MainView;
+
+use settings::gui::GuiEvent;
+use settings::{Settings, MAX_PLAYERS};
+
+use std::sync::{Arc, RwLock};
+use std::time::Duration;
+use window::egui_winit_wgpu::Renderer;
+
+use emulation::{BufferPool, Emulator, SAMPLE_RATE};
 use integer_scaling::MINIMUM_INTEGER_SCALING_SIZE;
 
 use emulation::{NES_HEIGHT, NES_WIDTH_4_3};
@@ -57,32 +70,86 @@ async fn run() -> anyhow::Result<()> {
         Size::new(NES_WIDTH_4_3, NES_HEIGHT),
         &event_loop,
     )?);
+
+    // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
+    sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
+    // TODO: Perhaps do this to fix this issue: https://github.com/libsdl-org/SDL/issues/7896#issuecomment-1616700934
+    //sdl2::hint::set("SDL_JOYSTICK_RAWINPUT", "0");
+
+    let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
+    let mut sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
+
+    let mut audio = Audio::new(
+        &sdl_context,
+        Duration::from_millis(Settings::current().audio.latency as u64),
+        SAMPLE_RATE as u32,
+    )?;
+
+    let inputs = Inputs::new(Sdl2Gamepads::new(
+        sdl_context.game_controller().map_err(anyhow::Error::msg)?,
+    ));
+    let audio_tx = audio.stream.start()?;
+
+    let renderer = Renderer::new(window.clone()).await?;
+    let mut main_view = MainView::new(renderer);
+    let mut inputs_gui = InputsGui::new(inputs);
+    let mut audio_gui = AudioGui::new(audio);
+
     let emulator = Emulator::new()?;
+    let shared_inputs = Arc::new(RwLock::new([JoypadState(0); MAX_PLAYERS]));
+    let frame_buffer = BufferPool::new();
+    let mut emulator_gui = emulator
+        .start_thread(audio_tx, shared_inputs.clone(), frame_buffer.clone())
+        .await?;
 
-    let (event_tx, event_rx) = channel();
-    emulator.start_thread(window.clone(), event_rx).await?;
-
+    event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     event_loop.run(|winit_event, control_flow| {
-        if let Event::WindowEvent {
-            event: window_event,
-            ..
-        } = &winit_event
-        {
-            match window_event {
-                WindowEvent::CloseRequested | WindowEvent::Destroyed => {
-                    control_flow.exit();
+        let mut need_render = false;
+        match &winit_event {
+            Event::WindowEvent {
+                event: window_event,
+                ..
+            } => {
+                match window_event {
+                    WindowEvent::CloseRequested | WindowEvent::Destroyed => {
+                        control_flow.exit();
+                    }
+                    WindowEvent::RedrawRequested => {
+                        // Windows needs this to not freeze the window when resizing or moving
+                        #[cfg(windows)]
+                        window.request_redraw();
+                        need_render = true;
+                    }
+                    _ => {}
                 }
-                WindowEvent::RedrawRequested => {
-                    // Windows needs this to not freeze the window when resizing or moving
-                    #[cfg(windows)]
-                    window.request_redraw();
-                }
-                _ => {}
+                main_view.handle_window_event(
+                    window_event,
+                    &mut [&mut audio_gui, &mut inputs_gui, &mut emulator_gui],
+                );
             }
-            event_tx
-                .send(window_event.clone())
-                .expect("to be able to send the window event");
-        };
+            Event::AboutToWait => {
+                need_render = true;
+            }
+            _ => {}
+        }
+        for sdl_gui_event in sdl_event_pump
+            .poll_iter()
+            .flat_map(|e| e.to_gamepad_event())
+            .map(GuiEvent::Gamepad)
+        {
+            main_view.handle_gui_event(
+                &sdl_gui_event,
+                &mut [&mut audio_gui, &mut inputs_gui, &mut emulator_gui],
+            );
+        }
+        *shared_inputs.write().unwrap() = inputs_gui.inputs.joypads;
+
+        if need_render {
+            main_view.render(
+                &frame_buffer,
+                &mut [&mut audio_gui, &mut inputs_gui, &mut emulator_gui],
+            );
+        }
     })?;
 
     Ok(())

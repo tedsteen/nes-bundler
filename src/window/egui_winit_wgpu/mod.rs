@@ -9,6 +9,8 @@ use gui::EguiRenderer;
 use wgpu::{PresentMode, TextureViewDescriptor};
 use winit::window::Window;
 
+use crate::bundle::Bundle;
+
 pub mod texture;
 
 pub struct Renderer {
@@ -63,13 +65,26 @@ impl Renderer {
             .find(|f| !f.is_srgb())
             .unwrap_or(surface_caps.formats[0]);
 
+        let present_mode = if Bundle::current().config.enable_vsync {
+            PresentMode::AutoVsync
+        } else {
+            [
+                PresentMode::Mailbox,
+                PresentMode::Immediate,
+                PresentMode::Fifo,
+            ]
+            .into_iter()
+            .find(|mode| surface_caps.present_modes.contains(mode))
+            .unwrap_or(PresentMode::AutoNoVsync)
+        };
+
         let config = wgpu::SurfaceConfiguration {
             desired_maximum_frame_latency: 1,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: PresentMode::AutoVsync,
+            present_mode,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
@@ -153,9 +168,6 @@ impl Renderer {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("egui.draw");
 
-            //TODO: Using a window here (and above) blocks on macos when minimizing/maximizing or occluding the window.
-            //      All the `maybe_wait_on_main` calls inside the window will block.
-            //      Figure out if we can somehow remove the dependency on the window here...
             self.egui.draw(
                 &self.device,
                 &self.queue,

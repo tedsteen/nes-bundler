@@ -16,6 +16,8 @@ pub struct BuildConfiguration {
     pub manufacturer: String,
     pub default_settings: Settings,
     pub nes_region: NesRegion,
+    #[serde(default = "Default::default")]
+    pub enable_vsync: bool,
 
     #[cfg(feature = "netplay")]
     pub netplay: crate::netplay::NetplayBuildConfiguration,

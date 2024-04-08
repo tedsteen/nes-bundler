@@ -21,6 +21,9 @@ manufacturer: "Darkbits"
 # NES region to use (Pal, Ntsc or Dendy)
 nes_region: Pal
 
+# There will be tearing if disabled, there might be more dropped frames if enabled
+enable_vsync: false
+
 # This will be the default settings for the game.
 # For all the gory details see the `BuildConfiguration`-struct in the source.
 default_settings:

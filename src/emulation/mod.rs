@@ -1,28 +1,19 @@
 use std::{
     ops::{Deref, DerefMut},
-    sync::{mpsc::Receiver, Arc, OnceLock, RwLock, RwLockReadGuard},
-    time::Duration,
+    sync::{Arc, Mutex, OnceLock, RwLock, RwLockReadGuard},
 };
 
 use anyhow::Result;
-use sdl2::EventPump;
+
 use serde::Deserialize;
-use thingbuf::Recycle;
-use tokio::task::JoinHandle;
-use winit::event::WindowEvent;
+
+use thingbuf::{Recycle, ThingBuf};
 
 use crate::{
-    audio::{gui::AudioGui, Audio, AudioSender},
+    audio::AudioSender,
     fps::RateCounter,
-    input::{
-        gamepad::ToGamepadEvent, gui::InputsGui, sdl2_impl::Sdl2Gamepads, Inputs, JoypadState,
-    },
-    main_view::MainView,
-    settings::{
-        gui::{GuiComponent, GuiEvent},
-        Settings, MAX_PLAYERS,
-    },
-    window::egui_winit_wgpu::Renderer,
+    input::JoypadState,
+    settings::{Settings, MAX_PLAYERS},
 };
 
 pub mod gui;
@@ -49,7 +40,12 @@ impl Emulator {
         Ok(Self {})
     }
 
-    async fn init() -> Result<(EventPump, Inputs, Audio, AudioSender, StateHandler)> {
+    pub async fn start_thread(
+        &self,
+        audio_tx: AudioSender,
+        inputs: Arc<RwLock<[JoypadState; MAX_PLAYERS]>>,
+        frame_buffer: BufferPool,
+    ) -> Result<EmulatorGui> {
         #[cfg(not(feature = "netplay"))]
         let nes_state = crate::emulation::LocalNesState::start_rom(
             &crate::bundle::Bundle::current().rom,
@@ -59,109 +55,64 @@ impl Emulator {
         #[cfg(feature = "netplay")]
         let nes_state = crate::netplay::NetplayStateHandler::new()?;
 
-        // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
-        sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
-        // TODO: Perhaps do this to fix this issue: https://github.com/libsdl-org/SDL/issues/7896#issuecomment-1616700934
-        //sdl2::hint::set("SDL_JOYSTICK_RAWINPUT", "0");
+        let nes_state = Arc::new(Mutex::new(nes_state));
 
-        let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
-        let sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
+        tokio::task::spawn_blocking({
+            let nes_state = nes_state.clone();
+            move || {
+                let mut audio_buffer = NESAudioFrame::new();
 
-        let mut audio = Audio::new(
-            &sdl_context,
-            Duration::from_millis(Settings::current().audio.latency as u64),
-            SAMPLE_RATE as u32,
-        )?;
-
-        let inputs = Inputs::new(Sdl2Gamepads::new(
-            sdl_context.game_controller().map_err(anyhow::Error::msg)?,
-        ));
-        let audio_tx = audio.stream.start()?;
-        Ok((sdl_event_pump, inputs, audio, audio_tx, nes_state))
-    }
-    pub async fn start_thread(
-        &self,
-        window: Arc<winit::window::Window>,
-        event_rx: Receiver<WindowEvent>,
-    ) -> Result<JoinHandle<()>> {
-        let renderer = Renderer::new(window.clone()).await?;
-
-        Ok(tokio::task::spawn_blocking(move || {
-            let (mut sdl_event_pump, inputs, audio, audio_tx, nes_state) =
-                futures::executor::block_on(Self::init()).expect("TODO");
-
-            let mut main_view = MainView::new(renderer);
-            let mut inputs_gui = InputsGui::new(inputs);
-            let mut audio_gui = AudioGui::new(audio);
-            let mut emulator_gui = EmulatorGui::new(nes_state);
-
-            let mut audio_buffer = NESAudioFrame::new();
-            let mut rate_counter = RateCounter::new();
-
-            loop {
-                #[cfg(feature = "debug")]
-                puffin::profile_function!("Emulator loop");
-
-                {
+                let mut rate_counter = RateCounter::new();
+                loop {
                     #[cfg(feature = "debug")]
-                    puffin::profile_scope!("push audio");
+                    puffin::profile_function!("Emulator loop");
 
-                    log::trace!("Pushing {:} audio samples", audio_buffer.len());
-                    for s in audio_buffer.iter() {
-                        let _ = audio_tx.send(*s);
-                    }
-                }
-
-                {
-                    #[cfg(feature = "debug")]
-                    puffin::profile_scope!("poll and handle events");
-
-                    let gui_components: &mut [&mut dyn GuiComponent] =
-                        &mut [&mut audio_gui, &mut inputs_gui, &mut emulator_gui];
-                    for window_event in event_rx.try_iter() {
-                        main_view.handle_window_event(&window_event, gui_components);
-                    }
-
-                    for sdl_gui_event in sdl_event_pump
-                        .poll_iter()
-                        .flat_map(|e| e.to_gamepad_event())
-                        .map(GuiEvent::Gamepad)
                     {
-                        main_view.handle_gui_event(&sdl_gui_event, gui_components);
+                        #[cfg(feature = "debug")]
+                        puffin::profile_scope!("push audio");
+
+                        log::trace!("Pushing {:} audio samples", audio_buffer.len());
+                        for s in audio_buffer.iter() {
+                            let _ = audio_tx.send(*s);
+                        }
                     }
-                }
 
-                {
-                    #[cfg(feature = "debug")]
-                    puffin::profile_scope!("advance");
+                    {
+                        #[cfg(feature = "debug")]
+                        puffin::profile_scope!("advance");
 
-                    rate_counter.tick("Frame");
-                    audio_buffer.clear();
-                    emulator_gui.nes_state.advance(
-                        inputs_gui.inputs.joypads,
-                        Some(&mut NESBuffers {
-                            video: &mut main_view.nes_frame,
-                            audio: &mut audio_buffer,
-                        }),
-                    );
-                }
-                {
-                    main_view.render(&mut [&mut audio_gui, &mut inputs_gui, &mut emulator_gui])
-                }
+                        rate_counter.tick("Frame");
+                        audio_buffer.clear();
+                        let frame = frame_buffer.push_ref();
+                        if frame.is_err() {
+                            //TODO: If we get in a bad sync with vsync and drop a lot of frames then perhaps we can do something to yank things in place again?
+                            rate_counter.tick("Dropped frame");
+                        }
+                        nes_state.lock().unwrap().advance(
+                            *inputs.read().unwrap(),
+                            &mut NESBuffers {
+                                video: frame.ok().as_deref_mut(),
+                                audio: Some(&mut audio_buffer),
+                            },
+                        );
+                    }
 
-                if let Some(report) = rate_counter.report() {
-                    // Hitch-hike on the once-per-second-reporting to save the sram.
-                    use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
-                    use base64::Engine;
-                    Settings::current_mut().save_state = emulator_gui
-                        .nes_state
-                        .save_sram()
-                        .map(|sram| b64.encode(sram));
+                    if let Some(report) = rate_counter.report() {
+                        // Hitch-hike on the once-per-second-reporting to save the sram.
+                        use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+                        use base64::Engine;
+                        Settings::current_mut().save_state = nes_state
+                            .lock()
+                            .unwrap()
+                            .save_sram()
+                            .map(|sram| b64.encode(sram));
 
-                    log::debug!("Emulation: {report}");
+                        log::debug!("Emulation: {report}");
+                    }
                 }
             }
-        }))
+        });
+        Ok(EmulatorGui::new(nes_state))
     }
 
     fn _emulation_speed() -> &'static RwLock<f32> {
@@ -180,11 +131,7 @@ impl Emulator {
 }
 
 pub trait NesStateHandler {
-    fn advance(
-        &mut self,
-        joypad_state: [JoypadState; MAX_PLAYERS],
-        buffers: Option<&mut NESBuffers>,
-    );
+    fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers);
     fn save_sram(&self) -> Option<&[u8]>;
     fn frame(&self) -> u32;
 }
@@ -207,8 +154,8 @@ impl NesRegion {
 }
 
 pub struct NESBuffers<'a> {
-    pub audio: &'a mut NESAudioFrame,
-    pub video: &'a mut NESVideoFrame,
+    pub audio: Option<&'a mut NESAudioFrame>,
+    pub video: Option<&'a mut NESVideoFrame>,
 }
 
 pub struct NESVideoFrame(Vec<u8>);
@@ -249,7 +196,7 @@ impl DerefMut for NESVideoFrame {
 
 pub struct NESAudioFrame(Vec<f32>);
 impl NESAudioFrame {
-    fn new() -> NESAudioFrame {
+    pub fn new() -> NESAudioFrame {
         Self(Vec::new())
     }
 }
@@ -276,4 +223,26 @@ impl Recycle<NESVideoFrame> for FrameRecycle {
     }
 
     fn recycle(&self, _frame: &mut NESVideoFrame) {}
+}
+
+#[derive(Debug)]
+pub struct BufferPool(Arc<ThingBuf<NESVideoFrame, FrameRecycle>>);
+
+impl BufferPool {
+    pub fn new() -> Self {
+        Self(Arc::new(ThingBuf::with_recycle(1, FrameRecycle)))
+    }
+}
+
+impl Deref for BufferPool {
+    type Target = Arc<ThingBuf<NESVideoFrame, FrameRecycle>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Clone for BufferPool {
+    fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0))
+    }
 }

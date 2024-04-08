@@ -1,7 +1,7 @@
 use egui::{load::SizedTexture, Image, Order, Vec2};
 
 use crate::{
-    emulation::{NESVideoFrame, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3},
+    emulation::{BufferPool, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3},
     input::{
         buttons::GamepadButton,
         keys::{KeyCode, Modifiers},
@@ -21,7 +21,6 @@ pub struct MainView {
     modifiers: Modifiers,
     nes_texture: Texture,
     renderer: Renderer,
-    pub nes_frame: NESVideoFrame,
 }
 
 impl MainView {
@@ -32,7 +31,6 @@ impl MainView {
 
             nes_texture: Texture::new(&mut renderer, NES_WIDTH, NES_HEIGHT, Some("nes frame")),
             renderer,
-            nes_frame: NESVideoFrame::new(),
         }
     }
 
@@ -87,15 +85,18 @@ impl MainView {
         }
     }
 
-    pub fn render(&mut self, gui_components: &mut [&mut dyn GuiComponent]) {
+    pub fn render(
+        &mut self,
+        frame_buffer: &BufferPool,
+        gui_components: &mut [&mut dyn GuiComponent],
+    ) {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
-        {
+        if let Some(nes_frame) = &frame_buffer.pop_ref() {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("update nes texture");
-            self.nes_texture
-                .update(&self.renderer.queue, &self.nes_frame);
+            self.nes_texture.update(&self.renderer.queue, nes_frame);
         }
 
         let nes_texture_id = self.nes_texture.get_id();

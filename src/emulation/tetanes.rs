@@ -86,7 +86,7 @@ impl TetanesNesState {
     }
 
     fn set_speed(&mut self, speed: f32) {
-        let speed = speed.max(0.01).min(1.0);
+        let speed = speed.max(0.005);
         let apu = &mut self.control_deck.cpu_mut().bus.apu;
         let target_sample_rate = match apu.region {
             // Downsample a tiny bit extra to match the most common screen refresh rate (60hz)
@@ -104,13 +104,13 @@ impl TetanesNesState {
         }
     }
 
-    pub fn clock_frame_into(&mut self, buffers: Option<&mut NESBuffers>) -> Result<usize> {
+    pub fn clock_frame_into(&mut self, buffers: &mut NESBuffers) -> Result<usize> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
         self.control_deck.cpu_mut().bus.ppu.skip_rendering = false;
         let cycles = self.control_deck.clock_frame()?;
-        if let Some(buffers) = buffers {
+        if let Some(video) = &mut buffers.video {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("copy buffers");
             self.control_deck
@@ -123,19 +123,19 @@ impl TetanesNesState {
                 .for_each(|(idx, &palette_index)| {
                     let palette_index = palette_index as usize * 3;
                     let pixel_index = idx * 4;
-                    buffers.video[pixel_index..pixel_index + 3]
+                    video[pixel_index..pixel_index + 3]
                         .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
                 });
-            buffers
-                .audio
-                .extend_from_slice(&self.control_deck.cpu().bus.audio_samples());
+        }
+        if let Some(audio) = &mut buffers.audio {
+            audio.extend_from_slice(self.control_deck.cpu().bus.audio_samples());
         }
 
         self.control_deck.clear_audio_samples();
         Ok(cycles)
     }
 
-    pub fn clock_frame_ahead_into(&mut self, buffers: Option<&mut NESBuffers>) -> Result<usize> {
+    pub fn clock_frame_ahead_into(&mut self, buffers: &mut NESBuffers) -> Result<usize> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
@@ -173,11 +173,7 @@ impl TetanesNesState {
 }
 
 impl NesStateHandler for TetanesNesState {
-    fn advance(
-        &mut self,
-        joypad_state: [JoypadState; MAX_PLAYERS],
-        buffers: Option<&mut NESBuffers>,
-    ) {
+    fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers) {
         self.set_speed(*Emulator::emulation_speed());
 
         *self.control_deck.joypad_mut(Player::One) = Joypad::from_bytes((*joypad_state[0]).into());
