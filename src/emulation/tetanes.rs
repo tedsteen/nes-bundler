@@ -13,9 +13,7 @@ use tetanes_core::{
     video::VideoFilter,
 };
 
-use super::{
-    Emulator, NESAudioFrame, NESBuffers, NESVideoFrame, NesStateHandler, NTSC_PAL, SAMPLE_RATE,
-};
+use super::{Emulator, NESBuffers, NesStateHandler, NTSC_PAL, SAMPLE_RATE};
 use crate::{
     bundle::Bundle,
     input::JoypadState,

@@ -103,8 +103,8 @@ fn init_logger() {
                     .init();
             }
             Err(e) => {
-                eprintln!("Could not open nes-bundler-log.txt for writing, {:?}", e);
                 env_logger::init();
+                log::warn!("Could not open nes-bundler-log.txt for writing, {:?}", e)
             }
         }
     }
