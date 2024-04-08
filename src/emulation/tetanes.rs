@@ -86,7 +86,7 @@ impl TetanesNesState {
     }
 
     fn set_speed(&mut self, speed: f32) {
-        let speed = speed.max(0.01).min(1.0);
+        let speed = speed.max(0.005);
         let apu = &mut self.control_deck.cpu_mut().bus.apu;
         let target_sample_rate = match apu.region {
             // Downsample a tiny bit extra to match the most common screen refresh rate (60hz)
