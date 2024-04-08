@@ -85,6 +85,7 @@ impl Emulator {
                         audio_buffer.clear();
                         let frame = frame_buffer.push_ref();
                         if frame.is_err() {
+                            //TODO: If we get in a bad sync with vsync and drop a lot of frames then perhaps we can do something to yank things in place again?
                             rate_counter.tick("Dropped frame");
                         }
                         nes_state.lock().unwrap().advance(

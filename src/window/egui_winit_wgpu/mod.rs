@@ -9,6 +9,8 @@ use gui::EguiRenderer;
 use wgpu::{PresentMode, TextureViewDescriptor};
 use winit::window::Window;
 
+use crate::bundle::Bundle;
+
 pub mod texture;
 
 pub struct Renderer {
@@ -63,14 +65,18 @@ impl Renderer {
             .find(|f| !f.is_srgb())
             .unwrap_or(surface_caps.formats[0]);
 
-        let best_mode = [
-            PresentMode::Mailbox,
-            PresentMode::Immediate,
-            PresentMode::Fifo,
-        ]
-        .into_iter()
-        .find(|mode| surface_caps.present_modes.contains(mode))
-        .unwrap_or(PresentMode::AutoNoVsync);
+        let present_mode = if Bundle::current().config.enable_vsync {
+            PresentMode::AutoVsync
+        } else {
+            [
+                PresentMode::Mailbox,
+                PresentMode::Immediate,
+                PresentMode::Fifo,
+            ]
+            .into_iter()
+            .find(|mode| surface_caps.present_modes.contains(mode))
+            .unwrap_or(PresentMode::AutoNoVsync)
+        };
 
         let config = wgpu::SurfaceConfiguration {
             desired_maximum_frame_latency: 1,
@@ -78,7 +84,7 @@ impl Renderer {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: best_mode,
+            present_mode,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
