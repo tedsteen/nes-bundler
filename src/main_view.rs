@@ -89,7 +89,7 @@ impl MainView {
 
     pub fn render(&mut self, gui_components: &mut [&mut dyn GuiComponent]) {
         #[cfg(feature = "debug")]
-        puffin::profile_function!("render");
+        puffin::profile_function!();
 
         {
             #[cfg(feature = "debug")]

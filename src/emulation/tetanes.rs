@@ -5,8 +5,9 @@ use anyhow::Result;
 use tetanes_core::{
     apu::filter::FilterChain,
     common::{NesRegion, Regional},
-    control_deck::{Config, ControlDeck},
+    control_deck::{Config, ControlDeck, HeadlessMode},
     cpu::Cpu,
+    fs,
     input::{FourPlayer, Joypad, Player},
     mem::RamState,
     video::VideoFilter,
@@ -53,6 +54,7 @@ impl TetanesNesState {
             genie_codes: vec![],
             concurrent_dpad: false,
             channels_enabled: [true; 5],
+            headless_mode: HeadlessMode::empty(),
         };
         log::debug!("Starting ROM with configuration {config:?}");
         let mut control_deck = ControlDeck::with_config(config);
@@ -100,52 +102,88 @@ impl TetanesNesState {
             apu.sample_period = new_sample_period;
         }
     }
-}
 
-impl NesStateHandler for TetanesNesState {
-    fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers) {
+    pub fn clock_frame_into(&mut self, buffers: Option<&mut NESBuffers>) -> Result<usize> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
+        self.control_deck.cpu_mut().bus.ppu.skip_rendering = false;
+        let cycles = self.control_deck.clock_frame()?;
+        if let Some(buffers) = buffers {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("copy buffers");
+            self.control_deck
+                .cpu()
+                .bus
+                .ppu
+                .frame_buffer()
+                .iter()
+                .enumerate()
+                .for_each(|(idx, &palette_index)| {
+                    let palette_index = palette_index as usize * 3;
+                    let pixel_index = idx * 4;
+                    buffers.video[pixel_index..pixel_index + 3]
+                        .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
+                });
+            buffers
+                .audio
+                .extend_from_slice(&self.control_deck.cpu().bus.audio_samples());
+        }
+
+        self.control_deck.clear_audio_samples();
+        Ok(cycles)
+    }
+
+    pub fn clock_frame_ahead_into(&mut self, buffers: Option<&mut NESBuffers>) -> Result<usize> {
+        #[cfg(feature = "debug")]
+        puffin::profile_function!();
+
+        self.control_deck.cpu_mut().bus.ppu.skip_rendering = true;
+        // Clock current frame and discard video
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("clock frame");
+            self.control_deck.clock_frame()?;
+        }
+
+        // Save state so we can rewind
+        let state = {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("serialize");
+            bincode::serialize(self.control_deck.cpu())
+                .map_err(|err| fs::Error::SerializationFailed(err.to_string()))?
+        };
+
+        // Discard audio and only output the future frame/audio
+        self.control_deck.clear_audio_samples();
+        let cycles = self.clock_frame_into(buffers)?;
+
+        // Restore back to current frame
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("deserialize and load");
+            let state = bincode::deserialize(&state)
+                .map_err(|err| fs::Error::DeserializationFailed(err.to_string()))?;
+            self.control_deck.load_cpu(state);
+        }
+
+        Ok(cycles)
+    }
+}
+
+impl NesStateHandler for TetanesNesState {
+    fn advance(
+        &mut self,
+        joypad_state: [JoypadState; MAX_PLAYERS],
+        buffers: Option<&mut NESBuffers>,
+    ) {
         self.set_speed(*Emulator::emulation_speed());
 
         *self.control_deck.joypad_mut(Player::One) = Joypad::from_bytes((*joypad_state[0]).into());
         *self.control_deck.joypad_mut(Player::Two) = Joypad::from_bytes((*joypad_state[1]).into());
 
-        self.control_deck.clear_audio_samples();
-
-        {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("clock frame");
-            self.control_deck
-                .clock_frame()
-                .expect("NES to clock a frame");
-        }
-        {
-            if let Some(video_buffer) = &mut buffers.video {
-                #[cfg(feature = "debug")]
-                puffin::profile_scope!("copy video");
-                self.control_deck
-                    .cpu()
-                    .bus
-                    .ppu
-                    .frame_buffer()
-                    .iter()
-                    .enumerate()
-                    .for_each(|(idx, &palette_index)| {
-                        let palette_index = palette_index as usize * 3;
-                        let pixel_index = idx * 4;
-                        video_buffer[pixel_index..pixel_index + 3]
-                            .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
-                    });
-            }
-
-            if let Some(audio_buffer) = &mut buffers.audio {
-                #[cfg(feature = "debug")]
-                puffin::profile_scope!("copy audio");
-                audio_buffer.extend_from_slice(self.control_deck.audio_samples());
-            }
-        }
+        self.clock_frame_ahead_into(buffers)
+            .expect("NES to clock a frame");
     }
 
     fn save_sram(&self) -> Option<Vec<u8>> {
