@@ -185,8 +185,7 @@ pub trait NesStateHandler {
         joypad_state: [JoypadState; MAX_PLAYERS],
         buffers: Option<&mut NESBuffers>,
     );
-    fn save_sram(&self) -> Option<Vec<u8>>;
-    fn load_sram(&mut self, data: &mut Vec<u8>);
+    fn save_sram(&self) -> Option<&[u8]>;
     fn frame(&self) -> u32;
 }
 
