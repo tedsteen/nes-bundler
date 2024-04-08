@@ -68,6 +68,7 @@ impl TetanesNesState {
                     use base64::Engine;
                     match b64.decode(b64_encoded_sram) {
                         Ok(sram) => {
+                            log::info!("Loading SRAM save state");
                             control_deck.cpu_mut().bus.load_sram(sram);
                         }
                         Err(err) => {
@@ -186,17 +187,11 @@ impl NesStateHandler for TetanesNesState {
             .expect("NES to clock a frame");
     }
 
-    fn save_sram(&self) -> Option<Vec<u8>> {
+    fn save_sram(&self) -> Option<&[u8]> {
         if let Some(true) = self.control_deck.cart_battery_backed() {
-            Some(bincode::serialize(&self.control_deck.cpu()).expect("NES state to serialize"))
+            Some(self.control_deck.sram())
         } else {
             None
-        }
-    }
-    fn load_sram(&mut self, data: &mut Vec<u8>) {
-        if let Some(true) = self.control_deck.cart_battery_backed() {
-            *self.control_deck.cpu_mut() =
-                bincode::deserialize(data).expect("NES state to deserialize");
         }
     }
 
