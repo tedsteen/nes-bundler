@@ -1,3 +1,5 @@
+use std::borrow::BorrowMut;
+
 use ggrs::{Config, GgrsRequest, P2PSession};
 use matchbox_socket::PeerId;
 
@@ -55,7 +57,7 @@ impl NetplaySession {
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
         joypad_mapping: &JoypadMapping,
-        buffers: &mut NESBuffers,
+        mut buffers: Option<&mut NESBuffers>,
     ) -> anyhow::Result<()> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
@@ -95,18 +97,17 @@ impl NetplaySession {
                         }
                         GgrsRequest::AdvanceFrame { inputs } => {
                             let is_replay = self.game_state.frame <= self.last_handled_frame;
-                            let no_buffers = &mut NESBuffers {
-                                audio: None,
-                                video: None,
-                            };
-                            let buffers = if is_replay { no_buffers } else { &mut *buffers };
 
                             self.game_state.advance(
                                 joypad_mapping.map(
                                     [JoypadState(inputs[0].0), JoypadState(inputs[1].0)],
                                     local_player_idx,
                                 ),
-                                buffers,
+                                if is_replay {
+                                    None
+                                } else {
+                                    buffers.as_mut().map(BorrowMut::borrow_mut)
+                                },
                             );
 
                             if !is_replay {

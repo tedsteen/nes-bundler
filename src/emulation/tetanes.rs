@@ -105,15 +105,10 @@ impl TetanesNesState {
         }
     }
 
-    pub fn clock_frame_into(
-        &mut self,
-        frame_buffer: &mut Option<&mut NESVideoFrame>,
-        audio_samples: &mut Option<&mut NESAudioFrame>,
-    ) -> Result<usize> {
+    pub fn clock_frame_into(&mut self, buffers: Option<&mut NESBuffers>) -> Result<usize> {
         self.control_deck.cpu_mut().bus.ppu.skip_rendering = false;
         let cycles = self.control_deck.clock_frame()?;
-
-        if let Some(frame_buffer) = frame_buffer {
+        if let Some(buffers) = buffers {
             self.control_deck
                 .cpu()
                 .bus
@@ -124,23 +119,19 @@ impl TetanesNesState {
                 .for_each(|(idx, &palette_index)| {
                     let palette_index = palette_index as usize * 3;
                     let pixel_index = idx * 4;
-                    frame_buffer[pixel_index..pixel_index + 3]
+                    buffers.video[pixel_index..pixel_index + 3]
                         .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
                 });
-        }
-        if let Some(audio_samples) = audio_samples {
-            audio_samples.extend_from_slice(&self.control_deck.cpu().bus.audio_samples());
+            buffers
+                .audio
+                .extend_from_slice(&self.control_deck.cpu().bus.audio_samples());
         }
 
         self.control_deck.clear_audio_samples();
         Ok(cycles)
     }
 
-    pub fn clock_frame_ahead_into(
-        &mut self,
-        frame_buffer: &mut Option<&mut NESVideoFrame>,
-        audio_samples: &mut Option<&mut NESAudioFrame>,
-    ) -> Result<usize> {
+    pub fn clock_frame_ahead_into(&mut self, buffers: Option<&mut NESBuffers>) -> Result<usize> {
         self.control_deck.cpu_mut().bus.ppu.skip_rendering = true;
         // Clock current frame and discard video
         self.control_deck.clock_frame()?;
@@ -150,7 +141,7 @@ impl TetanesNesState {
 
         // Discard audio and only output the future frame/audio
         self.control_deck.clear_audio_samples();
-        let cycles = self.clock_frame_into(frame_buffer, audio_samples)?;
+        let cycles = self.clock_frame_into(buffers)?;
 
         // Restore back to current frame
         let state = bincode::deserialize(&state)
@@ -162,7 +153,11 @@ impl TetanesNesState {
 }
 
 impl NesStateHandler for TetanesNesState {
-    fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers) {
+    fn advance(
+        &mut self,
+        joypad_state: [JoypadState; MAX_PLAYERS],
+        buffers: Option<&mut NESBuffers>,
+    ) {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
@@ -175,7 +170,7 @@ impl NesStateHandler for TetanesNesState {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("clock frame");
 
-            self.clock_frame_ahead_into(&mut buffers.video, &mut buffers.audio)
+            self.clock_frame_ahead_into(buffers)
                 .expect("NES to clock a frame");
         }
     }
