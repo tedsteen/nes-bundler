@@ -6,7 +6,6 @@ use audio::gui::AudioGui;
 use audio::Audio;
 use bundle::Bundle;
 
-use emulation::gui::EmulatorGui;
 use input::gamepad::ToGamepadEvent;
 use input::gui::InputsGui;
 use input::sdl2_impl::Sdl2Gamepads;
@@ -95,12 +94,11 @@ async fn run() -> anyhow::Result<()> {
     let mut main_view = MainView::new(renderer);
     let mut inputs_gui = InputsGui::new(inputs);
     let mut audio_gui = AudioGui::new(audio);
-    let mut emulator_gui = EmulatorGui::new();
 
     let emulator = Emulator::new()?;
     let shared_inputs = Arc::new(RwLock::new([JoypadState(0); MAX_PLAYERS]));
     let frame_buffer = BufferPool::new();
-    emulator
+    let mut emulator_gui = emulator
         .start_thread(audio_tx, shared_inputs.clone(), frame_buffer.clone())
         .await?;
 
@@ -125,7 +123,7 @@ async fn run() -> anyhow::Result<()> {
                     _ => {}
                 }
                 main_view.handle_window_event(
-                    &window_event,
+                    window_event,
                     &mut [&mut audio_gui, &mut inputs_gui, &mut emulator_gui],
                 );
             }

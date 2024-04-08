@@ -1,6 +1,6 @@
 use std::{
     ops::{Deref, DerefMut},
-    sync::{Arc, OnceLock, RwLock, RwLockReadGuard},
+    sync::{Arc, Mutex, OnceLock, RwLock, RwLockReadGuard},
 };
 
 use anyhow::Result;
@@ -8,7 +8,6 @@ use anyhow::Result;
 use serde::Deserialize;
 
 use thingbuf::{Recycle, ThingBuf};
-use tokio::task::JoinHandle;
 
 use crate::{
     audio::AudioSender,
@@ -19,7 +18,7 @@ use crate::{
 
 pub mod gui;
 pub mod tetanes;
-use self::tetanes::TetanesNesState;
+use self::{gui::EmulatorGui, tetanes::TetanesNesState};
 pub type LocalNesState = TetanesNesState;
 
 pub const NES_WIDTH: u32 = 256;
@@ -46,75 +45,73 @@ impl Emulator {
         audio_tx: AudioSender,
         inputs: Arc<RwLock<[JoypadState; MAX_PLAYERS]>>,
         frame_buffer: BufferPool,
-    ) -> Result<JoinHandle<()>> {
+    ) -> Result<EmulatorGui> {
         #[cfg(not(feature = "netplay"))]
-        let mut nes_state = crate::emulation::LocalNesState::start_rom(
+        let nes_state = crate::emulation::LocalNesState::start_rom(
             &crate::bundle::Bundle::current().rom,
             true,
         )?;
 
         #[cfg(feature = "netplay")]
-        let mut nes_state = crate::netplay::NetplayStateHandler::new()?;
-        Ok(tokio::task::spawn_blocking(move || {
-            let mut audio_buffer = NESAudioFrame::new();
+        let nes_state = crate::netplay::NetplayStateHandler::new()?;
 
-            let mut dummy_video_buffer = NESVideoFrame::new();
+        let nes_state = Arc::new(Mutex::new(nes_state));
 
-            let mut rate_counter = RateCounter::new();
-            loop {
-                #[cfg(feature = "debug")]
-                puffin::profile_function!("Emulator loop");
+        tokio::task::spawn_blocking({
+            let nes_state = nes_state.clone();
+            move || {
+                let mut audio_buffer = NESAudioFrame::new();
 
-                {
+                let mut rate_counter = RateCounter::new();
+                loop {
                     #[cfg(feature = "debug")]
-                    puffin::profile_scope!("push audio");
+                    puffin::profile_function!("Emulator loop");
 
-                    log::trace!("Pushing {:} audio samples", audio_buffer.len());
-                    for s in audio_buffer.iter() {
-                        let _ = audio_tx.send(*s);
+                    {
+                        #[cfg(feature = "debug")]
+                        puffin::profile_scope!("push audio");
+
+                        log::trace!("Pushing {:} audio samples", audio_buffer.len());
+                        for s in audio_buffer.iter() {
+                            let _ = audio_tx.send(*s);
+                        }
                     }
-                }
 
-                {
-                    #[cfg(feature = "debug")]
-                    puffin::profile_scope!("advance");
+                    {
+                        #[cfg(feature = "debug")]
+                        puffin::profile_scope!("advance");
 
-                    rate_counter.tick("Frame");
-                    audio_buffer.clear();
-                    let frame_drop = frame_buffer
-                        .push_with(|video| {
-                            nes_state.advance(
-                                *inputs.read().unwrap(),
-                                Some(&mut NESBuffers {
-                                    video,
-                                    audio: &mut audio_buffer,
-                                }),
-                            );
-                        })
-                        .is_err();
-                    if frame_drop {
-                        rate_counter.tick("Dropped frame");
-                        nes_state.advance(
+                        rate_counter.tick("Frame");
+                        audio_buffer.clear();
+                        let frame = frame_buffer.push_ref();
+                        if frame.is_err() {
+                            rate_counter.tick("Dropped frame");
+                        }
+                        nes_state.lock().unwrap().advance(
                             *inputs.read().unwrap(),
-                            Some(&mut NESBuffers {
-                                video: &mut dummy_video_buffer,
-                                audio: &mut audio_buffer,
-                            }),
+                            &mut NESBuffers {
+                                video: frame.ok().as_deref_mut(),
+                                audio: Some(&mut audio_buffer),
+                            },
                         );
                     }
-                }
 
-                if let Some(report) = rate_counter.report() {
-                    // Hitch-hike on the once-per-second-reporting to save the sram.
-                    use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
-                    use base64::Engine;
-                    Settings::current_mut().save_state =
-                        nes_state.save_sram().map(|sram| b64.encode(sram));
+                    if let Some(report) = rate_counter.report() {
+                        // Hitch-hike on the once-per-second-reporting to save the sram.
+                        use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+                        use base64::Engine;
+                        Settings::current_mut().save_state = nes_state
+                            .lock()
+                            .unwrap()
+                            .save_sram()
+                            .map(|sram| b64.encode(sram));
 
-                    log::debug!("Emulation: {report}");
+                        log::debug!("Emulation: {report}");
+                    }
                 }
             }
-        }))
+        });
+        Ok(EmulatorGui::new(nes_state))
     }
 
     fn _emulation_speed() -> &'static RwLock<f32> {
@@ -133,11 +130,7 @@ impl Emulator {
 }
 
 pub trait NesStateHandler {
-    fn advance(
-        &mut self,
-        joypad_state: [JoypadState; MAX_PLAYERS],
-        buffers: Option<&mut NESBuffers>,
-    );
+    fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers);
     fn save_sram(&self) -> Option<&[u8]>;
     fn frame(&self) -> u32;
 }
@@ -160,8 +153,8 @@ impl NesRegion {
 }
 
 pub struct NESBuffers<'a> {
-    pub audio: &'a mut NESAudioFrame,
-    pub video: &'a mut NESVideoFrame,
+    pub audio: Option<&'a mut NESAudioFrame>,
+    pub video: Option<&'a mut NESVideoFrame>,
 }
 
 pub struct NESVideoFrame(Vec<u8>);

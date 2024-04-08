@@ -168,7 +168,7 @@ impl NetplayGui {
                         do_join = join_btn_clicked || enter_pressed_in_room_input;
 
                         ui.end_row();
-                        ui.label("or simply");
+                        ui.label("or");
                         random_clicked = ui.button("Match with a random player").clicked();
                         ui.end_row();
                     });
