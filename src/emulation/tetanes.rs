@@ -141,9 +141,6 @@ impl TetanesNesState {
         frame_buffer: &mut Option<&mut NESVideoFrame>,
         audio_samples: &mut Option<&mut NESAudioFrame>,
     ) -> Result<usize> {
-        #[cfg(feature = "profiling")]
-        puffin::profile_function!();
-
         self.control_deck.cpu_mut().bus.ppu.skip_rendering = true;
         // Clock current frame and discard video
         self.control_deck.clock_frame()?;
