@@ -104,9 +104,14 @@ impl TetanesNesState {
     }
 
     pub fn clock_frame_into(&mut self, buffers: Option<&mut NESBuffers>) -> Result<usize> {
+        #[cfg(feature = "debug")]
+        puffin::profile_function!();
+
         self.control_deck.cpu_mut().bus.ppu.skip_rendering = false;
         let cycles = self.control_deck.clock_frame()?;
         if let Some(buffers) = buffers {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("copy buffers");
             self.control_deck
                 .cpu()
                 .bus
@@ -130,21 +135,37 @@ impl TetanesNesState {
     }
 
     pub fn clock_frame_ahead_into(&mut self, buffers: Option<&mut NESBuffers>) -> Result<usize> {
+        #[cfg(feature = "debug")]
+        puffin::profile_function!();
+
         self.control_deck.cpu_mut().bus.ppu.skip_rendering = true;
         // Clock current frame and discard video
-        self.control_deck.clock_frame()?;
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("clock frame");
+            self.control_deck.clock_frame()?;
+        }
+
         // Save state so we can rewind
-        let state = bincode::serialize(self.control_deck.cpu())
-            .map_err(|err| fs::Error::SerializationFailed(err.to_string()))?;
+        let state = {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("serialize");
+            bincode::serialize(self.control_deck.cpu())
+                .map_err(|err| fs::Error::SerializationFailed(err.to_string()))?
+        };
 
         // Discard audio and only output the future frame/audio
         self.control_deck.clear_audio_samples();
         let cycles = self.clock_frame_into(buffers)?;
 
         // Restore back to current frame
-        let state = bincode::deserialize(&state)
-            .map_err(|err| fs::Error::DeserializationFailed(err.to_string()))?;
-        self.control_deck.load_cpu(state);
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("deserialize and load");
+            let state = bincode::deserialize(&state)
+                .map_err(|err| fs::Error::DeserializationFailed(err.to_string()))?;
+            self.control_deck.load_cpu(state);
+        }
 
         Ok(cycles)
     }
@@ -156,21 +177,13 @@ impl NesStateHandler for TetanesNesState {
         joypad_state: [JoypadState; MAX_PLAYERS],
         buffers: Option<&mut NESBuffers>,
     ) {
-        #[cfg(feature = "debug")]
-        puffin::profile_function!();
-
         self.set_speed(*Emulator::emulation_speed());
 
         *self.control_deck.joypad_mut(Player::One) = Joypad::from_bytes((*joypad_state[0]).into());
         *self.control_deck.joypad_mut(Player::Two) = Joypad::from_bytes((*joypad_state[1]).into());
 
-        {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("clock frame");
-
-            self.clock_frame_ahead_into(buffers)
-                .expect("NES to clock a frame");
-        }
+        self.clock_frame_ahead_into(buffers)
+            .expect("NES to clock a frame");
     }
 
     fn save_sram(&self) -> Option<Vec<u8>> {
