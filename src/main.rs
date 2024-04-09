@@ -39,7 +39,7 @@ mod netplay;
 mod settings;
 mod window;
 
-#[tokio::main]
+#[tokio::main(worker_threads = 1)]
 async fn main() {
     init_logger();
 
