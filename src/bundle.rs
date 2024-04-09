@@ -18,6 +18,8 @@ pub struct BuildConfiguration {
     pub nes_region: NesRegion,
     #[serde(default = "Default::default")]
     pub enable_vsync: bool,
+    #[serde(default = "Default::default")]
+    pub start_in_fullscreen: bool,
 
     #[cfg(feature = "netplay")]
     pub netplay: crate::netplay::NetplayBuildConfiguration,
