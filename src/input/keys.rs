@@ -483,8 +483,26 @@ impl std::fmt::Display for KeyCode {
             Digit7 => write!(f, "7"),
             Digit8 => write!(f, "8"),
             Digit9 => write!(f, "9"),
+
             Equal => write!(f, "="),
             Minus => write!(f, "-"),
+
+            ShiftLeft => write!(f, "Left Shift"),
+            ShiftRight => write!(f, "Right Shift"),
+            ControlLeft => write!(f, "Left Control"),
+            ControlRight => write!(f, "Right Control"),
+            AltLeft => write!(f, "Left Alt"),
+            AltRight => write!(f, "Right Alt"),
+
+            #[cfg(target_os = "macos")]
+            SuperLeft => write!(f, "Left Command"),
+            #[cfg(target_os = "windows")]
+            SuperLeft => write!(f, "Left Windows"),
+
+            #[cfg(target_os = "macos")]
+            SuperRight => write!(f, "Right Command"),
+            #[cfg(target_os = "windows")]
+            SuperRight => write!(f, "Right Windows"),
 
             ArrowUp => write!(f, "Up"),
             ArrowDown => write!(f, "Down"),
