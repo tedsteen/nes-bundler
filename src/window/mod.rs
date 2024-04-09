@@ -10,6 +10,7 @@ mod winit_impl;
 
 pub trait Fullscreen {
     fn check_and_set_fullscreen(&self, key_mod: Modifiers, key_code: KeyCode) -> bool;
+    fn toggle_fullscreen(&self);
 }
 
 impl From<Size> for winit::dpi::Size {

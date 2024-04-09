@@ -24,7 +24,7 @@ use integer_scaling::MINIMUM_INTEGER_SCALING_SIZE;
 
 use emulation::{NES_HEIGHT, NES_WIDTH_4_3};
 use window::create_window;
-use winit::event::{Event, WindowEvent};
+use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::EventLoop;
 
 mod audio;
@@ -106,6 +106,12 @@ async fn run() -> anyhow::Result<()> {
     event_loop.run(|winit_event, control_flow| {
         let mut need_render = false;
         match &winit_event {
+            Event::NewEvents(StartCause::Init) => {
+                if Bundle::current().config.start_in_fullscreen {
+                    use crate::window::Fullscreen;
+                    window.toggle_fullscreen();
+                }
+            }
             Event::WindowEvent {
                 event: window_event,
                 ..

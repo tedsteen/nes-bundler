@@ -9,11 +9,28 @@ mod conversions;
 
 impl Fullscreen for winit::window::Window {
     fn check_and_set_fullscreen(&self, key_mod: Modifiers, key_code: KeyCode) -> bool {
-        let window = self;
-
         #[cfg(target_os = "macos")]
         if key_mod.contains(Modifiers::LOGO)
             && (key_code == KeyCode::KeyF || key_code == KeyCode::Enter)
+        {
+            self.toggle_fullscreen();
+            return true;
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        if (key_mod.contains(Modifiers::ALT) && key_code == KeyCode::Enter)
+            || key_code == KeyCode::F11
+        {
+            self.toggle_fullscreen();
+            return true;
+        };
+
+        false
+    }
+
+    fn toggle_fullscreen(&self) {
+        let window = self;
+        #[cfg(target_os = "macos")]
         {
             use winit::platform::macos::WindowExtMacOS;
             if window.simple_fullscreen() {
@@ -22,12 +39,8 @@ impl Fullscreen for winit::window::Window {
             } else {
                 window.set_simple_fullscreen(true);
             }
-            return true;
         }
-
         #[cfg(not(target_os = "macos"))]
-        if (key_mod.contains(Modifiers::ALT) && key_code == KeyCode::Enter)
-            || key_code == KeyCode::F11
         {
             if window.fullscreen().is_some() {
                 window.set_fullscreen(None);
@@ -35,9 +48,6 @@ impl Fullscreen for winit::window::Window {
             } else {
                 window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
             }
-            return true;
-        };
-
-        false
+        }
     }
 }
