@@ -3,7 +3,7 @@ name: "NES Bundler Demo"
 
 # Optional version of your game, will default to the nes-bundler version if omitted
 # NOTE: Must be semver
-version: "1.0.0"
+# version: "1.0.0"
 
 # Short description used when creating linux and Windows installers
 short_description: "A demonstration of NES Bundler in action!"

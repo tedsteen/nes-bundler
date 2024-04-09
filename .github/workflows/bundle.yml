@@ -69,6 +69,9 @@ jobs:
     - name: Set bundle name
       run: echo "BUNDLE_NAME=$(yq '.name' config/config.yaml)" >> $GITHUB_ENV
 
+    - name: Set bundle version
+      run: echo "BUNDLE_VERSION=$(yq '.version // "${{ github.ref_name }}"' config/config.yaml)" >> $GITHUB_ENV
+    
     - name: Build
       run: |
         BINARIES_PATH="$RUNNER_TEMP/binaries"
@@ -301,7 +304,7 @@ jobs:
     - uses: actions/upload-artifact@v4
       id: artifact-upload-step
       with:
-        name: ${{ env.BUNDLE_NAME }} ${{ github.ref_name }} ${{ env.RUNNER_OS }}
+        name: ${{ env.BUNDLE_NAME }} ${{ env.BUNDLE_VERSION }} ${{ env.RUNNER_OS }}
         path: artifacts/*
 
     - name: Get email address
@@ -316,7 +319,7 @@ jobs:
       run: |
         cat <<'EOF' >> email.html
         <p>
-          <a href="${{ steps.artifact-upload-step.outputs.artifact-url }}">${{ env.BUNDLE_NAME }} ${{ github.ref_name }} ${{ env.RUNNER_OS }}.zip</a><br />
+          <a href="${{ steps.artifact-upload-step.outputs.artifact-url }}">${{ env.BUNDLE_NAME }} ${{ env.BUNDLE_VERSION }} ${{ env.RUNNER_OS }}.zip</a><br />
           Zip password: ${{ env.BUNDLE_PASSWORD }}
         </p>
         <p>The downloads will be available for 90 days and you have to be logged in to GitHub to access it.</p>
