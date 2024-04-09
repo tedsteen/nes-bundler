@@ -50,7 +50,7 @@ impl InputsGui {
             .striped(true)
             .show(ui, |ui| {
                 use JoypadButton::*;
-                [Up, Down, Left, Right, Start, Select, B, A]
+                [Up, Down, Left, Right, Select, Start, B, A]
                     .iter()
                     .for_each(|&button| {
                         Self::button_map_ui(
@@ -71,7 +71,7 @@ impl InputsGui {
         joypad_state: JoypadState,
         button: JoypadButton,
     ) {
-        let mut text = RichText::new(format!("{:?}", button));
+        let mut text = RichText::new(format!("{button}"));
         if joypad_state.is_pressed(button) {
             text = text.color(Color32::from_rgb(255, 255, 255));
         }

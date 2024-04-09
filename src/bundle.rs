@@ -11,6 +11,36 @@ use serde::Deserialize;
 use crate::{emulation::NesRegion, settings::Settings};
 
 #[derive(Deserialize, Debug)]
+pub struct InputButtonNames {
+    pub up: String,
+    pub down: String,
+    pub left: String,
+    pub right: String,
+
+    pub select: String,
+    pub start: String,
+
+    pub b: String,
+    pub a: String,
+}
+
+impl Default for InputButtonNames {
+    fn default() -> Self {
+        Self {
+            up: String::from("Up"),
+            down: String::from("Down"),
+            left: String::from("Left"),
+            right: String::from("Right"),
+
+            select: String::from("Select"),
+            start: String::from("Start"),
+
+            b: String::from("B"),
+            a: String::from("A"),
+        }
+    }
+}
+#[derive(Deserialize, Debug)]
 pub struct BuildConfiguration {
     pub name: String,
     pub manufacturer: String,
@@ -20,6 +50,8 @@ pub struct BuildConfiguration {
     pub enable_vsync: bool,
     #[serde(default = "Default::default")]
     pub start_in_fullscreen: bool,
+    #[serde(default = "Default::default")]
+    pub input_button_names: InputButtonNames,
 
     #[cfg(feature = "netplay")]
     pub netplay: crate::netplay::NetplayBuildConfiguration,

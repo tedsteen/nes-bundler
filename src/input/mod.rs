@@ -36,11 +36,29 @@ pub enum JoypadButton {
     Left = 0b01000000,
     Right = 0b10000000,
 
-    Start = 0b00001000,
     Select = 0b00000100,
+    Start = 0b00001000,
 
     B = 0b00000010,
     A = 0b00000001,
+}
+
+impl std::fmt::Display for JoypadButton {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let names = &Bundle::current().config.input_button_names;
+        match self {
+            JoypadButton::Up => write!(f, "{}", names.up),
+            JoypadButton::Down => write!(f, "{}", names.down),
+            JoypadButton::Left => write!(f, "{}", names.left),
+            JoypadButton::Right => write!(f, "{}", names.right),
+
+            JoypadButton::Select => write!(f, "{}", names.select),
+            JoypadButton::Start => write!(f, "{}", names.start),
+
+            JoypadButton::B => write!(f, "{}", names.b),
+            JoypadButton::A => write!(f, "{}", names.a),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, PartialEq, Eq)]
@@ -49,8 +67,10 @@ pub struct JoypadMapping<KeyType> {
     pub down: Option<KeyType>,
     pub left: Option<KeyType>,
     pub right: Option<KeyType>,
-    pub start: Option<KeyType>,
+
     pub select: Option<KeyType>,
+    pub start: Option<KeyType>,
+
     pub b: Option<KeyType>,
     pub a: Option<KeyType>,
 }
@@ -65,8 +85,10 @@ where
             JoypadButton::Down => &mut self.down,
             JoypadButton::Left => &mut self.left,
             JoypadButton::Right => &mut self.right,
-            JoypadButton::Start => &mut self.start,
+
             JoypadButton::Select => &mut self.select,
+            JoypadButton::Start => &mut self.start,
+
             JoypadButton::B => &mut self.b,
             JoypadButton::A => &mut self.a,
         }
@@ -78,8 +100,8 @@ where
             (JoypadButton::Down, &self.down),
             (JoypadButton::Left, &self.left),
             (JoypadButton::Right, &self.right),
-            (JoypadButton::Start, &self.start),
             (JoypadButton::Select, &self.select),
+            (JoypadButton::Start, &self.start),
             (JoypadButton::B, &self.b),
             (JoypadButton::A, &self.a),
         ]
