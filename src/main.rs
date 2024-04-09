@@ -16,7 +16,7 @@ use settings::gui::GuiEvent;
 use settings::{Settings, MAX_PLAYERS};
 
 use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use window::egui_winit_wgpu::Renderer;
 
 use emulation::{BufferPool, Emulator, SAMPLE_RATE};
@@ -102,13 +102,18 @@ async fn run() -> anyhow::Result<()> {
         .start_thread(audio_tx, shared_inputs.clone(), frame_buffer.clone())
         .await?;
 
+    let mouse_hide_timeout = Duration::from_secs(1);
+    let mut last_mouse_touch = Instant::now()
+        .checked_sub(mouse_hide_timeout)
+        .expect("there to be an instant `mouse_hide_timeout` seconds in the past");
+
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     event_loop.run(|winit_event, control_flow| {
         let mut need_render = false;
+        use crate::window::Fullscreen;
         match &winit_event {
             Event::NewEvents(StartCause::Init) => {
                 if Bundle::current().config.start_in_fullscreen {
-                    use crate::window::Fullscreen;
                     window.toggle_fullscreen();
                 }
             }
@@ -126,6 +131,9 @@ async fn run() -> anyhow::Result<()> {
                         window.request_redraw();
                         need_render = true;
                     }
+                    WindowEvent::MouseInput { .. } | WindowEvent::CursorMoved { .. } => {
+                        last_mouse_touch = Instant::now();
+                    }
                     _ => {}
                 }
                 main_view.handle_window_event(
@@ -138,6 +146,15 @@ async fn run() -> anyhow::Result<()> {
             }
             _ => {}
         }
+
+        window.set_cursor_visible(
+            !(window.is_fullscreen()
+                && !main_view.settings_gui.visible
+                && Instant::now()
+                    .duration_since(last_mouse_touch)
+                    .gt(&mouse_hide_timeout)),
+        );
+
         for sdl_gui_event in sdl_event_pump
             .poll_iter()
             .flat_map(|e| e.to_gamepad_event())

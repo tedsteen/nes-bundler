@@ -36,7 +36,7 @@ pub trait GuiComponent {
 
 pub struct SettingsGui {
     start_time: Instant,
-    visible: bool,
+    pub visible: bool,
 }
 
 impl SettingsGui {

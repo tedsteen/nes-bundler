@@ -25,7 +25,7 @@ nes_region: Pal
 enable_vsync: false
 
 # Starts the game in fullscreen if true
-start_in_fullscreen: true
+start_in_fullscreen: false
 
 # This will be the default settings for the game.
 # For all the gory details see the `BuildConfiguration`-struct in the source.

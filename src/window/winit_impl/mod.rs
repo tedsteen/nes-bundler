@@ -33,7 +33,7 @@ impl Fullscreen for winit::window::Window {
         #[cfg(target_os = "macos")]
         {
             use winit::platform::macos::WindowExtMacOS;
-            if window.simple_fullscreen() {
+            if window.is_fullscreen() {
                 window.set_simple_fullscreen(false);
                 let _ = window.request_inner_size(MINIMUM_INTEGER_SCALING_SIZE);
             } else {
@@ -42,12 +42,23 @@ impl Fullscreen for winit::window::Window {
         }
         #[cfg(not(target_os = "macos"))]
         {
-            if window.fullscreen().is_some() {
+            if window.is_fullscreen() {
                 window.set_fullscreen(None);
                 let _ = window.request_inner_size(MINIMUM_INTEGER_SCALING_SIZE);
             } else {
                 window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
             }
         }
+    }
+
+    fn is_fullscreen(&self) -> bool {
+        #[cfg(target_os = "macos")]
+        {
+            use winit::platform::macos::WindowExtMacOS;
+            self.simple_fullscreen()
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        self.fullscreen().is_some()
     }
 }
