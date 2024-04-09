@@ -7,7 +7,7 @@
   <key>CFBundleDisplayName</key>
   <string>{name}</string>
   <key>CFBundleExecutable</key>
-  <string>nes-bundler</string>
+  <string>{name}</string>
   <key>CFBundleIdentifier</key>
   <string>{cf_bundle_identifier}</string>
   <key>CFBundleInfoDictionaryVersion</key>
