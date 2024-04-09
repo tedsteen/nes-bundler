@@ -91,10 +91,10 @@ impl InputsGui {
             _ => {
                 let key_to_map = match &mut input_configuration.kind {
                     crate::input::InputConfigurationKind::Keyboard(mapping) => {
-                        mapping.lookup(&button).map(|v| format!("{:?}", v))
+                        mapping.lookup(&button).map(|v| format!("{v}"))
                     }
                     crate::input::InputConfigurationKind::Gamepad(mapping) => {
-                        mapping.lookup(&button).map(|v| format!("{:?}", v))
+                        mapping.lookup(&button).map(|v| format!("{v}"))
                     }
                 }
                 .unwrap_or_else(|| "-".to_string());

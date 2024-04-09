@@ -468,3 +468,58 @@ pub enum KeyCode {
     /// General-purpose function key.
     F35,
 }
+
+impl std::fmt::Display for KeyCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use KeyCode::*;
+        match self {
+            Digit0 => write!(f, "0"),
+            Digit1 => write!(f, "1"),
+            Digit2 => write!(f, "2"),
+            Digit3 => write!(f, "3"),
+            Digit4 => write!(f, "4"),
+            Digit5 => write!(f, "5"),
+            Digit6 => write!(f, "6"),
+            Digit7 => write!(f, "7"),
+            Digit8 => write!(f, "8"),
+            Digit9 => write!(f, "9"),
+            Equal => write!(f, "="),
+            Minus => write!(f, "-"),
+
+            ArrowUp => write!(f, "Up"),
+            ArrowDown => write!(f, "Down"),
+            ArrowLeft => write!(f, "Left"),
+            ArrowRight => write!(f, "Right"),
+
+            KeyA => write!(f, "A"),
+            KeyB => write!(f, "B"),
+            KeyC => write!(f, "C"),
+            KeyD => write!(f, "D"),
+            KeyE => write!(f, "E"),
+            KeyF => write!(f, "F"),
+            KeyG => write!(f, "G"),
+            KeyH => write!(f, "H"),
+            KeyI => write!(f, "I"),
+            KeyJ => write!(f, "J"),
+            KeyK => write!(f, "K"),
+            KeyL => write!(f, "L"),
+            KeyM => write!(f, "M"),
+            KeyN => write!(f, "N"),
+            KeyO => write!(f, "O"),
+            KeyP => write!(f, "P"),
+            KeyQ => write!(f, "Q"),
+            KeyR => write!(f, "R"),
+            KeyS => write!(f, "S"),
+            KeyT => write!(f, "T"),
+            KeyU => write!(f, "U"),
+            KeyV => write!(f, "V"),
+            KeyW => write!(f, "W"),
+            KeyX => write!(f, "X"),
+            KeyY => write!(f, "Y"),
+            KeyZ => write!(f, "Z"),
+
+            //TODO: Better names for the rest?
+            _ => write!(f, "{self:?}"),
+        }
+    }
+}
