@@ -270,7 +270,7 @@ impl SettingsGui {
     ) {
         match gui_event {
             GuiEvent::Gamepad(crate::input::gamepad::GamepadEvent::ButtonDown {
-                button: GamepadButton::Guide,
+                button: GamepadButton::Guide | GamepadButton::B,
                 ..
             })
             | GuiEvent::Keyboard(KeyEvent::Pressed(KeyCode::Escape)) => {
