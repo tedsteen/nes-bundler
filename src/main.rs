@@ -165,7 +165,14 @@ async fn run() -> anyhow::Result<()> {
                 &mut [&mut audio_gui, &mut inputs_gui, &mut emulator_gui],
             );
         }
-        *shared_inputs.write().unwrap() = inputs_gui.inputs.joypads;
+
+        let new_inputs = if !main_view.settings_gui.visible {
+            inputs_gui.inputs.joypads
+        } else {
+            // Don't let the inputs control the game if the gui is showing
+            [JoypadState(0), JoypadState(0)]
+        };
+        *shared_inputs.write().unwrap() = new_inputs;
 
         if need_render {
             main_view.render(

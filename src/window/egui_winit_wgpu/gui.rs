@@ -9,7 +9,7 @@ use winit::window::Window;
 
 pub struct EguiRenderer {
     context: Context,
-    state: State,
+    pub state: State,
     pub renderer: Renderer,
 }
 

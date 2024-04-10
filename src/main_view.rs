@@ -3,7 +3,9 @@ use egui::{load::SizedTexture, Color32, Image, Vec2};
 use crate::{
     audio::gui::AudioGui,
     emulation::{gui::EmulatorGui, BufferPool, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3},
-    input::{gui::InputsGui, keys::Modifiers, KeyEvent},
+    input::{
+        buttons::GamepadButton, gamepad::GamepadEvent, gui::InputsGui, keys::Modifiers, KeyEvent,
+    },
     integer_scaling::{calculate_size_corrected, MINIMUM_INTEGER_SCALING_SIZE},
     settings::gui::{GuiComponent, GuiEvent, SettingsGui, ToGuiEvent},
     window::{
@@ -18,6 +20,40 @@ pub struct MainView {
     modifiers: Modifiers,
     nes_texture: Texture,
     renderer: Renderer,
+}
+
+fn to_egui_key(gamepad_button: &GamepadButton) -> Option<egui::Key> {
+    match gamepad_button {
+        GamepadButton::DPadUp => Some(egui::Key::ArrowUp),
+        GamepadButton::DPadDown => Some(egui::Key::ArrowDown),
+        GamepadButton::DPadLeft => Some(egui::Key::ArrowLeft),
+        GamepadButton::DPadRight => Some(egui::Key::ArrowRight),
+        GamepadButton::A => Some(egui::Key::Enter),
+
+        _ => None,
+    }
+}
+fn to_egui_event(gamepad_event: &GamepadEvent) -> Option<egui::Event> {
+    match gamepad_event {
+        GamepadEvent::ButtonDown { button, .. } => {
+            to_egui_key(button).map(|key| egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            })
+        }
+
+        GamepadEvent::ButtonUp { button, .. } => to_egui_key(button).map(|key| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: false,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }),
+        _ => None,
+    }
 }
 
 impl MainView {
@@ -67,7 +103,17 @@ impl MainView {
                 .renderer
                 .window
                 .check_and_set_fullscreen(self.modifiers, *key_code),
-            _ => false,
+            _ => {
+                if self.settings_gui.visible {
+                    // If the gui is visible convert gamepad events to fake input events so we can control the ui with the gamepad
+                    if let GuiEvent::Gamepad(gamepad_event) = gui_event {
+                        if let Some(event) = to_egui_event(gamepad_event) {
+                            self.renderer.egui.state.egui_input_mut().events.push(event)
+                        }
+                    }
+                }
+                false
+            }
         };
         if !consumed {
             self.settings_gui.handle_event(gui_event, gui_components);

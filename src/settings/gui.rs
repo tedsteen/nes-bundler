@@ -4,7 +4,7 @@ use std::{
 };
 
 use egui::{
-    Align2, Color32, Context, CursorIcon, FontId, Frame, Margin, Response, RichText, Sense,
+    Align2, Color32, Context, CursorIcon, FontId, Frame, Id, Margin, Response, RichText, Sense,
     TextStyle, Ui, Vec2, Widget, WidgetInfo, WidgetText, WidgetType, Window,
 };
 use winit::dpi::LogicalSize;
@@ -92,6 +92,7 @@ impl Widget for MainMenuButton {
     }
 }
 
+#[derive(Debug)]
 enum MainMenuState {
     Main,
     Settings,
@@ -101,6 +102,7 @@ pub struct SettingsGui {
     start_time: Instant,
     pub visible: bool,
     state: MainMenuState,
+    last_focused_id: Option<Id>,
     window: Arc<winit::window::Window>,
 }
 
@@ -111,6 +113,7 @@ impl SettingsGui {
             start_time: Instant::now(),
             visible: false,
             state: MainMenuState::Main,
+            last_focused_id: None,
             window,
         }
     }
@@ -125,10 +128,7 @@ impl SettingsGui {
     }
 
     fn menu_item_ui(ui: &mut Ui, text: impl Into<String>) -> Response {
-        let res = ui.vertical_centered(|ui| {
-            let text = text.into();
-            MainMenuButton::new(text.clone()).ui(ui)
-        });
+        let res = ui.vertical_centered(|ui| MainMenuButton::new(text).ui(ui));
         ui.end_row();
         res.inner
     }
@@ -162,24 +162,37 @@ impl SettingsGui {
         emulator_gui: &mut EmulatorGui,
     ) {
         if self.visible {
-            match self.state {
+            match &mut self.state {
                 MainMenuState::Main => {
                     Self::main_window(&self.window, ctx, "Main", true, |ui| {
                         egui::Grid::new("main_menu_grid")
                             .num_columns(1)
                             .spacing([10.0, 10.0])
                             .show(ui, |ui| {
-                                if Self::menu_item_ui(ui, "BACK").clicked() {
+                                let back = Self::menu_item_ui(ui, "BACK");
+                                ui.memory_mut(|m| {
+                                    if let Some(last_focused_id) = self.last_focused_id {
+                                        if m.focus().is_none() {
+                                            m.request_focus(last_focused_id);
+                                        }
+                                    }
+
+                                    self.last_focused_id = m.focus().or(Some(back.id));
+                                });
+                                if back.clicked() {
                                     self.visible = false;
                                 }
+
                                 if let Some(name) = emulator_gui.name() {
                                     if Self::menu_item_ui(ui, name.to_uppercase()).clicked() {
                                         self.state = MainMenuState::Netplay;
                                     }
                                 }
+
                                 if Self::menu_item_ui(ui, "SETTINGS").clicked() {
                                     self.state = MainMenuState::Settings;
                                 }
+
                                 if Self::menu_item_ui(ui, "EXIT").clicked() {
                                     std::process::exit(0);
                                 }
@@ -265,9 +278,11 @@ impl SettingsGui {
                     self.visible = true;
                 } else {
                     match self.state {
-                        MainMenuState::Main => self.visible = false,
+                        MainMenuState::Main => {
+                            self.visible = false;
+                        }
                         MainMenuState::Settings | MainMenuState::Netplay => {
-                            self.state = MainMenuState::Main
+                            self.state = MainMenuState::Main;
                         }
                     }
                 }
