@@ -6,7 +6,7 @@ use crate::settings::MAX_PLAYERS;
 
 use super::{
     connecting_state::{Connecting, PeeringState},
-    netplay_state::NetplayState,
+    netplay_state::{Netplay, NetplayState},
     ConnectingState, NetplayStateHandler,
 };
 pub struct NetplayGui {
@@ -117,15 +117,40 @@ impl NetplayGui {
     }
     pub fn messages(&self, netplay_state_handler: &NetplayStateHandler) -> Option<Vec<String>> {
         Some(
-            match netplay_state_handler.netplay {
-                Some(NetplayState::Connecting(_)) => Some("Netplay is connecting"),
+            match &netplay_state_handler.netplay {
+                Some(NetplayState::Connecting(Netplay { state })) => match state {
+                    ConnectingState::LoadingNetplayServerConfiguration(_) => {
+                        Some("Initialising".to_string())
+                    }
+                    ConnectingState::PeeringUp(Connecting::<PeeringState> {
+                        state: PeeringState { socket, .. },
+                        ..
+                    }) => {
+                        let connected_peers = socket.connected_peers().count();
+                        let remaining = MAX_PLAYERS - (connected_peers + 1);
+                        Some(format!("Waiting for {remaining} player...."))
+                    }
+                    ConnectingState::Synchronizing(_) => Some("Synchronising".to_string()),
+                    ConnectingState::Connected(_) => None,
+                    ConnectingState::Retrying(retrying) => Some(format!(
+                        "Connection failed ({}), retrying in {}s...",
+                        retrying.state.fail_message,
+                        retrying
+                            .state
+                            .deadline
+                            .duration_since(Instant::now())
+                            .as_secs()
+                            + 1
+                    )),
+                    ConnectingState::Failed(reason) => Some(format!("Failed ({reason})")),
+                },
                 Some(NetplayState::Resuming(_)) => {
-                    Some("Netplay connection lost, trying to reconnect")
+                    Some("Connection lost, trying to reconnect".to_string())
                 }
                 _ => None,
             }
             .iter()
-            .map(|message| format!("{message} - see settings for details"))
+            .map(|s| format!("Netplay - {s}"))
             .collect(),
         )
     }
@@ -185,7 +210,7 @@ impl NetplayGui {
                 }
             }
             NetplayState::Resuming(netplay_resuming) => {
-                ui.label("Resuming...");
+                ui.label("Trying to resume...");
                 if ui.button("Cancel").clicked() {
                     NetplayState::Disconnected(netplay_resuming.cancel())
                 } else {
@@ -201,14 +226,8 @@ impl NetplayGui {
                         ui.label("Initializing...");
                     }
 
-                    ConnectingState::PeeringUp(Connecting::<PeeringState> {
-                        state: PeeringState { socket, .. },
-                        ..
-                    }) => {
+                    ConnectingState::PeeringUp(..) => {
                         ui.label("Peering up...");
-                        let connected_peers = socket.connected_peers().count();
-                        let remaining = MAX_PLAYERS - (connected_peers + 1);
-                        ui.label(format!("Waiting for {} players...", remaining));
                     }
                     ConnectingState::Synchronizing(synchronizing_state) => {
                         let start_method = synchronizing_state.start_method.clone();
@@ -230,17 +249,8 @@ impl NetplayGui {
                             }
                         }
                     }
-                    ConnectingState::Retrying(retrying) => {
-                        ui.label(format!(
-                            "Connection failed ({}), retrying in {}s...",
-                            retrying.state.fail_message,
-                            retrying
-                                .state
-                                .deadline
-                                .duration_since(Instant::now())
-                                .as_secs()
-                                + 1
-                        ));
+                    ConnectingState::Retrying(_) => {
+                        ui.label("Retrying");
                     }
                     _ => {}
                 }
@@ -288,6 +298,6 @@ impl NetplayGui {
     }
 
     pub fn name(&self) -> Option<String> {
-        Some("Netplay!".to_string())
+        Some("Netplay".to_string())
     }
 }

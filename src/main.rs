@@ -170,7 +170,9 @@ async fn run() -> anyhow::Result<()> {
         if need_render {
             main_view.render(
                 &frame_buffer,
-                &mut [&mut audio_gui, &mut inputs_gui, &mut emulator_gui],
+                &mut audio_gui,
+                &mut inputs_gui,
+                &mut emulator_gui,
             );
         }
     })?;
