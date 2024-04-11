@@ -27,7 +27,7 @@ pub struct MenuButton {
 }
 impl MenuButton {
     pub const ACTIVE_COLOR: Color32 = Color32::WHITE;
-    pub const UNACTIVE_COLOR: Color32 = Color32::from_rgb(96, 96, 96);
+    pub const INACTIVE_COLOR: Color32 = Color32::from_rgb(96, 96, 96);
     const GROUP_KEY: &'static str = "MENU_BTN_GROUP_KEY";
 
     pub fn new(text: impl Into<String>) -> Self {
@@ -105,7 +105,7 @@ impl Widget for MenuButton {
                 if response.has_focus() {
                     Self::ACTIVE_COLOR
                 } else {
-                    Self::UNACTIVE_COLOR
+                    Self::INACTIVE_COLOR
                 },
             );
         }

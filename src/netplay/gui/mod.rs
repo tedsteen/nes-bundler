@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use egui::{Align, Label, TextEdit, Ui, Widget};
+use egui::{Align, Color32, Label, TextEdit, Ui, Widget};
 
 use crate::{emulation::LocalNesState, gui::MenuButton, settings::MAX_PLAYERS};
 
@@ -87,7 +87,7 @@ impl NetplayGui {
                 .spacing([10.0, 10.0])
                 .show(ui, |ui| {
                     ui.vertical_centered(|ui| {
-                        Label::new(MenuButton::ui_text("JOIN GAME", MenuButton::UNACTIVE_COLOR))
+                        Label::new(MenuButton::ui_text("JOIN GAME", MenuButton::ACTIVE_COLOR))
                             .selectable(false)
                             .ui(ui);
                     });
@@ -96,7 +96,7 @@ impl NetplayGui {
                     ui.vertical_centered(|ui| {
                         Label::new(MenuButton::ui_text_small(
                             "ENTER CODE",
-                            MenuButton::UNACTIVE_COLOR,
+                            MenuButton::ACTIVE_COLOR,
                         ))
                         .selectable(false)
                         .ui(ui);
@@ -165,7 +165,7 @@ impl NetplayGui {
                     .num_columns(1)
                     .spacing([10.0, 10.0])
                     .show(ui, |ui| {
-                        Label::new(MenuButton::ui_text("PUBLIC", MenuButton::UNACTIVE_COLOR))
+                        Label::new(MenuButton::ui_text("PUBLIC", MenuButton::INACTIVE_COLOR))
                             .selectable(false)
                             .ui(ui);
                         ui.end_row();
@@ -177,7 +177,7 @@ impl NetplayGui {
                         });
                         ui.end_row();
 
-                        Label::new(MenuButton::ui_text("PRIVATE", MenuButton::UNACTIVE_COLOR))
+                        Label::new(MenuButton::ui_text("PRIVATE", MenuButton::INACTIVE_COLOR))
                             .selectable(false)
                             .ui(ui);
                         ui.end_row();
@@ -247,7 +247,7 @@ impl NetplayGui {
                                         ui.vertical_centered(|ui| {
                                             Label::new(MenuButton::ui_text(
                                                 "JOINING GAME",
-                                                MenuButton::UNACTIVE_COLOR,
+                                                MenuButton::ACTIVE_COLOR,
                                             ))
                                             .selectable(false)
                                             .ui(ui);
@@ -258,7 +258,7 @@ impl NetplayGui {
                                         ui.vertical_centered(|ui| {
                                             Label::new(MenuButton::ui_text(
                                                 "HOSTING GAME",
-                                                MenuButton::UNACTIVE_COLOR,
+                                                MenuButton::ACTIVE_COLOR,
                                             ))
                                             .selectable(false)
                                             .ui(ui);
@@ -268,9 +268,20 @@ impl NetplayGui {
                                 ui.end_row();
 
                                 ui.vertical_centered(|ui| {
+                                    Label::new(MenuButton::ui_text_small(
+                                        "WAITING FOR SECOND PLAYER",
+                                        MenuButton::ACTIVE_COLOR,
+                                    ))
+                                    .selectable(false)
+                                    .ui(ui);
+                                });
+
+                                ui.end_row();
+
+                                ui.vertical_centered(|ui| {
                                     Label::new(MenuButton::ui_text(
                                         "CODE",
-                                        MenuButton::UNACTIVE_COLOR,
+                                        MenuButton::ACTIVE_COLOR,
                                     ))
                                     .selectable(false)
                                     .ui(ui);
@@ -279,16 +290,20 @@ impl NetplayGui {
                                 ui.vertical_centered(|ui| {
                                     Label::new(MenuButton::ui_text(
                                         room_name,
-                                        MenuButton::ACTIVE_COLOR,
+                                        Color32::from_rgb(255, 200, 200),
                                     ))
                                     .ui(ui);
+                                });
+                                ui.end_row();
+                                ui.vertical(|ui| {
+                                    ui.add_space(40.0);
                                 });
                             }
                             super::connecting_state::StartMethod::Resume(_) => {
                                 ui.vertical_centered(|ui| {
                                     Label::new(MenuButton::ui_text(
                                         "RESUMING GAME",
-                                        MenuButton::UNACTIVE_COLOR,
+                                        MenuButton::ACTIVE_COLOR,
                                     ))
                                     .selectable(false)
                                     .ui(ui);
@@ -298,10 +313,24 @@ impl NetplayGui {
                                 ui.vertical_centered(|ui| {
                                     Label::new(MenuButton::ui_text(
                                         "FINDING GAME",
-                                        MenuButton::UNACTIVE_COLOR,
+                                        MenuButton::ACTIVE_COLOR,
                                     ))
                                     .selectable(false)
                                     .ui(ui);
+                                });
+                                ui.end_row();
+
+                                ui.vertical_centered(|ui| {
+                                    Label::new(MenuButton::ui_text_small(
+                                        "WAITING FOR SECOND PLAYER",
+                                        MenuButton::ACTIVE_COLOR,
+                                    ))
+                                    .selectable(false)
+                                    .ui(ui);
+                                });
+                                ui.end_row();
+                                ui.vertical(|ui| {
+                                    ui.add_space(100.0);
                                 });
                             }
                         }
@@ -311,7 +340,7 @@ impl NetplayGui {
                         ui.vertical_centered(|ui| {
                             Label::new(MenuButton::ui_text(
                                 "CONNECTING...",
-                                MenuButton::UNACTIVE_COLOR,
+                                MenuButton::ACTIVE_COLOR,
                             ))
                             .selectable(false)
                             .ui(ui);
@@ -320,15 +349,6 @@ impl NetplayGui {
                 }
                 ui.end_row();
 
-                ui.vertical_centered(|ui| {
-                    Label::new(MenuButton::ui_text_small(
-                        "WAITING FOR SECOND PLAYER",
-                        MenuButton::UNACTIVE_COLOR,
-                    ))
-                    .selectable(false)
-                    .ui(ui);
-                });
-                ui.end_row();
                 ui.vertical_centered(|ui| {
                     if ui.button("Cancel").clicked() {
                         canceled = true;
