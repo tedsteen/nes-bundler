@@ -135,7 +135,7 @@ impl PeeringState {
         let matchbox_server = &conf.matchbox.server;
 
         let room_name = match &start_method {
-            StartMethod::Join(StartState { session_id, .. }, _) => {
+            StartMethod::Start(StartState { session_id, .. }, ..) => {
                 format!("join_{}", session_id)
             }
             StartMethod::Resume(StartState {
@@ -217,8 +217,14 @@ impl SynchonizingState {
 type RoomName = String;
 
 #[derive(Clone, Debug)]
+pub enum JoinOrHost {
+    Join,
+    Host,
+}
+
+#[derive(Clone, Debug)]
 pub enum StartMethod {
-    Join(StartState, RoomName),
+    Start(StartState, RoomName, JoinOrHost),
     Resume(StartState),
     MatchWithRandom(StartState),
 }

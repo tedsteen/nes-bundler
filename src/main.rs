@@ -31,6 +31,7 @@ mod audio;
 mod bundle;
 mod emulation;
 mod fps;
+mod gui;
 mod input;
 mod integer_scaling;
 mod main_view;
@@ -138,7 +139,9 @@ async fn run() -> anyhow::Result<()> {
                 }
                 main_view.handle_window_event(
                     window_event,
-                    &mut [&mut audio_gui, &mut inputs_gui, &mut emulator_gui],
+                    &mut audio_gui,
+                    &mut inputs_gui,
+                    &mut emulator_gui,
                 );
             }
             Event::AboutToWait => {
@@ -162,7 +165,9 @@ async fn run() -> anyhow::Result<()> {
         {
             main_view.handle_gui_event(
                 &sdl_gui_event,
-                &mut [&mut audio_gui, &mut inputs_gui, &mut emulator_gui],
+                &mut audio_gui,
+                &mut inputs_gui,
+                &mut emulator_gui,
             );
         }
 

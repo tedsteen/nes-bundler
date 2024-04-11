@@ -7,7 +7,7 @@ use crate::{
         buttons::GamepadButton, gamepad::GamepadEvent, gui::InputsGui, keys::Modifiers, KeyEvent,
     },
     integer_scaling::{calculate_size_corrected, MINIMUM_INTEGER_SCALING_SIZE},
-    settings::gui::{GuiComponent, GuiEvent, SettingsGui, ToGuiEvent},
+    settings::gui::{GuiEvent, SettingsGui, ToGuiEvent},
     window::{
         egui_winit_wgpu::{texture::Texture, Renderer},
         Fullscreen,
@@ -70,7 +70,9 @@ impl MainView {
     pub fn handle_window_event(
         &mut self,
         window_event: &winit::event::WindowEvent,
-        gui_components: &mut [&mut dyn GuiComponent],
+        audio_gui: &mut AudioGui,
+        inputs_gui: &mut InputsGui,
+        emulator_gui: &mut EmulatorGui,
     ) {
         if let winit::event::WindowEvent::Resized(physical_size) = window_event {
             self.renderer.resize(*physical_size);
@@ -82,7 +84,7 @@ impl MainView {
             .consumed
         {
             if let Some(winit_gui_event) = &window_event.to_gui_event() {
-                self.handle_gui_event(winit_gui_event, gui_components);
+                self.handle_gui_event(winit_gui_event, audio_gui, inputs_gui, emulator_gui);
             }
         }
     }
@@ -90,7 +92,9 @@ impl MainView {
     pub fn handle_gui_event(
         &mut self,
         gui_event: &GuiEvent,
-        gui_components: &mut [&mut dyn GuiComponent],
+        audio_gui: &mut AudioGui,
+        inputs_gui: &mut InputsGui,
+        emulator_gui: &mut EmulatorGui,
     ) {
         use crate::settings::gui::GuiEvent::Keyboard;
 
@@ -116,7 +120,8 @@ impl MainView {
             }
         };
         if !consumed {
-            self.settings_gui.handle_event(gui_event, gui_components);
+            self.settings_gui
+                .handle_event(gui_event, audio_gui, inputs_gui, emulator_gui);
         }
     }
 

@@ -17,8 +17,6 @@ mod connecting_state;
 pub mod gui;
 mod netplay_session;
 mod netplay_state;
-#[cfg(feature = "debug")]
-mod stats;
 
 #[derive(Clone, Debug)]
 pub enum JoypadMapping {

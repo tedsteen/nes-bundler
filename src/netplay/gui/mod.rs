@@ -9,9 +9,12 @@ use super::{
     netplay_state::{Connected, Netplay, NetplayState},
     ConnectingState, NetplayStateHandler,
 };
+#[cfg(feature = "debug")]
+mod debug;
+
 pub struct NetplayGui {
     #[cfg(feature = "debug")]
-    pub stats: [super::stats::NetplayStats; MAX_PLAYERS],
+    pub stats: [debug::NetplayStats; MAX_PLAYERS],
     room_name: String,
 }
 
@@ -19,102 +22,13 @@ impl NetplayGui {
     pub fn new() -> Self {
         Self {
             #[cfg(feature = "debug")]
-            stats: [
-                super::stats::NetplayStats::new(),
-                super::stats::NetplayStats::new(),
-            ],
+            stats: [debug::NetplayStats::new(), debug::NetplayStats::new()],
             room_name: "".to_owned(),
         }
     }
 }
 
-#[cfg(feature = "debug")]
 impl NetplayGui {
-    fn stats_ui(ui: &mut egui::Ui, stats: &super::stats::NetplayStats, player: usize) {
-        if !stats.get_ping().is_empty() {
-            ui.label(format!("Player {player}"));
-            use egui_plot::{Line, Plot};
-
-            Plot::new(format!("stats_plot_{player}"))
-                .label_formatter(|name, value| {
-                    if !name.is_empty() {
-                        format!("{name}: {}", value.y)
-                    } else {
-                        "".to_string()
-                    }
-                })
-                .legend(
-                    egui_plot::Legend::default()
-                        .position(egui_plot::Corner::LeftTop)
-                        .text_style(egui::TextStyle::Small),
-                )
-                .view_aspect(2.0)
-                .include_y(0)
-                .show_axes([false, true])
-                .show(ui, |plot_ui| {
-                    plot_ui.line(
-                        Line::new(
-                            stats
-                                .get_ping()
-                                .iter()
-                                .map(|i| [i.duration.as_millis() as f64, i.stat.ping as f64])
-                                .collect::<egui_plot::PlotPoints>(),
-                        )
-                        .name("Ping"),
-                    );
-
-                    plot_ui.line(
-                        Line::new(
-                            stats
-                                .get_ping()
-                                .iter()
-                                .map(|i| {
-                                    [
-                                        i.duration.as_millis() as f64,
-                                        i.stat.local_frames_behind as f64,
-                                    ]
-                                })
-                                .collect::<egui_plot::PlotPoints>(),
-                        )
-                        .name("Behind (local)"),
-                    );
-
-                    plot_ui.line(
-                        Line::new(
-                            stats
-                                .get_ping()
-                                .iter()
-                                .map(|i| {
-                                    [
-                                        i.duration.as_millis() as f64,
-                                        i.stat.remote_frames_behind as f64,
-                                    ]
-                                })
-                                .collect::<egui_plot::PlotPoints>(),
-                        )
-                        .name("Behind (remote)"),
-                    );
-                });
-        }
-    }
-}
-
-impl NetplayGui {
-    #[cfg(feature = "debug")]
-    pub fn prepare(&mut self, netplay_state_handler: &NetplayStateHandler) {
-        if let Some(NetplayState::Connected(netplay)) = &netplay_state_handler.netplay {
-            let sess = &netplay.state.netplay_session.p2p_session;
-            if netplay.state.netplay_session.game_state.frame % 30 == 0 {
-                for i in 0..MAX_PLAYERS {
-                    if let Ok(stats) = sess.network_stats(i) {
-                        if !sess.local_player_handles().contains(&i) {
-                            self.stats[i].push_stats(stats);
-                        }
-                    }
-                }
-            };
-        }
-    }
     pub fn messages(&self, netplay_state_handler: &NetplayStateHandler) -> Option<Vec<String>> {
         Some(
             match &netplay_state_handler.netplay {
@@ -168,11 +82,11 @@ impl NetplayGui {
             .spacing([10.0, 4.0])
             .striped(true)
             .show(ui, |ui| {
-                ui.label("Join a game by name");
+                ui.label("Join a game with code");
                 let re = ui.add(
                     TextEdit::singleline(&mut self.room_name)
                         .desired_width(140.0)
-                        .hint_text("Netplay room"),
+                        .hint_text("Code"),
                 );
                 let enter_pressed_in_room_input =
                     if re.lost_focus() && re.ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
@@ -200,12 +114,10 @@ impl NetplayGui {
             });
         if do_join {
             netplay_disconnected
-                .join_by_name(&self.room_name)
+                .join_game(&self.room_name)
                 .expect("join to work")
         } else if random_clicked {
-            netplay_disconnected
-                .match_with_random()
-                .expect("random match to work")
+            netplay_disconnected.find_game().expect("find game to work")
         } else {
             NetplayState::Disconnected(netplay_disconnected)
         }
@@ -253,7 +165,7 @@ impl NetplayGui {
             _ => {}
         }
         if let Some(start_method) = retry_start_method {
-            netplay_connecting.cancel().join(start_method)
+            netplay_connecting.cancel().start(start_method)
         } else if ui.button("Cancel").clicked() {
             NetplayState::Disconnected(netplay_connecting.cancel())
         } else {
