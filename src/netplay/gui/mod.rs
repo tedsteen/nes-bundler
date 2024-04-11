@@ -1,8 +1,11 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use egui::{Align, Color32, Label, TextEdit, Ui, Widget};
 
-use crate::{emulation::LocalNesState, gui::MenuButton, settings::MAX_PLAYERS};
+use crate::{
+    emulation::LocalNesState, gui::MenuButton, netplay::connecting_state::StartMethod,
+    settings::MAX_PLAYERS,
+};
 
 use super::{
     connecting_state::{Connecting, PeeringState},
@@ -44,7 +47,7 @@ impl NetplayGui {
                         let remaining = MAX_PLAYERS - (connected_peers + 1);
                         Some(format!("Waiting for {remaining} player...."))
                     }
-                    ConnectingState::Synchronizing(_) => Some("Synchronising".to_string()),
+                    ConnectingState::Synchronizing(_) => Some("Pairing up...".to_string()),
                     ConnectingState::Connected(_) => None,
                     ConnectingState::Retrying(retrying) => Some(format!(
                         "Connection failed ({}), retrying in {}s...",
@@ -224,7 +227,11 @@ impl NetplayGui {
         ui: &mut Ui,
         netplay_connecting: Netplay<ConnectingState>,
     ) -> NetplayState {
-        let mut canceled = false;
+        enum Action {
+            Cancel,
+            Retry(StartMethod),
+        }
+        let mut action = None;
 
         egui::Grid::new("netplay_connecting_menu_grid")
             .num_columns(1)
@@ -296,7 +303,7 @@ impl NetplayGui {
                                 });
                                 ui.end_row();
                                 ui.vertical(|ui| {
-                                    ui.add_space(40.0);
+                                    ui.add_space(20.0);
                                 });
                             }
                             super::connecting_state::StartMethod::Resume(_) => {
@@ -330,12 +337,51 @@ impl NetplayGui {
                                 });
                                 ui.end_row();
                                 ui.vertical(|ui| {
-                                    ui.add_space(100.0);
+                                    ui.add_space(20.0);
                                 });
                             }
                         }
                     }
-                    //TODO: ConnectingState::Synchronizing(Box(...)) => todo!(),
+                    ConnectingState::Synchronizing(synchronizing_state) => {
+                        ui.vertical_centered(|ui| {
+                            Label::new(MenuButton::ui_text(
+                                "PAIRING UP...",
+                                MenuButton::ACTIVE_COLOR,
+                            ))
+                            .selectable(false)
+                            .ui(ui);
+                        });
+                        ui.end_row();
+                        if let Some(unlock_url) = &synchronizing_state.state.unlock_url {
+                            if Instant::now()
+                                .duration_since(synchronizing_state.state.start_time)
+                                .gt(&Duration::from_secs(5))
+                            {
+                                ui.vertical_centered(|ui| {
+                                    ui.horizontal_wrapped(|ui| {
+                                        ui.spacing_mut().item_spacing.x = 0.0;
+                                        ui.label("We're having trouble connecting you, click ");
+                                        ui.hyperlink_to("here", unlock_url);
+                                        ui.label(" to unlock Netplay!");
+                                    });
+                                });
+                                ui.end_row();
+                                ui.vertical_centered(|ui| {
+                                    if ui.button("Retry").clicked() {
+                                        action = Some(Action::Retry(
+                                            synchronizing_state.start_method.clone(),
+                                        ));
+                                    }
+                                });
+                                ui.end_row();
+                                ui.vertical(|ui| {
+                                    ui.add_space(20.0);
+                                });
+                            }
+                        }
+                    }
+
+                    // NOTE: This captures failed, retrying and connected. Let's just show "CONNECTING..." during that state
                     _ => {
                         ui.vertical_centered(|ui| {
                             Label::new(MenuButton::ui_text(
@@ -351,55 +397,18 @@ impl NetplayGui {
 
                 ui.vertical_centered(|ui| {
                     if ui.button("Cancel").clicked() {
-                        canceled = true;
+                        action = Some(Action::Cancel);
                     }
                 });
             });
-        if canceled {
-            return NetplayState::Disconnected(netplay_connecting.cancel());
+        if let Some(action) = action {
+            match action {
+                Action::Cancel => return NetplayState::Disconnected(netplay_connecting.cancel()),
+                Action::Retry(start_method) => {
+                    return netplay_connecting.cancel().start(start_method);
+                }
+            }
         }
-
-        // #[allow(clippy::collapsible_match)]
-        // match &netplay_connecting.state {
-        //     ConnectingState::LoadingNetplayServerConfiguration(_) => {
-        //         ui.label("Initializing...");
-        //     }
-
-        //     ConnectingState::PeeringUp(..) => {
-        //         ui.label("Peering up...");
-        //     }
-        //     ConnectingState::Synchronizing(synchronizing_state) => {
-        //         let start_method = synchronizing_state.start_method.clone();
-        //         ui.label("Synchronizing players...");
-        //         if let Some(unlock_url) = &synchronizing_state.state.unlock_url {
-        //             if Instant::now()
-        //                 .duration_since(synchronizing_state.state.start_time)
-        //                 .gt(&Duration::from_secs(5))
-        //             {
-        //                 ui.horizontal_wrapped(|ui| {
-        //                     ui.spacing_mut().item_spacing.x = 0.0;
-        //                     ui.label("We're having trouble connecting you, click ");
-        //                     ui.hyperlink_to("here", unlock_url);
-        //                     ui.label(" to unlock Netplay!");
-        //                 });
-        //                 if ui.button("Retry").clicked() {
-        //                     retry_start_method = Some(start_method);
-        //                 }
-        //             }
-        //         }
-        //     }
-        //     ConnectingState::Retrying(_) => {
-        //         ui.label("Retrying");
-        //     }
-        //     _ => {}
-        // }
-        // if let Some(start_method) = retry_start_method {
-        //     netplay_connecting.cancel().start(start_method)
-        // } else if ui.button("Cancel").clicked() {
-        //     NetplayState::Disconnected(netplay_connecting.cancel())
-        // } else {
-        //     NetplayState::Connecting(netplay_connecting)
-        // }
         NetplayState::Connecting(netplay_connecting)
     }
 
