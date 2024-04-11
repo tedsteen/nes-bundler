@@ -2495,6 +2495,7 @@ dependencies = [
  "md5",
  "puffin",
  "puffin_egui",
+ "rand",
  "raw-window-handle 0.6.0",
  "reqwest",
  "sdl2",
