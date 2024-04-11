@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use egui::{Align, Label, TextEdit, Ui, Widget};
 
@@ -139,6 +139,7 @@ impl NetplayGui {
                     ui.end_row();
                 });
             if let Some(action) = action {
+                self.room_name = None;
                 match action {
                     Action::Join(room_name) => {
                         return netplay_disconnected
@@ -147,7 +148,6 @@ impl NetplayGui {
                     }
                     Action::Cancel => {}
                 }
-                self.room_name = None;
             }
         } else {
             enum Action {
@@ -224,49 +224,163 @@ impl NetplayGui {
         ui: &mut Ui,
         netplay_connecting: Netplay<ConnectingState>,
     ) -> NetplayState {
-        let mut retry_start_method = None;
+        let mut canceled = false;
 
-        #[allow(clippy::collapsible_match)]
-        match &netplay_connecting.state {
-            ConnectingState::LoadingNetplayServerConfiguration(_) => {
-                ui.label("Initializing...");
-            }
+        egui::Grid::new("netplay_connecting_menu_grid")
+            .num_columns(1)
+            .spacing([10.0, 10.0])
+            .show(ui, |ui| {
+                match &netplay_connecting.state {
+                    ConnectingState::LoadingNetplayServerConfiguration(Connecting {
+                        start_method,
+                        ..
+                    })
+                    | ConnectingState::PeeringUp(Connecting { start_method, .. }) => {
+                        match start_method {
+                            super::connecting_state::StartMethod::Start(
+                                ..,
+                                room_name,
+                                join_or_host,
+                            ) => {
+                                match join_or_host {
+                                    super::connecting_state::JoinOrHost::Join => {
+                                        ui.vertical_centered(|ui| {
+                                            Label::new(MenuButton::ui_text(
+                                                "JOINING GAME",
+                                                MenuButton::UNACTIVE_COLOR,
+                                            ))
+                                            .selectable(false)
+                                            .ui(ui);
+                                        });
+                                    }
 
-            ConnectingState::PeeringUp(..) => {
-                ui.label("Peering up...");
-            }
-            ConnectingState::Synchronizing(synchronizing_state) => {
-                let start_method = synchronizing_state.start_method.clone();
-                ui.label("Synchronizing players...");
-                if let Some(unlock_url) = &synchronizing_state.state.unlock_url {
-                    if Instant::now()
-                        .duration_since(synchronizing_state.state.start_time)
-                        .gt(&Duration::from_secs(5))
-                    {
-                        ui.horizontal_wrapped(|ui| {
-                            ui.spacing_mut().item_spacing.x = 0.0;
-                            ui.label("We're having trouble connecting you, click ");
-                            ui.hyperlink_to("here", unlock_url);
-                            ui.label(" to unlock Netplay!");
-                        });
-                        if ui.button("Retry").clicked() {
-                            retry_start_method = Some(start_method);
+                                    super::connecting_state::JoinOrHost::Host => {
+                                        ui.vertical_centered(|ui| {
+                                            Label::new(MenuButton::ui_text(
+                                                "HOSTING GAME",
+                                                MenuButton::UNACTIVE_COLOR,
+                                            ))
+                                            .selectable(false)
+                                            .ui(ui);
+                                        });
+                                    }
+                                }
+                                ui.end_row();
+
+                                ui.vertical_centered(|ui| {
+                                    Label::new(MenuButton::ui_text(
+                                        "CODE",
+                                        MenuButton::UNACTIVE_COLOR,
+                                    ))
+                                    .selectable(false)
+                                    .ui(ui);
+                                });
+                                ui.end_row();
+                                ui.vertical_centered(|ui| {
+                                    Label::new(MenuButton::ui_text(
+                                        room_name,
+                                        MenuButton::ACTIVE_COLOR,
+                                    ))
+                                    .ui(ui);
+                                });
+                            }
+                            super::connecting_state::StartMethod::Resume(_) => {
+                                ui.vertical_centered(|ui| {
+                                    Label::new(MenuButton::ui_text(
+                                        "RESUMING GAME",
+                                        MenuButton::UNACTIVE_COLOR,
+                                    ))
+                                    .selectable(false)
+                                    .ui(ui);
+                                });
+                            }
+                            super::connecting_state::StartMethod::MatchWithRandom(_) => {
+                                ui.vertical_centered(|ui| {
+                                    Label::new(MenuButton::ui_text(
+                                        "FINDING GAME",
+                                        MenuButton::UNACTIVE_COLOR,
+                                    ))
+                                    .selectable(false)
+                                    .ui(ui);
+                                });
+                            }
                         }
                     }
+                    //TODO: ConnectingState::Synchronizing(Box(...)) => todo!(),
+                    _ => {
+                        ui.vertical_centered(|ui| {
+                            Label::new(MenuButton::ui_text(
+                                "CONNECTING...",
+                                MenuButton::UNACTIVE_COLOR,
+                            ))
+                            .selectable(false)
+                            .ui(ui);
+                        });
+                    }
                 }
-            }
-            ConnectingState::Retrying(_) => {
-                ui.label("Retrying");
-            }
-            _ => {}
+                ui.end_row();
+
+                ui.vertical_centered(|ui| {
+                    Label::new(MenuButton::ui_text_small(
+                        "WAITING FOR SECOND PLAYER",
+                        MenuButton::UNACTIVE_COLOR,
+                    ))
+                    .selectable(false)
+                    .ui(ui);
+                });
+                ui.end_row();
+                ui.vertical_centered(|ui| {
+                    if ui.button("Cancel").clicked() {
+                        canceled = true;
+                    }
+                });
+            });
+        if canceled {
+            return NetplayState::Disconnected(netplay_connecting.cancel());
         }
-        if let Some(start_method) = retry_start_method {
-            netplay_connecting.cancel().start(start_method)
-        } else if ui.button("Cancel").clicked() {
-            NetplayState::Disconnected(netplay_connecting.cancel())
-        } else {
-            NetplayState::Connecting(netplay_connecting)
-        }
+
+        // #[allow(clippy::collapsible_match)]
+        // match &netplay_connecting.state {
+        //     ConnectingState::LoadingNetplayServerConfiguration(_) => {
+        //         ui.label("Initializing...");
+        //     }
+
+        //     ConnectingState::PeeringUp(..) => {
+        //         ui.label("Peering up...");
+        //     }
+        //     ConnectingState::Synchronizing(synchronizing_state) => {
+        //         let start_method = synchronizing_state.start_method.clone();
+        //         ui.label("Synchronizing players...");
+        //         if let Some(unlock_url) = &synchronizing_state.state.unlock_url {
+        //             if Instant::now()
+        //                 .duration_since(synchronizing_state.state.start_time)
+        //                 .gt(&Duration::from_secs(5))
+        //             {
+        //                 ui.horizontal_wrapped(|ui| {
+        //                     ui.spacing_mut().item_spacing.x = 0.0;
+        //                     ui.label("We're having trouble connecting you, click ");
+        //                     ui.hyperlink_to("here", unlock_url);
+        //                     ui.label(" to unlock Netplay!");
+        //                 });
+        //                 if ui.button("Retry").clicked() {
+        //                     retry_start_method = Some(start_method);
+        //                 }
+        //             }
+        //         }
+        //     }
+        //     ConnectingState::Retrying(_) => {
+        //         ui.label("Retrying");
+        //     }
+        //     _ => {}
+        // }
+        // if let Some(start_method) = retry_start_method {
+        //     netplay_connecting.cancel().start(start_method)
+        // } else if ui.button("Cancel").clicked() {
+        //     NetplayState::Disconnected(netplay_connecting.cancel())
+        // } else {
+        //     NetplayState::Connecting(netplay_connecting)
+        // }
+        NetplayState::Connecting(netplay_connecting)
     }
 
     fn ui_connected(&mut self, ui: &mut Ui, netplay_connected: Netplay<Connected>) -> NetplayState {
@@ -281,7 +395,24 @@ impl NetplayGui {
             ui.button("Fake connection lost").clicked()
         };
 
-        if ui.button("Disconnect").clicked() {
+        let mut disconnect_clicked = false;
+        egui::Grid::new("netplay_connected_menu_grid")
+            .num_columns(1)
+            .spacing([10.0, 10.0])
+            .show(ui, |ui| {
+                ui.vertical_centered(|ui| {
+                    Label::new(MenuButton::ui_text("CONNECTED!", MenuButton::ACTIVE_COLOR))
+                        .selectable(false)
+                        .ui(ui);
+                });
+                ui.end_row();
+                ui.vertical_centered(|ui| {
+                    disconnect_clicked = ui.button("Disconnect").clicked();
+                });
+
+                ui.end_row();
+            });
+        if disconnect_clicked {
             NetplayState::Disconnected(netplay_connected.disconnect())
         } else if fake_lost_connection_clicked {
             log::debug!("Manually resuming connection (faking a lost connection)");
@@ -302,8 +433,28 @@ impl NetplayGui {
             }
             NetplayState::Connected(netplay_connected) => self.ui_connected(ui, netplay_connected),
             NetplayState::Resuming(netplay_resuming) => {
-                ui.label("Trying to resume...");
-                if ui.button("Cancel").clicked() {
+                let mut cancel_clicked = false;
+                egui::Grid::new("netplay_resuming_menu_grid")
+                    .num_columns(1)
+                    .spacing([10.0, 10.0])
+                    .show(ui, |ui| {
+                        ui.vertical_centered(|ui| {
+                            Label::new(MenuButton::ui_text(
+                                "RESUMING...",
+                                MenuButton::ACTIVE_COLOR,
+                            ))
+                            .selectable(false)
+                            .ui(ui);
+                        });
+                        ui.end_row();
+                        ui.vertical_centered(|ui| {
+                            cancel_clicked = ui.button("Cancel").clicked();
+                        });
+
+                        ui.end_row();
+                    });
+
+                if cancel_clicked {
                     NetplayState::Disconnected(netplay_resuming.cancel())
                 } else {
                     NetplayState::Resuming(netplay_resuming)

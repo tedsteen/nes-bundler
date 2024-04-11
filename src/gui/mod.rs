@@ -26,7 +26,7 @@ pub struct MenuButton {
     sense: Sense,
 }
 impl MenuButton {
-    const ACTIVE_COLOR: Color32 = Color32::WHITE;
+    pub const ACTIVE_COLOR: Color32 = Color32::WHITE;
     pub const UNACTIVE_COLOR: Color32 = Color32::from_rgb(96, 96, 96);
     const GROUP_KEY: &'static str = "MENU_BTN_GROUP_KEY";
 
