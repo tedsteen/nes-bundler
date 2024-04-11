@@ -1,10 +1,24 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use egui::{
     Align2, Color32, Context, CursorIcon, FontId, Id, RichText, Sense, TextStyle, Ui, Vec2, Widget,
     WidgetInfo, WidgetText, WidgetType, Window,
 };
 use winit::dpi::LogicalSize;
+
+#[derive(Clone)]
+struct MenuButtonGroup {
+    button_ids: HashSet<Id>,
+    focused: Option<Id>,
+}
+impl MenuButtonGroup {
+    fn new() -> Self {
+        Self {
+            button_ids: HashSet::new(),
+            focused: None,
+        }
+    }
+}
 
 // A widget that keeps track of focus between each other.
 pub struct MenuButton {
@@ -13,20 +27,31 @@ pub struct MenuButton {
 }
 impl MenuButton {
     const ACTIVE_COLOR: Color32 = Color32::WHITE;
-    const UNACTIVE_COLOR: Color32 = Color32::from_rgb(96, 96, 96);
-    const LAST_FOCUS_KEY: &'static str = "LAST_FOCUS";
+    pub const UNACTIVE_COLOR: Color32 = Color32::from_rgb(96, 96, 96);
+    const GROUP_KEY: &'static str = "MENU_BTN_GROUP_KEY";
 
     pub fn new(text: impl Into<String>) -> Self {
         Self {
-            text: RichText::new(text)
-                .color(Color32::PLACEHOLDER)
-                .strong()
-                .font(FontId::monospace(30.0))
-                .into(),
+            text: Self::ui_text(text, Color32::PLACEHOLDER).into(),
             sense: Sense::click(),
         }
     }
+
+    pub fn ui_text(text: impl Into<String>, color: Color32) -> RichText {
+        RichText::new(text)
+            .color(color)
+            .strong()
+            .font(FontId::monospace(30.0))
+    }
+
+    pub fn ui_text_small(text: impl Into<String>, color: Color32) -> RichText {
+        RichText::new(text)
+            .color(color)
+            .strong()
+            .font(FontId::monospace(15.0))
+    }
 }
+
 impl Widget for MenuButton {
     fn ui(self, ui: &mut Ui) -> egui::Response {
         let mut desired_size = Vec2::ZERO;
@@ -43,13 +68,29 @@ impl Widget for MenuButton {
             if response.hovered() {
                 m.request_focus(response.id);
             } else {
-                let last_focused_data_key = Id::new(MenuButton::LAST_FOCUS_KEY);
-                if let Some(current_focus) = m.focus() {
-                    m.data.insert_temp(last_focused_data_key, current_focus);
-                } else if let Some(last_focused_id) = m.data.get_temp(last_focused_data_key) {
-                    m.request_focus(last_focused_id);
+                let actual_focus_id = m.focus();
+
+                let parent_id = ui.id().value();
+                let group = m.data.get_temp_mut_or_insert_with(
+                    Id::new(format!("{}_{}", Self::GROUP_KEY, parent_id)),
+                    MenuButtonGroup::new,
+                );
+                let own_id = response.id;
+                let fallback_focus_id = group.focused.unwrap_or(own_id);
+
+                group.button_ids.insert(own_id);
+
+                if let Some(focused_id) = actual_focus_id {
+                    if group.button_ids.contains(&focused_id) {
+                        // There is a valid MenuButton focused, lets's update the group with this information.
+                        group.focused = Some(focused_id);
+                    } else {
+                        // Something outside of the group is focused. Request the safe fallback to be focused
+                        m.request_focus(fallback_focus_id);
+                    }
                 } else {
-                    m.request_focus(response.id);
+                    // Nothing is focused. Request the safe fallback to be focused
+                    m.request_focus(fallback_focus_id);
                 }
             }
         });

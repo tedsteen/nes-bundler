@@ -1,4 +1,5 @@
 use egui::{load::SizedTexture, Color32, Image, Vec2};
+use winit::keyboard::{KeyCode, PhysicalKey};
 
 use crate::{
     audio::gui::AudioGui,
@@ -77,11 +78,26 @@ impl MainView {
         if let winit::event::WindowEvent::Resized(physical_size) = window_event {
             self.renderer.resize(*physical_size);
         }
-        if !self
-            .renderer
-            .egui
-            .handle_input(&self.renderer.window, window_event)
-            .consumed
+
+        // Esc is a special case since we navigate back in the menu using that.
+        // egui consumes the event and we can't navigate, so check for it here and pass it through.
+        let is_esc = matches!(
+            window_event,
+            winit::event::WindowEvent::KeyboardInput {
+                event: winit::event::KeyEvent {
+                    physical_key: PhysicalKey::Code(KeyCode::Escape),
+                    ..
+                },
+                ..
+            }
+        );
+
+        if is_esc
+            || !self
+                .renderer
+                .egui
+                .handle_input(&self.renderer.window, window_event)
+                .consumed
         {
             if let Some(winit_gui_event) = &window_event.to_gui_event() {
                 self.handle_gui_event(winit_gui_event, audio_gui, inputs_gui, emulator_gui);

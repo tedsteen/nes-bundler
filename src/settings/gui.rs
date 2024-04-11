@@ -204,6 +204,7 @@ impl SettingsGui {
                             self.visible = false;
                         }
                         MainMenuState::Settings | MainMenuState::Netplay => {
+                            //TODO: check if the emulator_gui is modal and refuse to change state in that case?
                             self.state = MainMenuState::Main;
                         }
                     }
