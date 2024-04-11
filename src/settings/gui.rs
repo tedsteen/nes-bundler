@@ -51,6 +51,7 @@ pub struct MainMenuButton {
 impl MainMenuButton {
     const ACTIVE_COLOR: Color32 = Color32::WHITE;
     const UNACTIVE_COLOR: Color32 = Color32::from_rgb(96, 96, 96);
+    const LAST_FOCUS_KEY: &'static str = "LAST_FOCUS";
 
     fn new(text: impl Into<String>) -> Self {
         Self {
@@ -74,18 +75,30 @@ impl Widget for MainMenuButton {
         desired_size.y = desired_size.y.max(galley.size().y);
         let (rect, mut response) = ui.allocate_at_least(desired_size, self.sense);
         response.widget_info(|| WidgetInfo::labeled(WidgetType::Button, galley.text()));
+
+        ui.memory_mut(|m| {
+            if response.hovered() {
+                m.request_focus(response.id);
+            } else {
+                let last_focused_data_key = Id::new(MainMenuButton::LAST_FOCUS_KEY);
+                if let Some(current_focus) = m.focus() {
+                    m.data.insert_temp(last_focused_data_key, current_focus);
+                } else if let Some(last_focused_id) = m.data.get_temp(last_focused_data_key) {
+                    m.request_focus(last_focused_id);
+                } else {
+                    m.request_focus(response.id);
+                }
+            }
+        });
+
         if ui.is_rect_visible(rect) {
             let text_pos = ui.layout().align_size_within_rect(galley.size(), rect).min;
             response = response.on_hover_cursor(CursorIcon::PointingHand);
-            if response.hovered() {
-                ui.memory_mut(|m| {
-                    m.request_focus(Id::NULL);
-                });
-            }
+
             ui.painter().galley(
                 text_pos,
                 galley,
-                if response.has_focus() || response.hovered() {
+                if response.has_focus() {
                     Self::ACTIVE_COLOR
                 } else {
                     Self::UNACTIVE_COLOR
@@ -106,8 +119,6 @@ pub struct SettingsGui {
     start_time: Instant,
     pub visible: bool,
     state: MainMenuState,
-    last_focused_id: Option<Id>,
-    back_id: Option<Id>,
     window: Arc<winit::window::Window>,
 }
 
@@ -120,8 +131,6 @@ impl SettingsGui {
             start_time: Instant::now(),
             visible: false,
             state: MainMenuState::Main,
-            last_focused_id: None,
-            back_id: None,
             window,
         }
     }
@@ -174,24 +183,7 @@ impl SettingsGui {
                             .num_columns(1)
                             .spacing([10.0, 10.0])
                             .show(ui, |ui| {
-                                let back = Self::menu_item_ui(ui, "BACK");
-                                self.back_id = Some(back.id); //Save for later...
-
-                                ui.memory_mut(|m| {
-                                    // This means that we want to clear the focus (a mouse has been moved over the menu items)
-                                    if let Some(Id::NULL) = m.focus() {
-                                        self.last_focused_id = None;
-                                        m.surrender_focus(Id::NULL);
-                                    } else if m.focus().is_none() {
-                                        if let Some(last_focused_id) = self.last_focused_id {
-                                            m.request_focus(last_focused_id);
-                                        }
-                                    } else {
-                                        self.last_focused_id = m.focus();
-                                    }
-                                });
-
-                                if back.clicked() {
+                                if Self::menu_item_ui(ui, "BACK").clicked() {
                                     self.visible = false;
                                 }
 
@@ -281,10 +273,6 @@ impl SettingsGui {
         gui_event: &GuiEvent,
         gui_components: &mut [&mut dyn GuiComponent],
     ) {
-        // Make sure we focus something if a key is pressed to ensure that we can navigate
-        if self.last_focused_id.is_none() {
-            self.last_focused_id = self.back_id;
-        }
         match gui_event {
             GuiEvent::Gamepad(crate::input::gamepad::GamepadEvent::ButtonDown {
                 button: GamepadButton::Guide,
