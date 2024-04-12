@@ -1,5 +1,5 @@
 use std::{
-    sync::Arc,
+    sync::{Arc, OnceLock, RwLock, RwLockWriteGuard},
     time::{Duration, Instant},
 };
 
@@ -49,21 +49,34 @@ enum MainMenuState {
 }
 pub struct SettingsGui {
     start_time: Instant,
-    pub visible: bool,
     state: MainMenuState,
     window: Arc<winit::window::Window>,
 }
 
 impl SettingsGui {
+    fn main_menu_visible<'a>() -> RwLockWriteGuard<'a, bool> {
+        //TODO: Look into AtomicBool
+        static MEM: OnceLock<RwLock<bool>> = OnceLock::new();
+        MEM.get_or_init(|| RwLock::new(false)).write().unwrap()
+    }
+
+    // Convenience
+    pub fn visible(&self) -> bool {
+        *SettingsGui::main_menu_visible()
+    }
+
+    pub fn set_main_menu_visibility(visible: bool) {
+        *Self::main_menu_visible() = visible;
+    }
+
     const MESSAGE_TEXT_BACKGROUND: Color32 = Color32::from_rgba_premultiplied(20, 20, 20, 200);
     const MESSAGE_TEXT_COLOR: Color32 = Color32::from_rgb(255, 255, 255);
 
     pub fn new(window: Arc<winit::window::Window>) -> Self {
         Self {
             start_time: Instant::now(),
-            visible: false,
-            state: MainMenuState::Main,
             window,
+            state: MainMenuState::Main,
         }
     }
     fn message_ui(ui: &mut Ui, text: impl Into<String>) {
@@ -89,8 +102,8 @@ impl SettingsGui {
         inputs_gui: &mut InputsGui,
         emulator_gui: &mut EmulatorGui,
     ) {
-        if self.visible {
-            match &mut self.state {
+        if self.visible() {
+            match self.state {
                 MainMenuState::Main => {
                     centered_window(&self.window, ctx, None, |ui| {
                         ui.add_space(20.0);
@@ -99,7 +112,7 @@ impl SettingsGui {
                             .spacing([10.0, 10.0])
                             .show(ui, |ui| {
                                 if Self::menu_item_ui(ui, "BACK").clicked() {
-                                    self.visible = false;
+                                    Self::set_main_menu_visibility(false);
                                 }
 
                                 if let Some(name) = emulator_gui.name() {
@@ -196,12 +209,12 @@ impl SettingsGui {
                 ..
             })
             | GuiEvent::Keyboard(KeyEvent::Pressed(KeyCode::Escape)) => {
-                if !self.visible {
-                    self.visible = true;
+                if !self.visible() {
+                    Self::set_main_menu_visibility(true);
                 } else {
                     match self.state {
                         MainMenuState::Main => {
-                            self.visible = false;
+                            Self::set_main_menu_visibility(false);
                         }
                         MainMenuState::Settings | MainMenuState::Netplay => {
                             //TODO: check if the emulator_gui is modal and refuse to change state in that case?

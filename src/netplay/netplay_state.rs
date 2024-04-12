@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use anyhow::Result;
 use uuid::Uuid;
 
@@ -84,6 +86,7 @@ impl<T> Netplay<T> {
 pub struct Connected {
     pub netplay_session: NetplaySession,
     session_id: String,
+    pub start_time: Instant,
 }
 
 pub struct Resuming {
@@ -187,6 +190,7 @@ impl Netplay<ConnectingState> {
                 log::debug!("Connected! Starting netplay session");
                 NetplayState::Connected(Netplay {
                     state: Connected {
+                        start_time: Instant::now(),
                         netplay_session: connected.state,
                         session_id: match connected.start_method {
                             StartMethod::Start(StartState { session_id, .. }, ..)

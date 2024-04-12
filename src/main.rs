@@ -152,7 +152,7 @@ async fn run() -> anyhow::Result<()> {
 
         window.set_cursor_visible(
             !(window.is_fullscreen()
-                && !main_view.settings_gui.visible
+                && !main_view.settings_gui.visible()
                 && Instant::now()
                     .duration_since(last_mouse_touch)
                     .gt(&mouse_hide_timeout)),
@@ -171,7 +171,7 @@ async fn run() -> anyhow::Result<()> {
             );
         }
 
-        let new_inputs = if !main_view.settings_gui.visible {
+        let new_inputs = if !main_view.settings_gui.visible() {
             inputs_gui.inputs.joypads
         } else {
             // Don't let the inputs control the game if the gui is showing

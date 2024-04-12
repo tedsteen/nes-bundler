@@ -3,8 +3,10 @@ use std::time::{Duration, Instant};
 use egui::{Align, Color32, Label, TextEdit, Ui, Widget};
 
 use crate::{
-    emulation::LocalNesState, gui::MenuButton, netplay::connecting_state::StartMethod,
-    settings::MAX_PLAYERS,
+    emulation::LocalNesState,
+    gui::MenuButton,
+    netplay::connecting_state::StartMethod,
+    settings::{gui::SettingsGui, MAX_PLAYERS},
 };
 
 use super::{
@@ -380,7 +382,6 @@ impl NetplayGui {
                             }
                         }
                     }
-
                     // NOTE: This captures failed, retrying and connected. Let's just show "CONNECTING..." during that state
                     _ => {
                         ui.vertical_centered(|ui| {
@@ -413,6 +414,13 @@ impl NetplayGui {
     }
 
     fn ui_connected(&mut self, ui: &mut Ui, netplay_connected: Netplay<Connected>) -> NetplayState {
+        if Instant::now()
+            .duration_since(netplay_connected.state.start_time)
+            .as_millis()
+            < 200
+        {
+            SettingsGui::set_main_menu_visibility(false);
+        }
         #[cfg(not(feature = "debug"))]
         let fake_lost_connection_clicked = false;
         #[cfg(feature = "debug")]

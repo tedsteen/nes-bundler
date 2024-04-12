@@ -124,7 +124,7 @@ impl MainView {
                 .window
                 .check_and_set_fullscreen(self.modifiers, *key_code),
             _ => {
-                if self.settings_gui.visible {
+                if self.settings_gui.visible() {
                     // If the gui is visible convert gamepad events to fake input events so we can control the ui with the gamepad
                     if let GuiEvent::Gamepad(gamepad_event) = gui_event {
                         if let Some(event) = to_egui_event(gamepad_event) {
@@ -199,7 +199,7 @@ impl MainView {
                                 y: new_size.height as f32,
                             },
                         ));
-                        if settings_gui.visible {
+                        if settings_gui.visible() {
                             nes_image = nes_image.tint(Self::MENU_TINT);
                         }
                         ui.add(nes_image);

@@ -33,7 +33,10 @@ pub enum ConnectingState {
     LoadingNetplayServerConfiguration(Connecting<LoadingNetplayServerConfiguration>),
     PeeringUp(Connecting<PeeringState>),
     Synchronizing(Box<Connecting<SynchonizingState>>),
+
+    //TODO: Get rid of this state?
     Connected(Box<Connecting<NetplaySession>>),
+
     Retrying(Connecting<Retrying>),
     Failed(String),
 }
