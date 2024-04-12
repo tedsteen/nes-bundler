@@ -73,7 +73,7 @@ impl GuiComponent for AudioGui {
         let available_device_names =
             Audio::get_available_output_device_names_for_subsystem(&self.audio.audio_subsystem);
         ui.horizontal(|ui| {
-            egui::Grid::new("netplay_grid")
+            egui::Grid::new("audio_grid")
                 .num_columns(2)
                 .spacing([10.0, 4.0])
                 .striped(true)
@@ -117,7 +117,7 @@ impl GuiComponent for AudioGui {
         });
     }
 
-    fn name(&self) -> Option<String> {
-        Some("Audio".to_string())
+    fn name(&self) -> Option<&str> {
+        Some("Audio")
     }
 }

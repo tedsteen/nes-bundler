@@ -35,7 +35,7 @@ pub trait GuiComponent {
     fn messages(&self) -> Option<Vec<String>> {
         None
     }
-    fn name(&self) -> Option<String> {
+    fn name(&self) -> Option<&str> {
         None
     }
     fn handle_event(&mut self, _gui_event: &GuiEvent) {}
@@ -158,7 +158,8 @@ impl MainGui {
                     });
                 }
                 MainMenuState::Netplay => {
-                    if let Some(name) = emulator_gui.name() {
+                    if emulator_gui.name().is_some() {
+                        let name = emulator_gui.name().expect("a name").to_owned();
                         centered_window(&self.window, ctx, Some(&name), |ui| {
                             emulator_gui.ui(ui);
                         });

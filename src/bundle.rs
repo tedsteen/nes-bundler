@@ -8,38 +8,19 @@ use anyhow::Result;
 use directories::ProjectDirs;
 use serde::Deserialize;
 
-use crate::{emulation::NesRegion, settings::Settings};
+use crate::{
+    emulation::NesRegion, input::gui::InputButtonsVoca, netplay::gui::NetplayVoca,
+    settings::Settings,
+};
 
-#[derive(Deserialize, Debug)]
-pub struct InputButtonNames {
-    pub up: String,
-    pub down: String,
-    pub left: String,
-    pub right: String,
-
-    pub select: String,
-    pub start: String,
-
-    pub b: String,
-    pub a: String,
+#[derive(Deserialize, Default, Debug)]
+pub struct Vocabulary {
+    #[serde(default = "Default::default")]
+    pub input_buttons: InputButtonsVoca,
+    #[serde(default = "Default::default")]
+    pub netplay: NetplayVoca,
 }
 
-impl Default for InputButtonNames {
-    fn default() -> Self {
-        Self {
-            up: String::from("Up"),
-            down: String::from("Down"),
-            left: String::from("Left"),
-            right: String::from("Right"),
-
-            select: String::from("Select"),
-            start: String::from("Start"),
-
-            b: String::from("B"),
-            a: String::from("A"),
-        }
-    }
-}
 #[derive(Deserialize, Debug)]
 pub struct BuildConfiguration {
     pub name: String,
@@ -51,7 +32,7 @@ pub struct BuildConfiguration {
     #[serde(default = "Default::default")]
     pub start_in_fullscreen: bool,
     #[serde(default = "Default::default")]
-    pub input_button_names: InputButtonNames,
+    pub vocabulary: Vocabulary,
 
     #[cfg(feature = "netplay")]
     pub netplay: crate::netplay::NetplayBuildConfiguration,

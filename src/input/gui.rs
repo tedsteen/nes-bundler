@@ -4,8 +4,41 @@ use crate::{
     settings::Settings,
 };
 use egui::{Color32, Grid, RichText, Ui};
+use serde::Deserialize;
 
 use super::{settings::InputSettings, InputConfiguration, Inputs, MapRequest};
+
+#[derive(Deserialize, Debug)]
+pub struct InputButtonsVoca {
+    pub up: String,
+    pub down: String,
+    pub left: String,
+    pub right: String,
+
+    pub select: String,
+    pub start: String,
+
+    pub b: String,
+    pub a: String,
+}
+
+impl Default for InputButtonsVoca {
+    fn default() -> Self {
+        Self {
+            up: "Up".to_string(),
+            down: "Down".to_string(),
+            left: "Left".to_string(),
+            right: "Right".to_string(),
+
+            select: "Select".to_string(),
+            start: "Start".to_string(),
+
+            b: "B".to_string(),
+            a: "A".to_string(),
+        }
+    }
+}
+
 pub struct InputsGui {
     pub inputs: Inputs,
     mapping_request: Option<MapRequest>,
@@ -158,7 +191,7 @@ impl GuiComponent for InputsGui {
             .remap_configuration(&mut self.mapping_request, input_settings);
     }
 
-    fn name(&self) -> Option<String> {
-        Some("Input".to_string())
+    fn name(&self) -> Option<&str> {
+        Some("Input")
     }
 }

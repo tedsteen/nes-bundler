@@ -85,12 +85,12 @@ impl GuiComponent for EmulatorGui {
         self.netplay_gui.messages(&self.nes_state.lock().unwrap())
     }
 
-    fn name(&self) -> Option<String> {
+    fn name(&self) -> Option<&str> {
         if cfg!(feature = "netplay") {
             #[cfg(feature = "netplay")]
             return self.netplay_gui.name();
         } else if cfg!(feature = "debug") {
-            return Some("Debug".to_string());
+            return Some("Debug");
         }
 
         None

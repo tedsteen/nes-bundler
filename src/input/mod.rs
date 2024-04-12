@@ -46,7 +46,7 @@ pub enum JoypadButton {
 
 impl std::fmt::Display for JoypadButton {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let names = &Bundle::current().config.input_button_names;
+        let names = &Bundle::current().config.vocabulary.input_buttons;
         match self {
             JoypadButton::Up => write!(f, "{}", names.up),
             JoypadButton::Down => write!(f, "{}", names.down),

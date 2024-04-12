@@ -1,9 +1,10 @@
 use std::time::{Duration, Instant};
 
 use egui::{Align, Color32, FontId, Label, RichText, TextEdit, Ui, Widget};
+use serde::Deserialize;
 
 use crate::{
-    emulation::LocalNesState, gui::MenuButton, main_view::gui::MainGui,
+    bundle::Bundle, emulation::LocalNesState, gui::MenuButton, main_view::gui::MainGui,
     netplay::connecting_state::StartMethod, settings::MAX_PLAYERS,
 };
 
@@ -14,6 +15,18 @@ use super::{
 };
 #[cfg(feature = "debug")]
 mod debug;
+
+#[derive(Deserialize, Debug)]
+pub struct NetplayVoca {
+    pub name: String,
+}
+impl Default for NetplayVoca {
+    fn default() -> Self {
+        Self {
+            name: "Netplay".to_string(),
+        }
+    }
+}
 
 pub struct NetplayGui {
     #[cfg(feature = "debug")]
@@ -76,7 +89,7 @@ impl NetplayGui {
                 _ => None,
             }
             .iter()
-            .map(|s| format!("Netplay - {s}"))
+            .map(|s| format!("{} - {s}", self.name().expect("a name")))
             .collect(),
         )
     }
@@ -521,7 +534,7 @@ impl NetplayGui {
         });
     }
 
-    pub fn name(&self) -> Option<String> {
-        Some("Netplay".to_string())
+    pub fn name(&self) -> Option<&str> {
+        Some(&Bundle::current().config.vocabulary.netplay.name)
     }
 }

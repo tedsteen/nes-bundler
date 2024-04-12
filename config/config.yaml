@@ -27,16 +27,23 @@ enable_vsync: false
 # Starts the game in fullscreen if true
 start_in_fullscreen: false
 
-# The name of the inputs in the key mapping section
-input_button_names:
-    up: Up
-    down: Down
-    left: Left
-    right: Right
-    select: Select
-    start: Start
-    b: B
-    a: A
+# Optional vocabulary to change some parts of the UI.
+# If you have more needs file an issue or open a PR
+vocabulary:
+    # The name of the inputs in the key mapping section
+    settings:
+        input_buttons:
+            up: Up
+            down: Down
+            left: Left
+            right: Right
+            select: Select
+            start: Start
+            b: B
+            a: A
+    netplay:
+        # Name Netplay something else?
+        name: Netplay
 
 # This will be the default settings for the game.
 # For all the gory details see the `BuildConfiguration`-struct in the source.

@@ -264,9 +264,10 @@ impl Connecting<LoadingNetplayServerConfiguration> {
                     "Failed to retrieve netplay server configuration: {:?}, retrying...",
                     e
                 );
-                ConnectingState::Retrying(
-                    self.into_retrying("Failed to retrieve netplay server configuration."),
-                )
+                ConnectingState::Retrying(self.into_retrying(&format!(
+                    "Failed to retrieve {} configuration.",
+                    Bundle::current().config.vocabulary.netplay.name
+                )))
             }
         }
     }
