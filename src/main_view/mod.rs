@@ -15,11 +15,11 @@ use crate::{
     Size,
 };
 
-use self::gui::{GuiEvent, SettingsGui, ToGuiEvent};
+use self::gui::{GuiEvent, MainGui, ToGuiEvent};
 pub mod gui;
 
 pub struct MainView {
-    pub settings_gui: SettingsGui,
+    pub main_gui: MainGui,
     modifiers: Modifiers,
     nes_texture: Texture,
     renderer: Renderer,
@@ -62,7 +62,7 @@ fn to_egui_event(gamepad_event: &GamepadEvent) -> Option<egui::Event> {
 impl MainView {
     pub fn new(mut renderer: Renderer) -> Self {
         Self {
-            settings_gui: SettingsGui::new(renderer.window.clone()),
+            main_gui: MainGui::new(renderer.window.clone()),
             modifiers: Modifiers::empty(),
 
             nes_texture: Texture::new(&mut renderer, NES_WIDTH, NES_HEIGHT, Some("nes frame")),
@@ -126,7 +126,7 @@ impl MainView {
                 .window
                 .check_and_set_fullscreen(self.modifiers, *key_code),
             _ => {
-                if self.settings_gui.visible() {
+                if self.main_gui.visible() {
                     // If the gui is visible convert gamepad events to fake input events so we can control the ui with the gamepad
                     if let GuiEvent::Gamepad(gamepad_event) = gui_event {
                         if let Some(event) = to_egui_event(gamepad_event) {
@@ -138,7 +138,7 @@ impl MainView {
             }
         };
         if !consumed {
-            self.settings_gui
+            self.main_gui
                 .handle_event(gui_event, audio_gui, inputs_gui, emulator_gui);
         }
     }
@@ -158,11 +158,12 @@ impl MainView {
         if let Some(nes_frame) = &frame_buffer.pop_ref() {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("update nes texture");
+
             self.nes_texture.update(&self.renderer.queue, nes_frame);
         }
 
         let nes_texture_id = self.nes_texture.get_id();
-        let settings_gui = &mut self.settings_gui;
+        let main_gui = &mut self.main_gui;
         let render_result = self.renderer.render(move |ctx| {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("ui");
@@ -201,13 +202,13 @@ impl MainView {
                                 y: new_size.height as f32,
                             },
                         ));
-                        if settings_gui.visible() {
+                        if main_gui.visible() {
                             nes_image = nes_image.tint(Self::MENU_TINT);
                         }
                         ui.add(nes_image);
                     });
                 });
-            settings_gui.ui(ctx, audio_gui, inputs_gui, emulator_gui);
+            main_gui.ui(ctx, audio_gui, inputs_gui, emulator_gui);
         });
 
         match render_result {

@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use egui::{Align, Color32, Label, TextEdit, Ui, Widget};
 
 use crate::{
-    emulation::LocalNesState, gui::MenuButton, main_view::gui::SettingsGui,
+    emulation::LocalNesState, gui::MenuButton, main_view::gui::MainGui,
     netplay::connecting_state::StartMethod, settings::MAX_PLAYERS,
 };
 
@@ -417,7 +417,7 @@ impl NetplayGui {
             .as_millis()
             < 200
         {
-            SettingsGui::set_main_menu_visibility(false);
+            MainGui::set_main_menu_visibility(false);
         }
         #[cfg(not(feature = "debug"))]
         let fake_lost_connection_clicked = false;

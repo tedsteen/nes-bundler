@@ -47,13 +47,13 @@ enum MainMenuState {
     Settings,
     Netplay,
 }
-pub struct SettingsGui {
+pub struct MainGui {
     start_time: Instant,
     state: MainMenuState,
     window: Arc<winit::window::Window>,
 }
 
-impl SettingsGui {
+impl MainGui {
     fn main_menu_visible<'a>() -> RwLockWriteGuard<'a, bool> {
         //TODO: Look into AtomicBool
         static MEM: OnceLock<RwLock<bool>> = OnceLock::new();
@@ -62,7 +62,7 @@ impl SettingsGui {
 
     // Convenience
     pub fn visible(&self) -> bool {
-        *SettingsGui::main_menu_visible()
+        *MainGui::main_menu_visible()
     }
 
     pub fn set_main_menu_visibility(visible: bool) {
