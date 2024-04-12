@@ -83,6 +83,7 @@ impl MainView {
 
         // Esc is a special case since we navigate back in the menu using that.
         // egui consumes the event and we can't navigate, so check for it here and pass it through.
+        // TODO: Perhaps remove the ESC navigation and just add BACK menu buttons instead?
         let is_esc = matches!(
             window_event,
             winit::event::WindowEvent::KeyboardInput {

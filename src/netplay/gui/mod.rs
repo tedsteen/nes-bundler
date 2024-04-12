@@ -19,6 +19,7 @@ pub struct NetplayGui {
     #[cfg(feature = "debug")]
     pub stats: [debug::NetplayStats; MAX_PLAYERS],
     room_name: Option<String>,
+    last_screen: Option<&'static str>,
 }
 
 impl NetplayGui {
@@ -27,6 +28,7 @@ impl NetplayGui {
             #[cfg(feature = "debug")]
             stats: [debug::NetplayStats::new(), debug::NetplayStats::new()],
             room_name: None,
+            last_screen: None,
         }
     }
 }
@@ -118,6 +120,9 @@ impl NetplayGui {
                                     .desired_width(140.0)
                                     .vertical_align(Align::Center),
                             );
+                            if !self.last_screen.eq(&Some("JOIN")) {
+                                re.request_focus();
+                            }
                             if re.lost_focus() && re.ctx.input(|i| i.key_pressed(egui::Key::Enter))
                             {
                                 if room_name.is_empty() {
@@ -145,6 +150,8 @@ impl NetplayGui {
                     });
                     ui.end_row();
                 });
+            self.last_screen = Some("JOIN");
+
             if let Some(action) = action {
                 self.room_name = None;
                 match action {
@@ -205,6 +212,7 @@ impl NetplayGui {
                     });
             });
             ui.add_space(20.0);
+            self.last_screen = Some("DISCONNECTED");
 
             if let Some(action) = action {
                 match action {
