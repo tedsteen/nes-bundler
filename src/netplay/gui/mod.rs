@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use egui::{Align, Color32, Label, TextEdit, Ui, Widget};
+use egui::{Align, Color32, FontId, Label, RichText, TextEdit, Ui, Widget};
 
 use crate::{
     emulation::LocalNesState, gui::MenuButton, main_view::gui::MainGui,
@@ -29,6 +29,13 @@ impl NetplayGui {
             room_name: None,
         }
     }
+}
+
+fn ui_text_small(text: impl Into<String>, color: Color32) -> RichText {
+    RichText::new(text)
+        .color(color)
+        .strong()
+        .font(FontId::monospace(15.0))
 }
 
 impl NetplayGui {
@@ -97,12 +104,9 @@ impl NetplayGui {
                     ui.end_row();
 
                     ui.vertical_centered(|ui| {
-                        Label::new(MenuButton::ui_text_small(
-                            "ENTER CODE",
-                            MenuButton::ACTIVE_COLOR,
-                        ))
-                        .selectable(false)
-                        .ui(ui);
+                        Label::new(ui_text_small("ENTER CODE", MenuButton::ACTIVE_COLOR))
+                            .selectable(false)
+                            .ui(ui);
                     });
                     ui.end_row();
 
@@ -275,7 +279,7 @@ impl NetplayGui {
                                 ui.end_row();
 
                                 ui.vertical_centered(|ui| {
-                                    Label::new(MenuButton::ui_text_small(
+                                    Label::new(ui_text_small(
                                         "WAITING FOR SECOND PLAYER",
                                         MenuButton::ACTIVE_COLOR,
                                     ))
@@ -328,7 +332,7 @@ impl NetplayGui {
                                 ui.end_row();
 
                                 ui.vertical_centered(|ui| {
-                                    Label::new(MenuButton::ui_text_small(
+                                    Label::new(ui_text_small(
                                         "WAITING FOR SECOND PLAYER",
                                         MenuButton::ACTIVE_COLOR,
                                     ))

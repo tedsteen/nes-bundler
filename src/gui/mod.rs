@@ -44,13 +44,6 @@ impl MenuButton {
             .strong()
             .font(FontId::monospace(30.0))
     }
-
-    pub fn ui_text_small(text: impl Into<String>, color: Color32) -> RichText {
-        RichText::new(text)
-            .color(color)
-            .strong()
-            .font(FontId::monospace(15.0))
-    }
 }
 
 impl Widget for MenuButton {
