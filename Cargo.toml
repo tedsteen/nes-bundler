@@ -49,7 +49,7 @@ puffin_egui = { version = "0.26", optional = true }
 egui-winit = "0.26"
 egui-wgpu = "0.26"
 winit = "0.29"
-wgpu = "0.19"
+wgpu = { version = "0.19", features = ["dx12", "metal"] }
 raw-window-handle = "0.6"
 
 # sdl2 = { version = "0.36", features = ["bundled", "static-link"] }
