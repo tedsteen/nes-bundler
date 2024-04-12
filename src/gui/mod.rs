@@ -66,7 +66,7 @@ impl Widget for MenuButton {
         response.widget_info(|| WidgetInfo::labeled(WidgetType::Button, galley.text()));
 
         ui.memory_mut(|m| {
-            let actual_focus_id = m.focus();
+            let actual_focus_id = m.focused();
             let parent_id = ui.id().value();
             let group = m.data.get_temp_mut_or_insert_with(
                 Id::new(format!("{}_{}", Self::GROUP_KEY, parent_id)),
