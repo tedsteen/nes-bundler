@@ -12,7 +12,6 @@ use input::sdl2_impl::Sdl2Gamepads;
 use input::{Inputs, JoypadState};
 use main_view::MainView;
 
-use settings::gui::GuiEvent;
 use settings::{Settings, MAX_PLAYERS};
 
 use std::sync::{Arc, RwLock};
@@ -26,6 +25,8 @@ use emulation::{NES_HEIGHT, NES_WIDTH_4_3};
 use window::create_window;
 use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::EventLoop;
+
+use crate::main_view::gui::GuiEvent;
 
 mod audio;
 mod bundle;

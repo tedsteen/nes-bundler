@@ -7,7 +7,8 @@ use self::{
 };
 use crate::{
     bundle::Bundle,
-    settings::{gui::GuiEvent, Settings, MAX_PLAYERS},
+    main_view::gui::GuiEvent,
+    settings::{Settings, MAX_PLAYERS},
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, fmt::Debug, ops::Deref};

@@ -14,7 +14,6 @@ use std::{
     ops::{Deref, DerefMut},
     sync::{OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
-pub mod gui;
 
 pub const MAX_PLAYERS: usize = 2;
 

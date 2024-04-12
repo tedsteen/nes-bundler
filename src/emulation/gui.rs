@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use crate::settings::gui::GuiComponent;
+use crate::main_view::gui::GuiComponent;
 
 use super::StateHandler;
 

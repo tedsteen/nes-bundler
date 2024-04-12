@@ -3,10 +3,8 @@ use std::time::{Duration, Instant};
 use egui::{Align, Color32, Label, TextEdit, Ui, Widget};
 
 use crate::{
-    emulation::LocalNesState,
-    gui::MenuButton,
-    netplay::connecting_state::StartMethod,
-    settings::{gui::SettingsGui, MAX_PLAYERS},
+    emulation::LocalNesState, gui::MenuButton, main_view::gui::SettingsGui,
+    netplay::connecting_state::StartMethod, settings::MAX_PLAYERS,
 };
 
 use super::{

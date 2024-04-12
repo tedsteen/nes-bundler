@@ -8,13 +8,15 @@ use crate::{
         buttons::GamepadButton, gamepad::GamepadEvent, gui::InputsGui, keys::Modifiers, KeyEvent,
     },
     integer_scaling::{calculate_size_corrected, MINIMUM_INTEGER_SCALING_SIZE},
-    settings::gui::{GuiEvent, SettingsGui, ToGuiEvent},
     window::{
         egui_winit_wgpu::{texture::Texture, Renderer},
         Fullscreen,
     },
     Size,
 };
+
+use self::gui::{GuiEvent, SettingsGui, ToGuiEvent};
+pub mod gui;
 
 pub struct MainView {
     pub settings_gui: SettingsGui,
@@ -112,7 +114,7 @@ impl MainView {
         inputs_gui: &mut InputsGui,
         emulator_gui: &mut EmulatorGui,
     ) {
-        use crate::settings::gui::GuiEvent::Keyboard;
+        use gui::GuiEvent::Keyboard;
 
         let consumed = match gui_event {
             Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {

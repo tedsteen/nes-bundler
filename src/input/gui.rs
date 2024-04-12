@@ -1,6 +1,7 @@
 use crate::{
     input::{JoypadButton, JoypadState},
-    settings::{gui::GuiComponent, Settings},
+    main_view::gui::{GuiComponent, GuiEvent},
+    settings::Settings,
 };
 use egui::{Color32, Grid, RichText, Ui};
 
@@ -112,7 +113,7 @@ impl InputsGui {
 }
 
 impl GuiComponent for InputsGui {
-    fn handle_event(&mut self, gui_event: &crate::settings::gui::GuiEvent) {
+    fn handle_event(&mut self, gui_event: &GuiEvent) {
         self.inputs.advance(gui_event);
     }
 

@@ -1,4 +1,4 @@
-use crate::settings::{gui::GuiComponent, Settings};
+use crate::{main_view::gui::GuiComponent, settings::Settings};
 use egui::{Slider, Ui};
 
 use super::{
