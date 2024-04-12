@@ -134,7 +134,7 @@ impl Netplay<LocalNesState> {
     }
 
     pub fn join_game(self, room_name: &str) -> Result<NetplayState> {
-        self.join_or_host(room_name, JoinOrHost::Join)
+        self.join_or_host(&room_name.to_uppercase(), JoinOrHost::Join)
     }
 
     fn join_or_host(self, room_name: &str, join_or_host: JoinOrHost) -> Result<NetplayState> {
