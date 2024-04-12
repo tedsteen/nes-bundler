@@ -36,10 +36,7 @@ impl NetplayState {
         use NetplayState::*;
         match self {
             Connecting(netplay) => {
-                //Black screen and no sound while connecting
-                if let Some(video) = &mut buffers.video {
-                    video.fill(0);
-                }
+                //No sound while connecting
                 if let Some(audio) = &mut buffers.audio {
                     for _ in 0..1000 {
                         audio.push(0.0);
@@ -50,9 +47,7 @@ impl NetplayState {
             }
             Connected(netplay) => netplay.advance(joypad_state, buffers),
             Resuming(netplay) => {
-                if let Some(video) = &mut buffers.video {
-                    video.fill(0);
-                }
+                //No sound while resuming
                 if let Some(audio) = &mut buffers.audio {
                     for _ in 0..1000 {
                         audio.push(0.0);
