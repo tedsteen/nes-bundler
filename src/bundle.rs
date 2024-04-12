@@ -8,17 +8,16 @@ use anyhow::Result;
 use directories::ProjectDirs;
 use serde::Deserialize;
 
-use crate::{
-    emulation::NesRegion, input::gui::InputButtonsVoca, netplay::gui::NetplayVoca,
-    settings::Settings,
-};
+use crate::{emulation::NesRegion, input::gui::InputButtonsVoca, settings::Settings};
 
 #[derive(Deserialize, Default, Debug)]
 pub struct Vocabulary {
     #[serde(default = "Default::default")]
     pub input_buttons: InputButtonsVoca,
+
+    #[cfg(feature = "netplay")]
     #[serde(default = "Default::default")]
-    pub netplay: NetplayVoca,
+    pub netplay: crate::netplay::gui::NetplayVoca,
 }
 
 #[derive(Deserialize, Debug)]
