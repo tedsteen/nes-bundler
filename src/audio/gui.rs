@@ -72,49 +72,46 @@ impl GuiComponent for AudioGui {
         // Self::stats_ui(ui, &self.stats);
         let available_device_names =
             Audio::get_available_output_device_names_for_subsystem(&self.audio.audio_subsystem);
-        ui.horizontal(|ui| {
-            egui::Grid::new("audio_grid")
-                .num_columns(2)
-                .spacing([10.0, 4.0])
-                .striped(true)
-                .show(ui, |ui| {
-                    let new_device = {
-                        let mut new_device = None;
-                        ui.label("Output");
-                        let audio_settings = &mut Settings::current_mut().audio;
-                        let selected_device = &mut audio_settings.output_device;
-                        if selected_device.is_none() {
-                            *selected_device = self.audio.get_default_device_name();
-                        }
-                        if let Some(selected_text) = selected_device.as_deref_mut() {
-                            egui::ComboBox::from_id_source("audio-output")
-                                .width(160.0)
-                                .selected_text(selected_text.to_string())
-                                .show_ui(ui, |ui| {
-                                    for name in available_device_names {
-                                        if ui
-                                            .selectable_value(
-                                                selected_device,
-                                                Some(name.clone()),
-                                                name.clone(),
-                                            )
-                                            .changed()
-                                        {
-                                            new_device = Some(name);
-                                        }
-                                    }
-                                });
-                            ui.end_row();
-                        }
-                        ui.label("Volume");
-                        ui.add(Slider::new(&mut audio_settings.volume, 0..=100).suffix("%"));
-                        new_device
-                    };
-                    if let Some(new_device) = new_device {
-                        self.audio.stream.set_output_device(Some(new_device));
-                    }
-                });
-        });
+        let new_device = {
+            let mut new_device = None;
+            let audio_settings = &mut Settings::current_mut().audio;
+            ui.horizontal(|ui| {
+                ui.label("Output");
+                let selected_device = &mut audio_settings.output_device;
+                if selected_device.is_none() {
+                    *selected_device = self.audio.get_default_device_name();
+                }
+                if let Some(selected_text) = selected_device.as_deref_mut() {
+                    egui::ComboBox::from_id_source("audio-output")
+                        .width(160.0)
+                        .selected_text(selected_text.to_string())
+                        .show_ui(ui, |ui| {
+                            for name in available_device_names {
+                                if ui
+                                    .selectable_value(
+                                        selected_device,
+                                        Some(name.clone()),
+                                        name.clone(),
+                                    )
+                                    .changed()
+                                {
+                                    new_device = Some(name);
+                                }
+                            }
+                        });
+                }
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Volume");
+                ui.add(Slider::new(&mut audio_settings.volume, 0..=100).suffix("%"));
+            });
+
+            new_device
+        };
+        if let Some(new_device) = new_device {
+            self.audio.stream.set_output_device(Some(new_device));
+        }
     }
 
     fn name(&self) -> Option<&str> {

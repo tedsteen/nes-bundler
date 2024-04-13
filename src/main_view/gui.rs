@@ -3,13 +3,16 @@ use std::{
     time::{Duration, Instant},
 };
 
-use egui::{Color32, Context, FontId, Margin, Response, RichText, Ui, Widget};
+use egui::{
+    Align2, Button, Color32, Context, FontId, Margin, Response, RichText, Style, Ui, Widget,
+};
+use winit::dpi::LogicalSize;
 
 use crate::{
     audio::gui::AudioGui,
     bundle::Bundle,
     emulation::{gui::EmulatorGui, EmulatorCommand},
-    gui::{centered_window, MenuButton},
+    gui::MenuButton,
     input::{
         buttons::GamepadButton, gamepad::GamepadEvent, gui::InputsGui, keys::KeyCode, KeyEvent,
     },
@@ -99,6 +102,31 @@ impl MainGui {
         res.inner
     }
 
+    fn ui_main_container(
+        window: &Arc<winit::window::Window>,
+        title: Option<&str>,
+        ctx: &Context,
+        content: impl FnOnce(&mut Ui),
+    ) {
+        let size: LogicalSize<f32> = window.inner_size().to_logical(window.scale_factor());
+        let window_title = title.unwrap_or("");
+        egui::Window::new(window_title)
+            .title_bar(title.is_some())
+            .collapsible(false)
+            .resizable(false)
+            .movable(false)
+            .frame(egui::Frame::window(&Style::default()).inner_margin(Margin::same(20.0)))
+            .pivot(Align2::CENTER_CENTER)
+            .fixed_pos([size.width / 2.0, size.height / 2.0])
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    egui::Grid::new(format!("main_menu_grid_{window_title}"))
+                        .num_columns(1)
+                        .spacing([10.0, 10.0])
+                        .show(ui, content);
+                });
+            });
+    }
     pub fn ui(
         &mut self,
         ctx: &Context,
@@ -109,98 +137,114 @@ impl MainGui {
         if self.visible() {
             match self.state {
                 MainMenuState::Main => {
-                    centered_window(&self.window, ctx, None, |ui| {
-                        ui.add_space(20.0);
-                        egui::Grid::new("main_menu_grid")
-                            .num_columns(1)
-                            .spacing([10.0, 10.0])
-                            .show(ui, |ui| {
-                                if Self::menu_item_ui(ui, "BACK").clicked() {
-                                    Self::set_main_menu_visibility(false);
-                                }
+                    Self::ui_main_container(&self.window, None, ctx, |ui| {
+                        if Self::menu_item_ui(ui, "BACK").clicked() {
+                            Self::set_main_menu_visibility(false);
+                        }
 
-                                if let Some(name) = emulator_gui.name() {
-                                    if Self::menu_item_ui(ui, name.to_uppercase()).clicked() {
-                                        self.state = MainMenuState::Netplay;
-                                    }
-                                }
+                        if let Some(name) = emulator_gui.name() {
+                            if Self::menu_item_ui(ui, name.to_uppercase()).clicked() {
+                                self.state = MainMenuState::Netplay;
+                            }
+                        }
 
-                                if Self::menu_item_ui(ui, "SETTINGS").clicked() {
-                                    self.state = MainMenuState::Settings;
-                                }
+                        if Self::menu_item_ui(ui, "SETTINGS").clicked() {
+                            self.state = MainMenuState::Settings;
+                        }
 
-                                if Self::menu_item_ui(ui, "EXIT").clicked() {
-                                    std::process::exit(0);
-                                }
-                            });
-                        ui.add_space(20.0);
+                        if Self::menu_item_ui(ui, "QUIT GAME").clicked() {
+                            std::process::exit(0);
+                        }
                     });
                 }
                 MainMenuState::Settings => {
-                    centered_window(&self.window, ctx, Some("Settings"), |ui| {
-                        if let Some(name) = audio_gui.name() {
-                            ui.vertical_centered(|ui| {
-                                ui.heading(name);
-                            });
-                            audio_gui.ui(ui);
-                        }
-                        ui.separator();
-                        if let Some(name) = inputs_gui.name() {
-                            ui.vertical_centered(|ui| {
-                                ui.heading(name);
-                            });
-                            inputs_gui.ui(ui);
-                        }
-
-                        if Bundle::current().config.supported_nes_regions.len() > 1 {
-                            ui.separator();
-                            ui.vertical_centered(|ui| {
-                                ui.heading("NES System");
-                            });
-                            ui.vertical(|ui| {
-                                ui.label(
-                                    RichText::new("NOTE: changing this will restart the game")
-                                        .color(Color32::DARK_RED),
-                                );
-
-                                ui.horizontal(|ui| {
-                                    for supported_region in
-                                        &Bundle::current().config.supported_nes_regions
-                                    {
-                                        if ui
-                                            .radio_value(
-                                                Settings::current_mut().get_nes_region(),
-                                                supported_region.clone(),
-                                                format!("{:?}", supported_region),
-                                            )
-                                            .changed()
-                                        {
-                                            let _ =
-                                                self.emulator_tx.send(EmulatorCommand::Reset(true));
-                                        }
-                                    }
+                    Self::ui_main_container(&self.window, Some("Settings"), ctx, |ui| {
+                        ui.vertical(|ui| {
+                            if let Some(name) = audio_gui.name() {
+                                ui.vertical_centered(|ui| {
+                                    ui.heading(name);
                                 });
-                            });
-                        }
-
-                        #[cfg(feature = "debug")]
-                        {
+                                audio_gui.ui(ui);
+                            }
+                            ui.add_space(10.0);
                             ui.separator();
-                            let mut profile = puffin::are_scopes_on();
-                            ui.checkbox(&mut profile, "Toggle profiling");
-                            puffin::set_scopes_on(profile);
-                        }
+                            ui.add_space(10.0);
+                            if let Some(name) = inputs_gui.name() {
+                                ui.vertical_centered(|ui| {
+                                    ui.heading(name);
+                                });
+                                inputs_gui.ui(ui);
+                            }
+
+                            if Bundle::current().config.supported_nes_regions.len() > 1 {
+                                ui.separator();
+                                ui.vertical_centered(|ui| {
+                                    ui.heading("NES System");
+                                });
+                                ui.vertical(|ui| {
+                                    ui.label(
+                                        RichText::new("NOTE: changing this will restart the game")
+                                            .color(Color32::DARK_RED),
+                                    );
+
+                                    ui.horizontal(|ui| {
+                                        for supported_region in
+                                            &Bundle::current().config.supported_nes_regions
+                                        {
+                                            if ui
+                                                .radio_value(
+                                                    Settings::current_mut().get_nes_region(),
+                                                    supported_region.clone(),
+                                                    format!("{:?}", supported_region),
+                                                )
+                                                .changed()
+                                            {
+                                                let _ = self
+                                                    .emulator_tx
+                                                    .send(EmulatorCommand::Reset(true));
+                                            }
+                                        }
+                                    });
+                                });
+                            }
+
+                            #[cfg(feature = "debug")]
+                            {
+                                ui.add_space(10.0);
+                                ui.separator();
+                                ui.add_space(10.0);
+
+                                let mut profile = puffin::are_scopes_on();
+                                ui.checkbox(&mut profile, "Toggle profiling");
+                                puffin::set_scopes_on(profile);
+                            }
+
+                            ui.vertical_centered(|ui| {
+                                ui.add_space(20.0);
+                                if Button::new(
+                                    RichText::new("Close").font(FontId::proportional(20.0)),
+                                )
+                                .ui(ui)
+                                .clicked()
+                                {
+                                    MainGui::set_main_menu_visibility(false);
+                                }
+                            });
+                        });
                     });
                 }
                 MainMenuState::Netplay => {
                     if emulator_gui.name().is_some() {
                         let name = emulator_gui.name().expect("a name").to_owned();
-                        centered_window(&self.window, ctx, Some(&name), |ui| {
+                        Self::ui_main_container(&self.window, Some(&name), ctx, |ui| {
                             emulator_gui.ui(ui);
                         });
                     }
                 }
             }
+        } else {
+            // Always go to main state if hidden
+            self.state = MainMenuState::Main;
         }
 
         egui::TopBottomPanel::top("messages")

@@ -35,6 +35,7 @@ pub type StateHandler = crate::netplay::NetplayStateHandler;
 #[cfg(not(feature = "netplay"))]
 pub type StateHandler = crate::emulation::LocalNesState;
 
+#[allow(dead_code)] // Some commands are only sent by certain features
 pub enum EmulatorCommand {
     Reset(bool),
     SetSpeed(f32),

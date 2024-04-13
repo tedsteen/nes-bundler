@@ -1,10 +1,9 @@
-use std::{collections::HashSet, sync::Arc};
+use std::collections::HashSet;
 
 use egui::{
-    Align2, Color32, Context, CursorIcon, FontId, Id, RichText, Rounding, Sense, TextStyle, Ui,
-    Vec2, Widget, WidgetInfo, WidgetText, WidgetType, Window,
+    Color32, CursorIcon, FontId, Id, RichText, Rounding, Sense, TextStyle, Ui, Vec2, Widget,
+    WidgetInfo, WidgetText, WidgetType,
 };
-use winit::dpi::LogicalSize;
 
 #[derive(Clone)]
 struct MenuButtonGroup {
@@ -108,22 +107,4 @@ impl Widget for MenuButton {
         }
         response
     }
-}
-
-pub fn centered_window(
-    window: &Arc<winit::window::Window>,
-    ctx: &Context,
-    title: Option<&str>,
-    content: impl FnOnce(&mut Ui),
-) {
-    let size: LogicalSize<f32> = window.inner_size().to_logical(window.scale_factor());
-
-    Window::new(title.unwrap_or(""))
-        .title_bar(title.is_some())
-        .collapsible(false)
-        .resizable(false)
-        .movable(false)
-        .pivot(Align2::CENTER_CENTER)
-        .fixed_pos([size.width / 2.0, size.height / 2.0])
-        .show(ctx, content);
 }

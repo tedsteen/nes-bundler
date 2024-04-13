@@ -23,7 +23,7 @@ manufacturer: "Darkbits"
 supported_nes_regions:
     - Ntsc
 
-# There will be tearing if disabled, there might be more dropped frames if enabled
+# There might be tearing if disabled, there might be more dropped frames if enabled
 enable_vsync: false
 
 # Starts the game in fullscreen if true

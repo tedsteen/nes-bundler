@@ -44,31 +44,28 @@ impl EmulatorGui {
 #[cfg(feature = "debug")]
 impl DebugGui {
     fn ui(&mut self, ui: &mut egui::Ui) {
+        ui.end_row();
+
         ui.label(format!(
             "Frame: {}",
             super::NesStateHandler::frame(std::ops::Deref::deref(&self.nes_state.lock().unwrap()))
         ));
-        ui.horizontal(|ui| {
-            egui::Grid::new("debug_grid")
-                .num_columns(2)
-                .spacing([10.0, 4.0])
-                .striped(true)
-                .show(ui, |ui| {
-                    if ui
-                        .checkbox(&mut self.override_speed, "Override emulation speed")
-                        .changed()
-                        && !self.override_speed
-                    {
-                        let _ = self.emulator_tx.send(EmulatorCommand::SetSpeed(1.0));
-                    }
+        ui.end_row();
 
-                    if self.override_speed {
-                        ui.add(egui::Slider::new(&mut self.speed, 0.005..=2.0).suffix("x"));
-                        let _ = self.emulator_tx.send(EmulatorCommand::SetSpeed(self.speed));
-                    }
-                    ui.end_row();
-                });
-        });
+        if ui
+            .checkbox(&mut self.override_speed, "Override emulation speed")
+            .changed()
+            && !self.override_speed
+        {
+            let _ = self.emulator_tx.send(EmulatorCommand::SetSpeed(1.0));
+        }
+
+        if self.override_speed {
+            ui.end_row();
+            ui.add(egui::Slider::new(&mut self.speed, 0.005..=2.0).suffix("x"));
+            let _ = self.emulator_tx.send(EmulatorCommand::SetSpeed(self.speed));
+        }
+        ui.end_row();
     }
 }
 

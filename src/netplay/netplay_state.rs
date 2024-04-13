@@ -111,6 +111,9 @@ pub fn get_netplay_id() -> String {
         .get_or_insert_with(|| Uuid::new_v4().to_string())
         .to_string()
 }
+
+pub const MAX_ROOM_NAME_LEN: u8 = 4;
+
 impl Netplay<LocalNesState> {
     pub fn new() -> Result<Self> {
         Ok(Self {
@@ -122,7 +125,7 @@ impl Netplay<LocalNesState> {
         use rand::distributions::{Alphanumeric, DistString};
 
         let room_name = Alphanumeric
-            .sample_string(&mut rand::thread_rng(), 4)
+            .sample_string(&mut rand::thread_rng(), MAX_ROOM_NAME_LEN.into())
             .to_uppercase();
 
         self.join_or_host(&room_name, JoinOrHost::Host)
