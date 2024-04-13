@@ -2,7 +2,7 @@ use ggrs::{Config, GgrsRequest, P2PSession};
 use matchbox_socket::PeerId;
 
 use crate::{
-    emulation::{Emulator, NESBuffers, NesStateHandler},
+    emulation::{NESBuffers, NesStateHandler},
     input::JoypadState,
     settings::MAX_PLAYERS,
 };
@@ -128,16 +128,17 @@ impl NetplaySession {
             }
         }
 
-        *Emulator::emulation_speed_mut() = if sess.frames_ahead() > 0 {
+        if sess.frames_ahead() > 0 {
             log::debug!(
                 "Frames ahead: {:?}, slowing down emulation",
                 sess.frames_ahead()
             );
             //https://www.desmos.com/calculator/zbntsowijd
-            0.8_f32.max(1.0 - 0.1 * (0.2 * sess.frames_ahead() as f32).powf(2.0))
+            let speed = 0.8_f32.max(1.0 - 0.1 * (0.2 * sess.frames_ahead() as f32).powf(2.0));
+            self.game_state.set_speed(speed);
         } else {
-            1.0
-        };
+            self.game_state.set_speed(1.0)
+        }
         Ok(())
     }
 }

@@ -1,9 +1,13 @@
+use std::sync::mpsc::Sender;
+
 use egui::{load::SizedTexture, Color32, Image, Vec2};
 use winit::keyboard::{KeyCode, PhysicalKey};
 
 use crate::{
     audio::gui::AudioGui,
-    emulation::{gui::EmulatorGui, BufferPool, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3},
+    emulation::{
+        gui::EmulatorGui, BufferPool, EmulatorCommand, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3,
+    },
     input::{
         buttons::GamepadButton, gamepad::GamepadEvent, gui::InputsGui, keys::Modifiers, KeyEvent,
     },
@@ -60,9 +64,9 @@ fn to_egui_event(gamepad_event: &GamepadEvent) -> Option<egui::Event> {
 }
 
 impl MainView {
-    pub fn new(mut renderer: Renderer) -> Self {
+    pub fn new(mut renderer: Renderer, emulator_tx: Sender<EmulatorCommand>) -> Self {
         Self {
-            main_gui: MainGui::new(renderer.window.clone()),
+            main_gui: MainGui::new(renderer.window.clone(), emulator_tx),
             modifiers: Modifiers::empty(),
 
             nes_texture: Texture::new(&mut renderer, NES_WIDTH, NES_HEIGHT, Some("nes frame")),

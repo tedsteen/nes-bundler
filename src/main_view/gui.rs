@@ -1,5 +1,5 @@
 use std::{
-    sync::{Arc, OnceLock, RwLock, RwLockWriteGuard},
+    sync::{mpsc::Sender, Arc, OnceLock, RwLock, RwLockWriteGuard},
     time::{Duration, Instant},
 };
 
@@ -7,11 +7,13 @@ use egui::{Color32, Context, FontId, Margin, Response, RichText, Ui, Widget};
 
 use crate::{
     audio::gui::AudioGui,
-    emulation::gui::EmulatorGui,
+    bundle::Bundle,
+    emulation::{gui::EmulatorGui, EmulatorCommand},
     gui::{centered_window, MenuButton},
     input::{
         buttons::GamepadButton, gamepad::GamepadEvent, gui::InputsGui, keys::KeyCode, KeyEvent,
     },
+    settings::Settings,
 };
 
 pub trait ToGuiEvent {
@@ -51,6 +53,7 @@ pub struct MainGui {
     start_time: Instant,
     state: MainMenuState,
     window: Arc<winit::window::Window>,
+    emulator_tx: Sender<EmulatorCommand>,
 }
 
 impl MainGui {
@@ -72,11 +75,12 @@ impl MainGui {
     const MESSAGE_TEXT_BACKGROUND: Color32 = Color32::from_rgba_premultiplied(20, 20, 20, 200);
     const MESSAGE_TEXT_COLOR: Color32 = Color32::from_rgb(255, 255, 255);
 
-    pub fn new(window: Arc<winit::window::Window>) -> Self {
+    pub fn new(window: Arc<winit::window::Window>, emulator_tx: Sender<EmulatorCommand>) -> Self {
         Self {
             start_time: Instant::now(),
             window,
             state: MainMenuState::Main,
+            emulator_tx,
         }
     }
     fn message_ui(ui: &mut Ui, text: impl Into<String>) {
@@ -146,6 +150,37 @@ impl MainGui {
                                 ui.heading(name);
                             });
                             inputs_gui.ui(ui);
+                        }
+
+                        if Bundle::current().config.supported_nes_regions.len() > 1 {
+                            ui.separator();
+                            ui.vertical_centered(|ui| {
+                                ui.heading("NES System");
+                            });
+                            ui.vertical(|ui| {
+                                ui.label(
+                                    RichText::new("NOTE: changing this will restart the game")
+                                        .color(Color32::DARK_RED),
+                                );
+
+                                ui.horizontal(|ui| {
+                                    for supported_region in
+                                        &Bundle::current().config.supported_nes_regions
+                                    {
+                                        if ui
+                                            .radio_value(
+                                                Settings::current_mut().get_nes_region(),
+                                                supported_region.clone(),
+                                                format!("{:?}", supported_region),
+                                            )
+                                            .changed()
+                                        {
+                                            let _ =
+                                                self.emulator_tx.send(EmulatorCommand::Reset(true));
+                                        }
+                                    }
+                                });
+                            });
                         }
 
                         #[cfg(feature = "debug")]

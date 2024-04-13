@@ -93,16 +93,18 @@ async fn run() -> anyhow::Result<()> {
     let audio_tx = audio.stream.start()?;
 
     let renderer = Renderer::new(window.clone()).await?;
-    let mut main_view = MainView::new(renderer);
+
     let mut inputs_gui = InputsGui::new(inputs);
     let mut audio_gui = AudioGui::new(audio);
 
     let emulator = Emulator::new()?;
     let shared_inputs = Arc::new(RwLock::new([JoypadState(0); MAX_PLAYERS]));
     let frame_buffer = BufferPool::new();
-    let mut emulator_gui = emulator
+    let (mut emulator_gui, emulator_tx) = emulator
         .start_thread(audio_tx, shared_inputs.clone(), frame_buffer.clone())
         .await?;
+
+    let mut main_view = MainView::new(renderer, emulator_tx);
 
     let mouse_hide_timeout = Duration::from_secs(1);
     let mut last_mouse_touch = Instant::now()

@@ -1,12 +1,13 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc::Sender, Arc, Mutex};
 
 use crate::main_view::gui::GuiComponent;
 
-use super::StateHandler;
+use super::{EmulatorCommand, StateHandler};
 
 #[cfg(feature = "debug")]
 struct DebugGui {
     nes_state: Arc<Mutex<StateHandler>>,
+    emulator_tx: Sender<EmulatorCommand>,
 
     pub speed: f32,
     pub override_speed: bool,
@@ -23,13 +24,14 @@ pub struct EmulatorGui {
 }
 impl EmulatorGui {
     #[allow(unused_variables)]
-    pub fn new(nes_state: Arc<Mutex<StateHandler>>) -> Self {
+    pub fn new(nes_state: Arc<Mutex<StateHandler>>, emulator_tx: Sender<EmulatorCommand>) -> Self {
         Self {
             #[cfg(feature = "netplay")]
             netplay_gui: crate::netplay::gui::NetplayGui::new(),
             #[cfg(feature = "debug")]
             debug_gui: DebugGui {
                 nes_state: nes_state.clone(),
+                emulator_tx,
                 speed: 1.0,
                 override_speed: false,
             },
@@ -57,12 +59,12 @@ impl DebugGui {
                         .changed()
                         && !self.override_speed
                     {
-                        *super::Emulator::emulation_speed_mut() = 1.0;
+                        let _ = self.emulator_tx.send(EmulatorCommand::SetSpeed(1.0));
                     }
 
                     if self.override_speed {
                         ui.add(egui::Slider::new(&mut self.speed, 0.005..=2.0).suffix("x"));
-                        *super::Emulator::emulation_speed_mut() = self.speed;
+                        let _ = self.emulator_tx.send(EmulatorCommand::SetSpeed(self.speed));
                     }
                     ui.end_row();
                 });

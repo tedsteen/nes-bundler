@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use tetanes_core::{
     apu::filter::FilterChain,
-    common::{NesRegion, Regional},
+    common::{NesRegion, Regional, Reset, ResetKind},
     control_deck::{Config, ControlDeck, HeadlessMode},
     cpu::Cpu,
     fs,
@@ -13,7 +13,7 @@ use tetanes_core::{
     video::VideoFilter,
 };
 
-use super::{Emulator, NESBuffers, NesStateHandler, NTSC_PAL, SAMPLE_RATE};
+use super::{NESBuffers, NesStateHandler, NTSC_PAL, SAMPLE_RATE};
 use crate::{
     bundle::Bundle,
     input::JoypadState,
@@ -44,7 +44,7 @@ impl ToTetanesRegion for crate::emulation::NesRegion {
 
 impl TetanesNesState {
     pub fn start_rom(rom: &[u8], load_sram: bool) -> Result<Self> {
-        let region = Bundle::current().config.nes_region.to_tetanes_region();
+        let region = Settings::current_mut().get_nes_region().to_tetanes_region();
         let config = Config {
             filter: VideoFilter::Pixellate,
             region,
@@ -53,7 +53,7 @@ impl TetanesNesState {
             zapper: false,
             genie_codes: vec![],
             concurrent_dpad: false,
-            channels_enabled: [true; 5],
+            channels_enabled: [true; 6],
             headless_mode: HeadlessMode::empty(),
         };
         log::debug!("Starting ROM with configuration {config:?}");
@@ -85,30 +85,13 @@ impl TetanesNesState {
         Ok(s)
     }
 
-    fn set_speed(&mut self, speed: f32) {
-        let speed = speed.max(0.005);
-        let apu = &mut self.control_deck.cpu_mut().bus.apu;
-        let target_sample_rate = match apu.region {
-            // Downsample a tiny bit extra to match the most common screen refresh rate (60hz)
-            NesRegion::Ntsc => SAMPLE_RATE * (crate::emulation::NesRegion::Ntsc.to_fps() / 60.0),
-            _ => SAMPLE_RATE,
-        };
-
-        let new_sample_rate = target_sample_rate * (1.0 / speed);
-        let new_sample_period = Cpu::region_clock_rate(apu.region) / new_sample_rate;
-
-        if apu.sample_period != new_sample_period {
-            log::debug!("Change emulation speed to {speed}x");
-            apu.filter_chain = FilterChain::new(apu.region, new_sample_rate);
-            apu.sample_period = new_sample_period;
-        }
-    }
-
     pub fn clock_frame_into(&mut self, buffers: &mut NESBuffers) -> Result<usize> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
         self.control_deck.cpu_mut().bus.ppu.skip_rendering = false;
+        //self.control_deck.cpu_mut().bus.apu.skip_mixing = false;
+
         let cycles = self.control_deck.clock_frame()?;
         if let Some(video) = &mut buffers.video {
             #[cfg(feature = "debug")]
@@ -140,6 +123,7 @@ impl TetanesNesState {
         puffin::profile_function!();
 
         self.control_deck.cpu_mut().bus.ppu.skip_rendering = true;
+        //self.control_deck.cpu_mut().bus.apu.skip_mixing = true;
         // Clock current frame and discard video
         {
             #[cfg(feature = "debug")]
@@ -173,9 +157,26 @@ impl TetanesNesState {
 }
 
 impl NesStateHandler for TetanesNesState {
-    fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers) {
-        self.set_speed(*Emulator::emulation_speed());
+    fn set_speed(&mut self, speed: f32) {
+        let speed = speed.max(0.005);
+        let apu = &mut self.control_deck.cpu_mut().bus.apu;
+        let target_sample_rate = match apu.region {
+            // Downsample a tiny bit extra to match the most common screen refresh rate (60hz)
+            NesRegion::Ntsc => SAMPLE_RATE * (crate::emulation::NesRegion::Ntsc.to_fps() / 60.0),
+            _ => SAMPLE_RATE,
+        };
 
+        let new_sample_rate = target_sample_rate * (1.0 / speed);
+        let new_sample_period = Cpu::region_clock_rate(apu.region) / new_sample_rate;
+
+        if apu.sample_period != new_sample_period {
+            log::debug!("Change emulation speed to {speed}x");
+            apu.filter_chain = FilterChain::new(apu.region, new_sample_rate);
+            apu.sample_period = new_sample_period;
+        }
+    }
+
+    fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers) {
         *self.control_deck.joypad_mut(Player::One) = Joypad::from_bytes((*joypad_state[0]).into());
         *self.control_deck.joypad_mut(Player::Two) = Joypad::from_bytes((*joypad_state[1]).into());
 
@@ -193,5 +194,17 @@ impl NesStateHandler for TetanesNesState {
 
     fn frame(&self) -> u32 {
         self.control_deck.frame_number()
+    }
+
+    fn reset(&mut self, hard: bool) {
+        let kind = if hard {
+            ResetKind::Hard
+        } else {
+            ResetKind::Soft
+        };
+        //Set the region in case it has been changed since last start/reset
+        self.control_deck
+            .set_region(Settings::current_mut().get_nes_region().to_tetanes_region());
+        self.control_deck.reset(kind);
     }
 }

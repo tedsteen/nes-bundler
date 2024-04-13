@@ -25,7 +25,7 @@ pub struct BuildConfiguration {
     pub name: String,
     pub manufacturer: String,
     pub default_settings: Settings,
-    pub nes_region: NesRegion,
+    pub supported_nes_regions: Vec<NesRegion>,
     #[serde(default = "Default::default")]
     pub enable_vsync: bool,
     #[serde(default = "Default::default")]

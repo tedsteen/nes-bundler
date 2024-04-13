@@ -115,6 +115,22 @@ impl NesStateHandler for NetplayStateHandler {
             _ => 0,
         }
     }
+
+    fn set_speed(&mut self, speed: f32) {
+        match &mut self.netplay {
+            Some(NetplayState::Connected(s)) => s.state.netplay_session.game_state.set_speed(speed),
+            Some(NetplayState::Disconnected(s)) => s.state.set_speed(speed),
+            _ => {}
+        }
+    }
+
+    fn reset(&mut self, hard: bool) {
+        match &mut self.netplay {
+            Some(NetplayState::Connected(s)) => s.state.netplay_session.game_state.reset(hard),
+            Some(NetplayState::Disconnected(s)) => s.state.reset(hard),
+            _ => {}
+        }
+    }
 }
 
 impl NetplayStateHandler {

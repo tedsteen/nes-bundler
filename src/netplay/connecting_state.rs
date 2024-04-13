@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use crate::bundle::Bundle;
 use crate::netplay::netplay_state::get_netplay_id;
-use crate::settings::MAX_PLAYERS;
+use crate::settings::{Settings, MAX_PLAYERS};
 
 use super::netplay_session::{GGRSConfig, NetplaySession};
 
@@ -298,7 +298,7 @@ impl Connecting<PeeringState> {
             let mut sess_build = SessionBuilder::<GGRSConfig>::new()
                 .with_num_players(MAX_PLAYERS)
                 .with_input_delay(ggrs_config.input_delay)
-                .with_fps(Bundle::current().config.nes_region.to_fps() as usize)
+                .with_fps(Settings::current_mut().get_nes_region().to_fps() as usize)
                 .unwrap()
                 .with_max_prediction_window(ggrs_config.max_prediction)
                 .expect("ggrs session to configure");
