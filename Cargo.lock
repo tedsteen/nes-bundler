@@ -3484,7 +3484,7 @@ dependencies = [
 [[package]]
 name = "sdl2"
 version = "0.36.0"
-source = "git+https://github.com/tedsteen/rust-sdl2.git?branch=rust-sdl2-for-nes-bundler#3336cebbfb25a70e1bd7899bb73953bbb039622c"
+source = "git+https://github.com/tedsteen/rust-sdl2.git?branch=for-nes-bundler#73e665adc69970f4fcf53bca742d2132ea4e3722"
 dependencies = [
  "bitflags 1.3.2",
  "lazy_static",
@@ -3495,7 +3495,7 @@ dependencies = [
 [[package]]
 name = "sdl2-sys"
 version = "0.36.0"
-source = "git+https://github.com/tedsteen/rust-sdl2.git?branch=rust-sdl2-for-nes-bundler#3336cebbfb25a70e1bd7899bb73953bbb039622c"
+source = "git+https://github.com/tedsteen/rust-sdl2.git?branch=for-nes-bundler#73e665adc69970f4fcf53bca742d2132ea4e3722"
 dependencies = [
  "cfg-if",
  "cmake",

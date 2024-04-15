@@ -53,7 +53,7 @@ wgpu = { version = "0.19", features = ["dx12", "metal"] }
 raw-window-handle = "0.6"
 
 # sdl2 = { version = "0.36", features = ["bundled", "static-link"] }
-sdl2 = { git = "https://github.com/tedsteen/rust-sdl2.git", branch = "rust-sdl2-for-nes-bundler", features = ["bundled", "static-link"] }
+sdl2 = { git = "https://github.com/tedsteen/rust-sdl2.git", branch = "for-nes-bundler", features = ["bundled", "static-link"] }
 
 tetanes-core = { git = "https://github.com/tedsteen/tetanes.git", branch="for-nes-bundler" }
 bincode = "1.3"
