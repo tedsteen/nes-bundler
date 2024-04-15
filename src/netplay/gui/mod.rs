@@ -347,6 +347,7 @@ impl NetplayGui {
                         .gt(&Duration::from_secs(5))
                     {
                         ui.vertical_centered(|ui| {
+                            ui.set_width(300.0);
                             ui.horizontal_wrapped(|ui| {
                                 ui.spacing_mut().item_spacing.x = 0.0;
                                 ui.label("We're having trouble connecting you, click ");
@@ -355,6 +356,7 @@ impl NetplayGui {
                             });
                         });
                         ui.end_row();
+
                         ui.vertical_centered(|ui| {
                             if ui.button("Retry").clicked() {
                                 action =
@@ -377,6 +379,7 @@ impl NetplayGui {
             }
         }
         ui.end_row();
+
         ui.vertical(|ui| {
             ui.add_space(20.0);
         });
@@ -403,11 +406,7 @@ impl NetplayGui {
     }
 
     fn ui_connected(&mut self, ui: &mut Ui, netplay_connected: Netplay<Connected>) -> NetplayState {
-        enum Action {
-            FakeDisconnect,
-            Disconnect,
-        }
-        let mut action = None;
+        // Hide menu if we just managed to connect
         if Instant::now()
             .duration_since(netplay_connected.state.start_time)
             .as_millis()
@@ -415,8 +414,28 @@ impl NetplayGui {
         {
             MainGui::set_main_menu_visibility(false);
         }
-        #[cfg(not(feature = "debug"))]
-        let fake_lost_connection_clicked = false;
+
+        ui.vertical_centered(|ui| {
+            Label::new(MenuButton::ui_text("CONNECTED!", MenuButton::ACTIVE_COLOR))
+                .selectable(false)
+                .ui(ui);
+        });
+        ui.end_row();
+
+        #[allow(dead_code)] // Some actions are only triggered by certain features
+        enum Action {
+            FakeDisconnect,
+            Disconnect,
+        }
+
+        let mut action = None;
+        ui.vertical_centered(|ui| {
+            if ui.button("Disconnect").clicked() {
+                action = Some(Action::Disconnect);
+            }
+        });
+        ui.end_row();
+
         #[cfg(feature = "debug")]
         {
             ui.vertical_centered(|ui| {
@@ -430,20 +449,6 @@ impl NetplayGui {
             });
             ui.end_row();
         }
-
-        ui.vertical_centered(|ui| {
-            Label::new(MenuButton::ui_text("CONNECTED!", MenuButton::ACTIVE_COLOR))
-                .selectable(false)
-                .ui(ui);
-        });
-        ui.end_row();
-
-        ui.vertical_centered(|ui| {
-            if ui.button("Disconnect").clicked() {
-                action = Some(Action::Disconnect);
-            }
-        });
-        ui.end_row();
 
         if let Some(action) = action {
             match action {
@@ -481,17 +486,15 @@ impl NetplayGui {
             }
             NetplayState::Connected(netplay_connected) => self.ui_connected(ui, netplay_connected),
             NetplayState::Resuming(netplay_resuming) => {
-                let mut disconnect_clicked = false;
-
                 ui.vertical_centered(|ui| {
                     Label::new(MenuButton::ui_text("RESUMING...", MenuButton::ACTIVE_COLOR))
                         .selectable(false)
                         .ui(ui);
                 });
                 ui.end_row();
-                ui.vertical_centered(|ui| {
-                    disconnect_clicked = ui.button("Disconnect").clicked();
-                });
+                let disconnect_clicked = ui
+                    .vertical_centered(|ui| ui.button("Disconnect").clicked())
+                    .inner;
 
                 ui.end_row();
 
