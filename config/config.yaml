@@ -33,16 +33,15 @@ start_in_fullscreen: false
 # If you have more needs file an issue or open a PR
 vocabulary:
     # The name of the inputs in the key mapping section
-    settings:
-        input_buttons:
-            up: Up
-            down: Down
-            left: Left
-            right: Right
-            select: Select
-            start: Start
-            b: B
-            a: A
+    input_buttons:
+        up: Up
+        down: Down
+        left: Left
+        right: Right
+        select: Select
+        start: Start
+        b: B
+        a: A
     netplay:
         # Name Netplay something else?
         name: Netplay

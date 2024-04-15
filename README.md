@@ -11,7 +11,7 @@ What you get is an executable with
 * Netplay! (Optional feature, can be disabled if not wanted).
 
 <p align="center">
-  <img src="https://github.com/tedsteen/nes-bundler/blob/master/screenshot.png?raw=true" alt="Data Man!"/>
+  <img src="https://github.com/tedsteen/nes-bundler/blob/master/screenshot.gif?raw=true" alt="Data Man!"/>
 </p>
 
 ## Try it out
