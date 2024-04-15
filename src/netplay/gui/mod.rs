@@ -390,7 +390,10 @@ impl NetplayGui {
 
         if let Some(action) = action {
             match action {
-                Action::Cancel => return NetplayState::Disconnected(netplay_connecting.cancel()),
+                Action::Cancel => {
+                    MainGui::set_main_menu_visibility(false);
+                    return NetplayState::Disconnected(netplay_connecting.cancel());
+                }
                 Action::Retry(start_method) => {
                     return netplay_connecting.cancel().start(start_method);
                 }
@@ -400,6 +403,11 @@ impl NetplayGui {
     }
 
     fn ui_connected(&mut self, ui: &mut Ui, netplay_connected: Netplay<Connected>) -> NetplayState {
+        enum Action {
+            FakeDisconnect,
+            Disconnect,
+        }
+        let mut action = None;
         if Instant::now()
             .duration_since(netplay_connected.state.start_time)
             .as_millis()
@@ -410,42 +418,63 @@ impl NetplayGui {
         #[cfg(not(feature = "debug"))]
         let fake_lost_connection_clicked = false;
         #[cfg(feature = "debug")]
-        let fake_lost_connection_clicked = {
-            ui.collapsing("Stats", |ui| {
-                Self::stats_ui(ui, &self.stats[0], 0);
-                Self::stats_ui(ui, &self.stats[1], 1);
+        {
+            ui.vertical_centered(|ui| {
+                ui.collapsing("Stats", |ui| {
+                    Self::stats_ui(ui, &self.stats[0], 0);
+                    Self::stats_ui(ui, &self.stats[1], 1);
+                });
+                if ui.button("Fake connection lost").clicked() {
+                    action = Some(Action::FakeDisconnect);
+                }
             });
-            ui.button("Fake connection lost").clicked()
-        };
+            ui.end_row();
+        }
 
-        let mut disconnect_clicked = false;
         ui.vertical_centered(|ui| {
             Label::new(MenuButton::ui_text("CONNECTED!", MenuButton::ACTIVE_COLOR))
                 .selectable(false)
                 .ui(ui);
         });
         ui.end_row();
-        ui.vertical_centered(|ui| {
-            disconnect_clicked = ui.button("Disconnect").clicked();
-        });
 
+        ui.vertical_centered(|ui| {
+            if ui.button("Disconnect").clicked() {
+                action = Some(Action::Disconnect);
+            }
+        });
         ui.end_row();
 
-        if disconnect_clicked {
-            NetplayState::Disconnected(netplay_connected.disconnect())
-        } else if fake_lost_connection_clicked {
-            log::debug!("Manually resuming connection (faking a lost connection)");
-            NetplayState::Resuming(netplay_connected.resume())
-        } else {
-            NetplayState::Connected(netplay_connected)
+        if let Some(action) = action {
+            match action {
+                Action::FakeDisconnect => {
+                    log::debug!("Manually resuming connection (faking a lost connection)");
+                    return NetplayState::Resuming(netplay_connected.resume());
+                }
+                Action::Disconnect => {
+                    return NetplayState::Disconnected(netplay_connected.disconnect());
+                }
+            }
         }
+        NetplayState::Connected(netplay_connected)
     }
 
     pub fn ui(&mut self, ui: &mut Ui, netplay_state_handler: &mut NetplayStateHandler) {
         let netplay = &mut netplay_state_handler.netplay;
         *netplay = Some(match netplay.take().unwrap() {
             NetplayState::Disconnected(netplay_disconnected) => {
-                self.ui_disconnected(ui, netplay_disconnected)
+                let res = self.ui_disconnected(ui, netplay_disconnected);
+                ui.end_row();
+                ui.vertical_centered(|ui| {
+                    if Button::new(RichText::new("Close").font(FontId::proportional(20.0)))
+                        .ui(ui)
+                        .clicked()
+                    {
+                        self.room_name = None;
+                        MainGui::set_main_menu_visibility(false);
+                    }
+                });
+                res
             }
             NetplayState::Connecting(netplay_connecting) => {
                 self.ui_connecting(ui, netplay_connecting)
@@ -482,16 +511,6 @@ impl NetplayGui {
                 } else {
                     NetplayState::Failed(netplay_failed)
                 }
-            }
-        });
-        ui.end_row();
-        ui.vertical_centered(|ui| {
-            if Button::new(RichText::new("Close").font(FontId::proportional(20.0)))
-                .ui(ui)
-                .clicked()
-            {
-                self.room_name = None;
-                MainGui::set_main_menu_visibility(false);
             }
         });
     }
