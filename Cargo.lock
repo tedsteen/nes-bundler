@@ -3929,7 +3929,7 @@ dependencies = [
 [[package]]
 name = "tetanes-core"
 version = "0.10.0"
-source = "git+https://github.com/tedsteen/tetanes.git?branch=for-nes-bundler#889e41fb91f4db51f2269be7ce51d290fba48cca"
+source = "git+https://github.com/tedsteen/tetanes.git?branch=for-nes-bundler#5b33bc4f7453b9ee70440a115cd1270e7696cbb6"
 dependencies = [
  "anyhow",
  "bincode",
