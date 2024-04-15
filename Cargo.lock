@@ -1166,18 +1166,18 @@ dependencies = [
 
 [[package]]
 name = "ecolor"
-version = "0.26.2"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03cfe80b1890e1a8cdbffc6044d6872e814aaf6011835a2a5e2db0e5c5c4ef4e"
+checksum = "20930a432bbd57a6d55e07976089708d4893f3d556cf42a0d79e9e321fa73b10"
 dependencies = [
  "bytemuck",
 ]
 
 [[package]]
 name = "egui"
-version = "0.26.2"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "180f595432a5b615fc6b74afef3955249b86cfea72607b40740a4cd60d5297d0"
+checksum = "584c5d1bf9a67b25778a3323af222dbe1a1feb532190e103901187f92c7fe29a"
 dependencies = [
  "ahash",
  "epaint",
@@ -1187,9 +1187,9 @@ dependencies = [
 
 [[package]]
 name = "egui-wgpu"
-version = "0.26.2"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86f2d75e1e70228e7126f828bac05f9fe0e7ea88e9660c8cebe609bb114c61d4"
+checksum = "469ff65843f88a702b731a1532b7d03b0e8e96d283e70f3a22b0e06c46cb9b37"
 dependencies = [
  "bytemuck",
  "document-features",
@@ -1204,9 +1204,9 @@ dependencies = [
 
 [[package]]
 name = "egui-winit"
-version = "0.26.2"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa4d44f8d89f70d4480545eb2346b76ea88c3022e9f4706cebc799dbe8b004a2"
+checksum = "2e3da0cbe020f341450c599b35b92de4af7b00abde85624fd16f09c885573609"
 dependencies = [
  "arboard",
  "egui",
@@ -1220,9 +1220,9 @@ dependencies = [
 
 [[package]]
 name = "egui_plot"
-version = "0.26.2"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "803bfcb1ad294dd7f106e26ac9199730d16051496ddb66b10fdb6529eb43df58"
+checksum = "a7854b86dc1c2d352c5270db3d600011daa913d6b554141a03939761323288a1"
 dependencies = [
  "egui",
 ]
@@ -1250,9 +1250,9 @@ dependencies = [
 
 [[package]]
 name = "emath"
-version = "0.26.2"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6916301ecf80448f786cdf3eb51d9dbdd831538732229d49119e2d4312eaaf09"
+checksum = "e4c3a552cfca14630702449d35f41c84a0d15963273771c6059175a803620f3f"
 dependencies = [
  "bytemuck",
 ]
@@ -1303,9 +1303,9 @@ dependencies = [
 
 [[package]]
 name = "epaint"
-version = "0.26.2"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77b9fdf617dd7f58b0c8e6e9e4a1281f730cde0831d40547da446b2bb76a47af"
+checksum = "b381f8b149657a4acf837095351839f32cd5c4aec1817fc4df84e18d76334176"
 dependencies = [
  "ab_glyph",
  "ahash",
@@ -2495,6 +2495,7 @@ dependencies = [
  "md5",
  "puffin",
  "puffin_egui",
+ "rand",
  "raw-window-handle 0.6.0",
  "reqwest",
  "sdl2",
@@ -3060,9 +3061,9 @@ dependencies = [
 
 [[package]]
 name = "puffin_egui"
-version = "0.26.0"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49058d85ba61f403263d90fe72df1da7f60522a2fcd3a44a4f6acd5459106081"
+checksum = "2a0fb409a5d8c82c27b0ae884409c03e3d30ac053a89b4316663f63377ba02ae"
 dependencies = [
  "egui",
  "indexmap",
@@ -3928,7 +3929,7 @@ dependencies = [
 [[package]]
 name = "tetanes-core"
 version = "0.10.0"
-source = "git+https://github.com/tedsteen/tetanes.git?branch=for-nes-bundler#a1a1b9bae19530dfc4592a33cfb318f8d5e0df75"
+source = "git+https://github.com/tedsteen/tetanes.git?branch=for-nes-bundler#889e41fb91f4db51f2269be7ce51d290fba48cca"
 dependencies = [
  "anyhow",
  "bincode",

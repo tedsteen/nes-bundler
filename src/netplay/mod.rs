@@ -17,8 +17,6 @@ mod connecting_state;
 pub mod gui;
 mod netplay_session;
 mod netplay_state;
-#[cfg(feature = "debug")]
-mod stats;
 
 #[derive(Clone, Debug)]
 pub enum JoypadMapping {
@@ -115,6 +113,22 @@ impl NesStateHandler for NetplayStateHandler {
             Some(NetplayState::Connected(s)) => s.state.netplay_session.game_state.frame(),
             Some(NetplayState::Disconnected(s)) => s.state.frame(),
             _ => 0,
+        }
+    }
+
+    fn set_speed(&mut self, speed: f32) {
+        match &mut self.netplay {
+            Some(NetplayState::Connected(s)) => s.state.netplay_session.game_state.set_speed(speed),
+            Some(NetplayState::Disconnected(s)) => s.state.set_speed(speed),
+            _ => {}
+        }
+    }
+
+    fn reset(&mut self, hard: bool) {
+        match &mut self.netplay {
+            Some(NetplayState::Connected(s)) => s.state.netplay_session.game_state.reset(hard),
+            Some(NetplayState::Disconnected(s)) => s.state.reset(hard),
+            _ => {}
         }
     }
 }

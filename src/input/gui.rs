@@ -1,10 +1,44 @@
 use crate::{
     input::{JoypadButton, JoypadState},
-    settings::{gui::GuiComponent, Settings},
+    main_view::gui::{GuiComponent, GuiEvent},
+    settings::Settings,
 };
 use egui::{Color32, Grid, RichText, Ui};
+use serde::Deserialize;
 
 use super::{settings::InputSettings, InputConfiguration, Inputs, MapRequest};
+
+#[derive(Deserialize, Debug)]
+pub struct InputButtonsVoca {
+    pub up: String,
+    pub down: String,
+    pub left: String,
+    pub right: String,
+
+    pub select: String,
+    pub start: String,
+
+    pub b: String,
+    pub a: String,
+}
+
+impl Default for InputButtonsVoca {
+    fn default() -> Self {
+        Self {
+            up: "Up".to_string(),
+            down: "Down".to_string(),
+            left: "Left".to_string(),
+            right: "Right".to_string(),
+
+            select: "Select".to_string(),
+            start: "Start".to_string(),
+
+            b: "B".to_string(),
+            a: "A".to_string(),
+        }
+    }
+}
+
 pub struct InputsGui {
     pub inputs: Inputs,
     mapping_request: Option<MapRequest>,
@@ -50,7 +84,7 @@ impl InputsGui {
             .striped(true)
             .show(ui, |ui| {
                 use JoypadButton::*;
-                [Up, Down, Left, Right, Start, Select, B, A]
+                [Up, Down, Left, Right, Select, Start, B, A]
                     .iter()
                     .for_each(|&button| {
                         Self::button_map_ui(
@@ -71,7 +105,7 @@ impl InputsGui {
         joypad_state: JoypadState,
         button: JoypadButton,
     ) {
-        let mut text = RichText::new(format!("{:?}", button));
+        let mut text = RichText::new(format!("{button}"));
         if joypad_state.is_pressed(button) {
             text = text.color(Color32::from_rgb(255, 255, 255));
         }
@@ -91,10 +125,10 @@ impl InputsGui {
             _ => {
                 let key_to_map = match &mut input_configuration.kind {
                     crate::input::InputConfigurationKind::Keyboard(mapping) => {
-                        mapping.lookup(&button).map(|v| format!("{:?}", v))
+                        mapping.lookup(&button).map(|v| format!("{v}"))
                     }
                     crate::input::InputConfigurationKind::Gamepad(mapping) => {
-                        mapping.lookup(&button).map(|v| format!("{:?}", v))
+                        mapping.lookup(&button).map(|v| format!("{v}"))
                     }
                 }
                 .unwrap_or_else(|| "-".to_string());
@@ -112,7 +146,7 @@ impl InputsGui {
 }
 
 impl GuiComponent for InputsGui {
-    fn handle_event(&mut self, gui_event: &crate::settings::gui::GuiEvent) {
+    fn handle_event(&mut self, gui_event: &GuiEvent) {
         self.inputs.advance(gui_event);
     }
 
@@ -157,7 +191,7 @@ impl GuiComponent for InputsGui {
             .remap_configuration(&mut self.mapping_request, input_settings);
     }
 
-    fn name(&self) -> Option<String> {
-        Some("Input".to_string())
+    fn name(&self) -> Option<&str> {
+        Some("Input")
     }
 }

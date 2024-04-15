@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use anyhow::Result;
 use uuid::Uuid;
 
@@ -9,7 +11,8 @@ use crate::{
 };
 
 use super::{
-    netplay_session::NetplaySession, ConnectingState, JoypadMapping, StartMethod, StartState,
+    connecting_state::JoinOrHost, netplay_session::NetplaySession, ConnectingState, JoypadMapping,
+    StartMethod, StartState,
 };
 
 pub enum NetplayState {
@@ -33,10 +36,7 @@ impl NetplayState {
         use NetplayState::*;
         match self {
             Connecting(netplay) => {
-                //Black screen and no sound while connecting
-                if let Some(video) = &mut buffers.video {
-                    video.fill(0);
-                }
+                //No sound while connecting
                 if let Some(audio) = &mut buffers.audio {
                     for _ in 0..1000 {
                         audio.push(0.0);
@@ -47,9 +47,7 @@ impl NetplayState {
             }
             Connected(netplay) => netplay.advance(joypad_state, buffers),
             Resuming(netplay) => {
-                if let Some(video) = &mut buffers.video {
-                    video.fill(0);
-                }
+                //No sound while resuming
                 if let Some(audio) = &mut buffers.audio {
                     for _ in 0..1000 {
                         audio.push(0.0);
@@ -83,6 +81,7 @@ impl<T> Netplay<T> {
 pub struct Connected {
     pub netplay_session: NetplaySession,
     session_id: String,
+    pub start_time: Instant,
 }
 
 pub struct Resuming {
@@ -112,6 +111,9 @@ pub fn get_netplay_id() -> String {
         .get_or_insert_with(|| Uuid::new_v4().to_string())
         .to_string()
 }
+
+pub const MAX_ROOM_NAME_LEN: u8 = 4;
+
 impl Netplay<LocalNesState> {
     pub fn new() -> Result<Self> {
         Ok(Self {
@@ -119,20 +121,35 @@ impl Netplay<LocalNesState> {
         })
     }
 
-    pub fn join_by_name(self, room_name: &str) -> Result<NetplayState> {
+    pub fn host_game(self) -> Result<NetplayState> {
+        use rand::distributions::{Alphanumeric, DistString};
+
+        let room_name = Alphanumeric
+            .sample_string(&mut rand::thread_rng(), MAX_ROOM_NAME_LEN.into())
+            .to_uppercase();
+
+        self.join_or_host(&room_name, JoinOrHost::Host)
+    }
+
+    pub fn join_game(self, room_name: &str) -> Result<NetplayState> {
+        self.join_or_host(&room_name.to_uppercase(), JoinOrHost::Join)
+    }
+
+    fn join_or_host(self, room_name: &str, join_or_host: JoinOrHost) -> Result<NetplayState> {
         let netplay_rom = &Bundle::current().netplay_rom;
         let session_id = format!("{}_{:x}", room_name, md5::compute(netplay_rom));
         let nes_state = LocalNesState::start_rom(netplay_rom, false)?;
-        Ok(self.join(StartMethod::Join(
+        Ok(self.start(StartMethod::Start(
             StartState {
                 game_state: super::NetplayNesState::new(nes_state),
                 session_id,
             },
             room_name.to_string(),
+            join_or_host,
         )))
     }
 
-    pub fn match_with_random(self) -> Result<NetplayState> {
+    pub fn find_game(self) -> Result<NetplayState> {
         let netplay_rom = &Bundle::current().netplay_rom;
         let rom_hash = md5::compute(netplay_rom);
 
@@ -140,16 +157,17 @@ impl Netplay<LocalNesState> {
         //       Should be fixed though.
         let session_id = format!("{:x}", rom_hash);
         let nes_state = LocalNesState::start_rom(netplay_rom, false)?;
-        Ok(self.join(StartMethod::MatchWithRandom(StartState {
+        Ok(self.start(StartMethod::MatchWithRandom(StartState {
             game_state: super::NetplayNesState::new(nes_state),
             session_id,
         })))
     }
 
-    pub fn join(self, start_method: StartMethod) -> NetplayState {
-        log::debug!("Joining: {:?}", start_method);
+    pub fn start(self, start_method: StartMethod) -> NetplayState {
+        log::debug!("Starting: {:?}", start_method);
         NetplayState::Connecting(Netplay::from(ConnectingState::connect(start_method)))
     }
+
     fn advance(mut self, joypad_state: [JoypadState; 2], buffers: &mut NESBuffers) -> NetplayState {
         self.state.advance(joypad_state, buffers);
         NetplayState::Disconnected(self)
@@ -170,9 +188,10 @@ impl Netplay<ConnectingState> {
                 log::debug!("Connected! Starting netplay session");
                 NetplayState::Connected(Netplay {
                     state: Connected {
+                        start_time: Instant::now(),
                         netplay_session: connected.state,
                         session_id: match connected.start_method {
-                            StartMethod::Join(StartState { session_id, .. }, _)
+                            StartMethod::Start(StartState { session_id, .. }, ..)
                             | StartMethod::MatchWithRandom(StartState { session_id, .. })
                             | StartMethod::Resume(StartState { session_id, .. }) => session_id,
                         },

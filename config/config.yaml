@@ -18,14 +18,34 @@ wix_upgrade_code: "4D4E7FAD-4DA8-4D0D-9175-3B79B8A7C464"
 # Required by windows installer
 manufacturer: "Darkbits"
 
-# NES region to use (Pal, Ntsc or Dendy)
-nes_region: Pal
+# A list of supported NES regions (Pal, Ntsc and Dendy available)
+# There will be an option in the settings to switch between regions if there are more than one in this list.
+supported_nes_regions:
+    - Ntsc
 
-# There will be tearing if disabled, there might be more dropped frames if enabled
+# There might be tearing if disabled, there might be more dropped frames if enabled
 enable_vsync: false
 
 # Starts the game in fullscreen if true
 start_in_fullscreen: false
+
+# Optional vocabulary to change some parts of the UI.
+# If you have more needs file an issue or open a PR
+vocabulary:
+    # The name of the inputs in the key mapping section
+    settings:
+        input_buttons:
+            up: Up
+            down: Down
+            left: Left
+            right: Right
+            select: Select
+            start: Start
+            b: B
+            a: A
+    netplay:
+        # Name Netplay something else?
+        name: Netplay
 
 # This will be the default settings for the game.
 # For all the gory details see the `BuildConfiguration`-struct in the source.
@@ -49,8 +69,8 @@ default_settings:
                     down: ArrowDown
                     left: ArrowLeft
                     right: ArrowRight
-                    start: KeyW
                     select: KeyQ
+                    start: KeyW
                     b: KeyA
                     a: KeyS
             00-keyboard-2:
@@ -61,8 +81,8 @@ default_settings:
                     down: KeyS
                     left: KeyA
                     right: KeyD
-                    start: KeyI
                     select: KeyU
+                    start: KeyI
                     b: KeyJ
                     a: KeyK
             01-gamepad-0:
@@ -73,8 +93,8 @@ default_settings:
                     down: DPadDown
                     left: DPadLeft
                     right: DPadRight
-                    start: Start
                     select: Back
+                    start: Start
                     b: X
                     a: A
         # The default mapping for newly connected gamepads. For more gamepad button mappings see https://github.com/tedsteen/nes-bundler/blob/master/src/input/buttons.rs#L8.
@@ -83,8 +103,8 @@ default_settings:
             down: DPadDown
             left: DPadLeft
             right: DPadRight
-            start: Start
             select: Back
+            start: Start
             b: X
             a: A
 

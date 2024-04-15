@@ -1,11 +1,14 @@
 use std::{
     ops::{Deref, DerefMut},
-    sync::{Arc, Mutex, OnceLock, RwLock, RwLockReadGuard},
+    sync::{
+        mpsc::{channel, Sender},
+        Arc, Mutex, RwLock,
+    },
 };
 
 use anyhow::Result;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use thingbuf::{Recycle, ThingBuf};
 
@@ -32,6 +35,11 @@ pub type StateHandler = crate::netplay::NetplayStateHandler;
 #[cfg(not(feature = "netplay"))]
 pub type StateHandler = crate::emulation::LocalNesState;
 
+#[allow(dead_code)] // Some commands are only sent by certain features
+pub enum EmulatorCommand {
+    Reset(bool),
+    SetSpeed(f32),
+}
 pub struct Emulator {}
 pub const SAMPLE_RATE: f32 = 44_100.0;
 
@@ -45,7 +53,7 @@ impl Emulator {
         audio_tx: AudioSender,
         inputs: Arc<RwLock<[JoypadState; MAX_PLAYERS]>>,
         frame_buffer: BufferPool,
-    ) -> Result<EmulatorGui> {
+    ) -> Result<(EmulatorGui, Sender<EmulatorCommand>)> {
         #[cfg(not(feature = "netplay"))]
         let nes_state = crate::emulation::LocalNesState::start_rom(
             &crate::bundle::Bundle::current().rom,
@@ -56,13 +64,15 @@ impl Emulator {
         let nes_state = crate::netplay::NetplayStateHandler::new()?;
 
         let nes_state = Arc::new(Mutex::new(nes_state));
+        let (command_tx, command_rx) = channel();
 
         tokio::task::spawn_blocking({
             let nes_state = nes_state.clone();
+
             move || {
                 let mut audio_buffer = NESAudioFrame::new();
-
                 let mut rate_counter = RateCounter::new();
+
                 loop {
                     #[cfg(feature = "debug")]
                     puffin::profile_function!("Emulator loop");
@@ -88,6 +98,17 @@ impl Emulator {
                             //TODO: If we get in a bad sync with vsync and drop a lot of frames then perhaps we can do something to yank things in place again?
                             rate_counter.tick("Dropped frame");
                         }
+                        for command in command_rx.try_iter() {
+                            use EmulatorCommand::*;
+                            match command {
+                                Reset(hard) => {
+                                    nes_state.lock().unwrap().reset(hard);
+                                }
+                                SetSpeed(speed) => {
+                                    nes_state.lock().unwrap().set_speed(speed);
+                                }
+                            }
+                        }
                         nes_state.lock().unwrap().advance(
                             *inputs.read().unwrap(),
                             &mut NESBuffers {
@@ -112,31 +133,19 @@ impl Emulator {
                 }
             }
         });
-        Ok(EmulatorGui::new(nes_state))
-    }
-
-    fn _emulation_speed() -> &'static RwLock<f32> {
-        static MEM: OnceLock<RwLock<f32>> = OnceLock::new();
-        MEM.get_or_init(|| RwLock::new(1_f32))
-    }
-
-    pub fn emulation_speed<'a>() -> RwLockReadGuard<'a, f32> {
-        Self::_emulation_speed().read().unwrap()
-    }
-
-    #[cfg(any(feature = "netplay", feature = "debug"))]
-    pub fn emulation_speed_mut<'a>() -> std::sync::RwLockWriteGuard<'a, f32> {
-        Self::_emulation_speed().write().unwrap()
+        Ok((EmulatorGui::new(nes_state, command_tx.clone()), command_tx))
     }
 }
 
 pub trait NesStateHandler {
     fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers);
+    fn reset(&mut self, hard: bool);
+    fn set_speed(&mut self, speed: f32);
     fn save_sram(&self) -> Option<&[u8]>;
     fn frame(&self) -> u32;
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Hash, Debug, PartialEq)]
 pub enum NesRegion {
     Pal,
     Ntsc,

@@ -35,20 +35,21 @@ anyhow = "1.0"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 bitflags = "2"
+rand = "0.8"
 
 tokio = { version = "1", features = ["rt", "macros", "rt-multi-thread", "sync"] }
 futures = "0.3"
 
-egui = { version = "0.26", default-features = false, features = [
+egui = { version = "0.27", default-features = false, features = [
   "bytemuck", "default_fonts"
 ] }
-egui_plot = { version = "0.26", optional = true }
+egui_plot = { version = "0.27", optional = true }
 puffin = { version = "0.19", optional = true }
-puffin_egui = { version = "0.26", optional = true }
-egui-winit = "0.26"
-egui-wgpu = "0.26"
+puffin_egui = { version = "0.27", optional = true }
+egui-winit = "0.27"
+egui-wgpu = "0.27"
 winit = "0.29"
-wgpu = "0.19"
+wgpu = { version = "0.19", features = ["dx12", "metal"] }
 raw-window-handle = "0.6"
 
 # sdl2 = { version = "0.36", features = ["bundled", "static-link"] }

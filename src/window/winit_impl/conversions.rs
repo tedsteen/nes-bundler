@@ -5,7 +5,7 @@ use winit::{
 
 use crate::{
     input::keys::{Modifiers, ToGuiKeyCode, ToGuiMod},
-    settings::gui::{GuiEvent, ToGuiEvent},
+    main_view::gui::{GuiEvent, ToGuiEvent},
 };
 impl ToGuiKeyCode for winit::keyboard::KeyCode {
     fn to_gui_key_code(&self) -> Option<crate::input::keys::KeyCode> {

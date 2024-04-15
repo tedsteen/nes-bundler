@@ -12,7 +12,6 @@ use input::sdl2_impl::Sdl2Gamepads;
 use input::{Inputs, JoypadState};
 use main_view::MainView;
 
-use settings::gui::GuiEvent;
 use settings::{Settings, MAX_PLAYERS};
 
 use std::sync::{Arc, RwLock};
@@ -27,10 +26,13 @@ use window::create_window;
 use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::EventLoop;
 
+use crate::main_view::gui::GuiEvent;
+
 mod audio;
 mod bundle;
 mod emulation;
 mod fps;
+mod gui;
 mod input;
 mod integer_scaling;
 mod main_view;
@@ -91,16 +93,18 @@ async fn run() -> anyhow::Result<()> {
     let audio_tx = audio.stream.start()?;
 
     let renderer = Renderer::new(window.clone()).await?;
-    let mut main_view = MainView::new(renderer);
+
     let mut inputs_gui = InputsGui::new(inputs);
     let mut audio_gui = AudioGui::new(audio);
 
     let emulator = Emulator::new()?;
     let shared_inputs = Arc::new(RwLock::new([JoypadState(0); MAX_PLAYERS]));
     let frame_buffer = BufferPool::new();
-    let mut emulator_gui = emulator
+    let (mut emulator_gui, emulator_tx) = emulator
         .start_thread(audio_tx, shared_inputs.clone(), frame_buffer.clone())
         .await?;
+
+    let mut main_view = MainView::new(renderer, emulator_tx);
 
     let mouse_hide_timeout = Duration::from_secs(1);
     let mut last_mouse_touch = Instant::now()
@@ -138,7 +142,9 @@ async fn run() -> anyhow::Result<()> {
                 }
                 main_view.handle_window_event(
                     window_event,
-                    &mut [&mut audio_gui, &mut inputs_gui, &mut emulator_gui],
+                    &mut audio_gui,
+                    &mut inputs_gui,
+                    &mut emulator_gui,
                 );
             }
             Event::AboutToWait => {
@@ -149,7 +155,7 @@ async fn run() -> anyhow::Result<()> {
 
         window.set_cursor_visible(
             !(window.is_fullscreen()
-                && !main_view.settings_gui.visible
+                && !main_view.main_gui.visible()
                 && Instant::now()
                     .duration_since(last_mouse_touch)
                     .gt(&mouse_hide_timeout)),
@@ -162,15 +168,26 @@ async fn run() -> anyhow::Result<()> {
         {
             main_view.handle_gui_event(
                 &sdl_gui_event,
-                &mut [&mut audio_gui, &mut inputs_gui, &mut emulator_gui],
+                &mut audio_gui,
+                &mut inputs_gui,
+                &mut emulator_gui,
             );
         }
-        *shared_inputs.write().unwrap() = inputs_gui.inputs.joypads;
+
+        let new_inputs = if !main_view.main_gui.visible() {
+            inputs_gui.inputs.joypads
+        } else {
+            // Don't let the inputs control the game if the gui is showing
+            [JoypadState(0), JoypadState(0)]
+        };
+        *shared_inputs.write().unwrap() = new_inputs;
 
         if need_render {
             main_view.render(
                 &frame_buffer,
-                &mut [&mut audio_gui, &mut inputs_gui, &mut emulator_gui],
+                &mut audio_gui,
+                &mut inputs_gui,
+                &mut emulator_gui,
             );
         }
     })?;

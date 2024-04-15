@@ -1,6 +1,7 @@
 use crate::{
     audio::AudioSettings,
     bundle::Bundle,
+    emulation::NesRegion,
     input::{settings::InputSettings, InputConfigurationKind},
 };
 
@@ -14,7 +15,6 @@ use std::{
     ops::{Deref, DerefMut},
     sync::{OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
-pub mod gui;
 
 pub const MAX_PLAYERS: usize = 2;
 
@@ -61,6 +61,7 @@ pub struct Settings {
     pub input: InputSettings,
     pub netplay_id: Option<String>,
     pub save_state: Option<String>,
+    nes_region: Option<NesRegion>,
 }
 
 impl Settings {
@@ -111,6 +112,7 @@ impl Settings {
         //eprintln!("Failed to load config ({err}), falling back to default settings");
         settings.unwrap_or(default_settings)
     }
+
     fn save(&self) {
         let settings_file_path = &Bundle::current().settings_path.join("settings.yaml");
         if let Err(e) = File::create(settings_file_path)
@@ -129,5 +131,16 @@ impl Settings {
         let hasher = &mut DefaultHasher::new();
         self.hash(hasher);
         hasher.finish()
+    }
+
+    pub fn get_nes_region(&mut self) -> &mut NesRegion {
+        self.nes_region.get_or_insert_with(|| {
+            Bundle::current()
+                .config
+                .supported_nes_regions
+                .first()
+                .expect("at least one supported nes region")
+                .clone()
+        })
     }
 }
