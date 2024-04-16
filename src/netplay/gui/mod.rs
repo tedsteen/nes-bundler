@@ -6,7 +6,7 @@ use serde::Deserialize;
 use crate::{
     bundle::Bundle,
     emulation::LocalNesState,
-    gui::MenuButton,
+    gui::{esc_pressed, MenuButton},
     main_view::gui::{MainGui, MainMenuState},
     netplay::{connecting_state::StartMethod, netplay_state::MAX_ROOM_NAME_LEN},
 };
@@ -61,12 +61,8 @@ fn ui_button(text: &str) -> Button {
 }
 
 impl NetplayGui {
-    pub fn messages(
-        &self,
-        netplay_state_handler: &NetplayStateHandler,
-        main_menu_state: &MainMenuState,
-    ) -> Option<Vec<String>> {
-        if matches!(main_menu_state, &MainMenuState::Netplay) {
+    pub fn messages(&self, netplay_state_handler: &NetplayStateHandler) -> Option<Vec<String>> {
+        if matches!(MainGui::main_menu_state(), MainMenuState::Netplay) {
             // No need to show messages when the netplay menu is already showing status
             return None;
         }
@@ -183,7 +179,11 @@ impl NetplayGui {
             }
 
             ui.end_row();
-
+            ui.vertical_centered(|ui| {
+                if ui_button("Cancel").ui(ui).clicked() || esc_pressed(ui.ctx()) {
+                    self.room_name = None;
+                }
+            });
             self.last_screen = Some("JOIN");
 
             if let Some(action) = action {
@@ -225,6 +225,12 @@ impl NetplayGui {
                 }
             });
             ui.end_row();
+            ui.vertical_centered(|ui| {
+                if ui_button("Close").ui(ui).clicked() || esc_pressed(ui.ctx()) {
+                    self.room_name = None;
+                    MainGui::set_main_menu_state(MainMenuState::Main);
+                }
+            });
 
             self.last_screen = Some("DISCONNECTED");
 
@@ -397,7 +403,7 @@ impl NetplayGui {
         ui.end_row();
 
         ui.vertical_centered(|ui| {
-            if ui_button("Disconnect").ui(ui).clicked() {
+            if ui_button("Disconnect").ui(ui).clicked() || esc_pressed(ui.ctx()) {
                 action = Some(Action::Cancel);
             }
         });
@@ -405,7 +411,6 @@ impl NetplayGui {
         if let Some(action) = action {
             match action {
                 Action::Cancel => {
-                    MainGui::set_main_menu_visibility(false);
                     return NetplayState::Disconnected(netplay_connecting.cancel());
                 }
                 Action::Retry(start_method) => {
@@ -423,7 +428,7 @@ impl NetplayGui {
             .as_millis()
             < 200
         {
-            MainGui::set_main_menu_visibility(false);
+            MainGui::set_main_menu_state(MainMenuState::Closed);
         }
 
         ui.vertical_centered(|ui| {
@@ -446,6 +451,10 @@ impl NetplayGui {
             }
         });
         ui.end_row();
+
+        if esc_pressed(ui.ctx()) {
+            MainGui::set_main_menu_state(MainMenuState::Main);
+        }
 
         #[cfg(feature = "debug")]
         {
@@ -479,15 +488,7 @@ impl NetplayGui {
         let netplay = &mut netplay_state_handler.netplay;
         *netplay = Some(match netplay.take().unwrap() {
             NetplayState::Disconnected(netplay_disconnected) => {
-                let res = self.ui_disconnected(ui, netplay_disconnected);
-                ui.end_row();
-                ui.vertical_centered(|ui| {
-                    if ui_button("Close").ui(ui).clicked() {
-                        self.room_name = None;
-                        MainGui::set_main_menu_visibility(false);
-                    }
-                });
-                res
+                self.ui_disconnected(ui, netplay_disconnected)
             }
             NetplayState::Connecting(netplay_connecting) => {
                 self.ui_connecting(ui, netplay_connecting)
@@ -503,8 +504,11 @@ impl NetplayGui {
                 let disconnect_clicked = ui
                     .vertical_centered(|ui| ui_button("Disconnect").ui(ui).clicked())
                     .inner;
-
                 ui.end_row();
+
+                if esc_pressed(ui.ctx()) {
+                    MainGui::set_main_menu_state(MainMenuState::Main);
+                }
 
                 if disconnect_clicked {
                     NetplayState::Disconnected(netplay_resuming.cancel())
@@ -517,8 +521,8 @@ impl NetplayGui {
                     "Failed to connect: {}",
                     netplay_failed.state.reason
                 ));
-                if ui.button("Ok").clicked() {
-                    NetplayState::Disconnected(netplay_failed.restart())
+                if ui.button("Ok").clicked() || esc_pressed(ui.ctx()) {
+                    NetplayState::Disconnected(netplay_failed.disconnect())
                 } else {
                     NetplayState::Failed(netplay_failed)
                 }

@@ -1,7 +1,6 @@
 use std::sync::mpsc::Sender;
 
 use egui::{load::SizedTexture, Color32, Image, Vec2};
-use winit::keyboard::{KeyCode, PhysicalKey};
 
 use crate::{
     audio::gui::AudioGui,
@@ -36,29 +35,29 @@ fn to_egui_key(gamepad_button: &GamepadButton) -> Option<egui::Key> {
         GamepadButton::DPadLeft => Some(egui::Key::ArrowLeft),
         GamepadButton::DPadRight => Some(egui::Key::ArrowRight),
         GamepadButton::A => Some(egui::Key::Enter),
-
+        GamepadButton::Guide => Some(egui::Key::Escape),
         _ => None,
     }
 }
+
+fn to_egui_key_event(key: egui::Key, pressed: bool) -> egui::Event {
+    egui::Event::Key {
+        key,
+        physical_key: None,
+        pressed,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    }
+}
+
 fn to_egui_event(gamepad_event: &GamepadEvent) -> Option<egui::Event> {
     match gamepad_event {
         GamepadEvent::ButtonDown { button, .. } => {
-            to_egui_key(button).map(|key| egui::Event::Key {
-                key,
-                physical_key: None,
-                pressed: true,
-                repeat: false,
-                modifiers: egui::Modifiers::NONE,
-            })
+            to_egui_key(button).map(|e| to_egui_key_event(e, true))
         }
-
-        GamepadEvent::ButtonUp { button, .. } => to_egui_key(button).map(|key| egui::Event::Key {
-            key,
-            physical_key: None,
-            pressed: false,
-            repeat: false,
-            modifiers: egui::Modifiers::NONE,
-        }),
+        GamepadEvent::ButtonUp { button, .. } => {
+            to_egui_key(button).map(|e| to_egui_key_event(e, false))
+        }
         _ => None,
     }
 }
@@ -85,26 +84,11 @@ impl MainView {
             self.renderer.resize(*physical_size);
         }
 
-        // Esc is a special case since we navigate back in the menu using that.
-        // egui consumes the event and we can't navigate, so check for it here and pass it through.
-        // TODO: Perhaps remove the ESC navigation and just add BACK menu buttons instead?
-        let is_esc = matches!(
-            window_event,
-            winit::event::WindowEvent::KeyboardInput {
-                event: winit::event::KeyEvent {
-                    physical_key: PhysicalKey::Code(KeyCode::Escape),
-                    ..
-                },
-                ..
-            }
-        );
-
-        if is_esc
-            || !self
-                .renderer
-                .egui
-                .handle_input(&self.renderer.window, window_event)
-                .consumed
+        if !self
+            .renderer
+            .egui
+            .handle_input(&self.renderer.window, window_event)
+            .consumed
         {
             if let Some(winit_gui_event) = &window_event.to_gui_event() {
                 self.handle_gui_event(winit_gui_event, audio_gui, inputs_gui, emulator_gui);
@@ -131,14 +115,29 @@ impl MainView {
                 .window
                 .check_and_set_fullscreen(self.modifiers, *key_code),
             _ => {
-                if self.main_gui.visible() {
-                    // If the gui is visible convert gamepad events to fake input events so we can control the ui with the gamepad
-                    if let GuiEvent::Gamepad(gamepad_event) = gui_event {
-                        if let Some(event) = to_egui_event(gamepad_event) {
+                if let GuiEvent::Gamepad(gamepad_event) = gui_event {
+                    if let Some(event) = to_egui_event(gamepad_event) {
+                        if self.main_gui.visible() {
+                            // If the gui is visible convert gamepad events to fake input events so we can control the ui with the gamepad
                             self.renderer.egui.state.egui_input_mut().events.push(event)
+                        } else {
+                            // If the gui is not visible pass on only the guide button
+                            if matches!(
+                                gamepad_event,
+                                GamepadEvent::ButtonDown {
+                                    button: GamepadButton::Guide,
+                                    ..
+                                } | GamepadEvent::ButtonUp {
+                                    button: GamepadButton::Guide,
+                                    ..
+                                }
+                            ) {
+                                self.renderer.egui.state.egui_input_mut().events.push(event)
+                            }
                         }
                     }
                 }
+
                 false
             }
         };
