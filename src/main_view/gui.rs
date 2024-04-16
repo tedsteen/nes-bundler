@@ -1,10 +1,10 @@
 use std::{
-    sync::{mpsc::Sender, Arc, OnceLock, RwLock, RwLockWriteGuard},
+    sync::{mpsc::Sender, Arc, OnceLock, RwLock},
     time::{Duration, Instant},
 };
 
 use egui::{
-    Align2, Button, Color32, Context, FontId, Margin, Response, RichText, Style, Ui, Widget,
+    Align2, Button, Color32, Context, FontId, Label, Margin, Response, RichText, Style, Ui, Widget,
 };
 use winit::dpi::LogicalSize;
 
@@ -12,10 +12,8 @@ use crate::{
     audio::gui::AudioGui,
     bundle::Bundle,
     emulation::{gui::EmulatorGui, EmulatorCommand},
-    gui::MenuButton,
-    input::{
-        buttons::GamepadButton, gamepad::GamepadEvent, gui::InputsGui, keys::KeyCode, KeyEvent,
-    },
+    gui::{esc_pressed, MenuButton},
+    input::{gamepad::GamepadEvent, gui::InputsGui, KeyEvent},
     settings::Settings,
 };
 
@@ -37,7 +35,7 @@ pub trait GuiComponent {
     // Runs if gui is visible
     fn ui(&mut self, _ui: &mut Ui) {}
 
-    fn messages(&self, _main_menu_state: &MainMenuState) -> Option<Vec<String>> {
+    fn messages(&self) -> Option<Vec<String>> {
         None
     }
     fn name(&self) -> Option<&str> {
@@ -46,33 +44,35 @@ pub trait GuiComponent {
     fn handle_event(&mut self, _gui_event: &GuiEvent) {}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MainMenuState {
+    Closed,
+
     Main,
     Settings,
     Netplay,
 }
 pub struct MainGui {
     start_time: Instant,
-    state: MainMenuState,
     window: Arc<winit::window::Window>,
     emulator_tx: Sender<EmulatorCommand>,
 }
 
 impl MainGui {
-    fn main_menu_visible<'a>() -> RwLockWriteGuard<'a, bool> {
-        //TODO: Look into AtomicBool
-        static MEM: OnceLock<RwLock<bool>> = OnceLock::new();
-        MEM.get_or_init(|| RwLock::new(false)).write().unwrap()
+    fn _main_menu_state() -> &'static RwLock<MainMenuState> {
+        static MEM: OnceLock<RwLock<MainMenuState>> = OnceLock::new();
+        MEM.get_or_init(|| RwLock::new(MainMenuState::Closed))
+    }
+    pub fn set_main_menu_state(main_menu_state: MainMenuState) {
+        *Self::_main_menu_state().write().unwrap() = main_menu_state;
+    }
+    pub fn main_menu_state() -> MainMenuState {
+        Self::_main_menu_state().read().unwrap().clone()
     }
 
     // Convenience
     pub fn visible(&self) -> bool {
-        *MainGui::main_menu_visible()
-    }
-
-    pub fn set_main_menu_visibility(visible: bool) {
-        *Self::main_menu_visible() = visible;
+        !matches!(Self::main_menu_state(), MainMenuState::Closed)
     }
 
     const MESSAGE_TEXT_BACKGROUND: Color32 = Color32::from_rgba_premultiplied(20, 20, 20, 200);
@@ -82,17 +82,20 @@ impl MainGui {
         Self {
             start_time: Instant::now(),
             window,
-            state: MainMenuState::Main,
             emulator_tx,
         }
     }
+
     fn message_ui(ui: &mut Ui, text: impl Into<String>) {
-        ui.label(
-            RichText::new(text)
-                .font(FontId::monospace(30.0))
-                .strong()
-                .background_color(Self::MESSAGE_TEXT_BACKGROUND)
-                .color(Self::MESSAGE_TEXT_COLOR),
+        ui.add(
+            Label::new(
+                RichText::new(text)
+                    .font(FontId::monospace(30.0))
+                    .strong()
+                    .background_color(Self::MESSAGE_TEXT_BACKGROUND)
+                    .color(Self::MESSAGE_TEXT_COLOR),
+            )
+            .selectable(false),
         );
     }
 
@@ -134,117 +137,111 @@ impl MainGui {
         inputs_gui: &mut InputsGui,
         emulator_gui: &mut EmulatorGui,
     ) {
-        if self.visible() {
-            match self.state {
-                MainMenuState::Main => {
-                    Self::ui_main_container(&self.window, None, ctx, |ui| {
-                        if Self::menu_item_ui(ui, "BACK").clicked() {
-                            Self::set_main_menu_visibility(false);
+        if !self.visible() && esc_pressed(ctx) {
+            Self::set_main_menu_state(MainMenuState::Main);
+        }
+
+        match Self::main_menu_state() {
+            MainMenuState::Main => {
+                Self::ui_main_container(&self.window, None, ctx, |ui| {
+                    if Self::menu_item_ui(ui, "BACK").clicked() || esc_pressed(ctx) {
+                        Self::set_main_menu_state(MainMenuState::Closed);
+                    }
+
+                    if let Some(name) = emulator_gui.name() {
+                        if Self::menu_item_ui(ui, name.to_uppercase()).clicked() {
+                            Self::set_main_menu_state(MainMenuState::Netplay);
                         }
+                    }
 
-                        if let Some(name) = emulator_gui.name() {
-                            if Self::menu_item_ui(ui, name.to_uppercase()).clicked() {
-                                self.state = MainMenuState::Netplay;
-                            }
+                    if Self::menu_item_ui(ui, "SETTINGS").clicked() {
+                        Self::set_main_menu_state(MainMenuState::Settings);
+                    }
+
+                    #[cfg(feature = "debug")]
+                    {
+                        if Self::menu_item_ui(ui, format!("PROFILING",)).clicked() {
+                            puffin::set_scopes_on(!puffin::are_scopes_on());
                         }
+                    }
 
-                        if Self::menu_item_ui(ui, "SETTINGS").clicked() {
-                            self.state = MainMenuState::Settings;
-                        }
-
-                        if Self::menu_item_ui(ui, "QUIT GAME").clicked() {
-                            std::process::exit(0);
-                        }
-                    });
-                }
-                MainMenuState::Settings => {
-                    Self::ui_main_container(&self.window, Some("Settings"), ctx, |ui| {
-                        ui.vertical(|ui| {
-                            if let Some(name) = audio_gui.name() {
-                                ui.vertical_centered(|ui| {
-                                    ui.heading(name);
-                                });
-                                audio_gui.ui(ui);
-                            }
-                            ui.add_space(10.0);
-                            ui.separator();
-                            ui.add_space(10.0);
-                            if let Some(name) = inputs_gui.name() {
-                                ui.vertical_centered(|ui| {
-                                    ui.heading(name);
-                                });
-                                inputs_gui.ui(ui);
-                            }
-
-                            if Bundle::current().config.supported_nes_regions.len() > 1 {
-                                ui.separator();
-                                ui.vertical_centered(|ui| {
-                                    ui.heading("NES System");
-                                });
-                                ui.vertical(|ui| {
-                                    ui.label(
-                                        RichText::new("NOTE: changing this will restart the game")
-                                            .color(Color32::DARK_RED),
-                                    );
-
-                                    ui.horizontal(|ui| {
-                                        for supported_region in
-                                            &Bundle::current().config.supported_nes_regions
-                                        {
-                                            if ui
-                                                .radio_value(
-                                                    Settings::current_mut().get_nes_region(),
-                                                    supported_region.clone(),
-                                                    format!("{:?}", supported_region),
-                                                )
-                                                .changed()
-                                            {
-                                                let _ = self
-                                                    .emulator_tx
-                                                    .send(EmulatorCommand::Reset(true));
-                                            }
-                                        }
-                                    });
-                                });
-                            }
-
-                            #[cfg(feature = "debug")]
-                            {
-                                ui.add_space(10.0);
-                                ui.separator();
-                                ui.add_space(10.0);
-
-                                let mut profile = puffin::are_scopes_on();
-                                ui.checkbox(&mut profile, "Toggle profiling");
-                                puffin::set_scopes_on(profile);
-                            }
-
+                    if Self::menu_item_ui(ui, "QUIT GAME").clicked() {
+                        std::process::exit(0);
+                    }
+                });
+            }
+            MainMenuState::Settings => {
+                Self::ui_main_container(&self.window, Some("Settings"), ctx, |ui| {
+                    ui.vertical(|ui| {
+                        if let Some(name) = audio_gui.name() {
                             ui.vertical_centered(|ui| {
-                                ui.add_space(20.0);
-                                if Button::new(
-                                    RichText::new("Close").font(FontId::proportional(20.0)),
-                                )
+                                ui.heading(name);
+                            });
+                            audio_gui.ui(ui);
+                        }
+                        ui.add_space(10.0);
+                        ui.separator();
+                        ui.add_space(10.0);
+                        if let Some(name) = inputs_gui.name() {
+                            ui.vertical_centered(|ui| {
+                                ui.heading(name);
+                            });
+                            inputs_gui.ui(ui);
+                        }
+
+                        if Bundle::current().config.supported_nes_regions.len() > 1 {
+                            ui.separator();
+                            ui.vertical_centered(|ui| {
+                                ui.heading("NES System");
+                            });
+                            ui.vertical(|ui| {
+                                ui.label(
+                                    RichText::new("NOTE: changing this will restart the game")
+                                        .color(Color32::DARK_RED),
+                                );
+
+                                ui.horizontal(|ui| {
+                                    for supported_region in
+                                        &Bundle::current().config.supported_nes_regions
+                                    {
+                                        if ui
+                                            .radio_value(
+                                                Settings::current_mut().get_nes_region(),
+                                                supported_region.clone(),
+                                                format!("{:?}", supported_region),
+                                            )
+                                            .changed()
+                                        {
+                                            let _ =
+                                                self.emulator_tx.send(EmulatorCommand::Reset(true));
+                                        }
+                                    }
+                                });
+                            });
+                        }
+
+                        ui.vertical_centered(|ui| {
+                            ui.add_space(20.0);
+                            if Button::new(RichText::new("Close").font(FontId::proportional(20.0)))
                                 .ui(ui)
                                 .clicked()
-                                {
-                                    MainGui::set_main_menu_visibility(false);
-                                }
-                            });
+                                || esc_pressed(ui.ctx())
+                            {
+                                Self::set_main_menu_state(MainMenuState::Main);
+                            }
                         });
                     });
-                }
-                MainMenuState::Netplay => {
-                    if emulator_gui.name().is_some() {
-                        let name = emulator_gui.name().expect("a name").to_owned();
-                        Self::ui_main_container(&self.window, Some(&name), ctx, |ui| {
-                            emulator_gui.ui(ui);
-                        });
-                    }
+                });
+            }
+            MainMenuState::Netplay => {
+                if emulator_gui.name().is_some() {
+                    let name = emulator_gui.name().expect("a name").to_owned();
+                    Self::ui_main_container(&self.window, Some(&name), ctx, |ui| {
+                        emulator_gui.ui(ui);
+                    });
                 }
             }
-        } else {
-            // Always go to main state if hidden
-            self.state = MainMenuState::Main;
+            MainMenuState::Closed => {}
         }
 
         egui::TopBottomPanel::top("messages")
@@ -262,7 +259,7 @@ impl MainGui {
                     for gui in gui_components.iter_mut() {
                         gui.prepare();
                         if gui.name().is_some() {
-                            if let Some(messages) = gui.messages(&self.state) {
+                            if let Some(messages) = gui.messages() {
                                 for message in messages {
                                     Self::message_ui(ui, message);
                                 }
@@ -283,34 +280,11 @@ impl MainGui {
         inputs_gui: &mut InputsGui,
         emulator_gui: &mut EmulatorGui,
     ) {
-        match gui_event {
-            GuiEvent::Gamepad(crate::input::gamepad::GamepadEvent::ButtonDown {
-                button: GamepadButton::Guide,
-                ..
-            })
-            | GuiEvent::Keyboard(KeyEvent::Pressed(KeyCode::Escape)) => {
-                if !self.visible() {
-                    Self::set_main_menu_visibility(true);
-                } else {
-                    match self.state {
-                        MainMenuState::Main => {
-                            Self::set_main_menu_visibility(false);
-                        }
-                        MainMenuState::Settings | MainMenuState::Netplay => {
-                            //TODO: check if the emulator_gui is modal and refuse to change state in that case?
-                            self.state = MainMenuState::Main;
-                        }
-                    }
-                }
-            }
-            _ => {
-                let gui_components: &mut [&mut dyn GuiComponent] =
-                    &mut [audio_gui, inputs_gui, emulator_gui];
+        let gui_components: &mut [&mut dyn GuiComponent] =
+            &mut [audio_gui, inputs_gui, emulator_gui];
 
-                for gui in gui_components {
-                    gui.handle_event(gui_event);
-                }
-            }
+        for gui in gui_components {
+            gui.handle_event(gui_event);
         }
     }
 }

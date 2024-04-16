@@ -276,10 +276,6 @@ impl Netplay<Resuming> {
 }
 
 impl Netplay<Failed> {
-    pub fn restart(self) -> Netplay<LocalNesState> {
-        self.disconnect()
-    }
-
     fn advance(self) -> NetplayState {
         NetplayState::Failed(self)
     }

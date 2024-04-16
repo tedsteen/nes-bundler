@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
 use egui::{
-    Color32, CursorIcon, FontId, Id, RichText, Rounding, Sense, TextStyle, Ui, Vec2, Widget,
-    WidgetInfo, WidgetText, WidgetType,
+    Color32, Context, CursorIcon, FontId, Id, KeyboardShortcut, RichText, Rounding, Sense,
+    TextStyle, Ui, Vec2, Widget, WidgetInfo, WidgetText, WidgetType,
 };
 
 #[derive(Clone)]
@@ -19,6 +19,13 @@ impl MenuButtonGroup {
     }
 }
 
+const ESC_SHORTCUT: KeyboardShortcut = egui::KeyboardShortcut {
+    modifiers: egui::Modifiers::NONE,
+    logical_key: egui::Key::Escape,
+};
+pub fn esc_pressed(ctx: &Context) -> bool {
+    ctx.input_mut(|i| i.consume_shortcut(&ESC_SHORTCUT))
+}
 // A widget that keeps track of focus between each other.
 pub struct MenuButton {
     text: WidgetText,
