@@ -7,12 +7,12 @@ use crate::{
     bundle::Bundle,
     emulation::LocalNesState,
     gui::MenuButton,
-    main_view::gui::MainGui,
+    main_view::gui::{MainGui, MainMenuState},
     netplay::{connecting_state::StartMethod, netplay_state::MAX_ROOM_NAME_LEN},
 };
 
 use super::{
-    connecting_state::Connecting,
+    connecting_state::{Connecting, PeeringState},
     netplay_state::{Connected, Netplay, NetplayState},
     ConnectingState, NetplayStateHandler,
 };
@@ -56,15 +56,35 @@ fn ui_text_small(text: impl Into<String>, color: Color32) -> RichText {
         .font(FontId::monospace(15.0))
 }
 
+fn ui_button(text: &str) -> Button {
+    Button::new(RichText::new(text).font(FontId::proportional(20.0)))
+}
+
 impl NetplayGui {
-    pub fn messages(&self, netplay_state_handler: &NetplayStateHandler) -> Option<Vec<String>> {
+    pub fn messages(
+        &self,
+        netplay_state_handler: &NetplayStateHandler,
+        main_menu_state: &MainMenuState,
+    ) -> Option<Vec<String>> {
+        if matches!(main_menu_state, &MainMenuState::Netplay) {
+            // No need to show messages when the netplay menu is already showing status
+            return None;
+        }
+
         Some(
             match &netplay_state_handler.netplay {
                 Some(NetplayState::Connecting(Netplay { state })) => match state {
-                    ConnectingState::Synchronizing(_) => Some("Pairing up...".to_string()),
+                    ConnectingState::LoadingNetplayServerConfiguration(_) => {
+                        Some("Initialising".to_string())
+                    }
+                    ConnectingState::PeeringUp(Connecting::<PeeringState> {
+                        state: PeeringState { .. },
+                        ..
+                    }) => Some("Waiting for second player".to_string()),
+                    ConnectingState::Synchronizing(_) => Some("Synchronising".to_string()),
                     ConnectingState::Connected(_) => None,
                     ConnectingState::Retrying(retrying) => Some(format!(
-                        "Connection failed ({}), retrying in {}s...",
+                        "Connection failed ({}), retrying in {}s",
                         retrying.state.fail_message,
                         retrying
                             .state
@@ -74,15 +94,12 @@ impl NetplayGui {
                             + 1
                     )),
                     ConnectingState::Failed(reason) => Some(format!("Failed ({reason})")),
-                    _ => None,
                 },
-                Some(NetplayState::Resuming(_)) => {
-                    Some("Connection lost, trying to reconnect".to_string())
-                }
+                Some(NetplayState::Resuming(_)) => Some("Trying to reconnect...".to_string()),
                 _ => None,
             }
             .iter()
-            .map(|s| format!("{} - {s}", self.name().expect("a name")))
+            .map(|msg| format!("{} - {msg}", self.name().expect("a name")))
             .collect(),
         )
     }
@@ -333,12 +350,9 @@ impl NetplayGui {
             },
             ConnectingState::Synchronizing(synchronizing_state) => {
                 ui.vertical_centered(|ui| {
-                    Label::new(MenuButton::ui_text(
-                        "PAIRING UP...",
-                        MenuButton::ACTIVE_COLOR,
-                    ))
-                    .selectable(false)
-                    .ui(ui);
+                    Label::new(MenuButton::ui_text("PAIRING UP", MenuButton::ACTIVE_COLOR))
+                        .selectable(false)
+                        .ui(ui);
                 });
                 ui.end_row();
                 if let Some(unlock_url) = &synchronizing_state.state.unlock_url {
@@ -366,15 +380,12 @@ impl NetplayGui {
                     }
                 }
             }
-            // NOTE: This captures failed, retrying and connected. Let's just show "CONNECTING..." during that state
+            // NOTE: This captures failed, retrying and connected. Let's just show "CONNECTING" during that state
             _ => {
                 ui.vertical_centered(|ui| {
-                    Label::new(MenuButton::ui_text(
-                        "CONNECTING...",
-                        MenuButton::ACTIVE_COLOR,
-                    ))
-                    .selectable(false)
-                    .ui(ui);
+                    Label::new(MenuButton::ui_text("CONNECTING", MenuButton::ACTIVE_COLOR))
+                        .selectable(false)
+                        .ui(ui);
                 });
             }
         }
@@ -386,7 +397,7 @@ impl NetplayGui {
         ui.end_row();
 
         ui.vertical_centered(|ui| {
-            if ui.button("Disconnect").clicked() {
+            if ui_button("Disconnect").ui(ui).clicked() {
                 action = Some(Action::Cancel);
             }
         });
@@ -430,7 +441,7 @@ impl NetplayGui {
 
         let mut action = None;
         ui.vertical_centered(|ui| {
-            if ui.button("Disconnect").clicked() {
+            if ui_button("Disconnect").ui(ui).clicked() {
                 action = Some(Action::Disconnect);
             }
         });
@@ -471,10 +482,7 @@ impl NetplayGui {
                 let res = self.ui_disconnected(ui, netplay_disconnected);
                 ui.end_row();
                 ui.vertical_centered(|ui| {
-                    if Button::new(RichText::new("Close").font(FontId::proportional(20.0)))
-                        .ui(ui)
-                        .clicked()
-                    {
+                    if ui_button("Close").ui(ui).clicked() {
                         self.room_name = None;
                         MainGui::set_main_menu_visibility(false);
                     }
@@ -493,7 +501,7 @@ impl NetplayGui {
                 });
                 ui.end_row();
                 let disconnect_clicked = ui
-                    .vertical_centered(|ui| ui.button("Disconnect").clicked())
+                    .vertical_centered(|ui| ui_button("Disconnect").ui(ui).clicked())
                     .inner;
 
                 ui.end_row();

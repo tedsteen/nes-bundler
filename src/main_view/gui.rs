@@ -37,7 +37,7 @@ pub trait GuiComponent {
     // Runs if gui is visible
     fn ui(&mut self, _ui: &mut Ui) {}
 
-    fn messages(&self) -> Option<Vec<String>> {
+    fn messages(&self, _main_menu_state: &MainMenuState) -> Option<Vec<String>> {
         None
     }
     fn name(&self) -> Option<&str> {
@@ -47,7 +47,7 @@ pub trait GuiComponent {
 }
 
 #[derive(Debug)]
-enum MainMenuState {
+pub enum MainMenuState {
     Main,
     Settings,
     Netplay,
@@ -262,7 +262,7 @@ impl MainGui {
                     for gui in gui_components.iter_mut() {
                         gui.prepare();
                         if gui.name().is_some() {
-                            if let Some(messages) = gui.messages() {
+                            if let Some(messages) = gui.messages(&self.state) {
                                 for message in messages {
                                     Self::message_ui(ui, message);
                                 }
