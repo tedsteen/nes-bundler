@@ -80,11 +80,11 @@ impl NetplayGui {
                     ConnectingState::PeeringUp(Connecting::<PeeringState> {
                         state: PeeringState { .. },
                         ..
-                    }) => Some("Waiting for second player...".to_string()),
+                    }) => Some("Waiting for second player".to_string()),
                     ConnectingState::Synchronizing(_) => Some("Synchronising".to_string()),
                     ConnectingState::Connected(_) => None,
                     ConnectingState::Retrying(retrying) => Some(format!(
-                        "Connection failed ({}), retrying in {}s...",
+                        "Connection failed ({}), retrying in {}s",
                         retrying.state.fail_message,
                         retrying
                             .state
@@ -95,9 +95,7 @@ impl NetplayGui {
                     )),
                     ConnectingState::Failed(reason) => Some(format!("Failed ({reason})")),
                 },
-                Some(NetplayState::Resuming(_)) => {
-                    Some("Connection lost, trying to reconnect".to_string())
-                }
+                Some(NetplayState::Resuming(_)) => Some("Trying to reconnect...".to_string()),
                 _ => None,
             }
             .iter()
@@ -352,12 +350,9 @@ impl NetplayGui {
             },
             ConnectingState::Synchronizing(synchronizing_state) => {
                 ui.vertical_centered(|ui| {
-                    Label::new(MenuButton::ui_text(
-                        "PAIRING UP...",
-                        MenuButton::ACTIVE_COLOR,
-                    ))
-                    .selectable(false)
-                    .ui(ui);
+                    Label::new(MenuButton::ui_text("PAIRING UP", MenuButton::ACTIVE_COLOR))
+                        .selectable(false)
+                        .ui(ui);
                 });
                 ui.end_row();
                 if let Some(unlock_url) = &synchronizing_state.state.unlock_url {
@@ -385,15 +380,12 @@ impl NetplayGui {
                     }
                 }
             }
-            // NOTE: This captures failed, retrying and connected. Let's just show "CONNECTING..." during that state
+            // NOTE: This captures failed, retrying and connected. Let's just show "CONNECTING" during that state
             _ => {
                 ui.vertical_centered(|ui| {
-                    Label::new(MenuButton::ui_text(
-                        "CONNECTING...",
-                        MenuButton::ACTIVE_COLOR,
-                    ))
-                    .selectable(false)
-                    .ui(ui);
+                    Label::new(MenuButton::ui_text("CONNECTING", MenuButton::ACTIVE_COLOR))
+                        .selectable(false)
+                        .ui(ui);
                 });
             }
         }
