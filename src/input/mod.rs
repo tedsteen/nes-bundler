@@ -1,4 +1,5 @@
 use self::{
+    buttons::GamepadButton,
     gamepad::{Gamepads, JoypadGamepadMapping},
     keyboard::{JoypadKeyboardMapping, Keyboards},
     keys::{KeyCode, Modifiers},
@@ -267,9 +268,11 @@ impl Inputs {
                             gamepads.get_gamepad_by_input_id(&input_configuration_id)
                         {
                             if let Some(new_button) = state.get_pressed_buttons().iter().next() {
-                                //If there's any button pressed, use the first found.
-                                let _ = mapping.lookup(button).insert(*new_button);
-                                remapped = true;
+                                //If there's any button pressed, use the first found... unless it's the reserved "Guide" button
+                                if !matches!(new_button, GamepadButton::Guide) {
+                                    let _ = mapping.lookup(button).insert(*new_button);
+                                    remapped = true;
+                                }
                             }
                         }
                     }
