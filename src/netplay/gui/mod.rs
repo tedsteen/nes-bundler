@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{
-    connecting_state::{Connecting, PeeringState},
+    connecting_state::{Connecting, SynchonizingState},
     netplay_state::{Connected, Netplay, NetplayState},
     ConnectingState, NetplayStateHandler,
 };
@@ -61,6 +61,17 @@ fn ui_button(text: &str) -> Button {
 }
 
 impl NetplayGui {
+    fn needs_unlocking(synchronizing_state: &Connecting<SynchonizingState>) -> Option<&str> {
+        if let Some(unlock_url) = &synchronizing_state.state.unlock_url {
+            if Instant::now()
+                .duration_since(synchronizing_state.state.start_time)
+                .gt(&Duration::from_secs(5))
+            {
+                return Some(unlock_url);
+            }
+        }
+        None
+    }
     pub fn messages(&self, netplay_state_handler: &NetplayStateHandler) -> Option<Vec<String>> {
         if matches!(MainGui::main_menu_state(), MainMenuState::Netplay) {
             // No need to show messages when the netplay menu is already showing status
@@ -69,28 +80,8 @@ impl NetplayGui {
 
         Some(
             match &netplay_state_handler.netplay {
-                Some(NetplayState::Connecting(Netplay { state })) => match state {
-                    ConnectingState::LoadingNetplayServerConfiguration(_) => {
-                        Some("Initialising".to_string())
-                    }
-                    ConnectingState::PeeringUp(Connecting::<PeeringState> {
-                        state: PeeringState { .. },
-                        ..
-                    }) => Some("Waiting for second player".to_string()),
-                    ConnectingState::Synchronizing(_) => Some("Synchronising".to_string()),
-                    ConnectingState::Connected(_) => None,
-                    ConnectingState::Retrying(retrying) => Some(format!(
-                        "Connection failed ({}), retrying in {}s",
-                        retrying.state.fail_message,
-                        retrying
-                            .state
-                            .deadline
-                            .duration_since(Instant::now())
-                            .as_secs()
-                            + 1
-                    )),
-                    ConnectingState::Failed(reason) => Some(format!("Failed ({reason})")),
-                },
+                // Connecting is a modal state, you can't see any messages when in the netplay UI anyway
+                Some(NetplayState::Connecting(_)) => None,
                 Some(NetplayState::Resuming(_)) => Some("Trying to reconnect...".to_string()),
                 _ => None,
             }
@@ -270,9 +261,10 @@ impl NetplayGui {
                 start_method, ..
             })
             | ConnectingState::PeeringUp(Connecting { start_method, .. }) => match start_method {
-                super::connecting_state::StartMethod::Start(.., room_name, join_or_host) => {
+                StartMethod::Start(.., room_name, join_or_host) => {
+                    use super::connecting_state::JoinOrHost::*;
                     match join_or_host {
-                        super::connecting_state::JoinOrHost::Join => {
+                        Join => {
                             ui.vertical_centered(|ui| {
                                 Label::new(MenuButton::ui_text(
                                     "JOINING PRIVATE GAME",
@@ -283,7 +275,7 @@ impl NetplayGui {
                             });
                         }
 
-                        super::connecting_state::JoinOrHost::Host => {
+                        Host => {
                             ui.vertical_centered(|ui| {
                                 Label::new(MenuButton::ui_text(
                                     "HOSTING PRIVATE GAME",
@@ -323,17 +315,7 @@ impl NetplayGui {
                         .ui(ui);
                     });
                 }
-                super::connecting_state::StartMethod::Resume(_) => {
-                    ui.vertical_centered(|ui| {
-                        Label::new(MenuButton::ui_text(
-                            "RESUMING GAME",
-                            MenuButton::ACTIVE_COLOR,
-                        ))
-                        .selectable(false)
-                        .ui(ui);
-                    });
-                }
-                super::connecting_state::StartMethod::MatchWithRandom(_) => {
+                StartMethod::MatchWithRandom(_) => {
                     ui.vertical_centered(|ui| {
                         Label::new(MenuButton::ui_text(
                             "FINDING PUBLIC GAME",
@@ -353,6 +335,9 @@ impl NetplayGui {
                         .ui(ui);
                     });
                 }
+                StartMethod::Resume(_) => {
+                    //This is used internally during the `NetplayState::Resuming` state
+                }
             },
             ConnectingState::Synchronizing(synchronizing_state) => {
                 ui.vertical_centered(|ui| {
@@ -361,32 +346,42 @@ impl NetplayGui {
                         .ui(ui);
                 });
                 ui.end_row();
-                if let Some(unlock_url) = &synchronizing_state.state.unlock_url {
-                    if Instant::now()
-                        .duration_since(synchronizing_state.state.start_time)
-                        .gt(&Duration::from_secs(5))
-                    {
-                        ui.vertical_centered(|ui| {
-                            ui.set_width(300.0);
-                            ui.horizontal_wrapped(|ui| {
-                                ui.spacing_mut().item_spacing.x = 0.0;
-                                ui.label("We're having trouble connecting you, click ");
-                                ui.hyperlink_to("here", unlock_url);
-                                ui.label(" to unlock Netplay!");
-                            });
+                if let Some(unlock_url) = Self::needs_unlocking(synchronizing_state) {
+                    ui.vertical_centered(|ui| {
+                        ui.set_width(300.0);
+                        ui.horizontal_wrapped(|ui| {
+                            ui.spacing_mut().item_spacing.x = 0.0;
+                            ui.label("We're having trouble connecting you, click ");
+                            ui.hyperlink_to("here", unlock_url)
+                                .on_hover_cursor(egui::CursorIcon::PointingHand);
+                            ui.label(" to unlock Netplay!");
                         });
-                        ui.end_row();
+                    });
+                    ui.end_row();
 
-                        ui.vertical_centered(|ui| {
-                            if ui.button("Retry").clicked() {
-                                action =
-                                    Some(Action::Retry(synchronizing_state.start_method.clone()));
-                            }
-                        });
-                    }
+                    ui.vertical_centered(|ui| {
+                        if ui.button("Retry").clicked() {
+                            action = Some(Action::Retry(synchronizing_state.start_method.clone()));
+                        }
+                    });
                 }
             }
-            // NOTE: This captures failed, retrying and connected. Let's just show "CONNECTING" during that state
+            ConnectingState::Failed(reason) => {
+                ui.vertical_centered(|ui| {
+                    Label::new(MenuButton::ui_text(
+                        "FAILED TO CONNECT",
+                        MenuButton::ACTIVE_COLOR,
+                    ))
+                    .selectable(false)
+                    .ui(ui);
+                });
+                ui.end_row();
+
+                ui.vertical_centered(|ui| {
+                    Label::new(ui_text_small(reason, MenuButton::ACTIVE_COLOR)).ui(ui);
+                });
+            }
+            // NOTE: This captures retrying and connected. Let's just show "CONNECTING" during that state
             _ => {
                 ui.vertical_centered(|ui| {
                     Label::new(MenuButton::ui_text("CONNECTING", MenuButton::ACTIVE_COLOR))

@@ -4,7 +4,7 @@ use std::{
 };
 
 use egui::{
-    Align2, Button, Color32, Context, FontId, Margin, Response, RichText, Style, Ui, Widget,
+    Align2, Button, Color32, Context, FontId, Label, Margin, Response, RichText, Style, Ui, Widget,
 };
 use winit::dpi::LogicalSize;
 
@@ -85,13 +85,17 @@ impl MainGui {
             emulator_tx,
         }
     }
+
     fn message_ui(ui: &mut Ui, text: impl Into<String>) {
-        ui.label(
-            RichText::new(text)
-                .font(FontId::monospace(30.0))
-                .strong()
-                .background_color(Self::MESSAGE_TEXT_BACKGROUND)
-                .color(Self::MESSAGE_TEXT_COLOR),
+        ui.add(
+            Label::new(
+                RichText::new(text)
+                    .font(FontId::monospace(30.0))
+                    .strong()
+                    .background_color(Self::MESSAGE_TEXT_BACKGROUND)
+                    .color(Self::MESSAGE_TEXT_COLOR),
+            )
+            .selectable(false),
         );
     }
 
