@@ -80,8 +80,12 @@ impl GuiComponent for EmulatorGui {
     }
 
     #[cfg(feature = "netplay")]
-    fn messages(&self) -> Option<Vec<String>> {
-        self.netplay_gui.messages(&self.nes_state.lock().unwrap())
+    fn messages(
+        &self,
+        main_menu_state: &crate::main_view::gui::MainMenuState,
+    ) -> Option<Vec<String>> {
+        self.netplay_gui
+            .messages(&self.nes_state.lock().unwrap(), main_menu_state)
     }
 
     fn name(&self) -> Option<&str> {

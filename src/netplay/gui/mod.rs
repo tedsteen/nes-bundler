@@ -7,12 +7,12 @@ use crate::{
     bundle::Bundle,
     emulation::LocalNesState,
     gui::MenuButton,
-    main_view::gui::MainGui,
+    main_view::gui::{MainGui, MainMenuState},
     netplay::{connecting_state::StartMethod, netplay_state::MAX_ROOM_NAME_LEN},
 };
 
 use super::{
-    connecting_state::Connecting,
+    connecting_state::{Connecting, PeeringState},
     netplay_state::{Connected, Netplay, NetplayState},
     ConnectingState, NetplayStateHandler,
 };
@@ -61,11 +61,27 @@ fn ui_button(text: &str) -> Button {
 }
 
 impl NetplayGui {
-    pub fn messages(&self, netplay_state_handler: &NetplayStateHandler) -> Option<Vec<String>> {
+    pub fn messages(
+        &self,
+        netplay_state_handler: &NetplayStateHandler,
+        main_menu_state: &MainMenuState,
+    ) -> Option<Vec<String>> {
+        if matches!(main_menu_state, &MainMenuState::Netplay) {
+            // No need to show messages when the netplay menu is already showing status
+            return None;
+        }
+
         Some(
             match &netplay_state_handler.netplay {
                 Some(NetplayState::Connecting(Netplay { state })) => match state {
-                    ConnectingState::Synchronizing(_) => Some("Pairing up...".to_string()),
+                    ConnectingState::LoadingNetplayServerConfiguration(_) => {
+                        Some("Initialising".to_string())
+                    }
+                    ConnectingState::PeeringUp(Connecting::<PeeringState> {
+                        state: PeeringState { .. },
+                        ..
+                    }) => Some("Waiting for second player...".to_string()),
+                    ConnectingState::Synchronizing(_) => Some("Synchronising".to_string()),
                     ConnectingState::Connected(_) => None,
                     ConnectingState::Retrying(retrying) => Some(format!(
                         "Connection failed ({}), retrying in {}s...",
@@ -78,7 +94,6 @@ impl NetplayGui {
                             + 1
                     )),
                     ConnectingState::Failed(reason) => Some(format!("Failed ({reason})")),
-                    _ => None,
                 },
                 Some(NetplayState::Resuming(_)) => {
                     Some("Connection lost, trying to reconnect".to_string())
@@ -86,7 +101,7 @@ impl NetplayGui {
                 _ => None,
             }
             .iter()
-            .map(|s| format!("{} - {s}", self.name().expect("a name")))
+            .map(|msg| format!("{} - {msg}", self.name().expect("a name")))
             .collect(),
         )
     }
