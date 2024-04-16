@@ -158,6 +158,13 @@ impl MainGui {
                         Self::set_main_menu_state(MainMenuState::Settings);
                     }
 
+                    #[cfg(feature = "debug")]
+                    {
+                        if Self::menu_item_ui(ui, format!("PROFILING",)).clicked() {
+                            puffin::set_scopes_on(!puffin::are_scopes_on());
+                        }
+                    }
+
                     if Self::menu_item_ui(ui, "QUIT GAME").clicked() {
                         std::process::exit(0);
                     }
@@ -211,17 +218,6 @@ impl MainGui {
                                     }
                                 });
                             });
-                        }
-
-                        #[cfg(feature = "debug")]
-                        {
-                            ui.add_space(10.0);
-                            ui.separator();
-                            ui.add_space(10.0);
-
-                            let mut profile = puffin::are_scopes_on();
-                            ui.checkbox(&mut profile, "Toggle profiling");
-                            puffin::set_scopes_on(profile);
                         }
 
                         ui.vertical_centered(|ui| {
