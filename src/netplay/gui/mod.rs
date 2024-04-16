@@ -56,6 +56,10 @@ fn ui_text_small(text: impl Into<String>, color: Color32) -> RichText {
         .font(FontId::monospace(15.0))
 }
 
+fn ui_button(text: &str) -> Button {
+    Button::new(RichText::new(text).font(FontId::proportional(20.0)))
+}
+
 impl NetplayGui {
     pub fn messages(&self, netplay_state_handler: &NetplayStateHandler) -> Option<Vec<String>> {
         Some(
@@ -386,7 +390,7 @@ impl NetplayGui {
         ui.end_row();
 
         ui.vertical_centered(|ui| {
-            if ui.button("Disconnect").clicked() {
+            if ui_button("Disconnect").ui(ui).clicked() {
                 action = Some(Action::Cancel);
             }
         });
@@ -430,7 +434,7 @@ impl NetplayGui {
 
         let mut action = None;
         ui.vertical_centered(|ui| {
-            if ui.button("Disconnect").clicked() {
+            if ui_button("Disconnect").ui(ui).clicked() {
                 action = Some(Action::Disconnect);
             }
         });
@@ -471,10 +475,7 @@ impl NetplayGui {
                 let res = self.ui_disconnected(ui, netplay_disconnected);
                 ui.end_row();
                 ui.vertical_centered(|ui| {
-                    if Button::new(RichText::new("Close").font(FontId::proportional(20.0)))
-                        .ui(ui)
-                        .clicked()
-                    {
+                    if ui_button("Close").ui(ui).clicked() {
                         self.room_name = None;
                         MainGui::set_main_menu_visibility(false);
                     }
@@ -493,7 +494,7 @@ impl NetplayGui {
                 });
                 ui.end_row();
                 let disconnect_clicked = ui
-                    .vertical_centered(|ui| ui.button("Disconnect").clicked())
+                    .vertical_centered(|ui| ui_button("Disconnect").ui(ui).clicked())
                     .inner;
 
                 ui.end_row();
