@@ -4,7 +4,7 @@
 
 Did you make a NES-game but none of your friends own a Nintendo? Don't worry.  
 Add your ROM and configure NES Bundler to build for Mac, Windows and Linux.  
-What you get is an executable with
+What you get is a digitally signed executable with
 * Simple UI for settings (Show and hide with ESC).
 * Re-mappable Keyboard and Gamepad input (you bundle your default mappings).
 * Automatic save/load of sram state
