@@ -20,6 +20,7 @@ manufacturer: "Darkbits"
 
 # A list of supported NES regions (Pal, Ntsc and Dendy available)
 # There will be an option in the settings to switch between regions if there are more than one in this list.
+# The first in the list will be the default region, and also the region used for Netplay (since it has to be the same for both players)
 supported_nes_regions:
     - Ntsc
 

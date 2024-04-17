@@ -58,6 +58,7 @@ impl Emulator {
         let nes_state = crate::emulation::LocalNesState::start_rom(
             &crate::bundle::Bundle::current().rom,
             true,
+            Settings::current_mut().get_nes_region(),
         )?;
 
         #[cfg(feature = "netplay")]
