@@ -38,6 +38,11 @@ pub struct BuildConfiguration {
 }
 
 impl BuildConfiguration {
+    pub fn get_default_region(&self) -> &NesRegion {
+        self.supported_nes_regions
+            .first()
+            .expect("at least one supported nes region")
+    }
     pub fn get_config_dir(&self) -> Option<PathBuf> {
         let path = ProjectDirs::from("", &self.manufacturer, &self.name)
             .map(|pd| pd.config_dir().to_path_buf());

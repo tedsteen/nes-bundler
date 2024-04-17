@@ -134,13 +134,7 @@ impl Settings {
     }
 
     pub fn get_nes_region(&mut self) -> &mut NesRegion {
-        self.nes_region.get_or_insert_with(|| {
-            Bundle::current()
-                .config
-                .supported_nes_regions
-                .first()
-                .expect("at least one supported nes region")
-                .clone()
-        })
+        self.nes_region
+            .get_or_insert_with(|| Bundle::current().config.get_default_region().clone())
     }
 }

@@ -160,7 +160,7 @@ impl MainGui {
 
                     #[cfg(feature = "debug")]
                     {
-                        if Self::menu_item_ui(ui, format!("PROFILING",)).clicked() {
+                        if Self::menu_item_ui(ui, "PROFILING").clicked() {
                             puffin::set_scopes_on(!puffin::are_scopes_on());
                         }
                     }

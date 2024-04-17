@@ -43,8 +43,12 @@ impl ToTetanesRegion for crate::emulation::NesRegion {
 }
 
 impl TetanesNesState {
-    pub fn start_rom(rom: &[u8], load_sram: bool) -> Result<Self> {
-        let region = Settings::current_mut().get_nes_region().to_tetanes_region();
+    pub fn start_rom(
+        rom: &[u8],
+        load_sram: bool,
+        region: &crate::emulation::NesRegion,
+    ) -> Result<Self> {
+        let region = region.to_tetanes_region();
         let config = Config {
             filter: VideoFilter::Pixellate,
             region,
