@@ -257,9 +257,12 @@ impl Inputs {
                 match &mut input_configuration.kind {
                     InputConfigurationKind::Keyboard(mapping) => {
                         if let Some(code) = self.keyboards.pressed_keys.iter().next() {
-                            //If there's any key pressed, use the first found.
-                            let _ = mapping.lookup(button).insert(*code);
-                            remapped = true;
+                            // Don't map ESC as it is used for menu navigation
+                            if !matches!(code, KeyCode::Escape) {
+                                //If there's any key pressed, use the first found.
+                                let _ = mapping.lookup(button).insert(*code);
+                                remapped = true;
+                            }
                         }
                     }
                     InputConfigurationKind::Gamepad(mapping) => {
