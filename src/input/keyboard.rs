@@ -15,10 +15,11 @@ impl Keyboards {
     }
     pub fn advance(&mut self, key_event: &KeyEvent) {
         match key_event {
-            KeyEvent::Pressed(key) => {
+            // NOTE: Ignore the escape key as it is used for main menu navigation
+            KeyEvent::Pressed(key) if *key != KeyCode::Escape => {
                 self.pressed_keys.insert(*key);
             }
-            KeyEvent::Released(key) => {
+            KeyEvent::Released(key) if *key != KeyCode::Escape => {
                 self.pressed_keys.remove(key);
             }
             _ => (),
