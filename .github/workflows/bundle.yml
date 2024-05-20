@@ -2,17 +2,9 @@ name: Bundle
 
 on:
   push:
-  workflow_dispatch:
-    inputs:
-      configuration_url:
-        description: "URL to zipped bundle configuration"
-        default: "https://your.bundle/config.zip"
-        required: true
-      recipient_email:
-        description: "Email where to send the finished bundles"
-        default: ""
-        required: true
-
+  repository_dispatch:
+    types:
+      - bundle
 defaults:
   run:
     shell: bash # necessary for windows
@@ -59,7 +51,7 @@ jobs:
         fi
     
     - name: Unpack bundle configuration
-      if: github.event.inputs.configuration_url != ''
+      if: github.event.client_payload.configuration_url != ''
       run: |
         CONFIGURATION_URL=$(jq -r '.inputs.configuration_url' $GITHUB_EVENT_PATH)
         echo ::add-mask::$CONFIGURATION_URL
@@ -290,7 +282,7 @@ jobs:
         fi
 
     - name: Password protect bundle
-      if: github.event.inputs.configuration_url != ''
+      if: github.event.client_payload.configuration_url != ''
       id: zip-bundle
       run: |
         BUNDLE_PASSWORD=$(openssl rand -hex 24)
@@ -308,14 +300,14 @@ jobs:
         path: artifacts/*
 
     - name: Get email address
-      if: always() && github.event.inputs.recipient_email != ''
+      if: always() && github.event.client_payload.recipient_email != ''
       run: |
         RECIPIENT_EMAIL=$(jq -r '.inputs.recipient_email' $GITHUB_EVENT_PATH)
         echo ::add-mask::$RECIPIENT_EMAIL
         echo "RECIPIENT_EMAIL=$RECIPIENT_EMAIL" >> $GITHUB_ENV
   
     - name: Create email
-      if: github.event.inputs.recipient_email != ''
+      if: github.event.client_payload.recipient_email != ''
       run: |
         cat <<'EOF' >> email.html
         <p>
@@ -327,7 +319,7 @@ jobs:
         EOF
 
     - name: Email bundle
-      if: github.event.inputs.recipient_email != ''
+      if: github.event.client_payload.recipient_email != ''
       uses: dawidd6/action-send-mail@v3
       with:
         server_address: smtp.gmail.com
@@ -340,7 +332,7 @@ jobs:
         html_body: file://email.html
 
     - name: Email failure message
-      if: failure() && github.event.inputs.recipient_email != ''
+      if: failure() && github.event.client_payload.recipient_email != ''
       uses: dawidd6/action-send-mail@v3
       with: 
         server_address: smtp.gmail.com
@@ -355,7 +347,7 @@ jobs:
   release:
     name: Release
     needs: bundle
-    if: startsWith(github.event.ref, 'refs/tags/v') && github.event.inputs.configuration_url == ''
+    if: startsWith(github.event.ref, 'refs/tags/v') && github.event.client_payload.configuration_url == ''
     runs-on: ubuntu-latest
     steps:
       - name: Get artifacts
