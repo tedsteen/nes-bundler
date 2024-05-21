@@ -15,10 +15,13 @@ The rest is only needed for a proper bundle
 * [Windows app and window title icon](windows/app.ico) look [here](https://learn.microsoft.com/en-us/windows/apps/design/style/iconography/app-icon-construction) for details about baking a proper windows .ico-file
 * [Windows installer details](windows/wix/) (banner.bmp, dialog.bmp and licence.rtf)
 
-## Prepare the configuration for the github Bundle action
+## Prepare the configuration for bundling
 
-When you are done configuring your bundle you need to zip the files and put it online for the GitHub Bundle action to pick up.  
-If you use [`./prepare.sh`](./prepare.sh) it can do both for you (zipping and uploading through bashupload.com).
+When you are done configuring your bundle you need to zip the files and then it is ready to be sent of for bundling.  
+With 7zip it would look like this
+```bash
+7z a -r config.zip palette.pal config.yaml rom.nes netplay-rom.nes linux/* macos/* windows/*
+```
 
 ## Full control (you probably don't need this)
 If you want to build your own binaries with your own certificates you would have to fork this repository and provide some github secrets to make the builds work.
