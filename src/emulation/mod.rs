@@ -143,6 +143,7 @@ pub trait NesStateHandler {
     fn reset(&mut self, hard: bool);
     fn set_speed(&mut self, speed: f32);
     fn save_sram(&self) -> Option<&[u8]>;
+    #[cfg(feature = "netplay")]
     fn frame(&self) -> u32;
 }
 

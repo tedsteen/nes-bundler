@@ -28,9 +28,6 @@ pub struct TetanesNesState {
 trait ToTetanesRegion {
     fn to_tetanes_region(&self) -> NesRegion;
 }
-trait ToSampleRate {
-    fn to_sample_rate(&self) -> f32;
-}
 
 impl ToTetanesRegion for crate::emulation::NesRegion {
     fn to_tetanes_region(&self) -> NesRegion {
@@ -196,6 +193,7 @@ impl NesStateHandler for TetanesNesState {
         }
     }
 
+    #[cfg(feature = "netplay")]
     fn frame(&self) -> u32 {
         self.control_deck.frame_number()
     }
