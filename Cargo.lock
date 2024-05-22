@@ -1204,7 +1204,7 @@ dependencies = [
  "log",
  "thiserror",
  "type-map",
- "web-time 0.2.4",
+ "web-time",
  "wgpu",
 ]
 
@@ -1219,7 +1219,7 @@ dependencies = [
  "log",
  "raw-window-handle 0.6.2",
  "smithay-clipboard",
- "web-time 0.2.4",
+ "web-time",
  "webbrowser",
  "winit",
 ]
@@ -3109,7 +3109,7 @@ dependencies = [
  "puffin",
  "time",
  "vec1",
- "web-time 0.2.4",
+ "web-time",
 ]
 
 [[package]]
@@ -3981,9 +3981,8 @@ dependencies = [
 [[package]]
 name = "tetanes-core"
 version = "0.10.0"
-source = "git+https://github.com/tedsteen/tetanes.git?branch=for-nes-bundler#22c97e228c8afb521be25c7a45eab5bb8b8e83cd"
+source = "git+https://github.com/lukexor/tetanes.git#dcaec14828288d758c713861a7aef6c03e4da47b"
 dependencies = [
- "anyhow",
  "bincode",
  "bitflags 2.5.0",
  "cfg-if",
@@ -3994,7 +3993,7 @@ dependencies = [
  "serde",
  "thiserror",
  "tracing",
- "web-time 1.1.0",
+ "web-time",
 ]
 
 [[package]]
@@ -4675,16 +4674,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "web-time"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
-dependencies = [
- "js-sys",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "webbrowser"
 version = "0.8.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5332,7 +5321,7 @@ dependencies = [
  "wayland-protocols",
  "wayland-protocols-plasma",
  "web-sys",
- "web-time 0.2.4",
+ "web-time",
  "windows-sys 0.48.0",
  "x11-dl",
  "x11rb",
