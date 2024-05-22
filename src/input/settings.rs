@@ -29,12 +29,12 @@ impl InputSettings {
     pub(crate) fn reset_selected_disconnected_inputs(&mut self, inputs: &Inputs) {
         let input_conf = self.get_selected_configuration(0);
         if !inputs.is_connected(input_conf) {
-            self.selected[0] = inputs.get_default_conf(0).id.clone();
+            self.selected[0].clone_from(&inputs.get_default_conf(0).id);
         }
 
         let input_conf = self.get_selected_configuration(1);
         if !inputs.is_connected(input_conf) {
-            self.selected[1] = inputs.get_default_conf(1).id.clone();
+            self.selected[1].clone_from(&inputs.get_default_conf(1).id);
         }
     }
 }
