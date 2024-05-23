@@ -94,12 +94,12 @@ impl Settings {
                 if let InputConfigurationKind::Gamepad(_) =
                     &settings.input.get_selected_configuration(0).kind
                 {
-                    settings.input.selected[0] = default_selected[0].clone();
+                    settings.input.selected[0].clone_from(&default_selected[0]);
                 }
                 if let InputConfigurationKind::Gamepad(_) =
                     &settings.input.get_selected_configuration(1).kind
                 {
-                    settings.input.selected[1] = default_selected[1].clone();
+                    settings.input.selected[1].clone_from(&default_selected[1]);
                 }
             }
             Err(e) => log::warn!(

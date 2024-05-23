@@ -5,7 +5,7 @@ use anyhow::Result;
 use tetanes_core::{
     apu::filter::FilterChain,
     common::{NesRegion, Regional, Reset, ResetKind},
-    control_deck::{Config, ControlDeck, HeadlessMode},
+    control_deck::{Config, ControlDeck, HeadlessMode, MapperRevisionsConfig},
     cpu::Cpu,
     fs,
     input::{FourPlayer, Joypad, Player},
@@ -27,9 +27,6 @@ pub struct TetanesNesState {
 
 trait ToTetanesRegion {
     fn to_tetanes_region(&self) -> NesRegion;
-}
-trait ToSampleRate {
-    fn to_sample_rate(&self) -> f32;
 }
 
 impl ToTetanesRegion for crate::emulation::NesRegion {
@@ -59,6 +56,10 @@ impl TetanesNesState {
             concurrent_dpad: false,
             channels_enabled: [true; 6],
             headless_mode: HeadlessMode::empty(),
+            cycle_accurate: false,
+            data_dir: Config::default_data_dir(),
+            mapper_revisions: MapperRevisionsConfig::default(),
+            emulate_ppu_warmup: false,
         };
         log::debug!("Starting ROM with configuration {config:?}");
         let mut control_deck = ControlDeck::with_config(config);
@@ -196,6 +197,7 @@ impl NesStateHandler for TetanesNesState {
         }
     }
 
+    #[cfg(feature = "netplay")]
     fn frame(&self) -> u32 {
         self.control_deck.frame_number()
     }
