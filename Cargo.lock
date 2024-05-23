@@ -3981,7 +3981,7 @@ dependencies = [
 [[package]]
 name = "tetanes-core"
 version = "0.10.0"
-source = "git+https://github.com/lukexor/tetanes.git#dcaec14828288d758c713861a7aef6c03e4da47b"
+source = "git+https://github.com/lukexor/tetanes.git#e94f66851dd49ec318c7b17d850693839910aecf"
 dependencies = [
  "bincode",
  "bitflags 2.5.0",
