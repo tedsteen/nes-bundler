@@ -55,14 +55,14 @@ impl MenuButton {
 impl Widget for MenuButton {
     fn ui(self, ui: &mut Ui) -> egui::Response {
         let mut desired_size = Vec2::ZERO;
-        let galley =
-            self.text
-                .into_galley(ui, Some(false), ui.available_width(), TextStyle::Button);
+        let galley = self
+            .text
+            .into_galley(ui, None, ui.available_width(), TextStyle::Button);
 
         desired_size.x += galley.size().x;
         desired_size.y = desired_size.y.max(galley.size().y);
         let (rect, mut response) = ui.allocate_at_least(desired_size, self.sense);
-        response.widget_info(|| WidgetInfo::labeled(WidgetType::Button, galley.text()));
+        response.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, galley.text()));
 
         ui.memory_mut(|m| {
             let actual_focus_id = m.focused();

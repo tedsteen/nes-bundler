@@ -3,7 +3,7 @@ use crate::{
     Size,
 };
 use anyhow::Result;
-use winit::event_loop::EventLoop;
+use winit::{event_loop::ActiveEventLoop, window::Window};
 
 pub mod egui_winit_wgpu;
 mod winit_impl;
@@ -27,9 +27,9 @@ pub fn create_window(
     title: &str,
     inner_size: Size,
     min_inner_size: Size,
-    event_loop: &EventLoop<()>,
+    event_loop: &ActiveEventLoop,
 ) -> Result<winit::window::Window> {
-    let window_builder = winit::window::WindowBuilder::new()
+    let window_attributes = Window::default_attributes()
         .with_resizable(true)
         .with_inner_size(inner_size)
         .with_min_inner_size(min_inner_size)
@@ -37,9 +37,9 @@ pub fn create_window(
         .with_visible(true);
 
     #[cfg(windows)]
-    let window_builder = {
+    let window_attributes = {
         use winit::platform::windows::IconExtWindows;
-        window_builder.with_window_icon(Some(winit::window::Icon::from_resource(1, None)?))
+        window_attributes.with_window_icon(Some(winit::window::Icon::from_resource(1, None)?))
     };
-    Ok(window_builder.build(event_loop)?)
+    Ok(event_loop.create_window(window_attributes).unwrap())
 }

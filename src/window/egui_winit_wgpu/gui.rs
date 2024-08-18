@@ -36,7 +36,8 @@ impl EguiRenderer {
 
         egui_context.set_visuals(visuals);
 
-        let egui_state = egui_winit::State::new(egui_context.clone(), id, &window, None, None);
+        let egui_state =
+            egui_winit::State::new(egui_context.clone(), id, &window, None, None, None);
 
         // egui_state.set_pixels_per_point(window.scale_factor() as f32);
         let egui_renderer = Renderer::new(
@@ -44,6 +45,7 @@ impl EguiRenderer {
             output_color_format,
             output_depth_format,
             msaa_samples,
+            false,
         );
 
         EguiRenderer {
