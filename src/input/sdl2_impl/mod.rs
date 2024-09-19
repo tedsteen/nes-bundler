@@ -83,9 +83,6 @@ impl Gamepads for Sdl2Gamepads {
                     log::error!("Could not setup controller {:?}", which);
                 }
             }
-            // Event::ControllerDeviceRemoved { which, .. } => {
-            //     self.get_or_create_gamepad(which).disconnected = true;
-            // }
             GamepadEvent::ButtonDown { which, button, .. } => {
                 if let Some(gamepad_state) = self.get_gamepad(which.clone()) {
                     gamepad_state.toogle_button(button, true);
@@ -100,7 +97,6 @@ impl Gamepads for Sdl2Gamepads {
                     log::warn!("Button up on unmapped gamepad {:?}", which);
                 }
             }
-            _ => (),
         }
     }
 }
@@ -165,11 +161,6 @@ impl ToGamepadEvent for sdl2::event::Event {
         match self {
             sdl2::event::Event::ControllerDeviceAdded { which, .. } => {
                 Some(GamepadEvent::ControllerAdded {
-                    which: which.to_input_id(),
-                })
-            }
-            sdl2::event::Event::ControllerDeviceRemoved { which, .. } => {
-                Some(GamepadEvent::ControllerRemoved {
                     which: which.to_input_id(),
                 })
             }

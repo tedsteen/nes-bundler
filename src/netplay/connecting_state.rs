@@ -261,8 +261,8 @@ impl Connecting<LoadingNetplayServerConfiguration> {
             Ok(None) => ConnectingState::LoadingNetplayServerConfiguration(self), //No result yet
             Ok(Some(Err(e))) | Err(e) => {
                 log::error!(
-                    "Failed to retrieve netplay server configuration: {:?}, retrying...",
-                    e
+                    "Failed to retrieve netplay server configuration: {}, retrying...",
+                    e.description
                 );
                 ConnectingState::Retrying(self.into_retrying(&format!(
                     "Failed to retrieve {} configuration.",
@@ -390,7 +390,12 @@ impl Connecting<Retrying> {
                             retrying,
                         ))
                     } else {
-                        log::info!("Retrying... ({}/{})", failed_attempts, MAX_RETRY_ATTEMPTS);
+                        log::info!(
+                            "Retrying... ({}/{}) (Failure: {})",
+                            failed_attempts,
+                            MAX_RETRY_ATTEMPTS,
+                            retrying.state.fail_message
+                        );
                         retrying.state.failed_attempts = failed_attempts;
                         ConnectingState::Retrying(retrying)
                     }
