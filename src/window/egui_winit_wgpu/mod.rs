@@ -118,7 +118,7 @@ impl Renderer {
         }
     }
 
-    pub fn render(&mut self, run_ui: impl FnOnce(&Context)) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, mut run_ui: impl FnMut(&Context)) -> Result<(), wgpu::SurfaceError> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 

@@ -1,5 +1,5 @@
 use egui::epaint::Shadow;
-use egui::{Context, Visuals};
+use egui::{Context, Theme, Visuals};
 use egui_wgpu::{Renderer, ScreenDescriptor};
 
 use egui_winit::{EventResponse, State};
@@ -34,7 +34,7 @@ impl EguiRenderer {
             ..Default::default()
         };
 
-        egui_context.set_visuals(visuals);
+        egui_context.set_visuals_of(Theme::Dark, visuals);
 
         let egui_state =
             egui_winit::State::new(egui_context.clone(), id, &window, None, None, None);
@@ -68,12 +68,10 @@ impl EguiRenderer {
         window: &Window,
         window_surface_view: &TextureView,
         screen_descriptor: ScreenDescriptor,
-        run_ui: impl FnOnce(&Context),
+        run_ui: impl FnMut(&Context),
     ) {
         let raw_input = self.state.take_egui_input(window);
-        let full_output = self.context.run(raw_input, |_ui| {
-            run_ui(&self.context);
-        });
+        let full_output = self.context.run(raw_input, run_ui);
 
         self.state
             .handle_platform_output(window, full_output.platform_output);
