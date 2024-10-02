@@ -1,6 +1,6 @@
 mod gui;
 
-use std::{iter, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
 use egui::Context;
@@ -191,7 +191,7 @@ impl Renderer {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("submit");
 
-            self.queue.submit(iter::once(encoder.finish()));
+            self.queue.submit(std::iter::once(encoder.finish()));
         }
         {
             #[cfg(feature = "debug")]

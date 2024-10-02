@@ -85,7 +85,7 @@ impl EguiRenderer {
         }
         self.renderer
             .update_buffers(device, queue, encoder, &tris, &screen_descriptor);
-        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: window_surface_view,
                 resolve_target: None,
@@ -99,8 +99,12 @@ impl EguiRenderer {
             timestamp_writes: None,
             occlusion_query_set: None,
         });
-        self.renderer.render(&mut rpass, &tris, &screen_descriptor);
-        drop(rpass);
+        // Forgetting the pass' lifetime means that we are no longer compile-time protected from
+        // runtime errors caused by accessing the parent encoder before the render pass is dropped.
+        // Since we don't pass it on to the renderer, we should be perfectly safe against this mistake here!
+        self.renderer
+            .render(&mut rpass.forget_lifetime(), &tris, &screen_descriptor);
+
         for x in &full_output.textures_delta.free {
             self.renderer.free_texture(x)
         }
