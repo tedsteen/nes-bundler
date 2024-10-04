@@ -20,7 +20,7 @@ use winit::application::ApplicationHandler;
 use winit::window::Window;
 
 use crate::window::Fullscreen;
-use emulation::{BufferPool, Emulator, EmulatorCommand, SAMPLE_RATE};
+use emulation::{Emulator, EmulatorCommand, VideoBufferPool, SAMPLE_RATE};
 use integer_scaling::MINIMUM_INTEGER_SCALING_SIZE;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, RwLock};
@@ -47,7 +47,7 @@ mod netplay;
 mod settings;
 mod window;
 
-#[tokio::main(worker_threads = 1)]
+#[tokio::main(worker_threads = 2)]
 async fn main() {
     init_logger();
 
@@ -83,7 +83,7 @@ struct Application {
     emulator_gui: EmulatorGui,
     sdl_event_pump: EventPump,
     shared_inputs: SharedInputs,
-    frame_buffer: BufferPool,
+    frame_buffer: VideoBufferPool,
     emulator_tx: Sender<EmulatorCommand>,
 }
 impl Application {
@@ -112,7 +112,7 @@ impl Application {
 
         let emulator = Emulator::new()?;
         let shared_inputs = Arc::new(RwLock::new([JoypadState(0); MAX_PLAYERS]));
-        let frame_buffer = BufferPool::new();
+        let frame_buffer = VideoBufferPool::new();
         let (emulator_gui, emulator_tx) = emulator
             .start_thread(audio_tx, shared_inputs.clone(), frame_buffer.clone())
             .await?;
