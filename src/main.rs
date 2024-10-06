@@ -187,7 +187,7 @@ impl ApplicationHandler for Application {
             WindowEvent::RedrawRequested => {
                 // Windows needs this to not freeze the window when resizing or moving
                 #[cfg(windows)]
-                if let Some(window) = self.window {
+                if let Some(window) = &self.window {
                     window.request_redraw();
                 }
                 self.render();
