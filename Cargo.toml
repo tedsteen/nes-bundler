@@ -8,7 +8,7 @@ publish = false
 
 [features]
 #default = []
-default = ["netplay"]
+default = []
 
 netplay = ["matchbox_socket", "ggrs", "futures-timer", "uuid", "reqwest", "md5"]
 debug = ["egui_plot", "puffin", "puffin_egui"]
