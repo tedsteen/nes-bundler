@@ -173,6 +173,31 @@ impl ApplicationHandler for Application {
     }
 
     fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
+        if let Some(main_view) = &mut self.main_view {
+            for sdl_gui_event in self
+                .sdl_event_pump
+                .poll_iter()
+                .flat_map(|e| e.to_gamepad_event())
+                .map(GuiEvent::Gamepad)
+            {
+                dbg!(&sdl_gui_event);
+                main_view.handle_gui_event(
+                    &sdl_gui_event,
+                    &mut self.audio_gui,
+                    &mut self.inputs_gui,
+                    &mut self.emulator_gui,
+                );
+            }
+            let new_inputs = if !main_view.main_gui.visible() {
+                dbg!(self.inputs_gui.inputs.joypads);
+                self.inputs_gui.inputs.joypads
+            } else {
+                // Don't let the inputs control the game if the gui is showing
+                [JoypadState(0), JoypadState(0)]
+            };
+            *self.shared_inputs.write().unwrap() = new_inputs;
+        }
+
         self.render()
     }
 
@@ -213,28 +238,6 @@ impl ApplicationHandler for Application {
                             .gt(&self.mouse_hide_timeout)),
                 );
             }
-
-            for sdl_gui_event in self
-                .sdl_event_pump
-                .poll_iter()
-                .flat_map(|e| e.to_gamepad_event())
-                .map(GuiEvent::Gamepad)
-            {
-                main_view.handle_gui_event(
-                    &sdl_gui_event,
-                    &mut self.audio_gui,
-                    &mut self.inputs_gui,
-                    &mut self.emulator_gui,
-                );
-            }
-
-            let new_inputs = if !main_view.main_gui.visible() {
-                self.inputs_gui.inputs.joypads
-            } else {
-                // Don't let the inputs control the game if the gui is showing
-                [JoypadState(0), JoypadState(0)]
-            };
-            *self.shared_inputs.write().unwrap() = new_inputs;
         }
     }
 }
