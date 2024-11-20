@@ -162,8 +162,8 @@ jobs:
           mv $BINARIES_PATH/nes-bundler-netplay "$NETPLAY_APP/Contents/MacOS/$BUNDLE_NAME"
           mv $BINARIES_PATH/nes-bundler         "$NON_NETPLAY_APP/Contents/MacOS/$BUNDLE_NAME"
           
-          codesign --force --options=runtime -s $APPLE_SIGNING_IDENTITY "$NETPLAY_APP/Contents/MacOS/$BUNDLE_NAME"
-          codesign --force --options=runtime -s $APPLE_SIGNING_IDENTITY "$NON_NETPLAY_APP/Contents/MacOS/$BUNDLE_NAME"
+          codesign --force --options=runtime -s "$APPLE_SIGNING_IDENTITY" "$NETPLAY_APP/Contents/MacOS/$BUNDLE_NAME"
+          codesign --force --options=runtime -s "$APPLE_SIGNING_IDENTITY" "$NON_NETPLAY_APP/Contents/MacOS/$BUNDLE_NAME"
 
           create-dmg \
             --volname "$BUNDLE_NAME Installer" \
