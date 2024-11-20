@@ -103,33 +103,21 @@ jobs:
           mv target/release/nes-bundler $BINARIES_PATH/nes-bundler
         fi
 
-    - name: Import Certificates (macOS)
+    - uses: apple-actions/import-codesign-certs@v3
       if: runner.os == 'macOS'
-      env:
-        BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-        P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+      with: 
+        p12-file-base64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+        p12-password: ${{ secrets.P12_PASSWORD }}
+    
+    - name: Verify Certificate
+      if: runner.os == 'macOS'
       run: |
-        # create variables
-        CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
-        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-
-        # import certificate and provisioning profile from secrets
-        echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
-
-        # create temporary keychain
-        KEYCHAIN_PASSWORD=`openssl rand -hex 12`
-        security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-        security default-keychain -s $KEYCHAIN_PATH
-        security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-        security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
-        # import certificate to keychain
-        security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-        security list-keychain -d user -s $KEYCHAIN_PATH
+        CERT_INFO=$(security find-identity -v -p codesigning signing_temp.keychain | grep "Developer ID Application")
+        APPLE_SIGNING_IDENTITY=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
+        echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY" >> $GITHUB_ENV
+        echo "Certificate imported."
 
     - name: Prepare Artifacts
-      env:
-        CODE_SIGN_IDENTITY: ${{ secrets.CODE_SIGN_IDENTITY }}
       run: |
         rm -rf artifacts || true
         mkdir artifacts
@@ -174,8 +162,8 @@ jobs:
           mv $BINARIES_PATH/nes-bundler-netplay "$NETPLAY_APP/Contents/MacOS/$BUNDLE_NAME"
           mv $BINARIES_PATH/nes-bundler         "$NON_NETPLAY_APP/Contents/MacOS/$BUNDLE_NAME"
           
-          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY "$NETPLAY_APP/Contents/MacOS/$BUNDLE_NAME"
-          codesign --force --options=runtime -s $CODE_SIGN_IDENTITY "$NON_NETPLAY_APP/Contents/MacOS/$BUNDLE_NAME"
+          codesign --force --options=runtime -s $APPLE_SIGNING_IDENTITY "$NETPLAY_APP/Contents/MacOS/$BUNDLE_NAME"
+          codesign --force --options=runtime -s $APPLE_SIGNING_IDENTITY "$NON_NETPLAY_APP/Contents/MacOS/$BUNDLE_NAME"
 
           create-dmg \
             --volname "$BUNDLE_NAME Installer" \
