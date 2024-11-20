@@ -73,6 +73,9 @@ impl NetplayGui {
         None
     }
     pub fn messages(&self, netplay_state_handler: &NetplayStateHandler) -> Option<Vec<String>> {
+        #[cfg(feature = "debug")]
+        puffin::profile_function!();
+
         if matches!(MainGui::main_menu_state(), MainMenuState::Netplay) {
             // No need to show messages when the netplay menu is already showing status
             return None;

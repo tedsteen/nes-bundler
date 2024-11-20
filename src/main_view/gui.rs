@@ -137,140 +137,160 @@ impl MainGui {
         inputs_gui: &mut InputsGui,
         emulator_gui: &mut EmulatorGui,
     ) {
-        if !self.visible() && esc_pressed(ctx) {
-            Self::set_main_menu_state(MainMenuState::Main);
-        }
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("Main ui");
 
-        match Self::main_menu_state() {
-            MainMenuState::Main => {
-                Self::ui_main_container(&self.window, None, ctx, |ui| {
-                    if Self::menu_item_ui(ui, "BACK").clicked() || esc_pressed(ctx) {
-                        Self::set_main_menu_state(MainMenuState::Closed);
-                    }
-
-                    if let Some(name) = emulator_gui.name() {
-                        if Self::menu_item_ui(ui, name.to_uppercase()).clicked() {
-                            Self::set_main_menu_state(MainMenuState::Netplay);
-                        }
-                    }
-
-                    if Self::menu_item_ui(ui, "SETTINGS").clicked() {
-                        Self::set_main_menu_state(MainMenuState::Settings);
-                    }
-
-                    #[cfg(feature = "debug")]
-                    {
-                        if Self::menu_item_ui(ui, "PROFILING").clicked() {
-                            puffin::set_scopes_on(!puffin::are_scopes_on());
-                        }
-                    }
-
-                    if Self::menu_item_ui(ui, "QUIT GAME").clicked() {
-                        std::process::exit(0);
-                    }
-                });
+            if !self.visible() && esc_pressed(ctx) {
+                Self::set_main_menu_state(MainMenuState::Main);
             }
-            MainMenuState::Settings => {
-                Self::ui_main_container(&self.window, Some("Settings"), ctx, |ui| {
-                    ui.vertical(|ui| {
-                        if let Some(name) = audio_gui.name() {
-                            ui.vertical_centered(|ui| {
-                                ui.heading(name);
-                            });
-                            audio_gui.ui(ui);
-                        }
-                        ui.add_space(10.0);
-                        ui.separator();
-                        ui.add_space(10.0);
-                        if let Some(name) = inputs_gui.name() {
-                            ui.vertical_centered(|ui| {
-                                ui.heading(name);
-                            });
-                            inputs_gui.ui(ui);
+            match Self::main_menu_state() {
+                MainMenuState::Main => {
+                    Self::ui_main_container(&self.window, None, ctx, |ui| {
+                        if Self::menu_item_ui(ui, "BACK").clicked() || esc_pressed(ctx) {
+                            Self::set_main_menu_state(MainMenuState::Closed);
                         }
 
-                        if Bundle::current().config.supported_nes_regions.len() > 1 {
-                            ui.separator();
-                            ui.vertical_centered(|ui| {
-                                ui.heading("NES System");
-                            });
-                            ui.vertical(|ui| {
-                                ui.label(
-                                    RichText::new("NOTE: changing this will restart the game")
-                                        .color(Color32::DARK_RED),
-                                );
-
-                                ui.horizontal(|ui| {
-                                    for supported_region in
-                                        &Bundle::current().config.supported_nes_regions
-                                    {
-                                        if ui
-                                            .radio_value(
-                                                Settings::current_mut().get_nes_region(),
-                                                supported_region.clone(),
-                                                format!("{:?}", supported_region),
-                                            )
-                                            .changed()
-                                        {
-                                            let _ =
-                                                self.emulator_tx.send(EmulatorCommand::Reset(true));
-                                        }
-                                    }
-                                });
-                            });
-                        }
-
-                        ui.vertical_centered(|ui| {
-                            ui.add_space(20.0);
-                            if Button::new(RichText::new("Close").font(FontId::proportional(20.0)))
-                                .ui(ui)
-                                .clicked()
-                                || esc_pressed(ui.ctx())
-                            {
-                                Self::set_main_menu_state(MainMenuState::Main);
+                        if let Some(name) = emulator_gui.name() {
+                            if Self::menu_item_ui(ui, name.to_uppercase()).clicked() {
+                                Self::set_main_menu_state(MainMenuState::Netplay);
                             }
-                        });
-                    });
-                });
-            }
-            MainMenuState::Netplay => {
-                if emulator_gui.name().is_some() {
-                    let name = emulator_gui.name().expect("a name").to_owned();
-                    Self::ui_main_container(&self.window, Some(&name), ctx, |ui| {
-                        emulator_gui.ui(ui);
+                        }
+
+                        if Self::menu_item_ui(ui, "SETTINGS").clicked() {
+                            Self::set_main_menu_state(MainMenuState::Settings);
+                        }
+
+                        #[cfg(feature = "debug")]
+                        {
+                            if Self::menu_item_ui(ui, "PROFILING").clicked() {
+                                puffin::set_scopes_on(!puffin::are_scopes_on());
+                            }
+                        }
+
+                        if Self::menu_item_ui(ui, "QUIT GAME").clicked() {
+                            std::process::exit(0);
+                        }
                     });
                 }
-            }
-            MainMenuState::Closed => {}
-        }
+                MainMenuState::Settings => {
+                    Self::ui_main_container(&self.window, Some("Settings"), ctx, |ui| {
+                        ui.vertical(|ui| {
+                            if let Some(name) = audio_gui.name() {
+                                ui.vertical_centered(|ui| {
+                                    ui.heading(name);
+                                });
+                                audio_gui.ui(ui);
+                            }
+                            ui.add_space(10.0);
+                            ui.separator();
+                            ui.add_space(10.0);
+                            if let Some(name) = inputs_gui.name() {
+                                ui.vertical_centered(|ui| {
+                                    ui.heading(name);
+                                });
+                                inputs_gui.ui(ui);
+                            }
 
-        egui::TopBottomPanel::top("messages")
-            .show_separator_line(false)
-            .frame(
-                egui::Frame::default()
-                    .fill(Color32::TRANSPARENT)
-                    .outer_margin(Margin::same(80.0))
-                    .inner_margin(Margin::ZERO),
-            )
-            .show(ctx, |ui| {
-                ui.vertical_centered(|ui| {
-                    let gui_components: &mut [&mut dyn GuiComponent] =
-                        &mut [audio_gui, inputs_gui, emulator_gui];
-                    for gui in gui_components.iter_mut() {
-                        gui.prepare();
-                        if gui.name().is_some() {
-                            if let Some(messages) = gui.messages() {
-                                for message in messages {
-                                    Self::message_ui(ui, message);
+                            if Bundle::current().config.supported_nes_regions.len() > 1 {
+                                ui.separator();
+                                ui.vertical_centered(|ui| {
+                                    ui.heading("NES System");
+                                });
+                                ui.vertical(|ui| {
+                                    ui.label(
+                                        RichText::new("NOTE: changing this will restart the game")
+                                            .color(Color32::DARK_RED),
+                                    );
+
+                                    ui.horizontal(|ui| {
+                                        for supported_region in
+                                            &Bundle::current().config.supported_nes_regions
+                                        {
+                                            if ui
+                                                .radio_value(
+                                                    Settings::current_mut().get_nes_region(),
+                                                    supported_region.clone(),
+                                                    format!("{:?}", supported_region),
+                                                )
+                                                .changed()
+                                            {
+                                                let _ = self
+                                                    .emulator_tx
+                                                    .send(EmulatorCommand::Reset(true));
+                                            }
+                                        }
+                                    });
+                                });
+                            }
+
+                            ui.vertical_centered(|ui| {
+                                ui.add_space(20.0);
+                                if Button::new(
+                                    RichText::new("Close").font(FontId::proportional(20.0)),
+                                )
+                                .ui(ui)
+                                .clicked()
+                                    || esc_pressed(ui.ctx())
+                                {
+                                    Self::set_main_menu_state(MainMenuState::Main);
+                                }
+                            });
+                        });
+                    });
+                }
+                MainMenuState::Netplay => {
+                    if emulator_gui.name().is_some() {
+                        let name = emulator_gui.name().expect("a name").to_owned();
+                        Self::ui_main_container(&self.window, Some(&name), ctx, |ui| {
+                            emulator_gui.ui(ui);
+                        });
+                    }
+                }
+                MainMenuState::Closed => {}
+            }
+        }
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("Messages");
+            egui::TopBottomPanel::top("messages")
+                .show_separator_line(false)
+                .frame(
+                    egui::Frame::default()
+                        .fill(Color32::TRANSPARENT)
+                        .outer_margin(Margin::same(80.0))
+                        .inner_margin(Margin::ZERO),
+                )
+                .show(ctx, |ui| {
+                    ui.vertical_centered(|ui| {
+                        let gui_components: &mut [&mut dyn GuiComponent] =
+                            &mut [audio_gui, inputs_gui, emulator_gui];
+                        for gui in gui_components.iter_mut() {
+                            {
+                                #[cfg(feature = "debug")]
+                                puffin::profile_scope!(format!("Prepare {:?}", gui.name()));
+
+                                gui.prepare();
+                            }
+                            if gui.name().is_some() {
+                                {
+                                    #[cfg(feature = "debug")]
+                                    puffin::profile_scope!(format!("Messages {:?}", gui.name()));
+
+                                    if let Some(messages) = gui.messages() {
+                                        for message in messages {
+                                            Self::message_ui(ui, message);
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
-                    if self.start_time.elapsed() < Duration::from_secs(5) {
-                        Self::message_ui(ui, "Press ESC for menu");
-                    }
+                        if self.start_time.elapsed() < Duration::from_secs(5) {
+                            Self::message_ui(ui, "Press ESC for menu");
+                        }
+                    });
                 });
-            });
+        }
     }
 
     pub fn handle_event(

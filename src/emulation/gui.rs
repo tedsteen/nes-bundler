@@ -81,6 +81,8 @@ impl GuiComponent for EmulatorGui {
 
     #[cfg(feature = "netplay")]
     fn messages(&self) -> Option<Vec<String>> {
+        #[cfg(feature = "debug")]
+        puffin::profile_function!();
         self.netplay_gui.messages(&self.nes_state.lock().unwrap())
     }
 

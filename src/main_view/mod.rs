@@ -5,7 +5,7 @@ use egui::{load::SizedTexture, Color32, Image, Vec2};
 use crate::{
     audio::gui::AudioGui,
     emulation::{
-        gui::EmulatorGui, BufferPool, EmulatorCommand, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3,
+        gui::EmulatorGui, EmulatorCommand, VideoBufferPool, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3,
     },
     input::{
         buttons::GamepadButton, gamepad::GamepadEvent, gui::InputsGui, keys::Modifiers, KeyEvent,
@@ -151,18 +151,12 @@ impl MainView {
 
     pub fn render(
         &mut self,
-        frame_buffer: &BufferPool,
+        frame_buffer: &VideoBufferPool,
         audio_gui: &mut AudioGui,
         inputs_gui: &mut InputsGui,
         emulator_gui: &mut EmulatorGui,
     ) {
-        #[cfg(feature = "debug")]
-        puffin::profile_function!();
-
         if let Some(nes_frame) = &frame_buffer.pop_ref() {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("update nes texture");
-
             self.nes_texture.update(&self.renderer.queue, nes_frame);
         }
 
@@ -172,46 +166,51 @@ impl MainView {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("ui");
 
-            egui::CentralPanel::default()
-                .frame(egui::Frame::none().fill(egui::Color32::BLACK))
-                .show(ctx, |ui| {
-                    let available_size = ui.available_size();
-                    let new_size = if available_size.x < MINIMUM_INTEGER_SCALING_SIZE.width as f32
-                        || available_size.y < MINIMUM_INTEGER_SCALING_SIZE.height as f32
-                    {
-                        let width = NES_WIDTH_4_3;
-                        let ratio_height = available_size.y / NES_HEIGHT as f32;
-                        let ratio_width = available_size.x / width as f32;
-                        let ratio = f32::min(ratio_height, ratio_width);
-                        Size::new(
-                            (width as f32 * ratio) as u32,
-                            (NES_HEIGHT as f32 * ratio) as u32,
-                        )
-                    } else {
-                        calculate_size_corrected(
-                            available_size.x as u32,
-                            available_size.y as u32,
-                            NES_WIDTH,
-                            NES_HEIGHT,
-                            4.0,
-                            3.0,
-                        )
-                    };
+            {
+                #[cfg(feature = "debug")]
+                puffin::profile_scope!("NES Frame");
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::none().fill(egui::Color32::BLACK))
+                    .show(ctx, |ui| {
+                        let available_size = ui.available_size();
+                        let new_size = if available_size.x
+                            < MINIMUM_INTEGER_SCALING_SIZE.width as f32
+                            || available_size.y < MINIMUM_INTEGER_SCALING_SIZE.height as f32
+                        {
+                            let width = NES_WIDTH_4_3;
+                            let ratio_height = available_size.y / NES_HEIGHT as f32;
+                            let ratio_width = available_size.x / width as f32;
+                            let ratio = f32::min(ratio_height, ratio_width);
+                            Size::new(
+                                (width as f32 * ratio) as u32,
+                                (NES_HEIGHT as f32 * ratio) as u32,
+                            )
+                        } else {
+                            calculate_size_corrected(
+                                available_size.x as u32,
+                                available_size.y as u32,
+                                NES_WIDTH,
+                                NES_HEIGHT,
+                                4.0,
+                                3.0,
+                            )
+                        };
 
-                    ui.centered_and_justified(|ui| {
-                        let mut nes_image = Image::from_texture(SizedTexture::new(
-                            nes_texture_id,
-                            Vec2 {
-                                x: new_size.width as f32,
-                                y: new_size.height as f32,
-                            },
-                        ));
-                        if main_gui.visible() {
-                            nes_image = nes_image.tint(Self::MENU_TINT);
-                        }
-                        ui.add(nes_image);
+                        ui.centered_and_justified(|ui| {
+                            let mut nes_image = Image::from_texture(SizedTexture::new(
+                                nes_texture_id,
+                                Vec2 {
+                                    x: new_size.width as f32,
+                                    y: new_size.height as f32,
+                                },
+                            ));
+                            if main_gui.visible() {
+                                nes_image = nes_image.tint(Self::MENU_TINT);
+                            }
+                            ui.add(nes_image);
+                        });
                     });
-                });
+            }
             main_gui.ui(ctx, audio_gui, inputs_gui, emulator_gui);
         });
 
