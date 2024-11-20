@@ -1,5 +1,5 @@
 use egui::epaint::Shadow;
-use egui::{Context, Visuals};
+use egui::{Context, Theme, Visuals};
 use egui_wgpu::{Renderer, ScreenDescriptor};
 
 use egui_winit::{EventResponse, State};
@@ -34,9 +34,10 @@ impl EguiRenderer {
             ..Default::default()
         };
 
-        egui_context.set_visuals(visuals);
+        egui_context.set_visuals_of(Theme::Dark, visuals);
 
-        let egui_state = egui_winit::State::new(egui_context.clone(), id, &window, None, None);
+        let egui_state =
+            egui_winit::State::new(egui_context.clone(), id, &window, None, None, None);
 
         // egui_state.set_pixels_per_point(window.scale_factor() as f32);
         let egui_renderer = Renderer::new(
@@ -44,6 +45,7 @@ impl EguiRenderer {
             output_color_format,
             output_depth_format,
             msaa_samples,
+            false,
         );
 
         EguiRenderer {
@@ -66,12 +68,10 @@ impl EguiRenderer {
         window: &Window,
         window_surface_view: &TextureView,
         screen_descriptor: ScreenDescriptor,
-        run_ui: impl FnOnce(&Context),
+        run_ui: impl FnMut(&Context),
     ) {
         let raw_input = self.state.take_egui_input(window);
-        let full_output = self.context.run(raw_input, |_ui| {
-            run_ui(&self.context);
-        });
+        let full_output = self.context.run(raw_input, run_ui);
 
         self.state
             .handle_platform_output(window, full_output.platform_output);
@@ -85,7 +85,7 @@ impl EguiRenderer {
         }
         self.renderer
             .update_buffers(device, queue, encoder, &tris, &screen_descriptor);
-        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: window_surface_view,
                 resolve_target: None,
@@ -99,8 +99,12 @@ impl EguiRenderer {
             timestamp_writes: None,
             occlusion_query_set: None,
         });
-        self.renderer.render(&mut rpass, &tris, &screen_descriptor);
-        drop(rpass);
+        // Forgetting the pass' lifetime means that we are no longer compile-time protected from
+        // runtime errors caused by accessing the parent encoder before the render pass is dropped.
+        // Since we don't pass it on to the renderer, we should be perfectly safe against this mistake here!
+        self.renderer
+            .render(&mut rpass.forget_lifetime(), &tris, &screen_descriptor);
+
         for x in &full_output.textures_delta.free {
             self.renderer.free_texture(x)
         }

@@ -1,6 +1,6 @@
 mod gui;
 
-use std::{iter, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
 use egui::Context;
@@ -49,7 +49,8 @@ impl Renderer {
                     required_features: wgpu::Features::empty(),
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web we'll have to disable some.
-                    required_limits: wgpu::Limits::default(),
+                    required_limits: Default::default(),
+                    memory_hints: Default::default(),
                 },
                 None, // Trace path
             )
@@ -117,7 +118,7 @@ impl Renderer {
         }
     }
 
-    pub fn render(&mut self, run_ui: impl FnOnce(&Context)) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, mut run_ui: impl FnMut(&Context)) -> Result<(), wgpu::SurfaceError> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
@@ -190,7 +191,7 @@ impl Renderer {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("submit");
 
-            self.queue.submit(iter::once(encoder.finish()));
+            self.queue.submit(std::iter::once(encoder.finish()));
         }
         {
             #[cfg(feature = "debug")]

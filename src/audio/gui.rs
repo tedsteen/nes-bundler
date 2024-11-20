@@ -82,7 +82,7 @@ impl GuiComponent for AudioGui {
                     *selected_device = self.audio.get_default_device_name();
                 }
                 if let Some(selected_text) = selected_device.as_deref_mut() {
-                    egui::ComboBox::from_id_source("audio-output")
+                    egui::ComboBox::from_id_salt("audio-output")
                         .width(160.0)
                         .selected_text(selected_text.to_string())
                         .show_ui(ui, |ui| {

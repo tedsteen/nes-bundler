@@ -74,7 +74,7 @@ impl TetanesNesState {
                     match b64.decode(b64_encoded_sram) {
                         Ok(sram) => {
                             log::info!("Loading SRAM save state");
-                            control_deck.cpu_mut().bus.load_sram(sram);
+                            control_deck.cpu_mut().bus.load_sram(sram.into());
                         }
                         Err(err) => {
                             log::warn!("Failed to base64 decode sram: {err:?}");

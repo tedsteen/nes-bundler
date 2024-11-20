@@ -65,7 +65,7 @@ impl InputsGui {
             .get_selected_configuration_mut(player)
             .name
             .to_string();
-        egui::ComboBox::from_id_source(format!("joypad-{}", player))
+        egui::ComboBox::from_id_salt(format!("joypad-{}", player))
             .width(160.0)
             .selected_text(selected_text)
             .show_ui(ui, |ui| {

@@ -24,3 +24,14 @@ Running that will start a demo bundle, but if you place your own [config.yaml an
 To create a bundle you need to [configure it](config/README.md) with your ROM and a bundle configuration, zip it then send it of for bundling at https://nes-bundler.com/
 
 If everything goes well you should receive emails with the bundles.
+
+## Building
+
+```bash
+cargo build --release
+# or for dev
+cargo run
+```
+### Dependencies
+
+* cmake (`brew install cmake`)
