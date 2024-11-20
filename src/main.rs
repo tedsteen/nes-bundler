@@ -180,7 +180,6 @@ impl ApplicationHandler for Application {
                 .flat_map(|e| e.to_gamepad_event())
                 .map(GuiEvent::Gamepad)
             {
-                dbg!(&sdl_gui_event);
                 main_view.handle_gui_event(
                     &sdl_gui_event,
                     &mut self.audio_gui,
@@ -189,7 +188,6 @@ impl ApplicationHandler for Application {
                 );
             }
             let new_inputs = if !main_view.main_gui.visible() {
-                dbg!(self.inputs_gui.inputs.joypads);
                 self.inputs_gui.inputs.joypads
             } else {
                 // Don't let the inputs control the game if the gui is showing
