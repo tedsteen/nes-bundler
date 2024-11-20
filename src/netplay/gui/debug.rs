@@ -45,6 +45,8 @@ use super::NetplayGui;
 
 impl NetplayGui {
     pub fn prepare(&mut self, netplay_state_handler: &NetplayStateHandler) {
+        puffin::profile_function!();
+
         if let Some(NetplayState::Connected(netplay)) = &netplay_state_handler.netplay {
             let sess = &netplay.state.netplay_session.p2p_session;
             if netplay.state.netplay_session.game_state.frame % 30 == 0 {
