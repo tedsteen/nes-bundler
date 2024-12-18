@@ -36,26 +36,35 @@ serde_yaml = "0.9"
 bitflags = "2"
 rand = "0.8"
 
-tokio = { version = "1", features = ["rt", "macros", "rt-multi-thread", "sync"] }
+tokio = { version = "1", features = [
+  "rt",
+  "macros",
+  "rt-multi-thread",
+  "sync",
+] }
 futures = "0.3"
 
-egui = { version = "0.29", default-features = false, features = [
-  "bytemuck", "default_fonts"
+egui = { version = "0.30", default-features = false, features = [
+  "bytemuck",
+  "default_fonts",
 ] }
-egui_plot = { version = "0.29", optional = true }
+egui_plot = { version = "0.30", optional = true }
 
 # TODO: Use stable version of puffin and puffin_egui when https://github.com/EmbarkStudios/puffin/pull/234 is merged
 puffin = { git = "https://github.com/tedsteen/puffin.git", branch = "upgrade-egui", optional = true }
 puffin_egui = { git = "https://github.com/tedsteen/puffin.git", branch = "upgrade-egui", optional = true }
 
-egui-winit = "0.29"
-egui-wgpu = "0.29"
+egui-winit = "0.30"
+egui-wgpu = "0.30"
 winit = "0.30.5"
-wgpu = { version = "22.1", features = ["dx12", "metal"] }
+wgpu = { version = "23.0", features = ["dx12", "metal"] }
 raw-window-handle = "0.6"
 
 # sdl2 = { version = "0.36", features = ["bundled", "static-link"] }
-sdl2 = { git = "https://github.com/tedsteen/rust-sdl2.git", branch = "for-nes-bundler", features = ["bundled", "static-link"] }
+sdl2 = { git = "https://github.com/tedsteen/rust-sdl2.git", branch = "for-nes-bundler", features = [
+  "bundled",
+  "static-link",
+] }
 
 tetanes-core = { git = "https://github.com/lukexor/tetanes.git" }
 bincode = "1.3"
@@ -65,10 +74,10 @@ base64 = "0.22"
 directories = "5"
 
 # Netplay deps
-matchbox_socket = { version="0.10", features = ["ggrs"], optional = true }
+matchbox_socket = { version = "0.10", features = ["ggrs"], optional = true }
 futures-timer = { version = "3", features = ["wasm-bindgen"], optional = true }
 ggrs = { version = "0.10", optional = true }
-uuid = { version = "1", features = [ "v4" ], optional = true }
+uuid = { version = "1", features = ["v4"], optional = true }
 reqwest = { version = "0.12", features = ["json"], optional = true }
 md5 = { version = "0.7", optional = true }
 
