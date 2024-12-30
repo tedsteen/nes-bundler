@@ -95,11 +95,11 @@ impl Resuming {
         let session_id = netplay.state.session_id.clone();
         Self {
             attempt1: ConnectingState::connect(StartMethod::Resume(StartState {
-                game_state: netplay_session.last_confirmed_game_states[1].clone(),
+                game_state: netplay_session.last_confirmed_game_state1.clone(),
                 session_id: session_id.clone(),
             })),
             attempt2: ConnectingState::connect(StartMethod::Resume(StartState {
-                game_state: netplay_session.last_confirmed_game_states[0].clone(),
+                game_state: netplay_session.last_confirmed_game_state2.clone(),
                 session_id,
             })),
         }
@@ -221,12 +221,9 @@ impl Netplay<ConnectingState> {
 impl Netplay<Connected> {
     pub fn resume(mut self) -> Netplay<Resuming> {
         log::debug!(
-            "Resuming netplay to one of the frames ({:?})",
-            self.state
-                .netplay_session
-                .last_confirmed_game_states
-                .clone()
-                .map(|s| s.frame)
+            "Resuming netplay to one of the frames {:?} and {:?}",
+            self.state.netplay_session.last_confirmed_game_state1.frame,
+            self.state.netplay_session.last_confirmed_game_state2.frame
         );
 
         Netplay::from(Resuming::new(&mut self))

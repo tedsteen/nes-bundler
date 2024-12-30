@@ -1,3 +1,5 @@
+use std::mem;
+
 use ggrs::{Config, GgrsRequest, P2PSession};
 use matchbox_socket::PeerId;
 
@@ -21,7 +23,8 @@ pub struct NetplaySession {
     pub p2p_session: P2PSession<GGRSConfig>,
     pub game_state: NetplayNesState,
     pub last_handled_frame: i32,
-    pub last_confirmed_game_states: [NetplayNesState; 2],
+    pub last_confirmed_game_state1: NetplayNesState,
+    pub last_confirmed_game_state2: NetplayNesState,
 }
 
 impl NetplaySession {
@@ -37,7 +40,8 @@ impl NetplaySession {
         Self {
             p2p_session,
             game_state: game_state.clone(),
-            last_confirmed_game_states: [game_state.clone(), game_state],
+            last_confirmed_game_state1: game_state.clone(),
+            last_confirmed_game_state2: game_state,
             last_handled_frame: -1,
         }
     }
@@ -111,10 +115,11 @@ impl NetplaySession {
                                 //This is not a replay
                                 self.last_handled_frame = self.game_state.frame;
                                 if self.game_state.frame % (sess.max_prediction() * 2) as i32 == 0 {
-                                    self.last_confirmed_game_states = [
-                                        self.last_confirmed_game_states[1].clone(),
-                                        self.game_state.clone(),
-                                    ];
+                                    mem::swap(
+                                        &mut self.last_confirmed_game_state1,
+                                        &mut self.last_confirmed_game_state2,
+                                    );
+                                    self.last_confirmed_game_state2 = self.game_state.clone()
                                 }
                             }
 
