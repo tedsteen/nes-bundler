@@ -16,12 +16,15 @@ debug = ["egui_plot", "puffin", "puffin_egui"]
 [profile.dev]
 opt-level = 1
 # codegen-backend = "cranelift"
+panic = 'unwind'
+debug = true
+strip = false
 
 [profile.profiling]
 inherits = "release"
+panic = 'unwind'
 debug = true
 strip = false
-panic = 'unwind'
 
 [profile.release]
 codegen-units = 1
