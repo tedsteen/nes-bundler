@@ -122,9 +122,6 @@ impl NetplayGui {
                     .ui(ui);
             });
             ui.end_row();
-            ui.add_space(10.0);
-
-            ui.end_row();
 
             let enter_pressed_in_room_input = ui
                 .vertical_centered(|ui| {
@@ -300,8 +297,6 @@ impl NetplayGui {
                         .ui(ui);
                     });
 
-                    ui.end_row();
-                    ui.add_space(10.0);
                     ui.end_row();
 
                     ui.vertical_centered(|ui| {
