@@ -69,7 +69,7 @@ impl NetplaySession {
 
         {
             #[cfg(feature = "debug")]
-            puffin::profile_scope!("ggrs advance_frame");
+            puffin::profile_scope!("ggrs poll_remote_clients");
             sess.poll_remote_clients();
         }
 

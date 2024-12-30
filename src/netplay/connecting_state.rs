@@ -300,8 +300,7 @@ impl Connecting<PeeringState> {
                 .with_input_delay(ggrs_config.input_delay)
                 .with_fps(Settings::current_mut().get_nes_region().to_fps() as usize)
                 .unwrap()
-                .with_max_prediction_window(ggrs_config.max_prediction)
-                .expect("ggrs session to configure");
+                .with_max_prediction_window(ggrs_config.max_prediction);
 
             for (i, player) in players.into_iter().enumerate() {
                 sess_build = sess_build
@@ -313,7 +312,7 @@ impl Connecting<PeeringState> {
                 start_method: self.start_method,
                 state: SynchonizingState::new(
                     sess_build
-                        .start_p2p_session(self.state.socket)
+                        .start_p2p_session(socket.take_channel(0).expect("a channel"))
                         .expect("ggrs session to start"),
                     self.state.unlock_url.clone(),
                 ),
