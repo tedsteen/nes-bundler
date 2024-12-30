@@ -14,7 +14,6 @@ use thingbuf::{Recycle, ThingBuf};
 
 use crate::{
     audio::AudioSender,
-    fps::RateCounter,
     input::JoypadState,
     settings::{Settings, MAX_PLAYERS},
 };
@@ -71,7 +70,6 @@ impl Emulator {
         tokio::task::spawn({
             let nes_state = nes_state.clone();
             async move {
-                let rate_counter = Arc::new(Mutex::new(RateCounter::new()));
                 loop {
                     for command in command_rx.try_iter() {
                         let mut nes_state = nes_state.lock().unwrap();
@@ -81,7 +79,7 @@ impl Emulator {
                         }
                     }
 
-                    // Run advance in parallel with the audio pushing
+                    // Run advance and audio pushing in parallel
                     let _ = tokio::join!(
                         tokio::spawn({
                             let audio_buffer = audio_buffer.clone();
@@ -101,40 +99,25 @@ impl Emulator {
                             let nes_state = nes_state.clone();
                             let joypad_state = *inputs.read().unwrap();
                             let audio_buffer = audio_buffer.clone();
-                            let rate_counter = rate_counter.clone();
                             async move {
-                                let _ = audio_buffer.push_with(|audio_buffer| {
-                                    let frame = frame_buffer.push_ref();
-                                    if frame.is_err() {
-                                        //TODO: If we get in a bad sync with vsync and drop a lot of frames then perhaps we can do something to yank things in place again?
-                                        rate_counter.lock().unwrap().tick("Dropped frame");
-                                    } else {
-                                        rate_counter.lock().unwrap().tick("Frame");
-                                    }
-                                    log::trace!("Advance NES with joypad state {:?}", joypad_state);
-                                    nes_state.lock().unwrap().advance(
-                                        joypad_state,
-                                        &mut NESBuffers {
-                                            video: frame.ok().as_deref_mut(),
-                                            audio: Some(audio_buffer),
-                                        },
-                                    );
-                                });
-                                if let Some(report) = rate_counter.lock().unwrap().report() {
-                                    // Hitch-hike on the once-per-second-reporting to save the sram.
-                                    use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
-                                    use base64::Engine;
-                                    Settings::current_mut().save_state = nes_state
-                                        .lock()
-                                        .unwrap()
-                                        .save_sram()
-                                        .map(|sram| b64.encode(sram));
-
-                                    log::debug!("Emulation: {report}");
-                                }
+                                log::trace!("Advance NES with joypad state {:?}", joypad_state);
+                                nes_state.lock().unwrap().advance(
+                                    joypad_state,
+                                    &mut NESBuffers {
+                                        video: frame_buffer.push_ref().as_deref_mut().ok(),
+                                        audio: audio_buffer.push_ref().as_deref_mut().ok(),
+                                    },
+                                );
                             }
                         })
                     );
+                    use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+                    use base64::Engine;
+                    Settings::current_mut().save_state = nes_state
+                        .lock()
+                        .unwrap()
+                        .save_sram()
+                        .map(|sram| b64.encode(sram));
                 }
             }
         });
