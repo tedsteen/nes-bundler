@@ -35,3 +35,4 @@ cargo run --profile dev
 ### Dependencies
 
 * cmake (`brew install cmake`)
+* cargo-release (`cargo install cargo-release`, only needed when releasing a new version of nes-bundler)
