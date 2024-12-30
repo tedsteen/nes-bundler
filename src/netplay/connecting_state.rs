@@ -338,7 +338,7 @@ impl Connecting<SynchonizingState> {
         }
     }
 }
-const RETRY_COOLDOWN: Duration = Duration::from_secs(3);
+const RETRY_COOLDOWN: Duration = Duration::from_secs(5);
 const MAX_RETRY_ATTEMPTS: u16 = 3;
 
 pub struct Retrying {
