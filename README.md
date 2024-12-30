@@ -30,7 +30,7 @@ If everything goes well you should receive emails with the bundles.
 ```bash
 cargo build --release
 # or for dev
-cargo run
+cargo run --profile dev
 ```
 ### Dependencies
 
