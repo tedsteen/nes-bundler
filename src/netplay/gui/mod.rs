@@ -16,7 +16,7 @@ use crate::{
 
 use super::{
     connecting_state::SynchonizingState,
-    netplay_state::{Connected, Netplay, NetplayState},
+    netplay_state::{ConnectedState, Netplay, NetplayState},
     ConnectingState, NetplayStateHandler,
 };
 #[cfg(feature = "debug")]
@@ -417,7 +417,11 @@ impl NetplayGui {
         NetplayState::Connecting(netplay_connecting)
     }
 
-    fn ui_connected(&mut self, ui: &mut Ui, netplay_connected: Netplay<Connected>) -> NetplayState {
+    fn ui_connected(
+        &mut self,
+        ui: &mut Ui,
+        netplay_connected: Netplay<ConnectedState>,
+    ) -> NetplayState {
         // Hide menu if we just managed to connect
         if Instant::now()
             .duration_since(netplay_connected.state.start_time)

@@ -18,12 +18,12 @@ use super::{
 pub enum NetplayState {
     Disconnected(Netplay<LocalNesState>),
     Connecting(Netplay<ConnectingState>),
-    Connected(Netplay<Connected>),
-    Resuming(Netplay<Resuming>),
-    Failed(Netplay<Failed>),
+    Connected(Netplay<ConnectedState>),
+    Resuming(Netplay<ResumingState>),
+    Failed(Netplay<FailedState>),
 }
 
-pub struct Failed {
+pub struct FailedState {
     pub reason: String,
 }
 
@@ -78,18 +78,18 @@ impl<T> Netplay<T> {
     }
 }
 
-pub struct Connected {
+pub struct ConnectedState {
     pub netplay_session: NetplaySessionState,
     session_id: String,
     pub start_time: Instant,
 }
 
-pub struct Resuming {
+pub struct ResumingState {
     attempt1: ConnectingState,
     attempt2: ConnectingState,
 }
-impl Resuming {
-    fn new(netplay: &mut Netplay<Connected>) -> Self {
+impl ResumingState {
+    fn new(netplay: &mut Netplay<ConnectedState>) -> Self {
         let netplay_session = &netplay.state.netplay_session;
 
         let session_id = netplay.state.session_id.clone();
@@ -199,7 +199,7 @@ impl Netplay<ConnectingState> {
             ConnectingState::Connected(connected) => {
                 log::debug!("Connected! Starting netplay session");
                 NetplayState::Connected(Netplay {
-                    state: Connected {
+                    state: ConnectedState {
                         start_time: Instant::now(),
                         session_id: match &connected.start_method {
                             StartMethod::Start(StartState { session_id, .. }, ..)
@@ -213,22 +213,22 @@ impl Netplay<ConnectingState> {
                 })
             }
             ConnectingState::Failed(reason) => NetplayState::Failed(Netplay {
-                state: Failed { reason },
+                state: FailedState { reason },
             }),
             _ => NetplayState::Connecting(self),
         }
     }
 }
 
-impl Netplay<Connected> {
-    pub fn resume(mut self) -> Netplay<Resuming> {
+impl Netplay<ConnectedState> {
+    pub fn resume(mut self) -> Netplay<ResumingState> {
         log::debug!(
             "Resuming netplay to one of the frames {:?} and {:?}",
             self.state.netplay_session.last_confirmed_game_state1.frame,
             self.state.netplay_session.last_confirmed_game_state2.frame
         );
 
-        Netplay::from(Resuming::new(&mut self))
+        Netplay::from(ResumingState::new(&mut self))
     }
 
     fn advance(
@@ -261,7 +261,7 @@ impl Netplay<Connected> {
     }
 }
 
-impl Netplay<Resuming> {
+impl Netplay<ResumingState> {
     fn advance(mut self) -> NetplayState {
         //log::trace!("Advancing Netplay<Resuming>");
         self.state.attempt1 = self.state.attempt1.advance();
@@ -286,7 +286,7 @@ impl Netplay<Resuming> {
     }
 }
 
-impl Netplay<Failed> {
+impl Netplay<FailedState> {
     fn advance(self) -> NetplayState {
         NetplayState::Failed(self)
     }
