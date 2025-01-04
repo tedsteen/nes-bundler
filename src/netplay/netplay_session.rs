@@ -1,3 +1,5 @@
+use std::mem;
+
 use ggrs::{Config, GgrsRequest, P2PSession};
 use matchbox_socket::PeerId;
 
@@ -7,7 +9,10 @@ use crate::{
     settings::MAX_PLAYERS,
 };
 
-use super::{connecting_state::StartMethod, JoypadMapping, NetplayNesState};
+use super::{
+    connecting_state::{StartMethod, StaticNetplayServerConfiguration},
+    JoypadMapping, NetplayNesState,
+};
 
 #[derive(Debug)]
 pub struct GGRSConfig;
@@ -17,15 +22,22 @@ impl Config for GGRSConfig {
     type Address = PeerId;
 }
 
-pub struct NetplaySession {
+pub struct NetplaySessionState {
     pub p2p_session: P2PSession<GGRSConfig>,
     pub game_state: NetplayNesState,
     pub last_handled_frame: i32,
-    pub last_confirmed_game_states: [NetplayNesState; 2],
+    pub last_confirmed_game_state1: NetplayNesState,
+    pub last_confirmed_game_state2: NetplayNesState,
+    pub start_method: StartMethod,
+    pub netplay_server_configuration: StaticNetplayServerConfiguration,
 }
 
-impl NetplaySession {
-    pub fn new(start_method: StartMethod, p2p_session: P2PSession<GGRSConfig>) -> Self {
+impl NetplaySessionState {
+    pub fn new(
+        start_method: StartMethod,
+        p2p_session: P2PSession<GGRSConfig>,
+        netplay_server_configuration: StaticNetplayServerConfiguration,
+    ) -> Self {
         let mut game_state = match &start_method {
             StartMethod::Start(start_state, ..)
             | StartMethod::Resume(start_state)
@@ -37,8 +49,11 @@ impl NetplaySession {
         Self {
             p2p_session,
             game_state: game_state.clone(),
-            last_confirmed_game_states: [game_state.clone(), game_state],
+            last_confirmed_game_state1: game_state.clone(),
+            last_confirmed_game_state2: game_state,
             last_handled_frame: -1,
+            start_method,
+            netplay_server_configuration,
         }
     }
 
@@ -65,7 +80,7 @@ impl NetplaySession {
 
         {
             #[cfg(feature = "debug")]
-            puffin::profile_scope!("ggrs advance_frame");
+            puffin::profile_scope!("ggrs poll_remote_clients");
             sess.poll_remote_clients();
         }
 
@@ -111,10 +126,11 @@ impl NetplaySession {
                                 //This is not a replay
                                 self.last_handled_frame = self.game_state.frame;
                                 if self.game_state.frame % (sess.max_prediction() * 2) as i32 == 0 {
-                                    self.last_confirmed_game_states = [
-                                        self.last_confirmed_game_states[1].clone(),
-                                        self.game_state.clone(),
-                                    ];
+                                    mem::swap(
+                                        &mut self.last_confirmed_game_state1,
+                                        &mut self.last_confirmed_game_state2,
+                                    );
+                                    self.last_confirmed_game_state2 = self.game_state.clone()
                                 }
                             }
 

@@ -1,7 +1,11 @@
 {
-    "rust-analyzer.checkOnSave.command": "clippy",
-    "editor.formatOnSave": true,
-    "[rust]": {
-      "editor.defaultFormatter": "rust-lang.rust-analyzer"
-    }
+  "rust-analyzer.checkOnSave.command": "clippy",
+  "rust-analyzer.cargo.features": [
+    "netplay",
+    "debug"
+  ],
+  "editor.formatOnSave": true,
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
   }
+}

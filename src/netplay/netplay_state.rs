@@ -11,19 +11,19 @@ use crate::{
 };
 
 use super::{
-    connecting_state::JoinOrHost, netplay_session::NetplaySession, ConnectingState, JoypadMapping,
-    StartMethod, StartState,
+    connecting_state::JoinOrHost, netplay_session::NetplaySessionState, ConnectingState,
+    JoypadMapping, StartMethod, StartState,
 };
 
 pub enum NetplayState {
     Disconnected(Netplay<LocalNesState>),
     Connecting(Netplay<ConnectingState>),
-    Connected(Netplay<Connected>),
-    Resuming(Netplay<Resuming>),
-    Failed(Netplay<Failed>),
+    Connected(Netplay<ConnectedState>),
+    Resuming(Netplay<ResumingState>),
+    Failed(Netplay<FailedState>),
 }
 
-pub struct Failed {
+pub struct FailedState {
     pub reason: String,
 }
 
@@ -78,30 +78,32 @@ impl<T> Netplay<T> {
     }
 }
 
-pub struct Connected {
-    pub netplay_session: NetplaySession,
+pub struct ConnectedState {
+    pub netplay_session: NetplaySessionState,
     session_id: String,
     pub start_time: Instant,
 }
 
-pub struct Resuming {
+pub struct ResumingState {
     attempt1: ConnectingState,
     attempt2: ConnectingState,
 }
-impl Resuming {
-    fn new(netplay: &mut Netplay<Connected>) -> Self {
+impl ResumingState {
+    fn new(netplay: &mut Netplay<ConnectedState>) -> Self {
         let netplay_session = &netplay.state.netplay_session;
 
         let session_id = netplay.state.session_id.clone();
         Self {
-            attempt1: ConnectingState::connect(StartMethod::Resume(StartState {
-                game_state: netplay_session.last_confirmed_game_states[1].clone(),
-                session_id: session_id.clone(),
-            })),
-            attempt2: ConnectingState::connect(StartMethod::Resume(StartState {
-                game_state: netplay_session.last_confirmed_game_states[0].clone(),
-                session_id,
-            })),
+            attempt1: ConnectingState::resume(
+                netplay_session.last_confirmed_game_state1.clone(),
+                session_id.clone(),
+                netplay_session.netplay_server_configuration.clone(),
+            ),
+            attempt2: ConnectingState::resume(
+                netplay_session.last_confirmed_game_state2.clone(),
+                session_id.clone(),
+                netplay_session.netplay_server_configuration.clone(),
+            ),
         }
     }
 }
@@ -199,37 +201,36 @@ impl Netplay<ConnectingState> {
             ConnectingState::Connected(connected) => {
                 log::debug!("Connected! Starting netplay session");
                 NetplayState::Connected(Netplay {
-                    state: Connected {
+                    state: ConnectedState {
                         start_time: Instant::now(),
-                        netplay_session: connected.state,
-                        session_id: match connected.start_method {
+                        session_id: match &connected.start_method {
                             StartMethod::Start(StartState { session_id, .. }, ..)
                             | StartMethod::MatchWithRandom(StartState { session_id, .. })
-                            | StartMethod::Resume(StartState { session_id, .. }) => session_id,
+                            | StartMethod::Resume(StartState { session_id, .. }) => {
+                                session_id.clone()
+                            }
                         },
+                        netplay_session: connected,
                     },
                 })
             }
             ConnectingState::Failed(reason) => NetplayState::Failed(Netplay {
-                state: Failed { reason },
+                state: FailedState { reason },
             }),
             _ => NetplayState::Connecting(self),
         }
     }
 }
 
-impl Netplay<Connected> {
-    pub fn resume(mut self) -> Netplay<Resuming> {
+impl Netplay<ConnectedState> {
+    pub fn resume(mut self) -> Netplay<ResumingState> {
         log::debug!(
-            "Resuming netplay to one of the frames ({:?})",
-            self.state
-                .netplay_session
-                .last_confirmed_game_states
-                .clone()
-                .map(|s| s.frame)
+            "Resuming netplay to one of the frames {:?} and {:?}",
+            self.state.netplay_session.last_confirmed_game_state1.frame,
+            self.state.netplay_session.last_confirmed_game_state2.frame
         );
 
-        Netplay::from(Resuming::new(&mut self))
+        Netplay::from(ResumingState::new(&mut self))
     }
 
     fn advance(
@@ -262,7 +263,7 @@ impl Netplay<Connected> {
     }
 }
 
-impl Netplay<Resuming> {
+impl Netplay<ResumingState> {
     fn advance(mut self) -> NetplayState {
         //log::trace!("Advancing Netplay<Resuming>");
         self.state.attempt1 = self.state.attempt1.advance();
@@ -287,7 +288,7 @@ impl Netplay<Resuming> {
     }
 }
 
-impl Netplay<Failed> {
+impl Netplay<FailedState> {
     fn advance(self) -> NetplayState {
         NetplayState::Failed(self)
     }

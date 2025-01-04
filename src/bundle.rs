@@ -70,9 +70,9 @@ impl Bundle {
 
     fn load() -> Result<Bundle> {
         let external_config = fs::read_to_string(Path::new("config.yaml"))
+            .inspect_err(|e| log::info!("Not using external config.yaml: {:?}", e))
             .map_err(anyhow::Error::msg)
-            .and_then(|config| serde_yaml::from_str(&config).map_err(anyhow::Error::msg))
-            .inspect_err(|e| log::info!("Not using external config.yaml: {:?}", e));
+            .and_then(|config| serde_yaml::from_str(&config).map_err(anyhow::Error::msg));
 
         let external_rom = fs::read(Path::new("rom.nes"))
             .inspect_err(|e| log::info!("Not using external rom.nes: {:?}", e));

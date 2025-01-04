@@ -37,7 +37,6 @@ use crate::main_view::gui::GuiEvent;
 mod audio;
 mod bundle;
 mod emulation;
-mod fps;
 mod gui;
 mod input;
 mod integer_scaling;

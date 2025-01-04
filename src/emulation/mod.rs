@@ -11,11 +11,9 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use thingbuf::{Recycle, ThingBuf};
-use tokio::runtime::Handle;
 
 use crate::{
     audio::AudioSender,
-    fps::RateCounter,
     input::JoypadState,
     settings::{Settings, MAX_PLAYERS},
 };
@@ -69,25 +67,10 @@ impl Emulator {
         let (command_tx, command_rx) = channel();
         let audio_buffer = AudioBufferPool::new();
 
-        tokio::task::spawn_blocking({
+        tokio::task::spawn({
             let nes_state = nes_state.clone();
-            let rate_counter = Arc::new(Mutex::new(RateCounter::new()));
-            move || {
+            async move {
                 loop {
-                    let audio_task = tokio::task::spawn({
-                        let audio_buffer = audio_buffer.clone();
-                        let audio_tx = audio_tx.clone();
-                        async move {
-                            #[cfg(feature = "debug")]
-                            puffin::profile_scope!("push audio");
-                            audio_buffer.pop_with(|audio_buffer| {
-                                for s in audio_buffer.drain(..) {
-                                    let _ = audio_tx.send(s);
-                                }
-                            });
-                        }
-                    });
-
                     for command in command_rx.try_iter() {
                         let mut nes_state = nes_state.lock().unwrap();
                         match command {
@@ -96,49 +79,45 @@ impl Emulator {
                         }
                     }
 
-                    // Spawn NES advance task to let it work in paralell with the audio sending
-                    let advance_task = tokio::task::spawn({
-                        let frame_buffer = frame_buffer.clone();
-                        let nes_state = nes_state.clone();
-                        let joypad_state = *inputs.read().unwrap();
-                        let audio_buffer = audio_buffer.clone();
-                        let rate_counter = rate_counter.clone();
-                        async move {
-                            let _ = audio_buffer.push_with(|audio_buffer| {
-                                let frame = frame_buffer.push_ref();
-                                if frame.is_err() {
-                                    //TODO: If we get in a bad sync with vsync and drop a lot of frames then perhaps we can do something to yank things in place again?
-                                    rate_counter.lock().unwrap().tick("Dropped frame");
-                                } else {
-                                    rate_counter.lock().unwrap().tick("Frame");
-                                }
+                    // Run advance and audio pushing in parallel
+                    let _ = tokio::join!(
+                        tokio::spawn({
+                            let audio_buffer = audio_buffer.clone();
+                            let audio_tx = audio_tx.clone();
+                            async move {
+                                #[cfg(feature = "debug")]
+                                puffin::profile_scope!("push audio");
+                                audio_buffer.pop_with(|audio_buffer| {
+                                    for s in audio_buffer.drain(..) {
+                                        let _ = audio_tx.send(s);
+                                    }
+                                });
+                            }
+                        }),
+                        tokio::spawn({
+                            let frame_buffer = frame_buffer.clone();
+                            let nes_state = nes_state.clone();
+                            let joypad_state = *inputs.read().unwrap();
+                            let audio_buffer = audio_buffer.clone();
+                            async move {
                                 log::trace!("Advance NES with joypad state {:?}", joypad_state);
                                 nes_state.lock().unwrap().advance(
                                     joypad_state,
                                     &mut NESBuffers {
-                                        video: frame.ok().as_deref_mut(),
-                                        audio: Some(audio_buffer),
+                                        video: frame_buffer.push_ref().as_deref_mut().ok(),
+                                        audio: audio_buffer.push_ref().as_deref_mut().ok(),
                                     },
                                 );
-                            });
-                        }
-                    });
-
-                    let _ = Handle::current()
-                        .block_on(async { tokio::join!(audio_task, advance_task) });
-
-                    if let Some(report) = rate_counter.lock().unwrap().report() {
-                        // Hitch-hike on the once-per-second-reporting to save the sram.
-                        use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
-                        use base64::Engine;
-                        Settings::current_mut().save_state = nes_state
-                            .lock()
-                            .unwrap()
-                            .save_sram()
-                            .map(|sram| b64.encode(sram));
-
-                        log::debug!("Emulation: {report}");
-                    }
+                            }
+                        })
+                    );
+                    use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+                    use base64::Engine;
+                    Settings::current_mut().save_state = nes_state
+                        .lock()
+                        .unwrap()
+                        .save_sram()
+                        .map(|sram| b64.encode(sram));
                 }
             }
         });
