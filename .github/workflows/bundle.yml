@@ -60,7 +60,8 @@ jobs:
         7z -y x *.zip -oconfig 2>&1 >/dev/null
 
     - name: Set bundle name
-      run: echo "BUNDLE_NAME=$(yq '.name' config/config.yaml)" >> $GITHUB_ENV
+      run: |
+        echo "BUNDLE_NAME=$(yq '.name' config/config.yaml)" >> $GITHUB_ENV
 
     - name: Set bundle version
       run: echo "BUNDLE_VERSION=$(yq '.version // "${{ github.ref_name }}"' config/config.yaml)" >> $GITHUB_ENV
@@ -104,6 +105,7 @@ jobs:
         fi
 
     - uses: apple-actions/import-codesign-certs@v3
+      name: Import macOS certificates
       if: runner.os == 'macOS'
       with: 
         p12-file-base64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
@@ -122,6 +124,7 @@ jobs:
         rm -rf artifacts || true
         mkdir artifacts
         ARTIFACTS=`readlink -f artifacts`
+        echo "ARTIFACTS=$ARTIFACTS" >> $GITHUB_ENV
         BUNDLE_CONFIG=`readlink -f config`
         BINARIES_PATH="$RUNNER_TEMP/binaries"
         if [[ $RUNNER_OS == "Windows" ]]; then
@@ -137,9 +140,9 @@ jobs:
           light wix/*.wixobj -o "$BINARIES_PATH/nes-bundler.msi" -ext WixUIExtension
 
           # Add artifacts
-          mv $BINARIES_PATH/nes-bundler-netplay.msi "$ARTIFACTS/$BUNDLE_NAME (Netplay).msi"
+          mv $BINARIES_PATH/nes-bundler-netplay.msi "$ARTIFACTS/$BUNDLE_NAME Netplay.msi"
           mv $BINARIES_PATH/nes-bundler.msi "$ARTIFACTS/$BUNDLE_NAME.msi"
-          mv $BINARIES_PATH/nes-bundler-netplay.exe "$ARTIFACTS/$BUNDLE_NAME (Netplay).exe"
+          mv $BINARIES_PATH/nes-bundler-netplay.exe "$ARTIFACTS/$BUNDLE_NAME Netplay.exe"
           mv $BINARIES_PATH/nes-bundler.exe "$ARTIFACTS/$BUNDLE_NAME.exe"
 
         elif [[ $RUNNER_OS == "macOS" ]]; then
@@ -225,51 +228,53 @@ jobs:
         fi
         echo "RUNNER_OS=$RUNNER_OS" >> $GITHUB_ENV
 
-    - name: Sign and notarize final artifacts
+    - name: Sign and notarize macOS artifacts
       # if: startsWith(github.event.ref, 'refs/tags/v')
-      env:
-        BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
-        BUNDLE_APPLE_TEAM_ID: ${{ secrets.BUNDLE_APPLE_TEAM_ID }}
-        BUNDLE_APPLE_USER: ${{ secrets.BUNDLE_APPLE_USER }}
-        BUNDLE_APPLE_APP_PASSWORD: ${{ secrets.BUNDLE_APPLE_APP_PASSWORD }}
-      run: |
-        ARTIFACTS=`readlink -f artifacts`
+      if: runner.os == 'macOS'
+      run: |        
+        # apply provisioning profile
+        PP_PATH=$RUNNER_TEMP/build_pp.provisionprofile
+        echo -n "${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}" | base64 --decode -o $PP_PATH
+        mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+        cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
         
-        if [[ $RUNNER_OS == "Windows" ]]; then
-          dotnet tool install --global AzureSignTool
-          for Item in "$BUNDLE_NAME (Netplay).exe" "$BUNDLE_NAME.exe" "$BUNDLE_NAME (Netplay).msi" "$BUNDLE_NAME.msi" ;
-          do
-            AzureSignTool sign -d "$BUNDLE_NAME" -kvu "${{ secrets.AZURE_KEY_VAULT_URI }}" -kvi "${{ secrets.AZURE_CLIENT_ID }}" -kvt "${{ secrets.AZURE_TENANT_ID }}" -kvs "${{ secrets.AZURE_CLIENT_SECRET }}" -kvc ${{ secrets.AZURE_CERT_NAME }} -tr http://timestamp.digicert.com -v "$ARTIFACTS/$Item" &
-          done
-          wait          
-        elif [[ $RUNNER_OS == "macOS" ]]; then
-          # apply provisioning profile
-          PP_PATH=$RUNNER_TEMP/build_pp.provisionprofile
-          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o $PP_PATH
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
-          
-          # Notarize
-          ARTIFACT1="$ARTIFACTS/$BUNDLE_NAME Installer (Netplay).dmg"
-          ARTIFACT2="$ARTIFACTS/$BUNDLE_NAME Installer.dmg"
+        # Notarize
+        ARTIFACT1="$ARTIFACTS/$BUNDLE_NAME Installer (Netplay).dmg"
+        ARTIFACT2="$ARTIFACTS/$BUNDLE_NAME Installer.dmg"
 
-          xcrun notarytool submit \
-            --team-id $BUNDLE_APPLE_TEAM_ID \
-            --apple-id $BUNDLE_APPLE_USER \
-            --password $BUNDLE_APPLE_APP_PASSWORD \
-            --wait "$ARTIFACT1" &
+        xcrun notarytool submit \
+          --team-id ${{ secrets.BUNDLE_APPLE_TEAM_ID }} \
+          --apple-id ${{ secrets.BUNDLE_APPLE_USER }} \
+          --password ${{ secrets.BUNDLE_APPLE_APP_PASSWORD }} \
+          --wait "$ARTIFACT1" &
 
-          xcrun notarytool submit \
-            --team-id $BUNDLE_APPLE_TEAM_ID \
-            --apple-id $BUNDLE_APPLE_USER \
-            --password $BUNDLE_APPLE_APP_PASSWORD \
-            --wait "$ARTIFACT2" &
-          wait
+        xcrun notarytool submit \
+          --team-id ${{ secrets.BUNDLE_APPLE_TEAM_ID }} \
+          --apple-id ${{ secrets.BUNDLE_APPLE_USER }} \
+          --password ${{ secrets.BUNDLE_APPLE_APP_PASSWORD }} \
+          --wait "$ARTIFACT2" &
+        wait
 
-          xcrun stapler staple "$ARTIFACT1"
-          xcrun stapler staple "$ARTIFACT2"
-        fi
-
+        xcrun stapler staple "$ARTIFACT1"
+        xcrun stapler staple "$ARTIFACT2"
+        
+    - name: Sign and notarize Windows artifacts
+      # if: startsWith(github.event.ref, 'refs/tags/v')
+      if: runner.os == 'Windows'
+      uses: azure/trusted-signing-action@v0.5.0
+      with:
+        azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+        endpoint: https://weu.codesigning.azure.net/
+        trusted-signing-account-name: nes-bundler-signing
+        certificate-profile-name: net-bundler
+        files: |
+          ${{ github.workspace }}\artifacts\${{ env.BUNDLE_NAME }} Netplay.msi
+          ${{ github.workspace }}\artifacts\${{ env.BUNDLE_NAME }} Netplay.exe
+          ${{ github.workspace }}\artifacts\${{ env.BUNDLE_NAME }}.msi
+          ${{ github.workspace }}\artifacts\${{ env.BUNDLE_NAME }}.exe
+  
     - name: Password protect bundle
       if: github.event.client_payload.configuration_url != ''
       id: zip-bundle
@@ -283,6 +288,7 @@ jobs:
         echo "BUNDLE_PASSWORD=$BUNDLE_PASSWORD" >> $GITHUB_ENV
 
     - uses: actions/upload-artifact@v4
+      name: Upload artifacts
       id: artifact-upload-step
       with:
         name: ${{ env.BUNDLE_NAME }} ${{ env.BUNDLE_VERSION }} ${{ env.RUNNER_OS }}
