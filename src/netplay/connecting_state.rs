@@ -27,7 +27,7 @@ pub enum NetplayServerConfiguration {
 pub struct StaticNetplayServerConfiguration {
     matchbox: MatchboxConfiguration,
     pub ggrs: GGRSConfiguration,
-    unlock_url: Option<String>,
+    pub unlock_url: Option<String>,
 }
 
 pub enum ConnectingState {
@@ -45,6 +45,20 @@ pub enum ConnectingState {
 impl ConnectingState {
     pub fn connect(start_method: StartMethod) -> Self {
         Self::start(start_method)
+    }
+
+    pub fn resume(
+        game_state: NetplayNesState,
+        session_id: String,
+        netplay_server_configuration: StaticNetplayServerConfiguration,
+    ) -> Self {
+        Self::PeeringUp(PeeringState::new(
+            netplay_server_configuration,
+            StartMethod::Resume(StartState {
+                game_state,
+                session_id,
+            }),
+        ))
     }
 
     fn start(start_method: StartMethod) -> Self {
@@ -246,8 +260,8 @@ impl PeeringState {
                 sess_build
                     .start_p2p_session(socket.take_channel(0).expect("a channel"))
                     .expect("ggrs session to start"),
-                self.netplay_server_configuration.unlock_url.clone(),
                 self.start_method,
+                self.netplay_server_configuration.clone(),
             ))
         } else {
             ConnectingState::PeeringUp(self)
@@ -257,21 +271,21 @@ impl PeeringState {
 
 pub struct SynchonizingState {
     p2p_session: P2PSession<GGRSConfig>,
-    pub unlock_url: Option<String>,
     pub start_time: Instant,
     pub start_method: StartMethod,
+    pub netplay_server_configuration: StaticNetplayServerConfiguration,
 }
 impl SynchonizingState {
     pub fn new(
         p2p_session: P2PSession<GGRSConfig>,
-        unlock_url: Option<String>,
         start_method: StartMethod,
+        netplay_server_configuration: StaticNetplayServerConfiguration,
     ) -> Self {
         SynchonizingState {
             p2p_session,
-            unlock_url,
             start_time: Instant::now(),
             start_method,
+            netplay_server_configuration,
         }
     }
 
@@ -283,6 +297,7 @@ impl SynchonizingState {
             ConnectingState::Connected(NetplaySessionState::new(
                 start_method.clone(),
                 self.p2p_session,
+                self.netplay_server_configuration,
             ))
         } else {
             ConnectingState::Synchronizing(self)

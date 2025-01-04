@@ -65,7 +65,7 @@ fn ui_button(text: &str) -> Button {
 
 impl NetplayGui {
     fn needs_unlocking(synchronizing_state: &SynchonizingState) -> Option<&str> {
-        if let Some(unlock_url) = &synchronizing_state.unlock_url {
+        if let Some(unlock_url) = &synchronizing_state.netplay_server_configuration.unlock_url {
             if Instant::now()
                 .duration_since(synchronizing_state.start_time)
                 .gt(&Duration::from_secs(5))

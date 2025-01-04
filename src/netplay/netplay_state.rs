@@ -94,14 +94,16 @@ impl ResumingState {
 
         let session_id = netplay.state.session_id.clone();
         Self {
-            attempt1: ConnectingState::connect(StartMethod::Resume(StartState {
-                game_state: netplay_session.last_confirmed_game_state1.clone(),
-                session_id: session_id.clone(),
-            })),
-            attempt2: ConnectingState::connect(StartMethod::Resume(StartState {
-                game_state: netplay_session.last_confirmed_game_state2.clone(),
-                session_id,
-            })),
+            attempt1: ConnectingState::resume(
+                netplay_session.last_confirmed_game_state1.clone(),
+                session_id.clone(),
+                netplay_session.netplay_server_configuration.clone(),
+            ),
+            attempt2: ConnectingState::resume(
+                netplay_session.last_confirmed_game_state2.clone(),
+                session_id.clone(),
+                netplay_session.netplay_server_configuration.clone(),
+            ),
         }
     }
 }

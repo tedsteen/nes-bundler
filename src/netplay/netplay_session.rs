@@ -9,7 +9,10 @@ use crate::{
     settings::MAX_PLAYERS,
 };
 
-use super::{connecting_state::StartMethod, JoypadMapping, NetplayNesState};
+use super::{
+    connecting_state::{StartMethod, StaticNetplayServerConfiguration},
+    JoypadMapping, NetplayNesState,
+};
 
 #[derive(Debug)]
 pub struct GGRSConfig;
@@ -26,10 +29,15 @@ pub struct NetplaySessionState {
     pub last_confirmed_game_state1: NetplayNesState,
     pub last_confirmed_game_state2: NetplayNesState,
     pub start_method: StartMethod,
+    pub netplay_server_configuration: StaticNetplayServerConfiguration,
 }
 
 impl NetplaySessionState {
-    pub fn new(start_method: StartMethod, p2p_session: P2PSession<GGRSConfig>) -> Self {
+    pub fn new(
+        start_method: StartMethod,
+        p2p_session: P2PSession<GGRSConfig>,
+        netplay_server_configuration: StaticNetplayServerConfiguration,
+    ) -> Self {
         let mut game_state = match &start_method {
             StartMethod::Start(start_state, ..)
             | StartMethod::Resume(start_state)
@@ -45,6 +53,7 @@ impl NetplaySessionState {
             last_confirmed_game_state2: game_state,
             last_handled_frame: -1,
             start_method,
+            netplay_server_configuration,
         }
     }
 
