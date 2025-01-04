@@ -8,11 +8,14 @@ use crate::{
     emulation::LocalNesState,
     gui::{esc_pressed, MenuButton},
     main_view::gui::{MainGui, MainMenuState},
-    netplay::{connecting_state::StartMethod, netplay_state::MAX_ROOM_NAME_LEN},
+    netplay::{
+        connecting_state::{LoadingNetplayServerConfigurationState, PeeringState, StartMethod},
+        netplay_state::MAX_ROOM_NAME_LEN,
+    },
 };
 
 use super::{
-    connecting_state::{Connecting, SynchonizingState},
+    connecting_state::SynchonizingState,
     netplay_state::{Connected, Netplay, NetplayState},
     ConnectingState, NetplayStateHandler,
 };
@@ -61,10 +64,10 @@ fn ui_button(text: &str) -> Button {
 }
 
 impl NetplayGui {
-    fn needs_unlocking(synchronizing_state: &Connecting<SynchonizingState>) -> Option<&str> {
-        if let Some(unlock_url) = &synchronizing_state.state.unlock_url {
+    fn needs_unlocking(synchronizing_state: &SynchonizingState) -> Option<&str> {
+        if let Some(unlock_url) = &synchronizing_state.unlock_url {
             if Instant::now()
-                .duration_since(synchronizing_state.state.start_time)
+                .duration_since(synchronizing_state.start_time)
                 .gt(&Duration::from_secs(5))
             {
                 return Some(unlock_url);
@@ -257,10 +260,10 @@ impl NetplayGui {
         let mut action = None;
 
         match &netplay_connecting.state {
-            ConnectingState::LoadingNetplayServerConfiguration(Connecting {
-                start_method, ..
-            })
-            | ConnectingState::PeeringUp(Connecting { start_method, .. }) => match start_method {
+            ConnectingState::LoadingNetplayServerConfiguration(
+                LoadingNetplayServerConfigurationState { start_method, .. },
+            )
+            | ConnectingState::PeeringUp(PeeringState { start_method, .. }) => match start_method {
                 StartMethod::Start(.., room_name, join_or_host) => {
                     use super::connecting_state::JoinOrHost::*;
                     match join_or_host {

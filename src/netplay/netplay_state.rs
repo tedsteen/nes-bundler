@@ -11,8 +11,8 @@ use crate::{
 };
 
 use super::{
-    connecting_state::JoinOrHost, netplay_session::NetplaySession, ConnectingState, JoypadMapping,
-    StartMethod, StartState,
+    connecting_state::JoinOrHost, netplay_session::NetplaySessionState, ConnectingState,
+    JoypadMapping, StartMethod, StartState,
 };
 
 pub enum NetplayState {
@@ -79,7 +79,7 @@ impl<T> Netplay<T> {
 }
 
 pub struct Connected {
-    pub netplay_session: NetplaySession,
+    pub netplay_session: NetplaySessionState,
     session_id: String,
     pub start_time: Instant,
 }
@@ -201,12 +201,14 @@ impl Netplay<ConnectingState> {
                 NetplayState::Connected(Netplay {
                     state: Connected {
                         start_time: Instant::now(),
-                        netplay_session: connected.state,
-                        session_id: match connected.start_method {
+                        session_id: match &connected.start_method {
                             StartMethod::Start(StartState { session_id, .. }, ..)
                             | StartMethod::MatchWithRandom(StartState { session_id, .. })
-                            | StartMethod::Resume(StartState { session_id, .. }) => session_id,
+                            | StartMethod::Resume(StartState { session_id, .. }) => {
+                                session_id.clone()
+                            }
                         },
+                        netplay_session: connected,
                     },
                 })
             }

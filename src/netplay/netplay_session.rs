@@ -19,15 +19,16 @@ impl Config for GGRSConfig {
     type Address = PeerId;
 }
 
-pub struct NetplaySession {
+pub struct NetplaySessionState {
     pub p2p_session: P2PSession<GGRSConfig>,
     pub game_state: NetplayNesState,
     pub last_handled_frame: i32,
     pub last_confirmed_game_state1: NetplayNesState,
     pub last_confirmed_game_state2: NetplayNesState,
+    pub start_method: StartMethod,
 }
 
-impl NetplaySession {
+impl NetplaySessionState {
     pub fn new(start_method: StartMethod, p2p_session: P2PSession<GGRSConfig>) -> Self {
         let mut game_state = match &start_method {
             StartMethod::Start(start_state, ..)
@@ -43,6 +44,7 @@ impl NetplaySession {
             last_confirmed_game_state1: game_state.clone(),
             last_confirmed_game_state2: game_state,
             last_handled_frame: -1,
+            start_method,
         }
     }
 
