@@ -94,13 +94,13 @@ impl ResumingState {
 
         let session_id = netplay.state.session_id.clone();
         Self {
-            attempt1: ConnectingState::resume(
-                netplay_session.last_confirmed_game_state1.clone(),
+            attempt2: ConnectingState::resume(
+                netplay_session.last_confirmed_game_state2.clone(),
                 session_id.clone(),
                 netplay_session.netplay_server_configuration.clone(),
             ),
-            attempt2: ConnectingState::resume(
-                netplay_session.last_confirmed_game_state2.clone(),
+            attempt1: ConnectingState::resume(
+                netplay_session.last_confirmed_game_state1.clone(),
                 session_id.clone(),
                 netplay_session.netplay_server_configuration.clone(),
             ),
@@ -266,16 +266,16 @@ impl Netplay<ConnectedState> {
 impl Netplay<ResumingState> {
     fn advance(mut self) -> NetplayState {
         //log::trace!("Advancing Netplay<Resuming>");
-        self.state.attempt1 = self.state.attempt1.advance();
         self.state.attempt2 = self.state.attempt2.advance();
+        self.state.attempt1 = self.state.attempt1.advance();
 
-        if let ConnectingState::Connected(_) = &self.state.attempt1 {
-            NetplayState::Connecting(Netplay {
-                state: self.state.attempt1,
-            })
-        } else if let ConnectingState::Connected(_) = &self.state.attempt2 {
+        if let ConnectingState::Connected(_) = &self.state.attempt2 {
             NetplayState::Connecting(Netplay {
                 state: self.state.attempt2,
+            })
+        } else if let ConnectingState::Connected(_) = &self.state.attempt1 {
+            NetplayState::Connecting(Netplay {
+                state: self.state.attempt1,
             })
         } else {
             NetplayState::Resuming(self)

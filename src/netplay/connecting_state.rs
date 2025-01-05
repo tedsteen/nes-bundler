@@ -164,16 +164,18 @@ impl PeeringState {
     ) -> Self {
         let matchbox_server = &netplay_server_configuration.matchbox.server;
 
+        //TODO: matchbox will panic when we advance the frame on the ggrs session if we do not pass `players=2` here. See discussion (https://discord.com/channels/844211600009199626/1045611882691698688/1325596000928399495) for details.
+        //      revert this when the bug is fixed in matchbox.
         let room_name = match &start_method {
             StartMethod::Start(StartState { session_id, .. }, ..) => {
-                format!("join_{}", session_id)
+                format!("join_{}?next=2", session_id)
             }
             StartMethod::Resume(StartState {
                 session_id,
                 game_state,
                 ..
             }) => {
-                format!("resume_{}_{}", session_id, game_state.frame)
+                format!("resume_{}_{}?next=2", session_id, game_state.frame)
             }
             StartMethod::MatchWithRandom(StartState { session_id, .. }) => {
                 format!("random_{}?next=2", session_id)
@@ -207,6 +209,7 @@ impl PeeringState {
 
         let loop_fut = loop_fut.fuse();
         let timeout = Delay::new(Duration::from_millis(100));
+
         tokio::spawn(async move {
             futures::pin_mut!(loop_fut, timeout);
             loop {
