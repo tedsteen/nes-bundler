@@ -125,7 +125,7 @@ impl NetplaySessionState {
                             if !is_replay {
                                 //This is not a replay
                                 self.last_handled_frame = self.game_state.frame;
-                                if self.game_state.frame % (sess.max_prediction() * 2) as i32 == 0 {
+                                if self.game_state.frame % (sess.max_prediction() + 1) as i32 == 0 {
                                     mem::swap(
                                         &mut self.last_confirmed_game_state1,
                                         &mut self.last_confirmed_game_state2,
