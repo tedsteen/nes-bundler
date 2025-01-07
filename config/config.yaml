@@ -22,7 +22,7 @@ manufacturer: "Darkbits"
 # There will be an option in the settings to switch between regions if there are more than one in this list.
 # The first in the list will be the default region, and also the region used for Netplay (since it has to be the same for both players)
 supported_nes_regions:
-    - Ntsc
+  - Ntsc
 
 # There might be tearing if disabled, there might be more dropped frames if enabled
 enable_vsync: false
@@ -33,104 +33,104 @@ start_in_fullscreen: false
 # Optional vocabulary to change some parts of the UI.
 # If you have more needs file an issue or open a PR
 vocabulary:
-    # The name of the inputs in the key mapping section
-    input_buttons:
-        up: Up
-        down: Down
-        left: Left
-        right: Right
-        select: Select
-        start: Start
-        b: B
-        a: A
-    netplay:
-        # Name Netplay something else?
-        name: Netplay
+  # The name of the inputs in the key mapping section
+  input_buttons:
+    up: Up
+    down: Down
+    left: Left
+    right: Right
+    select: Select
+    start: Start
+    b: B
+    a: A
+  netplay:
+    # Name Netplay something else?
+    name: Netplay
 
 # This will be the default settings for the game.
 # For all the gory details see the `BuildConfiguration`-struct in the source.
 default_settings:
-    audio:
-        volume: 100 #in %
-        latency: 20 #in ms
-    input:
-        # Two ids that corresponds to the selected input mapping configuration of P1 and P2. Should only be keyboard mappings as they're guaranteed to be available.
-        selected:
-            - 00-keyboard-1
-            - 00-keyboard-2
-        # A list of input mapping configurations. For more key mappings see https://github.com/tedsteen/nes-bundler/blob/master/src/input/keys.rs#L28.
-        # To add a gamepad configuration use the kind `Gamepad` and id `01-gamepad-0` for the first gamepad that connects, `01-gamepad-1` for the second and so on.
-        configurations:
-            00-keyboard-1:
-                id: 00-keyboard-1
-                name: "⌨ Keyboard 1"
-                kind: !Keyboard
-                    up: ArrowUp
-                    down: ArrowDown
-                    left: ArrowLeft
-                    right: ArrowRight
-                    select: KeyQ
-                    start: KeyW
-                    b: KeyA
-                    a: KeyS
-            00-keyboard-2:
-                id: 00-keyboard-2
-                name: "⌨ Keyboard 2"
-                kind: !Keyboard
-                    up: KeyW
-                    down: KeyS
-                    left: KeyA
-                    right: KeyD
-                    select: KeyU
-                    start: KeyI
-                    b: KeyJ
-                    a: KeyK
-            01-gamepad-0:
-                id: 01-gamepad-0
-                name: "🎮 Gamepad"
-                kind: !Gamepad
-                    up: DPadUp
-                    down: DPadDown
-                    left: DPadLeft
-                    right: DPadRight
-                    select: Back
-                    start: Start
-                    b: X
-                    a: A
-        # The default mapping for newly connected gamepads. For more gamepad button mappings see https://github.com/tedsteen/nes-bundler/blob/master/src/input/buttons.rs#L8.
-        default_gamepad_mapping:
-            up: DPadUp
-            down: DPadDown
-            left: DPadLeft
-            right: DPadRight
-            select: Back
-            start: Start
-            b: X
-            a: A
+  audio:
+    volume: 100 #in %
+    latency: 20 #in ms
+  input:
+    # Two ids that corresponds to the selected input mapping configuration of P1 and P2. Should only be keyboard mappings as they're guaranteed to be available.
+    selected:
+      - 00-keyboard-1
+      - 00-keyboard-2
+    # A list of input mapping configurations. For more key mappings see https://github.com/tedsteen/nes-bundler/blob/master/src/input/keys.rs#L28.
+    # To add a gamepad configuration use the kind `Gamepad` and id `01-gamepad-0` for the first gamepad that connects, `01-gamepad-1` for the second and so on.
+    configurations:
+      00-keyboard-1:
+        id: 00-keyboard-1
+        name: "⌨ Keyboard 1"
+        kind: !Keyboard
+          up: ArrowUp
+          down: ArrowDown
+          left: ArrowLeft
+          right: ArrowRight
+          select: KeyQ
+          start: KeyW
+          b: KeyA
+          a: KeyS
+      00-keyboard-2:
+        id: 00-keyboard-2
+        name: "⌨ Keyboard 2"
+        kind: !Keyboard
+          up: KeyW
+          down: KeyS
+          left: KeyA
+          right: KeyD
+          select: KeyU
+          start: KeyI
+          b: KeyJ
+          a: KeyK
+      01-gamepad-0:
+        id: 01-gamepad-0
+        name: "🎮 Gamepad"
+        kind: !Gamepad
+          up: DPadUp
+          down: DPadDown
+          left: DPadLeft
+          right: DPadRight
+          select: Back
+          start: Start
+          b: X
+          a: A
+    # The default mapping for newly connected gamepads. For more gamepad button mappings see https://github.com/tedsteen/nes-bundler/blob/master/src/input/buttons.rs#L8.
+    default_gamepad_mapping:
+      up: DPadUp
+      down: DPadDown
+      left: DPadLeft
+      right: DPadRight
+      select: Back
+      start: Start
+      b: X
+      a: A
 
 # Netplay configuration. You can remove this if the netplay feature is disabled.
 netplay:
-    # GGRS and Matchbox server configuration. You can read more about them over here https://github.com/johanhelsing/matchbox and here https://github.com/gschup/ggrs
-    # This config can be either fetched from an external service (TurnOn) or configured statically (Static)
-    server:
-        # A hosted TurnOn server which should do the job.
-        # More information on this will come. It's free at the moment, but if network traffic costs starts piling up, there might be a paywall when unlocking Netplay (only needed if a direct p2p connection is not possible).
-        !TurnOn "https://netplay.tech/get-config"
-        # An example of a static configuration
-        #!Static
-        #    ggrs:
-        #        max_prediction: 12
-        #        input_delay: 2
-        #    matchbox:
-        #        # For quick and easy setup see https://github.com/tedsteen/nes-bundler/tree/master/matchbox_server.
-        #        server: "matchbox.your-domain.io:3536"
-        #        ice:
-        #            credentials:
-        #                # NOTE! - If you choose to put actual credentials here you should know there are risk.
-        #                !None
-        #            urls:
-        #                - "stun:stun.l.google.com:19302"
-    # An optional, universally unique identifier that identifies this particular build. Meant for builds targeting specific users.
-    # If not set, it will get assigned at runtime and saved in the settings.yaml.
-    # This id will be used when querying server configurations (TurnOn).
-    #netplay_id: "<some-uuid>"
+  # GGRS and Matchbox server configuration. You can read more about them over here https://github.com/johanhelsing/matchbox and here https://github.com/gschup/ggrs
+  # This config can be either fetched from an external service (TurnOn) or configured statically (Static)
+  server:
+    # A hosted TurnOn server which should do the job.
+    # More information on this will come. It's free at the moment, but if network traffic costs starts piling up, there might be a paywall when unlocking Netplay (only needed if a direct p2p connection is not possible).
+    !TurnOn "https://netplay.tech/get-config"
+    # An example of a static configuration
+    #!Static
+    #    ggrs:
+    #        max_prediction: 12
+    #        input_delay: 2
+    #    matchbox:
+    #        # For quick and easy setup see https://github.com/tedsteen/nes-bundler/tree/master/matchbox_server.
+    #        server: "matchbox.your-domain.io:3536"
+    #        ice:
+    #            credentials:
+    #                # NOTE! - If you choose to put actual credentials here you should know there are risk.
+    #                !None
+    #            urls:
+    #                - "stun:stun.l.google.com:19302"
+  # An optional, universally unique identifier that identifies this particular build. Meant for builds targeting specific users.
+  # If not set, it will get assigned at runtime and saved in the settings.yaml.
+  # This id will be used when querying server configurations (TurnOn).
+  #netplay_id: "<some-uuid>"
