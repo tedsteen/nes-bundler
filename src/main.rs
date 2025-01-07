@@ -134,18 +134,6 @@ impl Application {
         })
     }
 }
-impl Application {
-    fn render(&mut self) {
-        if let Some(main_view) = &mut self.main_view {
-            main_view.render(
-                &self.frame_buffer,
-                &mut self.audio_gui,
-                &mut self.inputs_gui,
-                &mut self.emulator_gui,
-            );
-        }
-    }
-}
 impl ApplicationHandler for Application {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let window = create_window(
@@ -171,8 +159,32 @@ impl ApplicationHandler for Application {
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
+    fn window_event(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        _window_id: winit::window::WindowId,
+        window_event: WindowEvent,
+    ) {
         if let Some(main_view) = &mut self.main_view {
+            match window_event {
+                WindowEvent::CloseRequested | WindowEvent::Destroyed => event_loop.exit(),
+                WindowEvent::RedrawRequested => {
+                    main_view.render(
+                        &self.frame_buffer,
+                        &mut self.audio_gui,
+                        &mut self.inputs_gui,
+                        &mut self.emulator_gui,
+                    );
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
+                    }
+                }
+                WindowEvent::MouseInput { .. } | WindowEvent::CursorMoved { .. } => {
+                    self.last_mouse_touch = Instant::now();
+                }
+                _ => {}
+            }
+
             for sdl_gui_event in self
                 .sdl_event_pump
                 .poll_iter()
@@ -193,33 +205,7 @@ impl ApplicationHandler for Application {
                 [JoypadState(0), JoypadState(0)]
             };
             *self.shared_inputs.write().unwrap() = new_inputs;
-        }
 
-        self.render()
-    }
-
-    fn window_event(
-        &mut self,
-        event_loop: &winit::event_loop::ActiveEventLoop,
-        _window_id: winit::window::WindowId,
-        window_event: WindowEvent,
-    ) {
-        match window_event {
-            WindowEvent::CloseRequested | WindowEvent::Destroyed => event_loop.exit(),
-            WindowEvent::RedrawRequested => {
-                // Windows needs this to not freeze the window when resizing or moving
-                #[cfg(windows)]
-                if let Some(window) = &self.window {
-                    window.request_redraw();
-                }
-                self.render();
-            }
-            WindowEvent::MouseInput { .. } | WindowEvent::CursorMoved { .. } => {
-                self.last_mouse_touch = Instant::now();
-            }
-            _ => {}
-        }
-        if let Some(main_view) = &mut self.main_view {
             main_view.handle_window_event(
                 &window_event,
                 &mut self.audio_gui,
