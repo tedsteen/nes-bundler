@@ -61,7 +61,7 @@ puffin_egui = { git = "https://github.com/tedsteen/puffin.git", branch = "upgrad
 
 egui-winit = "0.30"
 egui-wgpu = "0.30"
-winit = "0.30.5"
+winit = "0.30.8"
 wgpu = { version = "23.0", features = ["dx12", "metal"] }
 raw-window-handle = "0.6"
 
