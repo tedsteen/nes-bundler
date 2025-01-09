@@ -1,7 +1,7 @@
 [package]
 name = "nes-bundler"
 description = ""
-version = "1.3.2"
+version = "1.3.3"
 authors = ["Ted Steen <ted.steen@gmail.com>"]
 edition = "2021"
 publish = false
