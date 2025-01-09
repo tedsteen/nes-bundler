@@ -82,6 +82,8 @@ pub struct ConnectedState {
     pub netplay_session: NetplaySessionState,
     session_id: String,
     pub start_time: Instant,
+    #[cfg(feature = "debug")]
+    pub stats: [crate::netplay::stats::NetplayStats; crate::settings::MAX_PLAYERS],
 }
 
 pub struct ResumingState {
@@ -211,6 +213,11 @@ impl Netplay<ConnectingState> {
                             }
                         },
                         netplay_session: connected,
+                        #[cfg(feature = "debug")]
+                        stats: [
+                            crate::netplay::stats::NetplayStats::new(),
+                            crate::netplay::stats::NetplayStats::new(),
+                        ],
                     },
                 })
             }

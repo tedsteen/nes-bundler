@@ -97,8 +97,5 @@ impl GuiComponent for EmulatorGui {
         None
     }
 
-    #[cfg(all(feature = "netplay", feature = "debug"))]
-    fn prepare(&mut self) {
-        self.netplay_gui.prepare(&self.nes_state.lock().unwrap());
-    }
+    fn prepare(&mut self) {}
 }
