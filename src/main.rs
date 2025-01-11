@@ -159,6 +159,10 @@ impl ApplicationHandler for Application {
         }
     }
 
+    fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
+        self.audio_gui.audio.sync_audio_devices();
+    }
+
     fn window_event(
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,

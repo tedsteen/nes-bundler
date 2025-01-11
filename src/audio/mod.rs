@@ -203,17 +203,16 @@ impl Audio {
     }
 
     pub fn sync_audio_devices(&mut self) {
-        let available_device_names =
-            Self::get_available_output_device_names_for_subsystem(&self.audio_subsystem);
         if self.next_device_names_clear < Instant::now() {
             self.next_device_names_clear = Instant::now().add(Duration::new(1, 0));
-            self.available_device_names
-                .clone_from(&available_device_names);
+            self.available_device_names.clone_from(
+                &Self::get_available_output_device_names_for_subsystem(&self.audio_subsystem),
+            );
         }
 
         let selected_device = &mut Settings::current_mut().audio.output_device;
         if let Some(name) = selected_device {
-            if !available_device_names.contains(name) {
+            if !self.available_device_names.contains(name) {
                 *selected_device = None;
             }
         }
