@@ -76,7 +76,7 @@ bincode = "1.3"
 thingbuf = "0.1"
 
 base64 = "0.22"
-directories = "5"
+directories = "6.0"
 
 # Netplay deps
 matchbox_socket = { version = "0.11", features = ["ggrs"], optional = true }
