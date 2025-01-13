@@ -29,10 +29,7 @@ pub enum GuiEvent {
 }
 
 pub trait GuiComponent {
-    // Runs every frame
-    fn prepare(&mut self) {}
-
-    // Runs if gui is visible
+    // Runs when gui is visible
     fn ui(&mut self, _ui: &mut Ui) {}
 
     fn messages(&self) -> Option<Vec<String>> {
@@ -251,8 +248,6 @@ impl MainGui {
             }
         }
         {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("Messages");
             egui::TopBottomPanel::top("messages")
                 .show_separator_line(false)
                 .frame(
@@ -266,17 +261,8 @@ impl MainGui {
                         let gui_components: &mut [&mut dyn GuiComponent] =
                             &mut [audio_gui, inputs_gui, emulator_gui];
                         for gui in gui_components.iter_mut() {
-                            {
-                                #[cfg(feature = "debug")]
-                                puffin::profile_scope!(format!("Prepare {:?}", gui.name()));
-
-                                gui.prepare();
-                            }
                             if gui.name().is_some() {
                                 {
-                                    #[cfg(feature = "debug")]
-                                    puffin::profile_scope!(format!("Messages {:?}", gui.name()));
-
                                     if let Some(messages) = gui.messages() {
                                         for message in messages {
                                             Self::message_ui(ui, message);

@@ -35,8 +35,6 @@ impl Default for NetplayVoca {
 }
 
 pub struct NetplayGui {
-    #[cfg(feature = "debug")]
-    pub stats: [debug::NetplayStats; crate::settings::MAX_PLAYERS],
     room_name: Option<String>,
     last_screen: Option<&'static str>,
 }
@@ -44,8 +42,6 @@ pub struct NetplayGui {
 impl NetplayGui {
     pub fn new() -> Self {
         Self {
-            #[cfg(feature = "debug")]
-            stats: [debug::NetplayStats::new(), debug::NetplayStats::new()],
             room_name: None,
             last_screen: None,
         }
@@ -76,9 +72,6 @@ impl NetplayGui {
         None
     }
     pub fn messages(&self, netplay_state_handler: &NetplayStateHandler) -> Option<Vec<String>> {
-        #[cfg(feature = "debug")]
-        puffin::profile_function!();
-
         if matches!(MainGui::main_menu_state(), MainMenuState::Netplay) {
             // No need to show messages when the netplay menu is already showing status
             return None;
@@ -460,8 +453,8 @@ impl NetplayGui {
         {
             ui.vertical_centered(|ui| {
                 ui.collapsing("Stats", |ui| {
-                    Self::stats_ui(ui, &self.stats[0], 0);
-                    Self::stats_ui(ui, &self.stats[1], 1);
+                    Self::stats_ui(ui, &netplay_connected.state.stats[0], 0);
+                    Self::stats_ui(ui, &netplay_connected.state.stats[1], 1);
                 });
                 if ui.button("Fake connection lost").clicked() {
                     action = Some(Action::FakeDisconnect);

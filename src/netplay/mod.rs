@@ -18,6 +18,9 @@ pub mod gui;
 mod netplay_session;
 mod netplay_state;
 
+#[cfg(feature = "debug")]
+mod stats;
+
 #[derive(Clone, Debug)]
 pub enum JoypadMapping {
     P1,
@@ -91,6 +94,21 @@ impl DerefMut for NetplayNesState {
 
 impl NesStateHandler for NetplayStateHandler {
     fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers) {
+        #[cfg(feature = "debug")]
+        if let Some(NetplayState::Connected(netplay)) = &mut self.netplay {
+            let sess = &netplay.state.netplay_session.p2p_session;
+            if netplay.state.netplay_session.game_state.frame % 30 == 0 {
+                puffin::profile_scope!("Netplay stats");
+                for i in 0..MAX_PLAYERS {
+                    if let Ok(stats) = sess.network_stats(i) {
+                        if !sess.local_player_handles().contains(&i) {
+                            netplay.state.stats[i].push_stats(stats);
+                        }
+                    }
+                }
+            };
+        }
+
         if let Some(new_state) = self
             .netplay
             .take()

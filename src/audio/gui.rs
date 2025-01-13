@@ -58,15 +58,6 @@ impl AudioGui {
 // }
 
 impl GuiComponent for AudioGui {
-    fn prepare(&mut self) {
-        // #[cfg(feature = "debug")]
-        // if let Some(tx) = &instance.stream.tx {
-        //     self.stats.push_stat(AudioStat::new(tx.len()));
-        // }
-
-        self.audio.sync_audio_devices();
-    }
-
     fn ui(&mut self, ui: &mut Ui) {
         // #[cfg(feature = "debug")]
         // Self::stats_ui(ui, &self.stats);
