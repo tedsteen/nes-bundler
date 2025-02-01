@@ -130,10 +130,10 @@ impl Netplay<LocalNesState> {
     }
 
     pub fn host_game(self) -> Result<NetplayState> {
-        use rand::distributions::{Alphanumeric, DistString};
+        use rand::distr::{Alphanumeric, SampleString};
 
         let room_name = Alphanumeric
-            .sample_string(&mut rand::thread_rng(), MAX_ROOM_NAME_LEN.into())
+            .sample_string(&mut rand::rng(), MAX_ROOM_NAME_LEN.into())
             .to_uppercase();
 
         self.join_or_host(&room_name, JoinOrHost::Host)
