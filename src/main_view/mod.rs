@@ -170,7 +170,7 @@ impl MainView {
                 #[cfg(feature = "debug")]
                 puffin::profile_scope!("NES Frame");
                 egui::CentralPanel::default()
-                    .frame(egui::Frame::none().fill(egui::Color32::BLACK))
+                    .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
                     .show(ctx, |ui| {
                         let available_size = ui.available_size();
                         let new_size = if available_size.x
@@ -227,6 +227,7 @@ impl MainView {
                 // control_flow.exit(),
             }
             Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
+            Err(wgpu::SurfaceError::Other) => log::warn!("Other error"),
         };
     }
 }

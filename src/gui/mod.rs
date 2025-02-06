@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use egui::{
-    Color32, Context, CursorIcon, FontId, Id, KeyboardShortcut, RichText, Rounding, Sense,
+    Color32, Context, CornerRadius, CursorIcon, FontId, Id, KeyboardShortcut, RichText, Sense,
     TextStyle, Ui, Vec2, Widget, WidgetInfo, WidgetText, WidgetType,
 };
 
@@ -95,7 +95,7 @@ impl Widget for MenuButton {
             response = response.on_hover_cursor(CursorIcon::PointingHand);
             ui.painter().rect_filled(
                 rect.expand(5.0),
-                Rounding::default(),
+                CornerRadius::default(),
                 if response.hovered() {
                     Self::HOVER_BG
                 } else {

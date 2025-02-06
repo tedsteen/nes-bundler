@@ -115,7 +115,7 @@ impl MainGui {
             .collapsible(false)
             .resizable(false)
             .movable(false)
-            .frame(egui::Frame::window(&Style::default()).inner_margin(Margin::same(20.0)))
+            .frame(egui::Frame::window(&Style::default()).inner_margin(Margin::same(20)))
             .pivot(Align2::CENTER_CENTER)
             .fixed_pos([size.width / 2.0, size.height / 2.0])
             .show(ctx, |ui| {
@@ -253,7 +253,7 @@ impl MainGui {
                 .frame(
                     egui::Frame::default()
                         .fill(Color32::TRANSPARENT)
-                        .outer_margin(Margin::same(80.0))
+                        .outer_margin(Margin::same(80))
                         .inner_margin(Margin::ZERO),
                 )
                 .show(ctx, |ui| {
