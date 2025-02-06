@@ -27,7 +27,7 @@ pub struct Renderer {
 impl Renderer {
     pub async fn new(window: Arc<Window>) -> Result<Self> {
         let size = window.inner_size();
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             ..Default::default()
         });
@@ -142,6 +142,7 @@ impl Renderer {
                 mip_level_count: None,
                 base_array_layer: 0,
                 array_layer_count: None,
+                usage: None,
             })
         };
 

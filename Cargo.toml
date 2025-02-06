@@ -49,20 +49,20 @@ tokio = { version = "1", features = [
 ] }
 futures = "0.3"
 
-egui = { version = "0.30", default-features = false, features = [
+egui = { version = "0.31", default-features = false, features = [
   "bytemuck",
   "default_fonts",
 ] }
-egui_plot = { version = "0.30", optional = true }
+egui_plot = { version = "0.31", optional = true }
 
 # TODO: Use stable version of puffin and puffin_egui when https://github.com/EmbarkStudios/puffin/pull/234 is merged
 puffin = { git = "https://github.com/tedsteen/puffin.git", branch = "upgrade-egui", optional = true }
 puffin_egui = { git = "https://github.com/tedsteen/puffin.git", branch = "upgrade-egui", optional = true }
 
-egui-winit = "0.30"
-egui-wgpu = "0.30"
-winit = "0.30.8"
-wgpu = { version = "23.0", features = ["dx12", "metal"] }
+egui-winit = "0.31"
+egui-wgpu = "0.31"
+winit = "0.30"
+wgpu = { version = "24.0", features = ["dx12", "metal"] }
 raw-window-handle = "0.6"
 
 # sdl2 = { version = "0.36", features = ["bundled", "static-link"] }
