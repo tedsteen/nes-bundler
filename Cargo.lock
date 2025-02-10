@@ -2623,7 +2623,7 @@ dependencies = [
 
 [[package]]
 name = "nes-bundler"
-version = "1.3.3"
+version = "1.3.4"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
