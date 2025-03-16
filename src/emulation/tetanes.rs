@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::{io::Cursor, ops::Deref};
 
 use anyhow::Result;
 
@@ -13,11 +13,11 @@ use tetanes_core::{
     video::VideoFilter,
 };
 
-use super::{NESBuffers, NesStateHandler, NTSC_PAL, SAMPLE_RATE};
+use super::{NESBuffers, NTSC_PAL, NesStateHandler, SAMPLE_RATE};
 use crate::{
     bundle::Bundle,
     input::JoypadState,
-    settings::{Settings, MAX_PLAYERS},
+    settings::{MAX_PLAYERS, Settings},
 };
 
 #[derive(Clone)]
@@ -69,8 +69,8 @@ impl TetanesNesState {
         if load_sram {
             if let Some(true) = control_deck.cart_battery_backed() {
                 if let Some(b64_encoded_sram) = &Settings::current().save_state {
-                    use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
                     use base64::Engine;
+                    use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
                     match b64.decode(b64_encoded_sram) {
                         Ok(sram) => {
                             log::info!("Loading SRAM save state");
@@ -90,7 +90,7 @@ impl TetanesNesState {
         Ok(s)
     }
 
-    pub fn clock_frame_into(&mut self, buffers: &mut NESBuffers) -> Result<usize> {
+    pub fn clock_frame_into(&mut self, buffers: &mut NESBuffers) -> Result<u64> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
@@ -123,7 +123,7 @@ impl TetanesNesState {
         Ok(cycles)
     }
 
-    pub fn clock_frame_ahead_into(&mut self, buffers: &mut NESBuffers) -> Result<usize> {
+    pub fn clock_frame_ahead_into(&mut self, buffers: &mut NESBuffers) -> Result<u64> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
@@ -140,7 +140,7 @@ impl TetanesNesState {
         let state = {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("serialize");
-            bincode::serialize(self.control_deck.cpu())
+            postcard::to_allocvec(self.control_deck.cpu())
                 .map_err(|err| fs::Error::SerializationFailed(err.to_string()))?
         };
 
@@ -152,7 +152,7 @@ impl TetanesNesState {
         {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("deserialize and load");
-            let state = bincode::deserialize(&state)
+            let state = postcard::from_bytes(state.deref())
                 .map_err(|err| fs::Error::DeserializationFailed(err.to_string()))?;
             self.control_deck.load_cpu(state);
         }

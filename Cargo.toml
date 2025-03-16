@@ -3,7 +3,7 @@ name = "nes-bundler"
 description = ""
 version = "1.3.4"
 authors = ["Ted Steen <ted.steen@gmail.com>"]
-edition = "2021"
+edition = "2024"
 publish = false
 
 [features]
@@ -72,7 +72,7 @@ sdl2 = { git = "https://github.com/tedsteen/rust-sdl2.git", branch = "for-nes-bu
 ] }
 
 tetanes-core = { git = "https://github.com/lukexor/tetanes.git" }
-bincode = "1.3"
+postcard = { version = "1.1", features = ["alloc"] }
 thingbuf = "0.1"
 
 base64 = "0.22"
