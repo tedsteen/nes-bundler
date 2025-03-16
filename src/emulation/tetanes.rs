@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::{io::Cursor, ops::Deref};
 
 use anyhow::Result;
 
@@ -140,7 +140,7 @@ impl TetanesNesState {
         let state = {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("serialize");
-            bincode::serialize(self.control_deck.cpu())
+            postcard::to_allocvec(self.control_deck.cpu())
                 .map_err(|err| fs::Error::SerializationFailed(err.to_string()))?
         };
 
@@ -152,7 +152,7 @@ impl TetanesNesState {
         {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("deserialize and load");
-            let state = bincode::deserialize(&state)
+            let state = postcard::from_bytes(state.deref())
                 .map_err(|err| fs::Error::DeserializationFailed(err.to_string()))?;
             self.control_deck.load_cpu(state);
         }
