@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         # NOTE: Should use the oldest available Ubuntu release, for maximum compatibility
-        os: [windows-latest, macOS-15, ubuntu-20.04]
+        os: [windows-latest, macOS-15, ubuntu-22.04]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
