@@ -1,18 +1,17 @@
 use std::time::Instant;
 
 use anyhow::Result;
-use uuid::Uuid;
 
 use crate::{
     bundle::Bundle,
     emulation::{LocalNesState, NESBuffers, NesStateHandler},
     input::JoypadState,
-    settings::{Settings, MAX_PLAYERS},
+    settings::{MAX_PLAYERS, Settings},
 };
 
 use super::{
-    connecting_state::JoinOrHost, netplay_session::NetplaySessionState, ConnectingState,
-    JoypadMapping, StartMethod, StartState,
+    ConnectingState, JoypadMapping, StartMethod, StartState, connecting_state::JoinOrHost,
+    netplay_session::NetplaySessionState,
 };
 
 pub enum NetplayState {
@@ -108,12 +107,6 @@ impl ResumingState {
             ),
         }
     }
-}
-pub fn get_netplay_id() -> String {
-    Settings::current_mut()
-        .netplay_id
-        .get_or_insert_with(|| Uuid::new_v4().to_string())
-        .to_string()
 }
 
 pub const MAX_ROOM_NAME_LEN: u8 = 4;

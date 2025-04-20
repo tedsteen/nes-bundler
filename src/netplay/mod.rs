@@ -6,13 +6,13 @@ use crate::{
     settings::MAX_PLAYERS,
 };
 use anyhow::Result;
-use serde::Deserialize;
 
 use self::{
-    connecting_state::{ConnectingState, NetplayServerConfiguration, StartMethod, StartState},
+    connecting_state::{ConnectingState, StartMethod, StartState},
     netplay_state::{Netplay, NetplayState},
 };
 
+pub mod configuration;
 mod connecting_state;
 pub mod gui;
 mod netplay_session;
@@ -50,12 +50,6 @@ impl JoypadMapping {
             }
         }
     }
-}
-
-#[derive(Deserialize, Clone, Debug)]
-pub struct NetplayBuildConfiguration {
-    pub netplay_id: Option<String>,
-    pub server: NetplayServerConfiguration,
 }
 
 pub struct NetplayStateHandler {

@@ -10,8 +10,8 @@ use crate::{
 };
 
 use super::{
-    connecting_state::{StartMethod, StaticNetplayServerConfiguration},
-    JoypadMapping, NetplayNesState,
+    JoypadMapping, NetplayNesState, configuration::StaticNetplayServerConfiguration,
+    connecting_state::StartMethod,
 };
 
 #[derive(Debug)]

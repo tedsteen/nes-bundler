@@ -34,7 +34,7 @@ pub struct BuildConfiguration {
     pub vocabulary: Vocabulary,
 
     #[cfg(feature = "netplay")]
-    pub netplay: crate::netplay::NetplayBuildConfiguration,
+    pub netplay: crate::netplay::configuration::NetplayBuildConfiguration,
 }
 
 impl BuildConfiguration {

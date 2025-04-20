@@ -2,7 +2,7 @@ use crate::{
     audio::AudioSettings,
     bundle::Bundle,
     emulation::NesRegion,
-    input::{settings::InputSettings, InputConfigurationKind},
+    input::{InputConfigurationKind, settings::InputSettings},
 };
 
 use anyhow::Result;
@@ -15,6 +15,7 @@ use std::{
     ops::{Deref, DerefMut},
     sync::{OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
+use uuid::Uuid;
 
 pub const MAX_PLAYERS: usize = 2;
 
@@ -76,6 +77,12 @@ impl Settings {
 
     pub fn current<'a>() -> RwLockReadGuard<'a, Settings> {
         Self::_current().read().unwrap()
+    }
+
+    pub fn get_netplay_id(&mut self) -> String {
+        self.netplay_id
+            .get_or_insert_with(|| Uuid::new_v4().to_string())
+            .to_string()
     }
 
     fn load() -> Settings {
