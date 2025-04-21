@@ -197,7 +197,7 @@ impl NesStateHandler for TetanesNesState {
         }
     }
 
-    #[cfg(feature = "netplay")]
+    #[cfg(feature = "debug")]
     fn frame(&self) -> u32 {
         self.control_deck.frame_number()
     }

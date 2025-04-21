@@ -2,7 +2,7 @@ use crate::{
     audio::AudioSettings,
     bundle::Bundle,
     emulation::NesRegion,
-    input::{settings::InputSettings, InputConfigurationKind},
+    input::{InputConfigurationKind, settings::InputSettings},
 };
 
 use anyhow::Result;
@@ -76,6 +76,13 @@ impl Settings {
 
     pub fn current<'a>() -> RwLockReadGuard<'a, Settings> {
         Self::_current().read().unwrap()
+    }
+
+    #[cfg(feature = "netplay")]
+    pub fn get_netplay_id(&mut self) -> String {
+        self.netplay_id
+            .get_or_insert_with(|| uuid::Uuid::new_v4().to_string())
+            .to_string()
     }
 
     fn load() -> Settings {

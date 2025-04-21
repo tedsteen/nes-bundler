@@ -2,8 +2,8 @@
 #![allow(unsafe_code)]
 #![deny(clippy::all)]
 
-use audio::gui::AudioGui;
 use audio::Audio;
+use audio::gui::AudioGui;
 use bundle::Bundle;
 
 use emulation::gui::EmulatorGui;
@@ -15,12 +15,12 @@ use input::{Inputs, JoypadState};
 use main_view::MainView;
 
 use sdl2::EventPump;
-use settings::{Settings, MAX_PLAYERS};
+use settings::{MAX_PLAYERS, Settings};
 use winit::application::ApplicationHandler;
 use winit::window::Window;
 
 use crate::window::Fullscreen;
-use emulation::{Emulator, EmulatorCommand, VideoBufferPool, SAMPLE_RATE};
+use emulation::{Emulator, EmulatorCommand, SAMPLE_RATE, VideoBufferPool};
 use integer_scaling::MINIMUM_INTEGER_SCALING_SIZE;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, RwLock};
@@ -55,10 +55,16 @@ async fn main() {
         .collect::<String>()
         .contains(&"--print-netplay-id".to_string())
     {
-        if let Some(id) = &Bundle::current().config.netplay.netplay_id {
-            println!("{id}");
+        if let netplay::configuration::NetplayServerConfiguration::TurnOn(
+            turn_on_config
+        ) = &Bundle::current().config.netplay.server
+        {
+            println!("{0}", turn_on_config.get_netplay_id());
+            std::process::exit(0);
+        } else {
+            eprintln!("Netplay id not applicable for {0:#?}", Bundle::current().config.netplay.server);
+            std::process::exit(1);
         }
-        std::process::exit(0);
     }
 
     log::info!("NES Bundler is starting!");

@@ -1,5 +1,5 @@
 use futures::channel::oneshot::Receiver;
-use futures::{select, FutureExt};
+use futures::{FutureExt, select};
 use futures_timer::Delay;
 use ggrs::{P2PSession, SessionBuilder, SessionState};
 use matchbox_socket::{ChannelConfig, RtcIceServerConfig, WebRtcSocket, WebRtcSocketBuilder};
@@ -9,26 +9,16 @@ use std::fmt::Debug;
 use std::time::{Duration, Instant};
 
 use crate::bundle::Bundle;
-use crate::netplay::netplay_state::get_netplay_id;
-use crate::settings::{Settings, MAX_PLAYERS};
+use crate::netplay::configuration::{GGRSConfiguration, IceConfiguration, MatchboxConfiguration};
+use crate::settings::{MAX_PLAYERS, Settings};
 
 use super::netplay_session::{GGRSConfig, NetplaySessionState};
 
 use super::NetplayNesState;
-
-#[derive(Deserialize, Clone, Debug)]
-pub enum NetplayServerConfiguration {
-    Static(StaticNetplayServerConfiguration),
-    //An external server for fetching TURN credentials
-    TurnOn(String),
-}
-
-#[derive(Deserialize, Clone, Debug)]
-pub struct StaticNetplayServerConfiguration {
-    matchbox: MatchboxConfiguration,
-    pub ggrs: GGRSConfiguration,
-    pub unlock_url: Option<String>,
-}
+use super::configuration::{
+    IceCredentials, IcePasswordCredentials, NetplayServerConfiguration,
+    StaticNetplayServerConfiguration,
+};
 
 pub enum ConnectingState {
     LoadingNetplayServerConfiguration(LoadingNetplayServerConfigurationState),
@@ -64,23 +54,34 @@ impl ConnectingState {
     fn start(start_method: StartMethod) -> Self {
         let reqwest_client = reqwest::Client::new();
         match &Bundle::current().config.netplay.server {
-            NetplayServerConfiguration::Static(conf) => {
-                Self::PeeringUp(PeeringState::new(conf.clone(), start_method))
+            NetplayServerConfiguration::Static(static_conf) => {
+                Self::PeeringUp(PeeringState::new(static_conf.clone(), start_method))
             }
 
-            NetplayServerConfiguration::TurnOn(server) => {
-                log::debug!("Fetching TurnOn config from server: {}", server);
-                let netplay_id = get_netplay_id();
-                let req = reqwest_client.get(format!("{server}/{netplay_id}")).send();
+            NetplayServerConfiguration::TurnOn(turn_on_conf) => {
+                let netplay_id = turn_on_conf.get_netplay_id();
+                let url = format!("{0}/{netplay_id}", turn_on_conf.url);
+                log::debug!("Fetching TurnOn config from server: {}", url);
+
+                let req = reqwest_client.get(url).send();
                 let (sender, result) =
                     futures::channel::oneshot::channel::<Result<TurnOnResponse, TurnOnError>>();
                 tokio::spawn(async move {
                     if let Err(e) = match req.await {
                         Ok(res) => {
-                            log::trace!("Received response from TurnOn server: {:?}", res);
-                            sender.send(res.json().await.map_err(|e| TurnOnError {
-                                description: format!("Failed to receive response: {}", e),
-                            }))
+                            log::debug!("Response from TurnOn server: {:?}", res);
+                            if res.status().is_success() {
+                                sender.send(res.json().await.map_err(|e| TurnOnError {
+                                    description: format!("Failed to receive response: {e:?}"),
+                                }))
+                            } else {
+                                sender.send(Err(TurnOnError {
+                                    description: format!(
+                                        "Response was not successful: {:?}",
+                                        res.text().await
+                                    ),
+                                }))
+                            }
                         }
                         Err(e) => sender.send(Err(TurnOnError {
                             description: format!("Could not connect: {}", e),
@@ -196,10 +197,9 @@ impl PeeringState {
                 username,
                 credential: password,
             };
+
             log::debug!(
-                "Peering up through WebRTC socket: room_url={:?}, ice_server={:?}",
-                room_url,
-                ice_server
+                "Peering up through WebRTC socket:\nroom_url={room_url:?},\nice_server={ice_server:?}"
             );
             WebRtcSocketBuilder::new(room_url)
                 .ice_server(ice_server)
@@ -418,34 +418,4 @@ pub enum TurnOnResponse {
 pub struct BasicConfiguration {
     unlock_url: String,
     conf: StaticNetplayServerConfiguration,
-}
-
-#[derive(Deserialize, Clone, Debug)]
-pub struct IcePasswordCredentials {
-    username: String,
-    password: String,
-}
-
-#[derive(Deserialize, Clone, Debug)]
-pub struct MatchboxConfiguration {
-    server: String,
-    ice: IceConfiguration,
-}
-
-#[derive(Deserialize, Clone, Debug)]
-pub struct GGRSConfiguration {
-    pub max_prediction: usize,
-    pub input_delay: usize,
-}
-
-#[derive(Deserialize, Clone, Debug)]
-pub struct IceConfiguration {
-    urls: Vec<String>,
-    credentials: IceCredentials,
-}
-
-#[derive(Deserialize, Clone, Debug)]
-pub enum IceCredentials {
-    None,
-    Password(IcePasswordCredentials),
 }

@@ -115,22 +115,24 @@ netplay:
   server:
     # A hosted TurnOn server which should do the job.
     # More information on this will come. It's free at the moment, but if network traffic costs starts piling up, there might be a paywall when unlocking Netplay (only needed if a direct p2p connection is not possible).
-    !TurnOn "https://netplay.tech/get-config"
+    !TurnOn
+      url: "https://netplay.tech/get-config"
+      # An optional, universally unique identifier that identifies this particular build. Meant for builds targeting specific users.
+      # If not set, it will get assigned at runtime and saved in the settings.yaml.
+      # This id will be used when querying server configurations (TurnOn).
+      #netplay_id: "<some-uuid>"
+
     # An example of a static configuration
     #!Static
-    #    ggrs:
-    #        max_prediction: 12
-    #        input_delay: 2
-    #    matchbox:
-    #        # For quick and easy setup see https://github.com/tedsteen/nes-bundler/tree/master/matchbox_server.
-    #        server: "matchbox.your-domain.io:3536"
-    #        ice:
-    #            credentials:
-    #                # NOTE! - If you choose to put actual credentials here you should know there are risk.
-    #                !None
-    #            urls:
-    #                - "stun:stun.l.google.com:19302"
-  # An optional, universally unique identifier that identifies this particular build. Meant for builds targeting specific users.
-  # If not set, it will get assigned at runtime and saved in the settings.yaml.
-  # This id will be used when querying server configurations (TurnOn).
-  #netplay_id: "<some-uuid>"
+    #  ggrs:
+    #    max_prediction: 12
+    #    input_delay: 2
+    #  matchbox:
+    #    # For quick and easy setup see https://github.com/tedsteen/nes-bundler/tree/master/matchbox_server.
+    #    server: "matchbox.your-domain.io:3536"
+    #    ice:
+    #      credentials:
+    #        # NOTE! - If you choose to put actual credentials here you should know there are risk.
+    #        !None
+    #      urls:
+    #        - "stun:stun.l.google.com:19302"

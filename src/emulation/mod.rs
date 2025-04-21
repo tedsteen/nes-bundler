@@ -1,8 +1,8 @@
 use std::{
     ops::{Deref, DerefMut},
     sync::{
-        mpsc::{channel, Sender},
         Arc, Mutex, RwLock,
+        mpsc::{Sender, channel},
     },
 };
 
@@ -15,7 +15,7 @@ use thingbuf::{Recycle, ThingBuf};
 use crate::{
     audio::AudioSender,
     input::JoypadState,
-    settings::{Settings, MAX_PLAYERS},
+    settings::{MAX_PLAYERS, Settings},
 };
 
 pub mod gui;
@@ -111,8 +111,8 @@ impl Emulator {
                             }
                         })
                     );
-                    use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
                     use base64::Engine;
+                    use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
                     Settings::current_mut().save_state = nes_state
                         .lock()
                         .unwrap()
@@ -130,7 +130,7 @@ pub trait NesStateHandler {
     fn reset(&mut self, hard: bool);
     fn set_speed(&mut self, speed: f32);
     fn save_sram(&self) -> Option<&[u8]>;
-    #[cfg(feature = "netplay")]
+    #[cfg(feature = "debug")]
     fn frame(&self) -> u32;
 }
 
