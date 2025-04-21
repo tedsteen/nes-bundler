@@ -28,48 +28,42 @@ impl NetplayGui {
                 .include_y(0)
                 .show_axes([false, true])
                 .show(ui, |plot_ui| {
-                    plot_ui.line(
-                        Line::new(
-                            stats
-                                .get_ping()
-                                .iter()
-                                .map(|i| [i.duration.as_millis() as f64, i.stat.ping as f64])
-                                .collect::<egui_plot::PlotPoints>(),
-                        )
-                        .name("Ping"),
-                    );
+                    plot_ui.line(Line::new(
+                        "Ping",
+                        stats
+                            .get_ping()
+                            .iter()
+                            .map(|i| [i.duration.as_millis() as f64, i.stat.ping as f64])
+                            .collect::<egui_plot::PlotPoints>(),
+                    ));
 
-                    plot_ui.line(
-                        Line::new(
-                            stats
-                                .get_ping()
-                                .iter()
-                                .map(|i| {
-                                    [
-                                        i.duration.as_millis() as f64,
-                                        i.stat.local_frames_behind as f64,
-                                    ]
-                                })
-                                .collect::<egui_plot::PlotPoints>(),
-                        )
-                        .name("Behind (local)"),
-                    );
+                    plot_ui.line(Line::new(
+                        "Behind (local)",
+                        stats
+                            .get_ping()
+                            .iter()
+                            .map(|i| {
+                                [
+                                    i.duration.as_millis() as f64,
+                                    i.stat.local_frames_behind as f64,
+                                ]
+                            })
+                            .collect::<egui_plot::PlotPoints>(),
+                    ));
 
-                    plot_ui.line(
-                        Line::new(
-                            stats
-                                .get_ping()
-                                .iter()
-                                .map(|i| {
-                                    [
-                                        i.duration.as_millis() as f64,
-                                        i.stat.remote_frames_behind as f64,
-                                    ]
-                                })
-                                .collect::<egui_plot::PlotPoints>(),
-                        )
-                        .name("Behind (remote)"),
-                    );
+                    plot_ui.line(Line::new(
+                        "Behind (remote)",
+                        stats
+                            .get_ping()
+                            .iter()
+                            .map(|i| {
+                                [
+                                    i.duration.as_millis() as f64,
+                                    i.stat.remote_frames_behind as f64,
+                                ]
+                            })
+                            .collect::<egui_plot::PlotPoints>(),
+                    ));
                 });
         }
     }

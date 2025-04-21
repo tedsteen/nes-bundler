@@ -53,7 +53,7 @@ egui = { version = "0.31", default-features = false, features = [
   "bytemuck",
   "default_fonts",
 ] }
-egui_plot = { version = "0.31", optional = true }
+egui_plot = { version = "0.32", optional = true }
 
 # TODO: Use stable version of puffin and puffin_egui when https://github.com/EmbarkStudios/puffin/pull/234 is merged
 puffin = { git = "https://github.com/tedsteen/puffin.git", branch = "upgrade-egui", optional = true }
