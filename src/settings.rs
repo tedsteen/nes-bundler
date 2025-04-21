@@ -15,7 +15,6 @@ use std::{
     ops::{Deref, DerefMut},
     sync::{OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
-use uuid::Uuid;
 
 pub const MAX_PLAYERS: usize = 2;
 
@@ -79,9 +78,10 @@ impl Settings {
         Self::_current().read().unwrap()
     }
 
+    #[cfg(feature = "netplay")]
     pub fn get_netplay_id(&mut self) -> String {
         self.netplay_id
-            .get_or_insert_with(|| Uuid::new_v4().to_string())
+            .get_or_insert_with(|| uuid::Uuid::new_v4().to_string())
             .to_string()
     }
 

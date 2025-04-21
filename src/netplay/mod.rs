@@ -120,6 +120,7 @@ impl NesStateHandler for NetplayStateHandler {
         }
     }
 
+    #[cfg(feature = "debug")]
     fn frame(&self) -> u32 {
         match &self.netplay {
             Some(NetplayState::Connected(s)) => s.state.netplay_session.game_state.frame(),
