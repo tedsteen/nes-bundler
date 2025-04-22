@@ -128,8 +128,8 @@ jobs:
           elif [[ $RUNNER_OS == "macOS" ]]; then
             # Prepare the app structure
             BUNDLE_APP_PATH="$RUNNER_TEMP/netplay/$BUNDLE_NAME.app"
-            mkdir -p $BUNDLE_APP_PATH/Contents/MacOS || true
-            mkdir -p $BUNDLE_APP_PATH/Contents/Resources || true
+            mkdir -p "$BUNDLE_APP_PATH/Contents/MacOS" || true
+            mkdir -p "$BUNDLE_APP_PATH/Contents/Resources" || true
             cp $BUNDLE_CONFIG/macos/Info.plist "$BUNDLE_APP_PATH/Contents/"
 
             iconutil $BUNDLE_CONFIG/macos/bundle.iconset -c icns --output $BUNDLE_APP_PATH/Contents/Resources/bundle.icns
