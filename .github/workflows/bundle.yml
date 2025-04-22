@@ -267,8 +267,8 @@ jobs:
 
           ARTIFACT_LINKS=$(paste -sd' ' "$TMP_FILE")
 
-          cat <<'EOF' >> email.html
-          The following files are stored for 3 days and can be downloaded only once.
+          cat <<EOF >> email.html
+          The following is stored for 3 days and can be downloaded only once.
           $ARTIFACT_LINKS
           <p>Thanks for using NES Bundler!</p>
           EOF
@@ -285,7 +285,6 @@ jobs:
           to: ${{ env.RECIPIENT_EMAIL }}
           from: NES Bundler
           html_body: file://email.html
-          attachments: artifacts/*
 
       - name: Email failure message
         if: failure() && github.event.client_payload.recipient_email != ''
