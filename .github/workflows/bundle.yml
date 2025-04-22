@@ -14,9 +14,9 @@ jobs:
   encrypt_config:
     name: Encrypt configuration
     runs-on: ubuntu-latest
-    if: github.event.client_payload.configuration_url != ''
     steps:
       - name: Download and encrypt configuration
+        if: github.event.client_payload.configuration_url != ''
         run: |
           CONFIGURATION_URL=$(jq -r '.client_payload.configuration_url' $GITHUB_EVENT_PATH)
           echo ::add-mask::$CONFIGURATION_URL
@@ -27,6 +27,7 @@ jobs:
             -pass pass:${{ secrets.CONFIG_ZIP_PASSWORD }}
 
       - uses: actions/upload-artifact@v4
+        if: github.event.client_payload.configuration_url != ''
         with:
           name: encrypted-configuration
           path: config.zip.enc
@@ -34,6 +35,7 @@ jobs:
   bundle:
     name: Bundle for ${{ matrix.os }}${{ matrix.netplay && ' (Netplay)' || ''}}
     runs-on: ${{ matrix.os }}
+    needs: encrypt_config
     strategy:
       matrix:
         # NOTE: Should use the oldest available Ubuntu release, for maximum compatibility
