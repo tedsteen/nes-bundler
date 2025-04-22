@@ -106,7 +106,7 @@ jobs:
             -in config.zip.enc -out config.zip \
             -pass pass:${{ secrets.CONFIG_ZIP_PASSWORD }}
 
-          FILE_BIN=$(sha512sum config.zip | cut -d' ' -f1)
+          FILE_BIN=$(sha224sum config.zip | cut -d' ' -f1)
           echo ::add-mask::$FILE_BIN
           echo "FILE_BIN=$FILE_BIN" >> $GITHUB_ENV
 
@@ -294,7 +294,7 @@ jobs:
             -in config.zip.enc -out config.zip \
             -pass pass:${{ secrets.CONFIG_ZIP_PASSWORD }}
 
-          FILE_BIN=$(sha512sum config.zip | cut -d' ' -f1)
+          FILE_BIN=$(sha224sum config.zip | cut -d' ' -f1)
           echo ::add-mask::$FILE_BIN
           echo "FILE_BIN=$FILE_BIN" >> $GITHUB_ENV
 
