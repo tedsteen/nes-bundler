@@ -53,7 +53,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs: prepare_config
     env:
-      BUNDLE_NAME: ${{ needs.prepare_config.outputs.bundle_name }}${{ matrix.netplay && ' Netplay' || '' }}
+      BUNDLE_NAME: ${{ needs.prepare_config.outputs.bundle_name }} - ${{ needs.prepare_config.outputs.bundle_version }} ${{ matrix.netplay && ' Netplay' || '' }}
       BUNDLE_VERSION: ${{ needs.prepare_config.outputs.bundle_version }}
     strategy:
       matrix:
@@ -169,7 +169,7 @@ jobs:
             
             # Copy artifacts
             cp $BINARIES_PATH/nes-bundler.exe "$ARTIFACTS/$BUNDLE_NAME.exe"
-            cp "$BINARIES_PATH/nes-bundler.msi" "$ARTIFACTS/$BUNDLE_NAME.msi"
+            cp "$BINARIES_PATH/nes-bundler.msi" "$ARTIFACTS/$BUNDLE_NAME Installer.msi"
 
           elif [[ $RUNNER_OS == "macOS" ]]; then
             # Prepare the app structure
@@ -199,7 +199,7 @@ jobs:
           elif [[ $RUNNER_OS == "Linux" ]]; then
             # archive artifact
             strip $BINARIES_PATH/nes-bundler
-            tar czvf "$ARTIFACTS/${BUNDLE_NAME}-linux-x86_64.tar.gz" $BINARIES_PATH/nes-bundler
+            tar czvf "$ARTIFACTS/${BUNDLE_NAME}.tar.gz" $BINARIES_PATH/nes-bundler
 
             # create appimage
             curl -Lo linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/latest/download/linuxdeploy-x86_64.AppImage
