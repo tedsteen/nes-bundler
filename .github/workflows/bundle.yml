@@ -60,7 +60,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs: prepare_config
     env:
-      BUNDLE_NAME: ${{ needs.prepare_config.outputs.bundle_name }} - ${{ needs.prepare_config.outputs.bundle_version }} ${{ matrix.netplay && ' Netplay' || '' }}
+      BUNDLE_NAME: ${{ needs.prepare_config.outputs.bundle_name }} ${{ needs.prepare_config.outputs.bundle_version }} ${{ env.RUNNER_OS }}${{ matrix.netplay && ' Netplay' || '' }}
       BUNDLE_VERSION: ${{ needs.prepare_config.outputs.bundle_version }}
     strategy:
       matrix:
