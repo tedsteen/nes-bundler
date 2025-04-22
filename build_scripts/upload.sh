@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-set -x
 if (( $# != 2 )); then
   echo "Usage: upload <bin> <file>" >&2
   exit 1
