@@ -149,8 +149,8 @@ jobs:
             light wix/*.wixobj -o "$BINARIES_PATH/nes-bundler.msi" -ext WixUIExtension
             
             # Copy artifacts
-            cp $BINARIES_PATH/nes-bundler.exe "$ARTIFACTS/$BUNDLE_NAME.exe_"
-            cp "$BINARIES_PATH/nes-bundler.msi" "$ARTIFACTS/$BUNDLE_NAME.msi_"
+            cp $BINARIES_PATH/nes-bundler.exe "$ARTIFACTS/$BUNDLE_NAME.exe"
+            cp "$BINARIES_PATH/nes-bundler.msi" "$ARTIFACTS/$BUNDLE_NAME.msi"
 
           elif [[ $RUNNER_OS == "macOS" ]]; then
             # Prepare the app structure
@@ -176,8 +176,6 @@ jobs:
               --app-drop-link 600 165 \
               "$ARTIFACTS/$BUNDLE_NAME Installer.dmg" \
               "$BUNDLE_APP_PATH/../"
-
-              mv "$ARTIFACTS/$BUNDLE_NAME Installer.dmg" "$ARTIFACTS/$BUNDLE_NAME Installer.dmg_"
 
           elif [[ $RUNNER_OS == "Linux" ]]; then
             # archive artifact
@@ -252,13 +250,21 @@ jobs:
           echo ::add-mask::$RECIPIENT_EMAIL
           echo "RECIPIENT_EMAIL=$RECIPIENT_EMAIL" >> $GITHUB_ENV
 
-      - name: Create email
+      - name: Prepare email
         if: github.event.client_payload.recipient_email != ''
         run: |
           cat <<'EOF' >> email.html
           The files are attached in this email. Gmail blocks certain file types (See https://support.google.com/mail/answer/6590). So .exe, .msi and .dmg-files have an underscore added to them. Make sure to remove that.
           <p>Thanks for using NES Bundler!</p>
           EOF
+
+          cd artifacts
+          ls -haln
+          shopt -s nullglob
+          for f in *.dmg *.exe *.msi; do
+            mv "$f" "${f}_"
+          done
+          ls -haln
 
       - name: Email bundle
         if: github.event.client_payload.recipient_email != ''
