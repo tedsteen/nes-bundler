@@ -216,7 +216,7 @@ jobs:
         name: Upload artifacts
         if: github.event.client_payload.configuration_url == ''
         with:
-          name: ${{ matrix.os }}-${{ matrix.netplay && 'netplay' || ''}}
+          name: ${{ matrix.os }}${{ matrix.netplay && '-netplay' || ''}}
           path: artifacts/*
 
       - name: Get email address
@@ -272,14 +272,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-
-      - name: Zip artifact directories
-        working-directory: artifacts
-        run: |
-          for subdir in */; do
-            dirname=$(basename "$subdir")
-            zip -r "$dirname.zip" "$subdir"
-          done
+          merge-multiple: true
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
