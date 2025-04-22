@@ -63,11 +63,11 @@ jobs:
 
       - name: Unpack bundle configuration
         if: github.event.client_payload.configuration_url != ''
-        env:
-          CONFIGURATION_URL: ${{ github.event.client_payload.configuration_url }}
         run: |
-          echo ::add-mask::$CONFIGURATION_URL
-          curl -OL $CONFIGURATION_URL
+          CONFIGURATION_URL="${{ github.event.client_payload.configuration_url }}"
+          echo "::add-mask::$CONFIGURATION_URL"
+
+          curl -OL "$CONFIGURATION_URL"
           7z -y x *.zip -oconfig 2>&1 >/dev/null
 
       - name: Set bundle name
