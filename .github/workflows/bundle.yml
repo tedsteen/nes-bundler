@@ -253,6 +253,7 @@ jobs:
       - name: Prepare email
         if: github.event.client_payload.recipient_email != ''
         run: |
+          set -x
           cd artifacts
           shopt -s nullglob
           TMP_FILE=$(mktemp)
