@@ -74,7 +74,7 @@ jobs:
           FEATURE_FLAG="${{ matrix.netplay && '--features netplay' || ''}}"
           if [[ $RUNNER_OS == "Windows" ]]; then
             cargo build --locked --release $FEATURE_FLAG
-            cp target/release/nes-bundler.exe ${BINARIES_PATH}/nes-bundler.exe
+            mv target/release/nes-bundler.exe ${BINARIES_PATH}/nes-bundler.exe
           elif [[ $RUNNER_OS == "macOS" ]]; then
             mkdir -p target/release/
             
@@ -212,23 +212,11 @@ jobs:
             ${{ github.workspace }}\artifacts\${{ env.BUNDLE_NAME }}.msi
             ${{ github.workspace }}\artifacts\${{ env.BUNDLE_NAME }}.exe
 
-      - name: Password protect bundle
-        if: github.event.client_payload.configuration_url != ''
-        id: zip-bundle
-        run: |
-          BUNDLE_PASSWORD=$(openssl rand -hex 24)
-          echo ::add-mask::$BUNDLE_PASSWORD
-          7z a -p$BUNDLE_PASSWORD password_protected.zip artifacts/*
-          rm -rf artifacts/*
-          mv password_protected.zip artifacts/
-
-          echo "BUNDLE_PASSWORD=$BUNDLE_PASSWORD" >> $GITHUB_ENV
-
       - uses: actions/upload-artifact@v4
         name: Upload artifacts
-        id: artifact-upload-step
+        if: github.event.client_payload.configuration_url == ''
         with:
-          name: ${{ env.BUNDLE_NAME }} ${{ env.BUNDLE_VERSION }} ${{ env.RUNNER_OS }}
+          name: ${{ matrix.os }}-${{ matrix.netplay && 'netplay' || ''}}
           path: artifacts/*
 
       - name: Get email address
@@ -243,11 +231,7 @@ jobs:
         if: github.event.client_payload.recipient_email != ''
         run: |
           cat <<'EOF' >> email.html
-          <p>
-            <a href="${{ steps.artifact-upload-step.outputs.artifact-url }}">${{ env.BUNDLE_NAME }} ${{ env.BUNDLE_VERSION }} ${{ env.RUNNER_OS }}.zip</a><br />
-            Zip password: ${{ env.BUNDLE_PASSWORD }}
-          </p>
-          <p>The downloads will be available for 90 days and you have to be logged in to GitHub to access it.</p>
+          The files are attached in this email.
           <p>Thanks for using NES Bundler!</p>
           EOF
 
@@ -259,10 +243,11 @@ jobs:
           server_port: 465
           username: ${{secrets.MAIL_USERNAME}}
           password: ${{secrets.MAIL_PASSWORD}}
-          subject: ${{ env.BUNDLE_NAME }} for ${{ env.RUNNER_OS }} is bundled!
+          subject: Your ${{ env.BUNDLE_NAME }} ${{ matrix.netplay && ' (Netplay)' || ''}} bundle for ${{ env.RUNNER_OS }} is ready!
           to: ${{ env.RECIPIENT_EMAIL }}
           from: NES Bundler
           html_body: file://email.html
+          attachments: artifacts/*
 
       - name: Email failure message
         if: failure() && github.event.client_payload.recipient_email != ''
@@ -272,10 +257,10 @@ jobs:
           server_port: 465
           username: ${{secrets.MAIL_USERNAME}}
           password: ${{secrets.MAIL_PASSWORD}}
-          subject: There was a problem serving your bundle request
+          subject: There was a problem serving your bundle request ${{ env.BUNDLE_NAME }} ${{ matrix.netplay && ' (Netplay)' || ''}} for ${{ env.RUNNER_OS }}.
           to: ${{ env.RECIPIENT_EMAIL }}
           from: NES Bundler
-          body: Go here ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} for details
+          body: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} for details
 
   release:
     name: Release
@@ -303,4 +288,4 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-          files: "artifacts/*.zip"
+          files: "artifacts/*"
