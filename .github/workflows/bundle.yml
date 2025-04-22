@@ -307,8 +307,8 @@ jobs:
       - name: Prepare email
         run: |
           cat <<EOF >> email.html
-          <p>Click <a href="https://filebin.net/$FILE_BIN/">here</a> to download the bundles</p>
-          <p>Thanks for using NES Bundler!</p>
+          <p>Click <a href="https://filebin.net/$FILE_BIN/">here</a> to download all the bundles.</p>
+          <p>Thanks for using <a href="https://nes-bundler.com">NES Bundler</a>!</p>
           EOF
 
       - name: Email bundle
