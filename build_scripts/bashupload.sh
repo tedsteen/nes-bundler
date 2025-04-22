@@ -13,8 +13,8 @@ if [[ ! -f $file ]]; then
 fi
 
 fname=$(basename "$file")
-
-response=$(curl --silent --show-error --upload-file "$file" "https://bashupload.com/$fname")
+enc_fname=$(printf %s "$fname" | jq -sRr @uri)
+response=$(curl --silent --show-error --upload-file "$file" "https://bashupload.com/$enc_fname")
 
 url=$(awk '/wget/ { print $2; exit }' <<< "$response")
 
