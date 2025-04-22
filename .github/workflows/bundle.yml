@@ -132,7 +132,7 @@ jobs:
             mkdir -p "$BUNDLE_APP_PATH/Contents/Resources" || true
             cp $BUNDLE_CONFIG/macos/Info.plist "$BUNDLE_APP_PATH/Contents/"
 
-            iconutil $BUNDLE_CONFIG/macos/bundle.iconset -c icns --output $BUNDLE_APP_PATH/Contents/Resources/bundle.icns
+            iconutil $BUNDLE_CONFIG/macos/bundle.iconset -c icns --output "$BUNDLE_APP_PATH/Contents/Resources/bundle.icns"
 
             mv $BINARIES_PATH/nes-bundler "$BUNDLE_APP_PATH/Contents/MacOS/$BUNDLE_NAME"
             
