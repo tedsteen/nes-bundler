@@ -59,9 +59,6 @@ jobs:
     name: Bundle ${{ needs.prepare_config.outputs.bundle_name }}${{ matrix.netplay && ' (Netplay)' || ''}} for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     needs: prepare_config
-    env:
-      BUNDLE_NAME: ${{ needs.prepare_config.outputs.bundle_name }} ${{ needs.prepare_config.outputs.bundle_version }} ${{ env.RUNNER_OS }}${{ matrix.netplay && ' Netplay' || '' }}
-      BUNDLE_VERSION: ${{ needs.prepare_config.outputs.bundle_version }}
     strategy:
       matrix:
         # NOTE: Should use the oldest available Ubuntu release, for maximum compatibility
@@ -159,6 +156,11 @@ jobs:
           echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY" >> $GITHUB_ENV
           echo "Certificate imported."
 
+      - name: Set up bundle name and version
+        run: |
+          echo "BUNDLE_NAME=${{ needs.prepare_config.outputs.bundle_name }} ${{ needs.prepare_config.outputs.bundle_version }} ${{ runner.os }}${{ matrix.netplay && ' Netplay' || '' }}" >> $GITHUB_ENV
+          echo "BUNDLE_VERSION=${{ needs.prepare_config.outputs.bundle_version }}" >> $GITHUB_ENV
+
       - name: Prepare Artifacts
         run: |
           rm -rf artifacts || true
@@ -225,7 +227,6 @@ jobs:
             mv "${BUNDLE_NAME}.AppImage" $ARTIFACTS/
             mv "${BUNDLE_NAME}.AppImage.zsync" $ARTIFACTS/
           fi
-          echo "RUNNER_OS=$RUNNER_OS" >> $GITHUB_ENV
 
       - name: Sign and notarize macOS artifacts
         if: runner.os == 'macOS'
