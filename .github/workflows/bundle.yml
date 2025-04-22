@@ -258,7 +258,7 @@ jobs:
           trusted-signing-account-name: nes-bundler-signing
           certificate-profile-name: net-bundler
           files: |
-            ${{ github.workspace }}\artifacts\${{ env.BUNDLE_NAME }}.msi
+            ${{ github.workspace }}\artifacts\${{ env.BUNDLE_NAME }} Installer.msi
             ${{ github.workspace }}\artifacts\${{ env.BUNDLE_NAME }}.exe
 
       - uses: actions/upload-artifact@v4
