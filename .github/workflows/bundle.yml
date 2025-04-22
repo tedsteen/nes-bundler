@@ -6,12 +6,22 @@ on:
     types:
       - bundle
 
+  workflow_dispatch:
+    inputs:
+      configuration_url:
+        type: string
+        required: true
+      recipient_email:
+        type: string
+        required: true
+
 defaults:
   run:
     shell: bash # necessary for windows
 
 jobs:
   encrypt_config:
+    name: Encrypt configuration
     runs-on: ubuntu-latest
     outputs:
       encryption_password: ${{ steps.keygen.outputs.secret }}
