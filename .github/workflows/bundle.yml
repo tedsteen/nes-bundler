@@ -18,6 +18,13 @@ jobs:
       bundle_name: ${{ steps.set_bundle_name_and_version.outputs.bundle_name }}
       bundle_version: ${{ steps.set_bundle_name_and_version.outputs.bundle_version }}
     steps:
+      - name: Checkout config
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            config/
+          sparse-checkout-cone-mode: false
+
       - name: Download and unpack configuration
         if: github.event.client_payload.configuration_url != ''
         run: |
