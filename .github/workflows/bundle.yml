@@ -121,9 +121,11 @@ jobs:
             mkdir wix
             cp $BINARIES_PATH/nes-bundler.exe wix/
             candle $BUNDLE_CONFIG/windows/wix/main.wxs -o wix/
-            light wix/*.wixobj -o "$ARTIFACTS/$BUNDLE_NAME.msi" -ext WixUIExtension
-            # Make EXE artifact
+            light wix/*.wixobj -o "$BINARIES_PATH/nes-bundler.msi" -ext WixUIExtension
+            
+            # Copy artifacts
             cp $BINARIES_PATH/nes-bundler.exe "$ARTIFACTS/$BUNDLE_NAME.exe"
+            cp "$BINARIES_PATH/nes-bundler.msi" "$ARTIFACTS/$BUNDLE_NAME.msi"
 
           elif [[ $RUNNER_OS == "macOS" ]]; then
             # Prepare the app structure
