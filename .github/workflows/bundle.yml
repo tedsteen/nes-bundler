@@ -253,18 +253,25 @@ jobs:
       - name: Prepare email
         if: github.event.client_payload.recipient_email != ''
         run: |
+          cd artifacts
+          shopt -s nullglob
+          TMP_FILE=$(mktemp)
+          for ARTIFACT in *; do
+            (
+              ../build_scripts/bashupload.sh "$ARTIFACT"
+            ) >> "$TMP_FILE" &
+          done
+          cd -
+
+          wait
+
+          ARTIFACT_LINKS=$(paste -sd' ' "$TMP_FILE")
+
           cat <<'EOF' >> email.html
-          The files are attached in this email. Gmail blocks certain file types (See https://support.google.com/mail/answer/6590). So .exe, .msi and .dmg-files have an underscore added to them. Make sure to remove that.
+          The following files are stored for 3 days and can be downloaded only once.
+          $ARTIFACT_LINKS
           <p>Thanks for using NES Bundler!</p>
           EOF
-
-          cd artifacts
-          ls -haln
-          shopt -s nullglob
-          for f in *.dmg *.exe *.msi; do
-            mv "$f" "${f}_"
-          done
-          ls -haln
 
       - name: Email bundle
         if: github.event.client_payload.recipient_email != ''
