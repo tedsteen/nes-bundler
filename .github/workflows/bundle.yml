@@ -253,7 +253,6 @@ jobs:
       - name: Prepare email
         if: github.event.client_payload.recipient_email != ''
         run: |
-          set -x
           cd artifacts
           shopt -s nullglob
           TMP_FILE=$(mktemp)
@@ -269,8 +268,8 @@ jobs:
           ARTIFACT_LINKS=$(paste -sd' ' "$TMP_FILE")
 
           cat <<EOF >> email.html
-          The following is stored for 3 days and can be downloaded only once.
-          $ARTIFACT_LINKS
+          <p>The following is stored for 3 days and can be downloaded only once.</p>
+          <p>$ARTIFACT_LINKS</p>
           <p>Thanks for using NES Bundler!</p>
           EOF
 

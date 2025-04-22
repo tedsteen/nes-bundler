@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
+set -x
 if (( $# != 1 )); then
   echo "Usage: bashupload <file>" >&2
   exit 1
