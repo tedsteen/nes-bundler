@@ -11,31 +11,54 @@ defaults:
     shell: bash # necessary for windows
 
 jobs:
-  encrypt_config:
-    name: Encrypt configuration
+  prepare_config:
+    name: Prepare configuration
     runs-on: ubuntu-latest
+    outputs:
+      bundle_name: ${{ steps.set_bundle_name_and_version.outputs.bundle_name }}
+      bundle_version: ${{ steps.set_bundle_name_and_version.outputs.bundle_version }}
     steps:
-      - name: Download and encrypt configuration
+      - name: Checkout config
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            config/
+          sparse-checkout-cone-mode: false
+
+      - name: Download and unpack configuration
         if: github.event.client_payload.configuration_url != ''
         run: |
           CONFIGURATION_URL=$(jq -r '.client_payload.configuration_url' $GITHUB_EVENT_PATH)
           echo ::add-mask::$CONFIGURATION_URL
 
           curl -L -o config.zip "$CONFIGURATION_URL"
-           openssl enc -aes-256-cbc -salt \
-            -in config.zip -out config.zip.enc \
-            -pass pass:${{ secrets.CONFIG_ZIP_PASSWORD }}
+
+          7z -y x config.zip -oconfig 2>&1 >/dev/null
+
+      - name: Get bundle name and version
+        id: set_bundle_name_and_version
+        run: |
+          echo "bundle_name=$(yq '.name' config/config.yaml)" >> $GITHUB_OUTPUT
+          echo "bundle_version=$(yq '.version // "${{ github.ref_name }}"' config/config.yaml)" >> $GITHUB_OUTPUT
+
+      - name: Encrypt configuration
+        if: github.event.client_payload.configuration_url != ''
+        run: |
+          openssl enc -aes-256-cbc -salt \
+          -in config.zip -out config.zip.enc \
+          -pass pass:${{ secrets.CONFIG_ZIP_PASSWORD }}
 
       - uses: actions/upload-artifact@v4
+        name: Upload encrypted configuration
         if: github.event.client_payload.configuration_url != ''
         with:
           name: encrypted-configuration
           path: config.zip.enc
 
   bundle:
-    name: Bundle for ${{ matrix.os }}${{ matrix.netplay && ' (Netplay)' || ''}}
+    name: Bundle ${{ needs.prepare_config.outputs.bundle_name }}${{ matrix.netplay && ' (Netplay)' || ''}} for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    needs: encrypt_config
+    needs: prepare_config
     strategy:
       matrix:
         # NOTE: Should use the oldest available Ubuntu release, for maximum compatibility
@@ -74,24 +97,24 @@ jobs:
             sudo apt-get -y install libatk1.0-dev libgtk-3-dev libsdl2-dev
           fi
 
-      - name: Get configuration artifact
+      - name: Download encrypted configuration
         if: github.event.client_payload.configuration_url != ''
         uses: actions/download-artifact@v4
         with:
           name: encrypted-configuration
 
-      - name: Decrypt and unpack bundle configuration
+      - name: Decrypt and unpack configuration
         if: github.event.client_payload.configuration_url != ''
         run: |
           openssl enc -d -aes-256-cbc \
             -in config.zip.enc -out config.zip \
             -pass pass:${{ secrets.CONFIG_ZIP_PASSWORD }}
-          7z -y x config.zip -oconfig 2>&1 >/dev/null
 
-      - name: Setup bundle name and version
-        run: |
-          echo "BUNDLE_NAME=$(yq '.name' config/config.yaml)${{ matrix.netplay && ' Netplay' || '' }}" >> $GITHUB_ENV
-          echo "BUNDLE_VERSION=$(yq '.version // "${{ github.ref_name }}"' config/config.yaml)" >> $GITHUB_ENV
+          FILE_BIN=$(sha224sum config.zip | cut -d' ' -f1)
+          echo ::add-mask::$FILE_BIN
+          echo "FILE_BIN=$FILE_BIN" >> $GITHUB_ENV
+
+          7z -y x config.zip -oconfig 2>&1 >/dev/null
 
       - name: Build
         run: |
@@ -133,6 +156,11 @@ jobs:
           echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY" >> $GITHUB_ENV
           echo "Certificate imported."
 
+      - name: Set up bundle name and version
+        run: |
+          echo "BUNDLE_NAME=${{ needs.prepare_config.outputs.bundle_name }} ${{ needs.prepare_config.outputs.bundle_version }} ${{ runner.os }}${{ matrix.netplay && ' Netplay' || '' }}" >> $GITHUB_ENV
+          echo "BUNDLE_VERSION=${{ needs.prepare_config.outputs.bundle_version }}" >> $GITHUB_ENV
+
       - name: Prepare Artifacts
         run: |
           rm -rf artifacts || true
@@ -150,7 +178,7 @@ jobs:
             
             # Copy artifacts
             cp $BINARIES_PATH/nes-bundler.exe "$ARTIFACTS/$BUNDLE_NAME.exe"
-            cp "$BINARIES_PATH/nes-bundler.msi" "$ARTIFACTS/$BUNDLE_NAME.msi"
+            cp "$BINARIES_PATH/nes-bundler.msi" "$ARTIFACTS/$BUNDLE_NAME Installer.msi"
 
           elif [[ $RUNNER_OS == "macOS" ]]; then
             # Prepare the app structure
@@ -180,7 +208,7 @@ jobs:
           elif [[ $RUNNER_OS == "Linux" ]]; then
             # archive artifact
             strip $BINARIES_PATH/nes-bundler
-            tar czvf "$ARTIFACTS/${BUNDLE_NAME}-linux-x86_64.tar.gz" $BINARIES_PATH/nes-bundler
+            tar czvf "$ARTIFACTS/${BUNDLE_NAME}.tar.gz" $BINARIES_PATH/nes-bundler
 
             # create appimage
             curl -Lo linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/latest/download/linuxdeploy-x86_64.AppImage
@@ -199,7 +227,6 @@ jobs:
             mv "${BUNDLE_NAME}.AppImage" $ARTIFACTS/
             mv "${BUNDLE_NAME}.AppImage.zsync" $ARTIFACTS/
           fi
-          echo "RUNNER_OS=$RUNNER_OS" >> $GITHUB_ENV
 
       - name: Sign and notarize macOS artifacts
         if: runner.os == 'macOS'
@@ -232,7 +259,7 @@ jobs:
           trusted-signing-account-name: nes-bundler-signing
           certificate-profile-name: net-bundler
           files: |
-            ${{ github.workspace }}\artifacts\${{ env.BUNDLE_NAME }}.msi
+            ${{ github.workspace }}\artifacts\${{ env.BUNDLE_NAME }} Installer.msi
             ${{ github.workspace }}\artifacts\${{ env.BUNDLE_NAME }}.exe
 
       - uses: actions/upload-artifact@v4
@@ -242,63 +269,80 @@ jobs:
           name: ${{ matrix.os }}${{ matrix.netplay && '-netplay' || ''}}
           path: artifacts/*
 
-      - name: Get email address
-        if: always() && github.event.client_payload.recipient_email != ''
-        env:
-          RECIPIENT_EMAIL: ${{ github.event.client_payload.recipient_email }}
-        run: |
-          echo ::add-mask::$RECIPIENT_EMAIL
-          echo "RECIPIENT_EMAIL=$RECIPIENT_EMAIL" >> $GITHUB_ENV
-
-      - name: Prepare email
+      - name: Upload files for email
         if: github.event.client_payload.recipient_email != ''
         run: |
           cd artifacts
           shopt -s nullglob
-          TMP_FILE=$(mktemp)
           for ARTIFACT in *; do
-            (
-              ../build_scripts/bashupload.sh "$ARTIFACT"
-            ) >> "$TMP_FILE" &
+              ../build_scripts/upload.sh "$FILE_BIN" "$ARTIFACT" &
           done
           cd -
-
           wait
 
-          ARTIFACT_LINKS=$(paste -sd' ' "$TMP_FILE")
+  send_email:
+    name: Send email
+    needs:
+      - bundle
+      - prepare_config
+    env:
+      BUNDLE_NAME: ${{ needs.prepare_config.outputs.bundle_name }}
+      BUNDLE_VERSION: ${{ needs.prepare_config.outputs.bundle_version }}
+    if: github.event.client_payload.recipient_email != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download encrypted configuration
+        uses: actions/download-artifact@v4
+        with:
+          name: encrypted-configuration
 
-          cat <<'EOF' >> email.html
-          The following files are stored for 3 days and can be downloaded only once.
-          $ARTIFACT_LINKS
-          <p>Thanks for using NES Bundler!</p>
+      - name: Decrypt configuration and get the bin
+        run: |
+          openssl enc -d -aes-256-cbc \
+            -in config.zip.enc -out config.zip \
+            -pass pass:${{ secrets.CONFIG_ZIP_PASSWORD }}
+
+          FILE_BIN=$(sha224sum config.zip | cut -d' ' -f1)
+          echo ::add-mask::$FILE_BIN
+          echo "FILE_BIN=$FILE_BIN" >> $GITHUB_ENV
+
+      - name: Get email address
+        run: |
+          RECIPIENT_EMAIL="$(jq -r '.client_payload.recipient_email' $GITHUB_EVENT_PATH)"
+          echo ::add-mask::$RECIPIENT_EMAIL
+          echo "RECIPIENT_EMAIL=$RECIPIENT_EMAIL" >> $GITHUB_ENV
+
+      - name: Prepare email
+        run: |
+          cat <<EOF >> email.html
+          <p>Click <a href="https://filebin.net/$FILE_BIN/">here</a> to download all the bundles.</p>
+          <p>Thanks for using <a href="https://nes-bundler.com">NES Bundler</a>!</p>
           EOF
 
       - name: Email bundle
-        if: github.event.client_payload.recipient_email != ''
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
           server_port: 465
           username: ${{secrets.MAIL_USERNAME}}
           password: ${{secrets.MAIL_PASSWORD}}
-          subject: Your ${{ env.BUNDLE_NAME }} bundle for ${{ env.RUNNER_OS }} is ready!
+          subject: Your bundle for ${{ env.BUNDLE_NAME }} is ready!
           to: ${{ env.RECIPIENT_EMAIL }}
           from: NES Bundler
           html_body: file://email.html
-          attachments: artifacts/*
 
       - name: Email failure message
-        if: failure() && github.event.client_payload.recipient_email != ''
+        if: failure()
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
           server_port: 465
           username: ${{secrets.MAIL_USERNAME}}
           password: ${{secrets.MAIL_PASSWORD}}
-          subject: There was a problem serving your bundle request ${{ env.BUNDLE_NAME }} for ${{ env.RUNNER_OS }}.
+          subject: There was a problem bundling ${{ env.BUNDLE_NAME }}.
           to: ${{ env.RECIPIENT_EMAIL }}
           from: NES Bundler
-          body: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} for details
+          body: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} for details.
 
   release:
     name: Release
