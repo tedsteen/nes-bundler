@@ -6,15 +6,6 @@ on:
     types:
       - bundle
 
-  workflow_dispatch:
-    inputs:
-      configuration_url:
-        type: string
-        required: true
-      recipient_email:
-        type: string
-        required: true
-
 defaults:
   run:
     shell: bash # necessary for windows
