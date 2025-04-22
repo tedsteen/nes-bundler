@@ -11,7 +11,7 @@ defaults:
 
 jobs:
   bundle:
-    name: Bundle for ${{ matrix.os }}
+    name: Bundle for ${{ matrix.os }}${{ matrix.netplay && ' (Netplay)' || ''}}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -71,7 +71,7 @@ jobs:
         run: |
           BINARIES_PATH="$RUNNER_TEMP/binaries"
           mkdir -p $BINARIES_PATH
-          FEATURE_FLAG="${{ matrix.netplay && '--features netplay' || '' }}"
+          FEATURE_FLAG="${{ matrix.netplay && '--features netplay' || ''}}"
           if [[ $RUNNER_OS == "Windows" ]]; then
             cargo build --locked --release $FEATURE_FLAG
             cp target/release/nes-bundler.exe ${BINARIES_PATH}/nes-bundler.exe
@@ -152,7 +152,7 @@ jobs:
           elif [[ $RUNNER_OS == "Linux" ]]; then
             # archive artifact
             strip $BINARIES_PATH/nes-bundler
-            tar czvf $ARTIFACTS/${BUNDLE_NAME}-linux-x86_64.tar.gz $BINARIES_PATH/nes-bundler
+            tar czvf "$ARTIFACTS/${BUNDLE_NAME}-linux-x86_64.tar.gz" $BINARIES_PATH/nes-bundler
 
             # create appimage
             curl -Lo linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/latest/download/linuxdeploy-x86_64.AppImage
