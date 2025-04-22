@@ -20,12 +20,17 @@ jobs:
       - name: Generate random password
         id: keygen
         run: |
-          echo "secret=$(openssl rand -hex 32)" >> $GITHUB_OUTPUT
+          SECRET=$(openssl rand -hex 32)
+          echo ::add-mask::$SECRET
+          echo "secret=$SECRET" >> $GITHUB_OUTPUT
 
       - name: Download and encrypt configuration
         if: github.event.client_payload.configuration_url != ''
         run: |
-          curl -L -o config.zip "${{ github.event.client_payload.configuration_url }}"
+          CONFIGURATION_URL=$(jq -r '.client_payload.configuration_url' $GITHUB_EVENT_PATH)
+          echo ::add-mask::$CONFIGURATION_URL
+
+          curl -L -o config.zip "$CONFIGURATION_URL"
            openssl enc -aes-256-cbc -salt \
             -in config.zip -out config.zip.enc \
             -pass pass:${{ steps.keygen.outputs.secret }}
