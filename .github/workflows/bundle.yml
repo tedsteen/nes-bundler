@@ -26,7 +26,8 @@ jobs:
         if: github.event.client_payload.configuration_url != ''
         run: |
           curl -L -o config.zip "${{ github.event.client_payload.configuration_url }}"
-          openssl enc -aes-256-cbc -salt \
+           openssl enc -aes-256-gcm -salt \
+            -pbkdf2 -iter 100000 \
             -in config.zip -out config.zip.enc \
             -pass pass:${{ steps.keygen.outputs.secret }}
 
@@ -88,10 +89,11 @@ jobs:
       - name: Decrypt and unpack bundle configuration
         if: github.event.client_payload.configuration_url != ''
         run: |
-          openssl enc -d -aes-256-cbc \
+          openssl enc -d -aes-256-gcm \
+            -pbkdf2 -iter 100000 \
             -in config.zip.enc -out config.zip \
             -pass pass:${{ needs.encrypt_config.outputs.encryption_password }}
-          7z -y x *.zip -oconfig 2>&1 >/dev/null
+          7z -y x config.zip -oconfig 2>&1 >/dev/null
 
       - name: Setup bundle name and version
         run: |
