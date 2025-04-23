@@ -277,7 +277,7 @@ jobs:
           for ARTIFACT in artifacts/*; do
               ./build_scripts/upload.sh "$FILE_BIN" "$ARTIFACT" &
           done
-          cd -
+          wait
 
   send_email:
     name: Send email
