@@ -273,13 +273,11 @@ jobs:
       - name: Upload files for email
         if: github.event.client_payload.recipient_email != ''
         run: |
-          cd artifacts
           shopt -s nullglob
-          for ARTIFACT in *; do
-              ../build_scripts/upload.sh "$FILE_BIN" "$ARTIFACT" &
+          for ARTIFACT in artifacts/*; do
+              ./build_scripts/upload.sh "$FILE_BIN" "$ARTIFACT" &
           done
           cd -
-          wait
 
   send_email:
     name: Send email

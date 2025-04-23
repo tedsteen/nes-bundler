@@ -12,6 +12,10 @@ if [[ ! -f $file ]]; then
 fi
 
 filename=$(basename "$file")
+if [[ "$filename" =~ \.(exe|msi)$ ]]; then
+  filename="${filename}_"
+fi
+
 resp=$(curl -s -X POST \
   --data-binary @"$file" \
   -H "bin: $bin" \
