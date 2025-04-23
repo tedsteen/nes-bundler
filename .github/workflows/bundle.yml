@@ -194,7 +194,7 @@ jobs:
             codesign --force --options=runtime -s "$APPLE_SIGNING_IDENTITY" "$BUNDLE_APP_PATH/Contents/MacOS/nes-bundler"
 
             create-dmg \
-              --volname "$BUNDLE_NAME Installer" \
+              --volname "${{ needs.prepare_config.outputs.bundle_name }}" \
               --volicon "$BUNDLE_APP_PATH/Contents/Resources/bundle.icns" \
               --window-pos 200 120 \
               --window-size 800 400 \
