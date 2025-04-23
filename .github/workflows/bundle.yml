@@ -181,29 +181,30 @@ jobs:
             cp "$BINARIES_PATH/nes-bundler.msi" "$ARTIFACTS/$BUNDLE_NAME Installer.msi"
 
           elif [[ $RUNNER_OS == "macOS" ]]; then
+            SIMPLE_BUNDLE_NAME="${{ needs.prepare_config.outputs.bundle_name }}"
             # Prepare the app structure
-            BUNDLE_APP_PATH="$RUNNER_TEMP/netplay/$BUNDLE_NAME.app"
+            BUNDLE_APP_PATH="$RUNNER_TEMP/$SIMPLE_BUNDLE_NAME.app"
             mkdir -p "$BUNDLE_APP_PATH/Contents/MacOS" || true
             mkdir -p "$BUNDLE_APP_PATH/Contents/Resources" || true
             cp $BUNDLE_CONFIG/macos/Info.plist "$BUNDLE_APP_PATH/Contents/"
 
             iconutil $BUNDLE_CONFIG/macos/bundle.iconset -c icns --output "$BUNDLE_APP_PATH/Contents/Resources/bundle.icns"
 
-            mv $BINARIES_PATH/nes-bundler "$BUNDLE_APP_PATH/Contents/MacOS/$BUNDLE_NAME"
+            mv $BINARIES_PATH/nes-bundler "$BUNDLE_APP_PATH/Contents/MacOS/"
             
-            codesign --force --options=runtime -s "$APPLE_SIGNING_IDENTITY" "$BUNDLE_APP_PATH/Contents/MacOS/$BUNDLE_NAME"
-
+            codesign --force --options=runtime -s "$APPLE_SIGNING_IDENTITY" "$BUNDLE_APP_PATH/Contents/MacOS/nes-bundler"
+            
             create-dmg \
-              --volname "$BUNDLE_NAME Installer" \
+              --volname "$SIMPLE_BUNDLE_NAME" \
               --volicon "$BUNDLE_APP_PATH/Contents/Resources/bundle.icns" \
               --window-pos 200 120 \
               --window-size 800 400 \
               --icon-size 100 \
-              --icon "$BUNDLE_NAME.app" 200 170 \
-              --hide-extension "$BUNDLE_NAME.app" \
+              --icon "$SIMPLE_BUNDLE_NAME.app" 200 170 \
+              --hide-extension "$SIMPLE_BUNDLE_NAME.app" \
               --app-drop-link 600 165 \
               "$ARTIFACTS/$BUNDLE_NAME Installer.dmg" \
-              "$BUNDLE_APP_PATH/../"
+              "$BUNDLE_APP_PATH/"
 
           elif [[ $RUNNER_OS == "Linux" ]]; then
             # archive artifact
@@ -272,13 +273,11 @@ jobs:
       - name: Upload files for email
         if: github.event.client_payload.recipient_email != ''
         run: |
-          cd artifacts
           shopt -s nullglob
-          for ARTIFACT in *; do
-              ../build_scripts/upload.sh "$FILE_BIN" "$ARTIFACT" &
+          for ARTIFACT in artifacts/*; do
+              ./build_scripts/upload.sh "$FILE_BIN" "$ARTIFACT" &
           done
           cd -
-          wait
 
   send_email:
     name: Send email
