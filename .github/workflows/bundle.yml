@@ -181,8 +181,9 @@ jobs:
             cp "$BINARIES_PATH/nes-bundler.msi" "$ARTIFACTS/$BUNDLE_NAME Installer.msi"
 
           elif [[ $RUNNER_OS == "macOS" ]]; then
+            SIMPLE_BUNDLE_NAME="${{ needs.prepare_config.outputs.bundle_name }}"
             # Prepare the app structure
-            BUNDLE_APP_PATH="$RUNNER_TEMP/$BUNDLE_NAME.app"
+            BUNDLE_APP_PATH="$RUNNER_TEMP/$SIMPLE_BUNDLE_NAME.app"
             mkdir -p "$BUNDLE_APP_PATH/Contents/MacOS" || true
             mkdir -p "$BUNDLE_APP_PATH/Contents/Resources" || true
             cp $BUNDLE_CONFIG/macos/Info.plist "$BUNDLE_APP_PATH/Contents/"
@@ -192,15 +193,15 @@ jobs:
             mv $BINARIES_PATH/nes-bundler "$BUNDLE_APP_PATH/Contents/MacOS/"
             
             codesign --force --options=runtime -s "$APPLE_SIGNING_IDENTITY" "$BUNDLE_APP_PATH/Contents/MacOS/nes-bundler"
-
+            
             create-dmg \
-              --volname "${{ needs.prepare_config.outputs.bundle_name }}" \
+              --volname "$SIMPLE_BUNDLE_NAME" \
               --volicon "$BUNDLE_APP_PATH/Contents/Resources/bundle.icns" \
               --window-pos 200 120 \
               --window-size 800 400 \
               --icon-size 100 \
-              --icon "$BUNDLE_NAME.app" 200 170 \
-              --hide-extension "$BUNDLE_NAME.app" \
+              --icon "$SIMPLE_BUNDLE_NAME.app" 200 170 \
+              --hide-extension "$SIMPLE_BUNDLE_NAME.app" \
               --app-drop-link 600 165 \
               "$ARTIFACTS/$BUNDLE_NAME Installer.dmg" \
               "$BUNDLE_APP_PATH/"
