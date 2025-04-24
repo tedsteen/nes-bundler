@@ -6,7 +6,7 @@ use serde::Deserialize;
 use crate::{
     bundle::Bundle,
     emulation::LocalNesState,
-    gui::{esc_pressed, MenuButton},
+    gui::{MenuButton, esc_pressed},
     main_view::gui::{MainGui, MainMenuState},
     netplay::{
         connecting_state::{LoadingNetplayServerConfigurationState, PeeringState, StartMethod},
@@ -15,9 +15,9 @@ use crate::{
 };
 
 use super::{
+    ConnectingState, NetplayStateHandler,
     connecting_state::SynchonizingState,
     netplay_state::{ConnectedState, Netplay, NetplayState},
-    ConnectingState, NetplayStateHandler,
 };
 #[cfg(feature = "debug")]
 mod debug;
@@ -25,11 +25,24 @@ mod debug;
 #[derive(Deserialize, Debug)]
 pub struct NetplayVoca {
     pub name: String,
+    pub find_public_game: String,
+    pub host_private_game: String,
+    pub join_private_game: String,
+    pub finding_public_game: String,
+    pub hosting_private_game: String,
+    pub joining_private_game: String,
 }
+
 impl Default for NetplayVoca {
     fn default() -> Self {
         Self {
             name: "Netplay".to_string(),
+            find_public_game: "FIND PUBLIC GAME".to_string(),
+            host_private_game: "HOST PRIVATE GAME".to_string(),
+            join_private_game: "JOIN PRIVATE GAME".to_string(),
+            finding_public_game: "FINDING PUBLIC GAME".to_string(),
+            hosting_private_game: "HOSTING PRIVATE GAME".to_string(),
+            joining_private_game: "JOINING PRIVATE GAME".to_string(),
         }
     }
 }
@@ -191,27 +204,43 @@ impl NetplayGui {
             }
 
             let mut action = None;
+            let netplay_voca = &Bundle::current().config.vocabulary.netplay;
 
-            ui.vertical_centered(|ui| {
-                if MenuButton::new("FIND PUBLIC GAME").ui(ui).clicked() {
-                    action = Some(Action::Find);
-                }
-            });
-            ui.end_row();
+            if !netplay_voca.find_public_game.is_empty() {
+                ui.vertical_centered(|ui| {
+                    if MenuButton::new(netplay_voca.find_public_game.clone())
+                        .ui(ui)
+                        .clicked()
+                    {
+                        action = Some(Action::Find);
+                    }
+                });
+                ui.end_row();
+            }
 
-            ui.vertical_centered(|ui| {
-                if MenuButton::new("HOST PRIVATE GAME").ui(ui).clicked() {
-                    action = Some(Action::Host);
-                }
-            });
-            ui.end_row();
+            if !netplay_voca.host_private_game.is_empty() {
+                ui.vertical_centered(|ui| {
+                    if MenuButton::new(netplay_voca.host_private_game.clone())
+                        .ui(ui)
+                        .clicked()
+                    {
+                        action = Some(Action::Host);
+                    }
+                });
+                ui.end_row();
+            }
 
-            ui.vertical_centered(|ui| {
-                if MenuButton::new("JOIN PRIVATE GAME").ui(ui).clicked() {
-                    action = Some(Action::Join);
-                }
-            });
-            ui.end_row();
+            if !netplay_voca.join_private_game.is_empty() {
+                ui.vertical_centered(|ui| {
+                    if MenuButton::new(netplay_voca.join_private_game.clone())
+                        .ui(ui)
+                        .clicked()
+                    {
+                        action = Some(Action::Join);
+                    }
+                });
+                ui.end_row();
+            }
             ui.vertical_centered(|ui| {
                 if ui_button("Close").ui(ui).clicked() || esc_pressed(ui.ctx()) {
                     self.room_name = None;
@@ -251,6 +280,7 @@ impl NetplayGui {
             Retry(StartMethod),
         }
         let mut action = None;
+        let netplay_voca = &Bundle::current().config.vocabulary.netplay;
 
         match &netplay_connecting.state {
             ConnectingState::LoadingNetplayServerConfiguration(
@@ -263,7 +293,7 @@ impl NetplayGui {
                         Join => {
                             ui.vertical_centered(|ui| {
                                 Label::new(MenuButton::ui_text(
-                                    "JOINING PRIVATE GAME",
+                                    netplay_voca.joining_private_game.clone(),
                                     MenuButton::ACTIVE_COLOR,
                                 ))
                                 .selectable(false)
@@ -274,7 +304,7 @@ impl NetplayGui {
                         Host => {
                             ui.vertical_centered(|ui| {
                                 Label::new(MenuButton::ui_text(
-                                    "HOSTING PRIVATE GAME",
+                                    netplay_voca.hosting_private_game.clone(),
                                     MenuButton::ACTIVE_COLOR,
                                 ))
                                 .selectable(false)
@@ -312,7 +342,7 @@ impl NetplayGui {
                 StartMethod::MatchWithRandom(_) => {
                     ui.vertical_centered(|ui| {
                         Label::new(MenuButton::ui_text(
-                            "FINDING PUBLIC GAME",
+                            netplay_voca.finding_public_game.clone(),
                             MenuButton::ACTIVE_COLOR,
                         ))
                         .selectable(false)
