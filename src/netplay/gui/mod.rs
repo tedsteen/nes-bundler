@@ -117,7 +117,7 @@ impl NetplayGui {
 
             ui.vertical_centered(|ui| {
                 Label::new(MenuButton::ui_text(
-                    "JOIN PRIVATE GAME",
+                    Bundle::current().config.vocabulary.netplay.join_private_game.clone(),
                     MenuButton::ACTIVE_COLOR,
                 ))
                 .selectable(false)
