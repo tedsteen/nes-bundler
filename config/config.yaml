@@ -46,6 +46,14 @@ vocabulary:
   netplay:
     # Name Netplay something else?
     name: Netplay
+    # NOTE: An empty value in any of the next three vocas will remove it from the menu
+    find_public_game: FIND PUBLIC GAME
+    host_private_game: HOST PRIVATE GAME
+    join_private_game: JOIN PRIVATE GAME
+
+    finding_public_game: FINDING PUBLIC GAME
+    hosting_private_game: HOSTING PRIVATE GAME
+    joining_private_game: JOINING PRIVATE GAME
 
 # This will be the default settings for the game.
 # For all the gory details see the `BuildConfiguration`-struct in the source.
