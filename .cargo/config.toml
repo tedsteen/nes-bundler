@@ -1,3 +1,7 @@
+[env]
+# Ensure compatibility with macOS 11.3 and later
+MACOSX_DEPLOYMENT_TARGET = "11.3"
+
 # https://github.com/Rust-SDL2/rust-sdl2/issues/1241
 [target.x86_64-apple-darwin]
 rustflags = ["-C", "link-args=-weak_framework CoreHaptics"]
