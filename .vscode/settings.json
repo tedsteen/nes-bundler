@@ -1,5 +1,5 @@
 {
-  "rust-analyzer.checkOnSave.command": "clippy",
+  "rust-analyzer.checkOnSave": true,
   "rust-analyzer.cargo.features": [
     "netplay",
     "debug"

@@ -68,7 +68,7 @@ fn ui_text_small(text: impl Into<String>, color: Color32) -> RichText {
         .font(FontId::monospace(15.0))
 }
 
-fn ui_button(text: &str) -> Button {
+fn ui_button(text: &str) -> Button<'_> {
     Button::new(RichText::new(text).font(FontId::proportional(20.0)))
 }
 
@@ -117,7 +117,12 @@ impl NetplayGui {
 
             ui.vertical_centered(|ui| {
                 Label::new(MenuButton::ui_text(
-                    Bundle::current().config.vocabulary.netplay.join_private_game.clone(),
+                    Bundle::current()
+                        .config
+                        .vocabulary
+                        .netplay
+                        .join_private_game
+                        .clone(),
                     MenuButton::ACTIVE_COLOR,
                 ))
                 .selectable(false)
