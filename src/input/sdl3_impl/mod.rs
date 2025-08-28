@@ -10,12 +10,12 @@ use std::collections::{HashMap, HashSet};
 
 use super::gamepad::{GamepadEvent, GamepadState, Gamepads, JoypadGamepadMapping, ToGamepadEvent};
 
-pub struct Sdl2GamepadState {
+pub struct SDL3GamepadState {
     pub pressed_buttons: HashSet<GamepadButton>,
     game_controller: Gamepad,
 }
 
-impl Sdl2GamepadState {
+impl SDL3GamepadState {
     pub fn new(game_controller: Gamepad) -> Self {
         Self {
             pressed_buttons: HashSet::new(),
@@ -30,7 +30,7 @@ impl ToInputId for u32 {
     }
 }
 
-impl GamepadState for Sdl2GamepadState {
+impl GamepadState for SDL3GamepadState {
     fn is_connected(&self) -> bool {
         self.game_controller.connected()
     }
@@ -47,12 +47,12 @@ impl GamepadState for Sdl2GamepadState {
         }
     }
 }
-pub struct Sdl2Gamepads {
+pub struct SDL3Gamepads {
     game_controller_subsystem: GamepadSubsystem,
     all: HashMap<InputId, Box<dyn GamepadState>>,
 }
 
-impl Gamepads for Sdl2Gamepads {
+impl Gamepads for SDL3Gamepads {
     fn get_joypad(&mut self, id: &InputId, mapping: &JoypadGamepadMapping) -> JoypadState {
         if let Some(state) = self.get_gamepad_by_input_id(id) {
             mapping.calculate_state(state.get_pressed_buttons())
@@ -101,13 +101,13 @@ impl Gamepads for Sdl2Gamepads {
         }
     }
 }
-impl Sdl2Gamepads {
+impl SDL3Gamepads {
     fn to_gamepad_id(id: &InputId) -> String {
         format!("01-gamepad-{}", id)
     }
 
     pub fn new(game_controller_subsystem: GamepadSubsystem) -> Self {
-        Sdl2Gamepads {
+        SDL3Gamepads {
             game_controller_subsystem,
             all: HashMap::new(),
         }
@@ -118,43 +118,44 @@ impl Sdl2Gamepads {
     }
 
     fn setup_gamepad_config(&mut self, input_id: InputId) -> Option<InputConfiguration> {
-        // if let Some(found_controller) =
-        //     (0..self.game_controller_subsystem.num_joysticks().unwrap_or(0)).find_map(|id| {
-        //         if input_id == id.to_input_id()
-        //             && self.game_controller_subsystem.is_game_controller(id)
-        //         {
-        //             match self.game_controller_subsystem.open(id) {
-        //                 Ok(c) => Some(c),
-        //                 Err(e) => {
-        //                     log::error!("Failed to open controller {:?}", e);
-        //                     None
-        //                 }
-        //             }
-        //         } else {
-        //             None
-        //         }
-        //     })
-        // {
-        //     let instance_id = found_controller.instance_id().to_input_id();
-        //     let gamepad_id = Self::to_gamepad_id(&instance_id);
-        //     self.all.insert(
-        //         gamepad_id.clone(),
-        //         Box::new(Sdl2GamepadState::new(found_controller)),
-        //     );
-        //     let input_settings = &mut Settings::current_mut().input;
-        //     let conf = input_settings.get_or_create_config(
-        //         gamepad_id.clone(),
-        //         input::InputConfiguration {
-        //             name: format!("🎮 Gamepad {}", instance_id),
-        //             id: gamepad_id,
-        //             kind: InputConfigurationKind::Gamepad(input_settings.default_gamepad_mapping),
-        //         },
-        //     );
-        //     Some(conf.clone())
-        // } else {
-        //     None
-        // }
-        None
+        if let Some(found_controller) = self
+            .game_controller_subsystem
+            .gamepads()
+            .expect("TODO get gamepads")
+            .iter()
+            .find_map(|id| {
+                if input_id == id.to_input_id() && self.game_controller_subsystem.is_gamepad(*id) {
+                    match self.game_controller_subsystem.open(*id) {
+                        Ok(c) => Some(c),
+                        Err(e) => {
+                            log::error!("Failed to open controller {:?}", e);
+                            None
+                        }
+                    }
+                } else {
+                    None
+                }
+            })
+        {
+            let instance_id = found_controller.id().unwrap().to_input_id();
+            let gamepad_id = Self::to_gamepad_id(&instance_id);
+            self.all.insert(
+                gamepad_id.clone(),
+                Box::new(SDL3GamepadState::new(found_controller)),
+            );
+            let input_settings = &mut Settings::current_mut().input;
+            let conf = input_settings.get_or_create_config(
+                gamepad_id.clone(),
+                InputConfiguration {
+                    name: format!("🎮 Gamepad {}", instance_id),
+                    id: gamepad_id,
+                    kind: InputConfigurationKind::Gamepad(input_settings.default_gamepad_mapping),
+                },
+            );
+            Some(conf.clone())
+        } else {
+            None
+        }
     }
 }
 
@@ -187,29 +188,38 @@ impl ToGamepadButton for sdl3::gamepad::Button {
     fn to_gamepad_button(&self) -> Option<GamepadButton> {
         use sdl3::gamepad::Button::*;
         match self {
-            // A => Some(GamepadButton::A),
-            // B => Some(GamepadButton::B),
-            // X => Some(GamepadButton::X),
-            // Y => Some(GamepadButton::Y),
+            South => Some(GamepadButton::South),
+            East => Some(GamepadButton::East),
+            West => Some(GamepadButton::West),
+            North => Some(GamepadButton::North),
+
             Back => Some(GamepadButton::Back),
-            Guide => Some(GamepadButton::Guide),
+
             Start => Some(GamepadButton::Start),
+            Guide => Some(GamepadButton::Guide),
+
             LeftStick => Some(GamepadButton::LeftStick),
             RightStick => Some(GamepadButton::RightStick),
             LeftShoulder => Some(GamepadButton::LeftShoulder),
             RightShoulder => Some(GamepadButton::RightShoulder),
+
             DPadUp => Some(GamepadButton::DPadUp),
             DPadDown => Some(GamepadButton::DPadDown),
             DPadLeft => Some(GamepadButton::DPadLeft),
             DPadRight => Some(GamepadButton::DPadRight),
-            Misc1 => Some(GamepadButton::Misc1),
-            // Paddle1 => Some(GamepadButton::Paddle1),
-            // Paddle2 => Some(GamepadButton::Paddle2),
-            // Paddle3 => Some(GamepadButton::Paddle3),
-            // Paddle4 => Some(GamepadButton::Paddle4),
+
             Touchpad => Some(GamepadButton::Touchpad),
-            // TODO: Re-enable the commented mappings above
-            _ => None,
+
+            LeftPaddle1 => Some(GamepadButton::LeftPaddle1),
+            RightPaddle1 => Some(GamepadButton::RightPaddle1),
+            LeftPaddle2 => Some(GamepadButton::LeftPaddle2),
+            RightPaddle2 => Some(GamepadButton::RightPaddle2),
+
+            Misc1 => Some(GamepadButton::Misc1),
+            Misc2 => Some(GamepadButton::Misc2),
+            Misc3 => Some(GamepadButton::Misc3),
+            Misc4 => Some(GamepadButton::Misc4),
+            Misc5 => Some(GamepadButton::Misc5),
         }
     }
 }

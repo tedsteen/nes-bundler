@@ -3,13 +3,13 @@ use self::{
     gamepad::{Gamepads, JoypadGamepadMapping},
     keyboard::{JoypadKeyboardMapping, Keyboards},
     keys::{KeyCode, Modifiers},
-    sdl2_impl::Sdl2Gamepads,
+    sdl3_impl::SDL3Gamepads,
     settings::InputSettings,
 };
 use crate::{
     bundle::Bundle,
     main_view::gui::GuiEvent,
-    settings::{Settings, MAX_PLAYERS},
+    settings::{MAX_PLAYERS, Settings},
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, fmt::Debug, ops::Deref};
@@ -19,10 +19,8 @@ pub mod gamepad;
 pub mod gui;
 pub mod keyboard;
 pub mod keys;
-pub mod sdl2_impl;
+pub mod sdl3_impl;
 pub mod settings;
-
-type GamepadImpl = Sdl2Gamepads;
 
 #[derive(Clone, Debug)]
 pub enum KeyEvent {
@@ -170,12 +168,12 @@ pub struct MapRequest {
 
 pub struct Inputs {
     keyboards: Keyboards,
-    gamepads: GamepadImpl,
+    gamepads: SDL3Gamepads,
     pub joypads: [JoypadState; MAX_PLAYERS],
 }
 
 impl Inputs {
-    pub fn new(gamepads: GamepadImpl) -> Self {
+    pub fn new(gamepads: SDL3Gamepads) -> Self {
         let keyboards = Keyboards::new();
 
         Self {

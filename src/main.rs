@@ -8,7 +8,7 @@ use bundle::Bundle;
 use futures::executor::block_on;
 use input::gamepad::ToGamepadEvent;
 use input::gui::InputsGui;
-use input::sdl2_impl::Sdl2Gamepads;
+use input::sdl3_impl::SDL3Gamepads;
 use input::{Inputs, JoypadState};
 use main_view::MainView;
 
@@ -101,7 +101,7 @@ impl Application {
         let audio_system = AudioSystem::new(sdl3_context.audio().expect("An SDL audio subsystem"));
         let audio_gui = AudioGui::new(audio_system.clone());
 
-        let inputs = Inputs::new(Sdl2Gamepads::new(
+        let inputs = Inputs::new(SDL3Gamepads::new(
             sdl3_context.gamepad().map_err(anyhow::Error::msg)?,
         ));
         let inputs_gui = InputsGui::new(inputs);

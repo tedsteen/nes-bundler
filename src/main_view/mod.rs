@@ -30,7 +30,7 @@ fn to_egui_key(gamepad_button: &GamepadButton) -> Option<egui::Key> {
         GamepadButton::DPadDown => Some(egui::Key::ArrowDown),
         GamepadButton::DPadLeft => Some(egui::Key::ArrowLeft),
         GamepadButton::DPadRight => Some(egui::Key::ArrowRight),
-        GamepadButton::A => Some(egui::Key::Enter),
+        GamepadButton::South => Some(egui::Key::Enter),
         GamepadButton::Guide => Some(egui::Key::Escape),
         _ => None,
     }

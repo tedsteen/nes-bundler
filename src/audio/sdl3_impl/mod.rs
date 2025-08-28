@@ -1,15 +1,12 @@
-use std::sync::{Arc, Mutex, RwLock};
-
 use sdl3::AudioSubsystem;
 use sdl3::audio::{
     AudioCallback, AudioDevice, AudioDeviceID, AudioFormat, AudioSpec, AudioStream as AudioStream2,
     AudioStreamWithCallback,
 };
 
-use crate::audio::{AudioSystem, NesBundlerAudioCallback};
-use crate::emulation::{NESBuffers, NesStateHandler, StateHandler, VideoBufferPool};
-use crate::input::JoypadState;
-use crate::settings::{MAX_PLAYERS, Settings};
+use crate::audio::NesBundlerAudioCallback;
+use crate::emulation::{NESBuffers, NesStateHandler};
+use crate::settings::Settings;
 
 #[derive(Debug, Clone)]
 pub struct SDL3AvailableAudioDevice {
