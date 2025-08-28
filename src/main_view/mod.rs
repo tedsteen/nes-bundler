@@ -1,21 +1,17 @@
-use std::sync::mpsc::Sender;
-
-use egui::{load::SizedTexture, Color32, Image, Vec2};
+use egui::{Color32, Image, Vec2, load::SizedTexture};
 
 use crate::{
-    audio::gui::AudioGui,
-    emulation::{
-        gui::EmulatorGui, EmulatorCommand, VideoBufferPool, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3,
-    },
-    input::{
-        buttons::GamepadButton, gamepad::GamepadEvent, gui::InputsGui, keys::Modifiers, KeyEvent,
-    },
-    integer_scaling::{calculate_size_corrected, MINIMUM_INTEGER_SCALING_SIZE},
-    window::{
-        egui_winit_wgpu::{texture::Texture, Renderer},
-        Fullscreen,
-    },
     Size,
+    audio::gui::AudioGui,
+    emulation::{Emulator, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3, gui::EmulatorGui},
+    input::{
+        KeyEvent, buttons::GamepadButton, gamepad::GamepadEvent, gui::InputsGui, keys::Modifiers,
+    },
+    integer_scaling::{MINIMUM_INTEGER_SCALING_SIZE, calculate_size_corrected},
+    window::{
+        Fullscreen,
+        egui_winit_wgpu::{Renderer, texture::Texture},
+    },
 };
 
 use self::gui::{GuiEvent, MainGui, ToGuiEvent};
@@ -63,9 +59,9 @@ fn to_egui_event(gamepad_event: &GamepadEvent) -> Option<egui::Event> {
 }
 
 impl MainView {
-    pub fn new(mut renderer: Renderer, emulator_tx: Sender<EmulatorCommand>) -> Self {
+    pub fn new(mut renderer: Renderer) -> Self {
         Self {
-            main_gui: MainGui::new(renderer.window.clone(), emulator_tx),
+            main_gui: MainGui::new(renderer.window.clone()),
             modifiers: Modifiers::empty(),
 
             nes_texture: Texture::new(&mut renderer, NES_WIDTH, NES_HEIGHT, Some("nes frame")),
@@ -151,12 +147,12 @@ impl MainView {
 
     pub fn render(
         &mut self,
-        frame_buffer: &VideoBufferPool,
         audio_gui: &mut AudioGui,
         inputs_gui: &mut InputsGui,
         emulator_gui: &mut EmulatorGui,
+        emulator: &mut Emulator,
     ) {
-        if let Some(nes_frame) = &frame_buffer.pop_ref() {
+        if let Some(nes_frame) = &emulator.frame_buffer.pop_ref() {
             self.nes_texture.update(&self.renderer.queue, nes_frame);
         }
 
@@ -211,7 +207,7 @@ impl MainView {
                         });
                     });
             }
-            main_gui.ui(ctx, audio_gui, inputs_gui, emulator_gui);
+            main_gui.ui(ctx, audio_gui, inputs_gui, emulator_gui, emulator);
         });
 
         match render_result {

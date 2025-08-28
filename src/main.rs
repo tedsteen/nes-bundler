@@ -2,11 +2,9 @@
 #![allow(unsafe_code)]
 #![deny(clippy::all)]
 
-use audio::Audio;
 use audio::gui::AudioGui;
 use bundle::Bundle;
 
-use emulation::gui::EmulatorGui;
 use futures::executor::block_on;
 use input::gamepad::ToGamepadEvent;
 use input::gui::InputsGui;
@@ -14,16 +12,16 @@ use input::sdl2_impl::Sdl2Gamepads;
 use input::{Inputs, JoypadState};
 use main_view::MainView;
 
-use sdl2::EventPump;
-use settings::{MAX_PLAYERS, Settings};
+use sdl3::EventPump;
 use winit::application::ApplicationHandler;
 use winit::window::Window;
 
+use crate::audio::AudioSystem;
+use crate::emulation::gui::EmulatorGui;
 use crate::window::Fullscreen;
-use emulation::{Emulator, EmulatorCommand, SAMPLE_RATE, VideoBufferPool};
+use emulation::Emulator;
 use integer_scaling::MINIMUM_INTEGER_SCALING_SIZE;
-use std::sync::mpsc::Sender;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use window::egui_winit_wgpu::Renderer;
 
@@ -55,14 +53,16 @@ async fn main() {
         .collect::<String>()
         .contains(&"--print-netplay-id".to_string())
     {
-        if let netplay::configuration::NetplayServerConfiguration::TurnOn(
-            turn_on_config
-        ) = &Bundle::current().config.netplay.server
+        if let netplay::configuration::NetplayServerConfiguration::TurnOn(turn_on_config) =
+            &Bundle::current().config.netplay.server
         {
             println!("{0}", turn_on_config.get_netplay_id());
             std::process::exit(0);
         } else {
-            eprintln!("Netplay id not applicable for {0:#?}", Bundle::current().config.netplay.server);
+            eprintln!(
+                "Netplay id not applicable for {0:#?}",
+                Bundle::current().config.netplay.server
+            );
             std::process::exit(1);
         }
     }
@@ -75,8 +75,6 @@ async fn main() {
     std::process::exit(0);
 }
 
-type SharedInputs = Arc<RwLock<[JoypadState; MAX_PLAYERS]>>;
-
 struct Application {
     window: Option<Arc<Window>>,
     main_view: Option<MainView>,
@@ -85,42 +83,32 @@ struct Application {
     mouse_hide_timeout: Duration,
     audio_gui: AudioGui,
     inputs_gui: InputsGui,
-    emulator_gui: EmulatorGui,
+    emulator: Emulator,
     sdl_event_pump: EventPump,
-    shared_inputs: SharedInputs,
-    frame_buffer: VideoBufferPool,
-    emulator_tx: Sender<EmulatorCommand>,
+    emulator_gui: EmulatorGui,
 }
+
 impl Application {
     async fn new(_event_loop: &EventLoop<()>) -> anyhow::Result<Self> {
         // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
-        sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
+        sdl3::hint::set("SDL_JOYSTICK_THREAD", "1");
         // TODO: Perhaps do this to fix this issue: https://github.com/libsdl-org/SDL/issues/7896#issuecomment-1616700934
-        //sdl2::hint::set("SDL_JOYSTICK_RAWINPUT", "0");
+        //sdl3::hint::set("SDL_JOYSTICK_RAWINPUT", "0");
 
-        let sdl_context = sdl2::init().map_err(anyhow::Error::msg)?;
-        let sdl_event_pump = sdl_context.event_pump().map_err(anyhow::Error::msg)?;
+        let sdl3_context = sdl3::init().map_err(anyhow::Error::msg)?;
+        let sdl_event_pump = sdl3_context.event_pump().map_err(anyhow::Error::msg)?;
 
-        let mut audio = Audio::new(
-            &sdl_context,
-            Duration::from_millis(Settings::current().audio.latency as u64),
-            SAMPLE_RATE as u32,
-        )?;
+        let audio_system = AudioSystem::new(sdl3_context.audio().expect("An SDL audio subsystem"));
+        let audio_gui = AudioGui::new(audio_system.clone());
 
         let inputs = Inputs::new(Sdl2Gamepads::new(
-            sdl_context.game_controller().map_err(anyhow::Error::msg)?,
+            sdl3_context.gamepad().map_err(anyhow::Error::msg)?,
         ));
-        let audio_tx = audio.stream.start()?;
-
         let inputs_gui = InputsGui::new(inputs);
-        let audio_gui = AudioGui::new(audio);
 
-        let emulator = Emulator::new()?;
-        let shared_inputs = Arc::new(RwLock::new([JoypadState(0); MAX_PLAYERS]));
-        let frame_buffer = VideoBufferPool::new();
-        let (emulator_gui, emulator_tx) = emulator
-            .start_thread(audio_tx, shared_inputs.clone(), frame_buffer.clone())
-            .await?;
+        let emulator = Emulator::new(audio_system).await?;
+        let emulator_gui =
+            EmulatorGui::new(emulator.nes_state.clone(), emulator.command_tx.clone());
 
         let mouse_hide_timeout = Duration::from_secs(1);
         Ok(Self {
@@ -132,11 +120,9 @@ impl Application {
                 .expect("there to be an instant `mouse_hide_timeout` seconds in the past"),
             audio_gui,
             inputs_gui,
+            emulator,
             emulator_gui,
             sdl_event_pump,
-            shared_inputs,
-            frame_buffer,
-            emulator_tx,
         })
     }
 }
@@ -152,7 +138,7 @@ impl ApplicationHandler for Application {
         let window = Arc::new(window);
 
         let renderer = block_on(Renderer::new(window.clone())).expect("a renderer to be created");
-        let main_view = MainView::new(renderer, self.emulator_tx.clone());
+        let main_view = MainView::new(renderer);
         self.main_view = Some(main_view);
         self.window = Some(window);
     }
@@ -165,9 +151,9 @@ impl ApplicationHandler for Application {
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
-        self.audio_gui.audio.sync_audio_devices();
-    }
+    // fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
+    //     self.audio_gui.audio.sync_audio_devices();
+    // }
 
     fn window_event(
         &mut self,
@@ -180,10 +166,10 @@ impl ApplicationHandler for Application {
                 WindowEvent::CloseRequested | WindowEvent::Destroyed => event_loop.exit(),
                 WindowEvent::RedrawRequested => {
                     main_view.render(
-                        &self.frame_buffer,
                         &mut self.audio_gui,
                         &mut self.inputs_gui,
                         &mut self.emulator_gui,
+                        &mut self.emulator,
                     );
                     if let Some(window) = &self.window {
                         window.request_redraw();
@@ -214,7 +200,7 @@ impl ApplicationHandler for Application {
                 // Don't let the inputs control the game if the gui is showing
                 [JoypadState(0), JoypadState(0)]
             };
-            *self.shared_inputs.write().unwrap() = new_inputs;
+            *self.emulator.inputs.write().unwrap() = new_inputs;
 
             main_view.handle_window_event(
                 &window_event,

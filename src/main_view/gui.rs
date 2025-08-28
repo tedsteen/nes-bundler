@@ -1,5 +1,5 @@
 use std::{
-    sync::{mpsc::Sender, Arc, OnceLock, RwLock},
+    sync::{Arc, OnceLock, RwLock},
     time::{Duration, Instant},
 };
 
@@ -11,9 +11,9 @@ use winit::dpi::LogicalSize;
 use crate::{
     audio::gui::AudioGui,
     bundle::Bundle,
-    emulation::{gui::EmulatorGui, EmulatorCommand},
-    gui::{esc_pressed, MenuButton},
-    input::{gamepad::GamepadEvent, gui::InputsGui, KeyEvent},
+    emulation::{Emulator, EmulatorCommand, gui::EmulatorGui},
+    gui::{MenuButton, esc_pressed},
+    input::{KeyEvent, gamepad::GamepadEvent, gui::InputsGui},
     settings::Settings,
 };
 
@@ -30,7 +30,7 @@ pub enum GuiEvent {
 
 pub trait GuiComponent {
     // Runs when gui is visible
-    fn ui(&mut self, _ui: &mut Ui) {}
+    fn ui(&mut self, ui: &mut Ui, emulator: &mut Emulator);
 
     fn messages(&self) -> Option<Vec<String>> {
         None
@@ -52,7 +52,6 @@ pub enum MainMenuState {
 pub struct MainGui {
     start_time: Instant,
     window: Arc<winit::window::Window>,
-    emulator_tx: Sender<EmulatorCommand>,
 }
 
 impl MainGui {
@@ -75,11 +74,10 @@ impl MainGui {
     const MESSAGE_TEXT_BACKGROUND: Color32 = Color32::from_rgba_premultiplied(20, 20, 20, 200);
     const MESSAGE_TEXT_COLOR: Color32 = Color32::from_rgb(255, 255, 255);
 
-    pub fn new(window: Arc<winit::window::Window>, emulator_tx: Sender<EmulatorCommand>) -> Self {
+    pub fn new(window: Arc<winit::window::Window>) -> Self {
         Self {
             start_time: Instant::now(),
             window,
-            emulator_tx,
         }
     }
 
@@ -133,6 +131,7 @@ impl MainGui {
         audio_gui: &mut AudioGui,
         inputs_gui: &mut InputsGui,
         emulator_gui: &mut EmulatorGui,
+        emulator: &mut Emulator,
     ) {
         {
             #[cfg(feature = "debug")]
@@ -177,7 +176,7 @@ impl MainGui {
                                 ui.vertical_centered(|ui| {
                                     ui.heading(name);
                                 });
-                                audio_gui.ui(ui);
+                                audio_gui.ui(ui, emulator);
                             }
                             ui.add_space(10.0);
                             ui.separator();
@@ -186,7 +185,7 @@ impl MainGui {
                                 ui.vertical_centered(|ui| {
                                     ui.heading(name);
                                 });
-                                inputs_gui.ui(ui);
+                                inputs_gui.ui(ui, emulator);
                             }
 
                             if Bundle::current().config.supported_nes_regions.len() > 1 {
@@ -212,8 +211,8 @@ impl MainGui {
                                                 )
                                                 .changed()
                                             {
-                                                let _ = self
-                                                    .emulator_tx
+                                                let _ = emulator
+                                                    .command_tx
                                                     .send(EmulatorCommand::Reset(true));
                                             }
                                         }
@@ -240,7 +239,7 @@ impl MainGui {
                     if emulator_gui.name().is_some() {
                         let name = emulator_gui.name().expect("a name").to_owned();
                         Self::ui_main_container(&self.window, Some(&name), ctx, |ui| {
-                            emulator_gui.ui(ui);
+                            emulator_gui.ui(ui, emulator);
                         });
                     }
                 }

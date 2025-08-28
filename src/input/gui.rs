@@ -1,4 +1,5 @@
 use crate::{
+    emulation::Emulator,
     input::{JoypadButton, JoypadState},
     main_view::gui::{GuiComponent, GuiEvent},
     settings::Settings,
@@ -6,7 +7,7 @@ use crate::{
 use egui::{Color32, Grid, RichText, Ui};
 use serde::Deserialize;
 
-use super::{settings::InputSettings, InputConfiguration, Inputs, MapRequest};
+use super::{InputConfiguration, Inputs, MapRequest, settings::InputSettings};
 
 #[derive(Deserialize, Debug)]
 pub struct InputButtonsVoca {
@@ -150,7 +151,7 @@ impl GuiComponent for InputsGui {
         self.inputs.advance(gui_event);
     }
 
-    fn ui(&mut self, ui: &mut Ui) {
+    fn ui(&mut self, ui: &mut Ui, _emulator: &mut Emulator) {
         let instance = &mut self.inputs;
         let input_settings = &mut Settings::current_mut().input;
         let available_configurations = &mut input_settings

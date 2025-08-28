@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex, mpsc::Sender};
 
-use crate::main_view::gui::GuiComponent;
+use crate::{emulation::Emulator, main_view::gui::GuiComponent};
 
 use super::{EmulatorCommand, StateHandler};
 
@@ -71,7 +71,7 @@ impl DebugGui {
 
 impl GuiComponent for EmulatorGui {
     #[allow(unused_variables)]
-    fn ui(&mut self, ui: &mut egui::Ui) {
+    fn ui(&mut self, ui: &mut egui::Ui, _emulator: &mut Emulator) {
         #[cfg(feature = "debug")]
         self.debug_gui.ui(ui);
 

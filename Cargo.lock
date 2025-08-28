@@ -2766,7 +2766,8 @@ dependencies = [
  "rand 0.9.2",
  "raw-window-handle",
  "reqwest",
- "sdl2",
+ "sdl3",
+ "sdl3-sys",
  "serde",
  "serde_yaml",
  "tetanes-core",
@@ -3825,6 +3826,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "rpkg-config"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a2d2f3481209a6b42eec2fbb49063fb4e8d35b57023401495d4fe0f85c817f0"
+
+[[package]]
 name = "rtcp"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4043,27 +4050,70 @@ dependencies = [
 ]
 
 [[package]]
-name = "sdl2"
-version = "0.38.0"
+name = "sdl3"
+version = "0.14.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d42407afc6a8ab67e36f92e80b8ba34cbdc55aaeed05249efe9a2e8d0e9feef"
+checksum = "0a99b2afb918ecbbda07d4b742bc4b52ea3985a0b24740593d5a3109211c63db"
 dependencies = [
- "bitflags 1.3.2",
+ "bitflags 2.9.3",
  "lazy_static",
  "libc",
- "sdl2-sys",
+ "sdl3-image-sys",
+ "sdl3-sys",
+ "sdl3-ttf-sys",
 ]
 
 [[package]]
-name = "sdl2-sys"
-version = "0.38.0"
+name = "sdl3-image-src"
+version = "3.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ff61407fc75d4b0bbc93dc7e4d6c196439965fbef8e4a4f003a36095823eac0"
+checksum = "c4d0c6070f236297a8e7931cbe5f652e3f0e5a8a214b12984357bd4904874cc7"
+
+[[package]]
+name = "sdl3-image-sys"
+version = "0.2.0+SDL3-image-3.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d92bd93ce75ca9b027474f90c788daf3b5ced8410ee3c1dcb478a10030bf162"
 dependencies = [
- "cfg-if",
  "cmake",
- "libc",
- "version-compare",
+ "rpkg-config",
+ "sdl3-image-src",
+ "sdl3-sys",
+]
+
+[[package]]
+name = "sdl3-src"
+version = "3.2.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bcf3cbc4d49f7ab594e9f5915fd7a051a327544077a8f1df83411f063df4be08"
+
+[[package]]
+name = "sdl3-sys"
+version = "0.5.4+SDL3-3.2.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c4f7f348dea346f67f38bc1392bf1edd9250d4c586479778e849f6ee61af2d8"
+dependencies = [
+ "cmake",
+ "rpkg-config",
+ "sdl3-src",
+]
+
+[[package]]
+name = "sdl3-ttf-src"
+version = "3.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f28923d2ce72ff317d8eb7cec97ddfb8f351c330d7bcbf8c76e91332122c93b3"
+
+[[package]]
+name = "sdl3-ttf-sys"
+version = "0.2.0+SDL3-ttf-3.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d1d8477496fa2b081fb8f63cf8d0a9a9ba6a7a8f2a21b87e7d13d2ab6d73582"
+dependencies = [
+ "cmake",
+ "rpkg-config",
+ "sdl3-sys",
+ "sdl3-ttf-src",
 ]
 
 [[package]]
@@ -5022,12 +5072,6 @@ name = "vec1"
 version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eab68b56840f69efb0fefbe3ab6661499217ffdc58e2eef7c3f6f69835386322"
-
-[[package]]
-name = "version-compare"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "579a42fc0b8e0c63b76519a339be31bed574929511fa53c1a3acae26eb258f29"
 
 [[package]]
 name = "version_check"

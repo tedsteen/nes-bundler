@@ -116,7 +116,7 @@ impl TetanesNesState {
                 });
         }
         if let Some(audio) = &mut buffers.audio {
-            audio.extend_from_slice(self.control_deck.cpu().bus.audio_samples());
+            audio.extend(self.control_deck.cpu().bus.audio_samples());
         }
 
         self.control_deck.clear_audio_samples();

@@ -4,6 +4,7 @@ use std::{
         Arc, Mutex, RwLock,
         mpsc::{Sender, channel},
     },
+    time::Duration,
 };
 
 use anyhow::Result;
@@ -13,14 +14,14 @@ use serde::{Deserialize, Serialize};
 use thingbuf::{Recycle, ThingBuf};
 
 use crate::{
-    audio::AudioSender,
+    audio::{AudioStream, AudioSystem, AvailableAudioDevice, NesBundlerAudioCallback},
     input::JoypadState,
     settings::{MAX_PLAYERS, Settings},
 };
 
 pub mod gui;
 pub mod tetanes;
-use self::{gui::EmulatorGui, tetanes::TetanesNesState};
+use self::tetanes::TetanesNesState;
 pub type LocalNesState = TetanesNesState;
 
 pub const NES_WIDTH: u32 = 256;
@@ -39,20 +40,20 @@ pub enum EmulatorCommand {
     Reset(bool),
     SetSpeed(f32),
 }
-pub struct Emulator {}
+
+pub struct Emulator {
+    audio_system: AudioSystem,
+    pub command_tx: Sender<EmulatorCommand>,
+    pub frame_buffer: VideoBufferPool,
+    pub inputs: Arc<RwLock<[JoypadState; 2]>>,
+    pub nes_state: Arc<Mutex<crate::netplay::NetplayStateHandler>>,
+    pub stream: AudioStream,
+}
+
 pub const SAMPLE_RATE: f32 = 44_100.0;
 
 impl Emulator {
-    pub fn new() -> Result<Self> {
-        Ok(Self {})
-    }
-
-    pub async fn start_thread(
-        &self,
-        audio_tx: AudioSender,
-        inputs: Arc<RwLock<[JoypadState; MAX_PLAYERS]>>,
-        frame_buffer: VideoBufferPool,
-    ) -> Result<(EmulatorGui, Sender<EmulatorCommand>)> {
+    pub async fn new(audio_system: AudioSystem) -> Result<Self> {
         #[cfg(not(feature = "netplay"))]
         let nes_state = crate::emulation::LocalNesState::start_rom(
             &crate::bundle::Bundle::current().rom,
@@ -65,63 +66,74 @@ impl Emulator {
 
         let nes_state = Arc::new(Mutex::new(nes_state));
         let (command_tx, command_rx) = channel();
-        let audio_buffer = AudioBufferPool::new();
+        let inputs = Arc::new(RwLock::new([JoypadState(0); MAX_PLAYERS]));
+        let frame_buffer = VideoBufferPool::new();
+
+        let stream = audio_system.start_stream(
+            Settings::current_mut()
+                .audio
+                .get_selected_device(&audio_system),
+            NesBundlerAudioCallback {
+                audio_buffer: Vec::new(),
+                frame_buffer: frame_buffer.clone(),
+                inputs: inputs.clone(),
+                nes_state: nes_state.clone(),
+            },
+        );
 
         tokio::task::spawn({
             let nes_state = nes_state.clone();
             async move {
                 loop {
-                    for command in command_rx.try_iter() {
+                    for command in command_rx.iter() {
                         let mut nes_state = nes_state.lock().unwrap();
                         match command {
                             EmulatorCommand::Reset(hard) => nes_state.reset(hard),
                             EmulatorCommand::SetSpeed(speed) => nes_state.set_speed(speed),
                         }
                     }
-
-                    // Run advance and audio pushing in parallel
-                    let _ = tokio::join!(
-                        tokio::spawn({
-                            let audio_buffer = audio_buffer.clone();
-                            let audio_tx = audio_tx.clone();
-                            async move {
-                                #[cfg(feature = "debug")]
-                                puffin::profile_scope!("push audio");
-                                audio_buffer.pop_with(|audio_buffer| {
-                                    for s in audio_buffer.drain(..) {
-                                        let _ = audio_tx.send(s);
-                                    }
-                                });
-                            }
-                        }),
-                        tokio::spawn({
-                            let frame_buffer = frame_buffer.clone();
-                            let nes_state = nes_state.clone();
-                            let joypad_state = *inputs.read().unwrap();
-                            let audio_buffer = audio_buffer.clone();
-                            async move {
-                                log::trace!("Advance NES with joypad state {:?}", joypad_state);
-                                nes_state.lock().unwrap().advance(
-                                    joypad_state,
-                                    &mut NESBuffers {
-                                        video: frame_buffer.push_ref().as_deref_mut().ok(),
-                                        audio: audio_buffer.push_ref().as_deref_mut().ok(),
-                                    },
-                                );
-                            }
-                        })
-                    );
-                    use base64::Engine;
-                    use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
-                    Settings::current_mut().save_state = nes_state
-                        .lock()
-                        .unwrap()
-                        .save_sram()
-                        .map(|sram| b64.encode(sram));
                 }
             }
         });
-        Ok((EmulatorGui::new(nes_state, command_tx.clone()), command_tx))
+        tokio::task::spawn({
+            let nes_state = nes_state.clone();
+            async move {
+                let mut ticker = tokio::time::interval(Duration::from_millis(500));
+                loop {
+                    ticker.tick().await;
+                    use base64::Engine;
+                    use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+                    if let Some(sram) = nes_state.lock().unwrap().save_sram() {
+                        Settings::current_mut().save_state = Some(b64.encode(sram));
+                    }
+                }
+            }
+        });
+
+        Ok(Self {
+            audio_system,
+            frame_buffer,
+            command_tx,
+            inputs,
+            nes_state,
+            stream,
+        })
+    }
+
+    pub(crate) fn swap_output_device(&mut self, device: AvailableAudioDevice) {
+        self.stream
+            .audio_stream_with_callback
+            .pause()
+            .expect("TODO a paused stream");
+        self.stream = self.audio_system.start_stream(
+            device,
+            NesBundlerAudioCallback {
+                audio_buffer: Vec::new(),
+                frame_buffer: self.frame_buffer.clone(),
+                inputs: self.inputs.clone(),
+                nes_state: self.nes_state.clone(),
+            },
+        );
     }
 }
 
@@ -152,7 +164,7 @@ impl NesRegion {
 }
 
 pub struct NESBuffers<'a> {
-    pub audio: Option<&'a mut NESAudioFrame>,
+    pub audio: Option<&'a mut Vec<f32>>,
     pub video: Option<&'a mut NESVideoFrame>,
 }
 
@@ -192,26 +204,6 @@ impl DerefMut for NESVideoFrame {
     }
 }
 
-pub struct NESAudioFrame(Vec<f32>);
-impl NESAudioFrame {
-    pub fn new() -> NESAudioFrame {
-        Self(Vec::new())
-    }
-}
-
-impl Deref for NESAudioFrame {
-    type Target = Vec<f32>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for NESAudioFrame {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
 #[derive(Debug)]
 pub struct FrameRecycle;
 
@@ -240,36 +232,6 @@ impl Deref for VideoBufferPool {
 }
 
 impl Clone for VideoBufferPool {
-    fn clone(&self) -> Self {
-        Self(Arc::clone(&self.0))
-    }
-}
-
-impl Recycle<NESAudioFrame> for FrameRecycle {
-    fn new_element(&self) -> NESAudioFrame {
-        NESAudioFrame::new()
-    }
-
-    fn recycle(&self, _frame: &mut NESAudioFrame) {}
-}
-
-#[derive(Debug)]
-pub struct AudioBufferPool(Arc<ThingBuf<NESAudioFrame, FrameRecycle>>);
-
-impl AudioBufferPool {
-    pub fn new() -> Self {
-        Self(Arc::new(ThingBuf::with_recycle(2, FrameRecycle)))
-    }
-}
-
-impl Deref for AudioBufferPool {
-    type Target = Arc<ThingBuf<NESAudioFrame, FrameRecycle>>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl Clone for AudioBufferPool {
     fn clone(&self) -> Self {
         Self(Arc::clone(&self.0))
     }

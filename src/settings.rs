@@ -13,7 +13,7 @@ use std::{
     hash::{Hash, Hasher},
     io::{BufReader, BufWriter},
     ops::{Deref, DerefMut},
-    sync::{OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard},
+    sync::{OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockResult},
 };
 
 pub const MAX_PLAYERS: usize = 2;
@@ -76,6 +76,10 @@ impl Settings {
 
     pub fn current<'a>() -> RwLockReadGuard<'a, Settings> {
         Self::_current().read().unwrap()
+    }
+
+    pub fn try_current<'a>() -> TryLockResult<RwLockReadGuard<'a, Settings>> {
+        Self::_current().try_read()
     }
 
     #[cfg(feature = "netplay")]
