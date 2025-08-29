@@ -9,14 +9,15 @@ use crate::{
     gui::{MenuButton, esc_pressed},
     main_view::gui::{MainGui, MainMenuState},
     netplay::{
-        connecting_state::{LoadingNetplayServerConfigurationState, PeeringState, StartMethod},
+        connecting_state::{
+            ConnectingState, SharedConnectingState, StartMethod, SynchonizingState,
+        },
         netplay_state::MAX_ROOM_NAME_LEN,
     },
 };
 
 use super::{
-    ConnectingState, NetplayStateHandler,
-    connecting_state::SynchonizingState,
+    NetplayStateHandler,
     netplay_state::{ConnectedState, Netplay, NetplayState},
 };
 #[cfg(feature = "debug")]
@@ -278,7 +279,7 @@ impl NetplayGui {
     fn ui_connecting(
         &mut self,
         ui: &mut Ui,
-        netplay_connecting: Netplay<ConnectingState>,
+        netplay_connecting: Netplay<SharedConnectingState>,
     ) -> NetplayState {
         enum Action {
             Cancel,
@@ -286,12 +287,9 @@ impl NetplayGui {
         }
         let mut action = None;
         let netplay_voca = &Bundle::current().config.vocabulary.netplay;
-
-        match &netplay_connecting.state {
-            ConnectingState::LoadingNetplayServerConfiguration(
-                LoadingNetplayServerConfigurationState { start_method, .. },
-            )
-            | ConnectingState::PeeringUp(PeeringState { start_method, .. }) => match start_method {
+        match &*netplay_connecting.state.borrow() {
+            ConnectingState::LoadingNetplayServerConfiguration(start_method, ..)
+            | ConnectingState::PeeringUp(start_method, ..) => match start_method {
                 StartMethod::Start(.., room_name, join_or_host) => {
                     use super::connecting_state::JoinOrHost::*;
                     match join_or_host {
@@ -364,7 +362,7 @@ impl NetplayGui {
                         .ui(ui);
                     });
                 }
-                StartMethod::Resume(_) => {
+                StartMethod::Resume(..) => {
                     //This is used internally during the `NetplayState::Resuming` state
                 }
             },
@@ -375,7 +373,7 @@ impl NetplayGui {
                         .ui(ui);
                 });
                 ui.end_row();
-                if let Some(unlock_url) = Self::needs_unlocking(synchronizing_state) {
+                if let Some(unlock_url) = Self::needs_unlocking(&synchronizing_state) {
                     ui.vertical_centered(|ui| {
                         ui.set_width(300.0);
                         ui.horizontal_wrapped(|ui| {

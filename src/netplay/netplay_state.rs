@@ -6,6 +6,7 @@ use crate::{
     bundle::Bundle,
     emulation::{LocalNesState, NESBuffers, NesStateHandler},
     input::JoypadState,
+    netplay::connecting_state::{ConnectingSession, SharedConnectingState},
     settings::{MAX_PLAYERS, Settings},
 };
 
@@ -16,7 +17,7 @@ use super::{
 
 pub enum NetplayState {
     Disconnected(Netplay<LocalNesState>),
-    Connecting(Netplay<ConnectingState>),
+    Connecting(Netplay<SharedConnectingState>),
     Connected(Netplay<ConnectedState>),
     Resuming(Netplay<ResumingState>),
     Failed(Netplay<FailedState>),
@@ -46,6 +47,7 @@ impl NetplayState {
 pub struct Netplay<T> {
     pub state: T,
 }
+//TODO: Remove this
 unsafe impl<T> Send for Netplay<T> {}
 
 impl<T> Netplay<T> {
@@ -58,6 +60,11 @@ impl<T> Netplay<T> {
         Netplay::new().expect("disconnect to work")
     }
 }
+impl Netplay<LocalNesState> {
+    pub fn connect(start_method: StartMethod) -> Netplay<SharedConnectingState> {
+        Netplay::from(ConnectingSession::new(start_method.clone()))
+    }
+}
 
 pub struct ConnectedState {
     pub netplay_session: NetplaySessionState,
@@ -68,25 +75,29 @@ pub struct ConnectedState {
 }
 
 pub struct ResumingState {
-    attempt1: ConnectingState,
-    attempt2: ConnectingState,
+    attempt1: SharedConnectingState,
+    attempt2: SharedConnectingState,
 }
 impl ResumingState {
     fn new(netplay: &mut Netplay<ConnectedState>) -> Self {
         let netplay_session = &netplay.state.netplay_session;
-
         let session_id = netplay.state.session_id.clone();
+
         Self {
-            attempt2: ConnectingState::resume(
-                netplay_session.last_confirmed_game_state2.clone(),
-                session_id.clone(),
+            attempt2: ConnectingSession::new(StartMethod::Resume(
+                StartState {
+                    game_state: netplay_session.last_confirmed_game_state2.clone(),
+                    session_id: session_id.clone(),
+                },
                 netplay_session.netplay_server_configuration.clone(),
-            ),
-            attempt1: ConnectingState::resume(
-                netplay_session.last_confirmed_game_state1.clone(),
-                session_id.clone(),
+            )),
+            attempt1: ConnectingSession::new(StartMethod::Resume(
+                StartState {
+                    game_state: netplay_session.last_confirmed_game_state1.clone(),
+                    session_id: session_id.clone(),
+                },
                 netplay_session.netplay_server_configuration.clone(),
-            ),
+            )),
         }
     }
 }
@@ -156,7 +167,8 @@ impl Netplay<LocalNesState> {
 
     pub fn start(self, start_method: StartMethod) -> NetplayState {
         log::debug!("Starting: {:?}", start_method);
-        NetplayState::Connecting(Netplay::from(ConnectingState::connect(start_method)))
+
+        NetplayState::Connecting(Netplay::connect(start_method))
     }
 
     fn advance(mut self, joypad_state: [JoypadState; 2], buffers: &mut NESBuffers) -> NetplayState {
@@ -165,39 +177,45 @@ impl Netplay<LocalNesState> {
     }
 }
 
-impl Netplay<ConnectingState> {
+impl Netplay<SharedConnectingState> {
     pub fn cancel(self) -> Netplay<LocalNesState> {
         log::debug!("Connection cancelled by user");
         self.disconnect()
     }
 
-    fn advance(mut self) -> NetplayState {
-        //log::trace!("Advancing Netplay<ConnectingState>");
-        self.state = self.state.advance();
-        match self.state {
-            ConnectingState::Connected(connected) => {
+    fn advance(self) -> NetplayState {
+        let state = self.state.clone();
+
+        match &mut *state.borrow_mut() {
+            ConnectingState::Connected(netplay_session_state) => {
                 log::debug!("Connected! Starting netplay session");
-                NetplayState::Connected(Netplay {
-                    state: ConnectedState {
-                        start_time: Instant::now(),
-                        session_id: match &connected.start_method {
-                            StartMethod::Start(StartState { session_id, .. }, ..)
-                            | StartMethod::MatchWithRandom(StartState { session_id, .. })
-                            | StartMethod::Resume(StartState { session_id, .. }) => {
-                                session_id.clone()
-                            }
+                if let Some(netplay_session_state) = netplay_session_state.take() {
+                    NetplayState::Connected(Netplay {
+                        state: ConnectedState {
+                            start_time: Instant::now(),
+                            session_id: match &netplay_session_state.start_method {
+                                StartMethod::Start(StartState { session_id, .. }, ..)
+                                | StartMethod::MatchWithRandom(StartState { session_id, .. })
+                                | StartMethod::Resume(StartState { session_id, .. }, ..) => {
+                                    session_id.clone()
+                                }
+                            },
+                            netplay_session: netplay_session_state,
+                            #[cfg(feature = "debug")]
+                            stats: [
+                                crate::netplay::stats::NetplayStats::new(),
+                                crate::netplay::stats::NetplayStats::new(),
+                            ],
                         },
-                        netplay_session: connected,
-                        #[cfg(feature = "debug")]
-                        stats: [
-                            crate::netplay::stats::NetplayStats::new(),
-                            crate::netplay::stats::NetplayStats::new(),
-                        ],
-                    },
-                })
+                    })
+                } else {
+                    NetplayState::Connecting(self)
+                }
             }
             ConnectingState::Failed(reason) => NetplayState::Failed(Netplay {
-                state: FailedState { reason },
+                state: FailedState {
+                    reason: reason.to_string(),
+                },
             }),
             _ => NetplayState::Connecting(self),
         }
@@ -246,18 +264,16 @@ impl Netplay<ConnectedState> {
 }
 
 impl Netplay<ResumingState> {
-    fn advance(mut self) -> NetplayState {
+    fn advance(self) -> NetplayState {
         //log::trace!("Advancing Netplay<Resuming>");
-        self.state.attempt2 = self.state.attempt2.advance();
-        self.state.attempt1 = self.state.attempt1.advance();
 
-        if let ConnectingState::Connected(_) = &self.state.attempt2 {
+        if let ConnectingState::Connected(_) = *self.state.attempt2.borrow() {
             NetplayState::Connecting(Netplay {
-                state: self.state.attempt2,
+                state: self.state.attempt2.clone(),
             })
-        } else if let ConnectingState::Connected(_) = &self.state.attempt1 {
+        } else if let ConnectingState::Connected(_) = *self.state.attempt1.borrow() {
             NetplayState::Connecting(Netplay {
-                state: self.state.attempt1,
+                state: self.state.attempt1.clone(),
             })
         } else {
             NetplayState::Resuming(self)

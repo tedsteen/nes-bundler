@@ -13,6 +13,7 @@ use input::{Inputs, JoypadState};
 use main_view::MainView;
 
 use sdl3::EventPump;
+use tokio::task::LocalSet;
 use winit::application::ApplicationHandler;
 use winit::window::Window;
 
@@ -46,6 +47,7 @@ mod settings;
 mod window;
 
 #[tokio::main(worker_threads = 2)]
+//#[tokio::main(flavor = "current_thread")]
 async fn main() {
     init_logger();
 
@@ -67,9 +69,20 @@ async fn main() {
             std::process::exit(1);
         }
     }
-
+    // let rt = tokio::runtime::Builder::new_current_thread()
+    //     .enable_all()
+    //     .build()
+    //     .unwrap();
     log::info!("NES Bundler is starting!");
-
+    // let local = LocalSet::new();
+    // local
+    //     .spawn_local(async {
+    //         if let Err(e) = run().await {
+    //             log::error!("nes-bundler failed to run :(\n{:?}", e)
+    //         }
+    //     })
+    //     .await
+    //     .expect("TODO");
     if let Err(e) = run().await {
         log::error!("nes-bundler failed to run :(\n{:?}", e)
     }

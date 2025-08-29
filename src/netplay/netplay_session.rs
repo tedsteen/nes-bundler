@@ -40,7 +40,7 @@ impl NetplaySessionState {
     ) -> Self {
         let mut game_state = match &start_method {
             StartMethod::Start(start_state, ..)
-            | StartMethod::Resume(start_state)
+            | StartMethod::Resume(start_state, ..)
             | StartMethod::MatchWithRandom(start_state) => start_state.clone().game_state,
         };
         //Start counting from 0 to be in sync with ggrs frame counter.
