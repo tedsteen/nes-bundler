@@ -45,9 +45,7 @@ mod netplay;
 mod settings;
 mod window;
 
-#[tokio::main(worker_threads = 2)]
-//#[tokio::main(flavor = "current_thread")]
-async fn main() {
+fn main() {
     init_logger();
 
     #[cfg(feature = "netplay")]
@@ -82,7 +80,7 @@ async fn main() {
     //     })
     //     .await
     //     .expect("TODO");
-    if let Err(e) = run().await {
+    if let Err(e) = run() {
         log::error!("nes-bundler failed to run :(\n{:?}", e)
     }
     std::process::exit(0);
@@ -102,7 +100,7 @@ struct Application {
 }
 
 impl Application {
-    async fn new(_event_loop: &EventLoop<()>) -> anyhow::Result<Self> {
+    fn new(_event_loop: &EventLoop<()>) -> anyhow::Result<Self> {
         // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
         sdl3::hint::set("SDL_JOYSTICK_THREAD", "1");
         // TODO: Perhaps do this to fix this issue: https://github.com/libsdl-org/SDL/issues/7896#issuecomment-1616700934
@@ -119,7 +117,7 @@ impl Application {
         );
         drop(settings);
 
-        let emulator = Emulator::new(stream).await?;
+        let emulator = Emulator::new(stream)?;
         let audio_gui = AudioGui::new(audio_system.clone());
 
         let inputs = Inputs::new(SDL3Gamepads::new(
@@ -243,11 +241,11 @@ impl ApplicationHandler for Application {
     }
 }
 
-async fn run() -> anyhow::Result<()> {
+fn run() -> anyhow::Result<()> {
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
-    let app = &mut Application::new(&event_loop).await?;
+    let app = &mut Application::new(&event_loop)?;
 
     event_loop.run_app(app)?;
 

@@ -212,8 +212,9 @@ impl MainGui {
                                                 .changed()
                                             {
                                                 let _ = emulator
-                                                    .command_tx
-                                                    .send(EmulatorCommand::Reset(true));
+                                                    .shared_state
+                                                    .emulator_command_tx
+                                                    .try_send(EmulatorCommand::Reset(true));
                                             }
                                         }
                                     });

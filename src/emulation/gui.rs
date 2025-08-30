@@ -31,13 +31,11 @@ impl EmulatorGui {
 #[cfg(feature = "debug")]
 impl DebugGui {
     fn ui(&mut self, ui: &mut egui::Ui, emulator: &mut Emulator) {
-        use crate::emulation::NesStateHandler;
-
         ui.end_row();
 
         ui.label(format!(
             "Frame: {}",
-            emulator.shared_nes_state.lock().unwrap().frame()
+            emulator.shared_state.emulator_state.read().unwrap().frame
         ));
         ui.end_row();
 
@@ -46,15 +44,19 @@ impl DebugGui {
             .changed()
             && !self.override_speed
         {
-            let _ = emulator.command_tx.send(EmulatorCommand::SetSpeed(1.0));
+            let _ = emulator
+                .shared_state
+                .emulator_command_tx
+                .try_send(EmulatorCommand::SetSpeed(1.0));
         }
 
         if self.override_speed {
             ui.end_row();
             ui.add(egui::Slider::new(&mut self.speed, 0.005..=2.0).suffix("x"));
             let _ = emulator
-                .command_tx
-                .send(EmulatorCommand::SetSpeed(self.speed));
+                .shared_state
+                .emulator_command_tx
+                .try_send(EmulatorCommand::SetSpeed(self.speed));
         }
         ui.end_row();
     }

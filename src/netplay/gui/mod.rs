@@ -5,18 +5,18 @@ use serde::Deserialize;
 
 use crate::{
     bundle::Bundle,
-    emulation::{Emulator, LocalNesState},
+    emulation::{
+        Emulator, NetplayCommandBus, SharedNetplayConnectedState, SharedNetplayConnectingState,
+        SharedNetplayState,
+    },
     gui::{MenuButton, esc_pressed},
     main_view::gui::{MainGui, MainMenuState},
     netplay::{
-        connecting_state::{
-            ConnectingState, SharedConnectingState, StartMethod, SynchonizingState,
-        },
+        connecting_state::{StartMethod, SynchonizingState},
         netplay_state::MAX_ROOM_NAME_LEN,
     },
 };
 
-use super::netplay_state::{ConnectedState, Netplay, NetplayState};
 #[cfg(feature = "debug")]
 mod debug;
 
@@ -89,10 +89,10 @@ impl NetplayGui {
         }
 
         Some(
-            match &emulator.shared_nes_state.lock().unwrap().netplay {
+            match &*emulator.shared_state.netplay_state.read().unwrap() {
                 // Connecting is a modal state, you can't see any messages when in the netplay UI anyway
-                Some(NetplayState::Connecting(_)) => None,
-                Some(NetplayState::Resuming(_)) => Some("Trying to reconnect...".to_string()),
+                SharedNetplayState::Connecting(_) => None,
+                SharedNetplayState::Resuming => Some("Trying to reconnect...".to_string()),
                 _ => None,
             }
             .iter()
@@ -101,11 +101,7 @@ impl NetplayGui {
         )
     }
 
-    fn ui_disconnected(
-        &mut self,
-        ui: &mut Ui,
-        netplay_disconnected: Netplay<LocalNesState>,
-    ) -> NetplayState {
+    fn ui_disconnected(&mut self, ui: &mut Ui, netplay_tx: &NetplayCommandBus) {
         if let Some(room_name) = &mut self.room_name {
             enum Action {
                 Join(String),
@@ -193,9 +189,8 @@ impl NetplayGui {
                 self.room_name = None;
                 match action {
                     Action::Join(room_name) => {
-                        return netplay_disconnected
-                            .join_game(&room_name)
-                            .expect("to be able to join game");
+                        let _ = netplay_tx
+                            .try_send(crate::emulation::NetplayCommand::JoinGame(room_name));
                     }
                 }
             }
@@ -256,37 +251,32 @@ impl NetplayGui {
             if let Some(action) = action {
                 match action {
                     Action::Find => {
-                        return netplay_disconnected
-                            .find_game()
-                            .expect("to be able to find a game");
+                        let _ = netplay_tx.try_send(crate::emulation::NetplayCommand::FindGame);
                     }
                     Action::Join => self.room_name = Some(String::new()),
                     Action::Host => {
-                        return netplay_disconnected
-                            .host_game()
-                            .expect("to be able to host a game");
+                        let _ = netplay_tx.try_send(crate::emulation::NetplayCommand::HostGame);
                     }
                 }
             }
         }
-
-        NetplayState::Disconnected(netplay_disconnected)
     }
 
     fn ui_connecting(
         &mut self,
         ui: &mut Ui,
-        netplay_connecting: Netplay<SharedConnectingState>,
-    ) -> NetplayState {
+        netplay_connecting: &SharedNetplayConnectingState,
+        netplay_tx: &NetplayCommandBus,
+    ) {
         enum Action {
             Cancel,
             Retry(StartMethod),
         }
         let mut action = None;
         let netplay_voca = &Bundle::current().config.vocabulary.netplay;
-        match &*netplay_connecting.state.borrow() {
-            ConnectingState::LoadingNetplayServerConfiguration(start_method, ..)
-            | ConnectingState::PeeringUp(start_method, ..) => match start_method {
+        match &netplay_connecting {
+            SharedNetplayConnectingState::LoadingNetplayServerConfiguration(start_method, ..)
+            | SharedNetplayConnectingState::PeeringUp(start_method, ..) => match start_method {
                 StartMethod::Start(.., room_name, join_or_host) => {
                     use super::connecting_state::JoinOrHost::*;
                     match join_or_host {
@@ -363,7 +353,7 @@ impl NetplayGui {
                     //This is used internally during the `NetplayState::Resuming` state
                 }
             },
-            ConnectingState::Synchronizing(synchronizing_state) => {
+            SharedNetplayConnectingState::Synchronizing(synchronizing_state) => {
                 ui.vertical_centered(|ui| {
                     Label::new(MenuButton::ui_text("PAIRING UP", MenuButton::ACTIVE_COLOR))
                         .selectable(false)
@@ -390,7 +380,7 @@ impl NetplayGui {
                     });
                 }
             }
-            ConnectingState::Failed(reason) => {
+            SharedNetplayConnectingState::Failed(reason) => {
                 ui.vertical_centered(|ui| {
                     Label::new(MenuButton::ui_text(
                         "FAILED TO CONNECT",
@@ -405,8 +395,7 @@ impl NetplayGui {
                     Label::new(ui_text_small(reason, MenuButton::ACTIVE_COLOR)).ui(ui);
                 });
             }
-            // NOTE: This captures retrying and connected. Let's just show "CONNECTING" during that state
-            _ => {
+            SharedNetplayConnectingState::Connecting | SharedNetplayConnectingState::Retry => {
                 ui.vertical_centered(|ui| {
                     Label::new(MenuButton::ui_text("CONNECTING", MenuButton::ACTIVE_COLOR))
                         .selectable(false)
@@ -430,24 +419,25 @@ impl NetplayGui {
         if let Some(action) = action {
             match action {
                 Action::Cancel => {
-                    return NetplayState::Disconnected(netplay_connecting.cancel());
+                    let _ = netplay_tx.try_send(crate::emulation::NetplayCommand::CancelConnect);
                 }
                 Action::Retry(start_method) => {
-                    return netplay_connecting.cancel().start(start_method);
+                    let _ = netplay_tx
+                        .send(crate::emulation::NetplayCommand::RetryConnect(start_method));
                 }
             }
         }
-        NetplayState::Connecting(netplay_connecting)
     }
 
     fn ui_connected(
         &mut self,
         ui: &mut Ui,
-        netplay_connected: Netplay<ConnectedState>,
-    ) -> NetplayState {
+        netplay_connected: &SharedNetplayConnectedState,
+        netplay_tx: &NetplayCommandBus,
+    ) {
         // Hide menu if we just managed to connect
         if Instant::now()
-            .duration_since(netplay_connected.state.start_time)
+            .duration_since(netplay_connected.start_time)
             .as_millis()
             < 200
         {
@@ -482,10 +472,11 @@ impl NetplayGui {
         #[cfg(feature = "debug")]
         {
             ui.vertical_centered(|ui| {
-                ui.collapsing("Stats", |ui| {
-                    Self::stats_ui(ui, &netplay_connected.state.stats[0], 0);
-                    Self::stats_ui(ui, &netplay_connected.state.stats[1], 1);
-                });
+                //TODO: Re-enable this
+                // ui.collapsing("Stats", |ui| {
+                //     Self::stats_ui(ui, &netplay_connected.state.stats[0], 0);
+                //     Self::stats_ui(ui, &netplay_connected.state.stats[1], 1);
+                // });
                 if ui.button("Fake connection lost").clicked() {
                     action = Some(Action::FakeDisconnect);
                 }
@@ -497,27 +488,36 @@ impl NetplayGui {
             match action {
                 Action::FakeDisconnect => {
                     log::debug!("Manually resuming connection (faking a lost connection)");
-                    return NetplayState::Resuming(netplay_connected.resume());
+                    let _ = netplay_tx.try_send(crate::emulation::NetplayCommand::Resume);
                 }
                 Action::Disconnect => {
-                    return NetplayState::Disconnected(netplay_connected.disconnect());
+                    let _ = netplay_tx.try_send(crate::emulation::NetplayCommand::Disconnect);
                 }
             }
         }
-        NetplayState::Connected(netplay_connected)
     }
 
     pub fn ui(&mut self, ui: &mut Ui, emulator: &mut Emulator) {
-        let netplay = &mut emulator.shared_nes_state.lock().unwrap().netplay;
-        *netplay = Some(match netplay.take().unwrap() {
-            NetplayState::Disconnected(netplay_disconnected) => {
-                self.ui_disconnected(ui, netplay_disconnected)
+        let netplay_tx = &emulator.shared_state.netplay_command_tx;
+        match &*emulator.shared_state.netplay_state.read().unwrap() {
+            SharedNetplayState::Disconnected => {
+                self.ui_disconnected(ui, &emulator.shared_state.netplay_command_tx);
             }
-            NetplayState::Connecting(netplay_connecting) => {
-                self.ui_connecting(ui, netplay_connecting)
+            SharedNetplayState::Connecting(netplay_connecting) => {
+                self.ui_connecting(
+                    ui,
+                    netplay_connecting,
+                    &emulator.shared_state.netplay_command_tx,
+                );
             }
-            NetplayState::Connected(netplay_connected) => self.ui_connected(ui, netplay_connected),
-            NetplayState::Resuming(netplay_resuming) => {
+            SharedNetplayState::Connected(netplay_connected) => {
+                self.ui_connected(
+                    ui,
+                    netplay_connected,
+                    &emulator.shared_state.netplay_command_tx,
+                );
+            }
+            SharedNetplayState::Resuming => {
                 ui.vertical_centered(|ui| {
                     Label::new(MenuButton::ui_text("RESUMING...", MenuButton::ACTIVE_COLOR))
                         .selectable(false)
@@ -534,23 +534,16 @@ impl NetplayGui {
                 }
 
                 if disconnect_clicked {
-                    NetplayState::Disconnected(netplay_resuming.cancel())
-                } else {
-                    NetplayState::Resuming(netplay_resuming)
+                    let _ = netplay_tx.try_send(crate::emulation::NetplayCommand::CancelConnect);
                 }
             }
-            NetplayState::Failed(netplay_failed) => {
-                ui.label(format!(
-                    "Failed to connect: {}",
-                    netplay_failed.state.reason
-                ));
+            SharedNetplayState::Failed(reason) => {
+                ui.label(format!("Failed to connect: {}", reason));
                 if ui.button("Ok").clicked() || esc_pressed(ui.ctx()) {
-                    NetplayState::Disconnected(netplay_failed.disconnect())
-                } else {
-                    NetplayState::Failed(netplay_failed)
+                    let _ = netplay_tx.try_send(crate::emulation::NetplayCommand::Disconnect);
                 }
             }
-        });
+        };
     }
 
     pub fn name(&self) -> Option<&str> {

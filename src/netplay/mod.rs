@@ -13,7 +13,7 @@ use self::{
 };
 
 pub mod configuration;
-mod connecting_state;
+pub mod connecting_state;
 pub mod gui;
 mod netplay_session;
 mod netplay_state;
@@ -151,5 +151,55 @@ impl NetplayStateHandler {
         Ok(NetplayStateHandler {
             netplay: Some(NetplayState::Disconnected(Netplay::new()?)),
         })
+    }
+    //TODO: Everything below this line is retarded, fix
+    pub fn host_game(&mut self) {
+        self.netplay = self.netplay.take().map(|s| match s {
+            NetplayState::Disconnected(np) => np.host_game().expect("TODO"),
+            other => other,
+        });
+    }
+
+    pub(crate) fn join_game(&mut self, room_name: String) {
+        self.netplay = self.netplay.take().map(|s| match s {
+            NetplayState::Disconnected(np) => np.join_game(&room_name).expect("TODO"),
+            other => other,
+        });
+    }
+
+    pub(crate) fn find_game(&mut self) {
+        self.netplay = self.netplay.take().map(|s| match s {
+            NetplayState::Disconnected(np) => np.find_game().expect("TODO"),
+            other => other,
+        });
+    }
+
+    pub(crate) fn cancel_connect(&mut self) {
+        self.netplay = self.netplay.take().map(|s| match s {
+            NetplayState::Connecting(np) => NetplayState::Disconnected(np.cancel()),
+            other => other,
+        });
+    }
+
+    pub(crate) fn retry_connect(&mut self, start_method: StartMethod) {
+        self.netplay = self.netplay.take().map(|s| match s {
+            NetplayState::Connecting(np) => np.cancel().start(start_method),
+            other => other,
+        });
+    }
+
+    pub(crate) fn resume(&mut self) {
+        self.netplay = self.netplay.take().map(|s| match s {
+            NetplayState::Connected(np) => NetplayState::Resuming(np.resume()),
+            other => other,
+        });
+    }
+
+    pub(crate) fn disconnect(&mut self) {
+        self.netplay = self.netplay.take().map(|s| match s {
+            NetplayState::Failed(np) => NetplayState::Disconnected(np.disconnect()),
+            NetplayState::Connected(np) => NetplayState::Disconnected(np.disconnect()),
+            other => other,
+        });
     }
 }
