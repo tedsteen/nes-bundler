@@ -18,6 +18,7 @@ use winit::window::Window;
 
 use crate::audio::AudioSystem;
 use crate::emulation::gui::EmulatorGui;
+use crate::settings::Settings;
 use crate::window::Fullscreen;
 use emulation::Emulator;
 use integer_scaling::MINIMUM_INTEGER_SCALING_SIZE;
@@ -99,6 +100,14 @@ impl Application {
         let sdl_event_pump = sdl3_context.event_pump().map_err(anyhow::Error::msg)?;
 
         let audio_system = AudioSystem::new(sdl3_context.audio().expect("An SDL audio subsystem"));
+        let mut settings = Settings::current_mut();
+        let stream = audio_system.start_stream(
+            settings.audio.get_selected_device(&audio_system),
+            settings.audio.volume,
+        );
+        drop(settings);
+
+        let emulator = Emulator::new(stream).await?;
         let audio_gui = AudioGui::new(audio_system.clone());
 
         let inputs = Inputs::new(SDL3Gamepads::new(
@@ -106,7 +115,6 @@ impl Application {
         ));
         let inputs_gui = InputsGui::new(inputs);
 
-        let emulator = Emulator::new(audio_system).await?;
         let emulator_gui =
             EmulatorGui::new(emulator.nes_state.clone(), emulator.command_tx.clone());
 

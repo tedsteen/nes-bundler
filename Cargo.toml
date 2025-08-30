@@ -71,6 +71,7 @@ sdl3 = { version = "0.14", features = ["build-from-source-static"] }
 tetanes-core = { git = "https://github.com/lukexor/tetanes.git" }
 postcard = { version = "1.1", features = ["alloc"] }
 thingbuf = "0.1"
+ringbuf = "0.4"
 
 base64 = "0.22"
 directories = "6.0"

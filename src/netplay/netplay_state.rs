@@ -34,27 +34,9 @@ impl NetplayState {
     ) -> Self {
         use NetplayState::*;
         match self {
-            Connecting(netplay) => {
-                //No sound while connecting
-                if let Some(audio) = &mut buffers.audio {
-                    for _ in 0..1000 {
-                        audio.push(0.0);
-                    }
-                }
-
-                netplay.advance()
-            }
+            Connecting(netplay) => netplay.advance(),
             Connected(netplay) => netplay.advance(joypad_state, buffers),
-            Resuming(netplay) => {
-                //No sound while resuming
-                if let Some(audio) = &mut buffers.audio {
-                    for _ in 0..1000 {
-                        audio.push(0.0);
-                    }
-                }
-
-                netplay.advance()
-            }
+            Resuming(netplay) => netplay.advance(),
             Disconnected(netplay) => netplay.advance(joypad_state, buffers),
             Failed(netplay) => netplay.advance(),
         }

@@ -9,12 +9,13 @@ use std::{
 
 use anyhow::Result;
 
+use ringbuf::traits::Observer;
 use serde::{Deserialize, Serialize};
 
 use thingbuf::{Recycle, ThingBuf};
 
 use crate::{
-    audio::{AudioStream, AudioSystem, AvailableAudioDevice, NesBundlerAudioCallback},
+    audio::{AudioProducer, AudioStream},
     input::JoypadState,
     settings::{MAX_PLAYERS, Settings},
 };
@@ -42,18 +43,17 @@ pub enum EmulatorCommand {
 }
 
 pub struct Emulator {
-    audio_system: AudioSystem,
     pub command_tx: Sender<EmulatorCommand>,
     pub frame_buffer: VideoBufferPool,
     pub inputs: Arc<RwLock<[JoypadState; 2]>>,
     pub nes_state: Arc<Mutex<crate::netplay::NetplayStateHandler>>,
-    pub stream: AudioStream,
+    pub audio_stream: AudioStream,
 }
 
 pub const SAMPLE_RATE: f32 = 44_100.0;
 
 impl Emulator {
-    pub async fn new(audio_system: AudioSystem) -> Result<Self> {
+    pub async fn new(mut audio_stream: AudioStream) -> Result<Self> {
         #[cfg(not(feature = "netplay"))]
         let nes_state = crate::emulation::LocalNesState::start_rom(
             &crate::bundle::Bundle::current().rom,
@@ -68,18 +68,6 @@ impl Emulator {
         let (command_tx, command_rx) = channel();
         let inputs = Arc::new(RwLock::new([JoypadState(0); MAX_PLAYERS]));
         let frame_buffer = VideoBufferPool::new();
-
-        let stream = audio_system.start_stream(
-            Settings::current_mut()
-                .audio
-                .get_selected_device(&audio_system),
-            NesBundlerAudioCallback {
-                audio_buffer: Vec::new(),
-                frame_buffer: frame_buffer.clone(),
-                inputs: inputs.clone(),
-                nes_state: nes_state.clone(),
-            },
-        );
 
         tokio::task::spawn({
             let nes_state = nes_state.clone();
@@ -110,30 +98,39 @@ impl Emulator {
             }
         });
 
+        tokio::task::spawn({
+            let nes_state = nes_state.clone();
+            let inputs = inputs.clone();
+            let frame_buffer = frame_buffer.clone();
+            let mut tx = audio_stream.tx.take();
+            async move {
+                loop {
+                    let mut nes_state = nes_state.lock().unwrap();
+                    if let Some(audio_producer) = &tx {
+                        if audio_producer.is_full() {
+                            //TODO: park the thread or something?
+                            continue;
+                        }
+                    }
+
+                    nes_state.advance(
+                        *inputs.read().unwrap(),
+                        &mut NESBuffers {
+                            audio: tx.as_mut(),
+                            video: frame_buffer.push_ref().as_deref_mut().ok(),
+                        },
+                    );
+                }
+            }
+        });
+
         Ok(Self {
-            audio_system,
             frame_buffer,
             command_tx,
             inputs,
             nes_state,
-            stream,
+            audio_stream,
         })
-    }
-
-    pub(crate) fn swap_output_device(&mut self, device: AvailableAudioDevice) {
-        self.stream
-            .audio_stream_with_callback
-            .pause()
-            .expect("TODO a paused stream");
-        self.stream = self.audio_system.start_stream(
-            device,
-            NesBundlerAudioCallback {
-                audio_buffer: Vec::new(),
-                frame_buffer: self.frame_buffer.clone(),
-                inputs: self.inputs.clone(),
-                nes_state: self.nes_state.clone(),
-            },
-        );
     }
 }
 
@@ -164,7 +161,7 @@ impl NesRegion {
 }
 
 pub struct NESBuffers<'a> {
-    pub audio: Option<&'a mut Vec<f32>>,
+    pub audio: Option<&'a mut AudioProducer>,
     pub video: Option<&'a mut NESVideoFrame>,
 }
 

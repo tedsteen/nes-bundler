@@ -77,7 +77,7 @@ impl GuiComponent for AudioGui {
                                 available_device.name(),
                             );
                             if a.changed() {
-                                emulator.swap_output_device(available_device);
+                                emulator.audio_stream.swap_output_device(available_device);
                             }
                         }
                     });
@@ -86,7 +86,12 @@ impl GuiComponent for AudioGui {
 
         ui.horizontal(|ui| {
             ui.label("Volume");
-            ui.add(Slider::new(&mut audio_settings.volume, 0..=100).suffix("%"));
+            if ui
+                .add(Slider::new(&mut audio_settings.volume, 0..=100).suffix("%"))
+                .changed()
+            {
+                emulator.audio_stream.set_volume(audio_settings.volume);
+            }
         });
     }
 

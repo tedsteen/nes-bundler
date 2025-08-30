@@ -2,6 +2,7 @@ use std::{io::Cursor, ops::Deref};
 
 use anyhow::Result;
 
+use ringbuf::traits::Producer;
 use tetanes_core::{
     apu::filter::FilterChain,
     common::{NesRegion, Regional, Reset, ResetKind},
@@ -115,8 +116,10 @@ impl TetanesNesState {
                         .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
                 });
         }
-        if let Some(audio) = &mut buffers.audio {
-            audio.extend(self.control_deck.cpu().bus.audio_samples());
+        if let Some(audio_producer) = &mut buffers.audio {
+            let samples = self.control_deck.cpu().bus.audio_samples();
+            println!("Pushing audio: {:?}", samples.len());
+            audio_producer.push_slice(samples);
         }
 
         self.control_deck.clear_audio_samples();
