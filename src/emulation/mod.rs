@@ -47,7 +47,7 @@ pub struct Emulator {
     pub command_tx: Sender<EmulatorCommand>,
     pub frame_buffer: VideoBufferPool,
     pub shared_inputs: Arc<[AtomicU8; 2]>,
-    pub nes_state: Arc<Mutex<crate::netplay::NetplayStateHandler>>,
+    pub shared_nes_state: Arc<Mutex<StateHandler>>,
     pub audio_stream: AudioStream,
 }
 
@@ -63,15 +63,15 @@ impl Emulator {
         )?;
 
         #[cfg(feature = "netplay")]
-        let nes_state = crate::netplay::NetplayStateHandler::new()?;
+        let nes_state = StateHandler::new()?;
 
-        let nes_state = Arc::new(Mutex::new(nes_state));
+        let shared_nes_state = Arc::new(Mutex::new(nes_state));
         let (command_tx, command_rx) = channel();
         let inputs = Arc::new([AtomicU8::new(0), AtomicU8::new(0)]);
         let frame_buffer = VideoBufferPool::new();
 
         tokio::task::spawn({
-            let nes_state = nes_state.clone();
+            let nes_state = shared_nes_state.clone();
             async move {
                 loop {
                     for command in command_rx.iter() {
@@ -85,7 +85,7 @@ impl Emulator {
             }
         });
         tokio::task::spawn({
-            let nes_state = nes_state.clone();
+            let nes_state = shared_nes_state.clone();
             async move {
                 let mut ticker = tokio::time::interval(Duration::from_millis(500));
                 loop {
@@ -100,7 +100,7 @@ impl Emulator {
         });
 
         tokio::task::spawn({
-            let nes_state = nes_state.clone();
+            let nes_state = shared_nes_state.clone();
             let inputs = inputs.clone();
             let frame_buffer = frame_buffer.clone();
             let mut tx = audio_stream.tx.take();
@@ -132,7 +132,7 @@ impl Emulator {
             frame_buffer,
             command_tx,
             shared_inputs: inputs,
-            nes_state,
+            shared_nes_state,
             audio_stream,
         })
     }

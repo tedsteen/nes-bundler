@@ -118,7 +118,6 @@ impl TetanesNesState {
         }
         if let Some(audio_producer) = &mut buffers.audio {
             let samples = self.control_deck.cpu().bus.audio_samples();
-            println!("Pushing audio: {:?}", samples.len());
             audio_producer.push_slice(samples);
         }
 

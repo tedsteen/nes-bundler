@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use crate::{
     bundle::Bundle,
-    emulation::LocalNesState,
+    emulation::{Emulator, LocalNesState},
     gui::{MenuButton, esc_pressed},
     main_view::gui::{MainGui, MainMenuState},
     netplay::{
@@ -16,10 +16,7 @@ use crate::{
     },
 };
 
-use super::{
-    NetplayStateHandler,
-    netplay_state::{ConnectedState, Netplay, NetplayState},
-};
+use super::netplay_state::{ConnectedState, Netplay, NetplayState};
 #[cfg(feature = "debug")]
 mod debug;
 
@@ -85,14 +82,14 @@ impl NetplayGui {
         }
         None
     }
-    pub fn messages(&self, netplay_state_handler: &NetplayStateHandler) -> Option<Vec<String>> {
+    pub fn messages(&self, emulator: &Emulator) -> Option<Vec<String>> {
         if matches!(MainGui::main_menu_state(), MainMenuState::Netplay) {
             // No need to show messages when the netplay menu is already showing status
             return None;
         }
 
         Some(
-            match &netplay_state_handler.netplay {
+            match &emulator.shared_nes_state.lock().unwrap().netplay {
                 // Connecting is a modal state, you can't see any messages when in the netplay UI anyway
                 Some(NetplayState::Connecting(_)) => None,
                 Some(NetplayState::Resuming(_)) => Some("Trying to reconnect...".to_string()),
@@ -510,8 +507,8 @@ impl NetplayGui {
         NetplayState::Connected(netplay_connected)
     }
 
-    pub fn ui(&mut self, ui: &mut Ui, netplay_state_handler: &mut NetplayStateHandler) {
-        let netplay = &mut netplay_state_handler.netplay;
+    pub fn ui(&mut self, ui: &mut Ui, emulator: &mut Emulator) {
+        let netplay = &mut emulator.shared_nes_state.lock().unwrap().netplay;
         *netplay = Some(match netplay.take().unwrap() {
             NetplayState::Disconnected(netplay_disconnected) => {
                 self.ui_disconnected(ui, netplay_disconnected)

@@ -1,22 +1,14 @@
-use std::sync::{Arc, Mutex, mpsc::Sender};
-
 use crate::{emulation::Emulator, main_view::gui::GuiComponent};
 
-use super::{EmulatorCommand, StateHandler};
+use super::EmulatorCommand;
 
 #[cfg(feature = "debug")]
 struct DebugGui {
-    nes_state: Arc<Mutex<StateHandler>>,
-    emulator_tx: Sender<EmulatorCommand>,
-
     pub speed: f32,
     pub override_speed: bool,
 }
 
 pub struct EmulatorGui {
-    #[cfg(feature = "netplay")]
-    nes_state: Arc<Mutex<StateHandler>>,
-
     #[cfg(feature = "netplay")]
     pub netplay_gui: crate::netplay::gui::NetplayGui,
     #[cfg(feature = "debug")]
@@ -24,31 +16,28 @@ pub struct EmulatorGui {
 }
 impl EmulatorGui {
     #[allow(unused_variables)]
-    pub fn new(nes_state: Arc<Mutex<StateHandler>>, emulator_tx: Sender<EmulatorCommand>) -> Self {
+    pub fn new() -> Self {
         Self {
             #[cfg(feature = "netplay")]
             netplay_gui: crate::netplay::gui::NetplayGui::new(),
             #[cfg(feature = "debug")]
             debug_gui: DebugGui {
-                nes_state: nes_state.clone(),
-                emulator_tx,
                 speed: 1.0,
                 override_speed: false,
             },
-
-            #[cfg(feature = "netplay")]
-            nes_state,
         }
     }
 }
 #[cfg(feature = "debug")]
 impl DebugGui {
-    fn ui(&mut self, ui: &mut egui::Ui) {
+    fn ui(&mut self, ui: &mut egui::Ui, emulator: &mut Emulator) {
+        use crate::emulation::NesStateHandler;
+
         ui.end_row();
 
         ui.label(format!(
             "Frame: {}",
-            super::NesStateHandler::frame(std::ops::Deref::deref(&self.nes_state.lock().unwrap()))
+            emulator.shared_nes_state.lock().unwrap().frame()
         ));
         ui.end_row();
 
@@ -57,13 +46,15 @@ impl DebugGui {
             .changed()
             && !self.override_speed
         {
-            let _ = self.emulator_tx.send(EmulatorCommand::SetSpeed(1.0));
+            let _ = emulator.command_tx.send(EmulatorCommand::SetSpeed(1.0));
         }
 
         if self.override_speed {
             ui.end_row();
             ui.add(egui::Slider::new(&mut self.speed, 0.005..=2.0).suffix("x"));
-            let _ = self.emulator_tx.send(EmulatorCommand::SetSpeed(self.speed));
+            let _ = emulator
+                .command_tx
+                .send(EmulatorCommand::SetSpeed(self.speed));
         }
         ui.end_row();
     }
@@ -71,17 +62,17 @@ impl DebugGui {
 
 impl GuiComponent for EmulatorGui {
     #[allow(unused_variables)]
-    fn ui(&mut self, ui: &mut egui::Ui, _emulator: &mut Emulator) {
+    fn ui(&mut self, ui: &mut egui::Ui, emulator: &mut Emulator) {
         #[cfg(feature = "debug")]
-        self.debug_gui.ui(ui);
+        self.debug_gui.ui(ui, emulator);
 
         #[cfg(feature = "netplay")]
-        self.netplay_gui.ui(ui, &mut self.nes_state.lock().unwrap());
+        self.netplay_gui.ui(ui, emulator);
     }
 
     #[cfg(feature = "netplay")]
-    fn messages(&self) -> Option<Vec<String>> {
-        self.netplay_gui.messages(&self.nes_state.lock().unwrap())
+    fn messages(&self, emulator: &Emulator) -> Option<Vec<String>> {
+        self.netplay_gui.messages(emulator)
     }
 
     fn name(&self) -> Option<&str> {

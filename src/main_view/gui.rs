@@ -32,7 +32,7 @@ pub trait GuiComponent {
     // Runs when gui is visible
     fn ui(&mut self, ui: &mut Ui, emulator: &mut Emulator);
 
-    fn messages(&self) -> Option<Vec<String>> {
+    fn messages(&self, _emulator: &Emulator) -> Option<Vec<String>> {
         None
     }
     fn name(&self) -> Option<&str> {
@@ -262,7 +262,7 @@ impl MainGui {
                         for gui in gui_components.iter_mut() {
                             if gui.name().is_some() {
                                 {
-                                    if let Some(messages) = gui.messages() {
+                                    if let Some(messages) = gui.messages(emulator) {
                                         for message in messages {
                                             Self::message_ui(ui, message);
                                         }

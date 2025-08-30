@@ -13,7 +13,6 @@ use input::{Inputs, JoypadState};
 use main_view::MainView;
 
 use sdl3::EventPump;
-use tokio::task::LocalSet;
 use winit::application::ApplicationHandler;
 use winit::window::Window;
 
@@ -128,8 +127,7 @@ impl Application {
         ));
         let inputs_gui = InputsGui::new(inputs);
 
-        let emulator_gui =
-            EmulatorGui::new(emulator.nes_state.clone(), emulator.command_tx.clone());
+        let emulator_gui = EmulatorGui::new();
 
         let mouse_hide_timeout = Duration::from_secs(1);
         Ok(Self {
