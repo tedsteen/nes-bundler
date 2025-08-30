@@ -208,7 +208,10 @@ impl ApplicationHandler for Application {
                 // Don't let the inputs control the game if the gui is showing
                 [JoypadState(0), JoypadState(0)]
             };
-            *self.emulator.inputs.write().unwrap() = new_inputs;
+            self.emulator.shared_inputs[0]
+                .store(*new_inputs[0], std::sync::atomic::Ordering::Relaxed);
+            self.emulator.shared_inputs[1]
+                .store(*new_inputs[1], std::sync::atomic::Ordering::Relaxed);
 
             main_view.handle_window_event(
                 &window_event,

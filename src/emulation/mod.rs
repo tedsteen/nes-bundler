@@ -1,7 +1,8 @@
 use std::{
     ops::{Deref, DerefMut},
     sync::{
-        Arc, Mutex, RwLock,
+        Arc, Mutex,
+        atomic::AtomicU8,
         mpsc::{Sender, channel},
     },
     time::Duration,
@@ -45,7 +46,7 @@ pub enum EmulatorCommand {
 pub struct Emulator {
     pub command_tx: Sender<EmulatorCommand>,
     pub frame_buffer: VideoBufferPool,
-    pub inputs: Arc<RwLock<[JoypadState; 2]>>,
+    pub shared_inputs: Arc<[AtomicU8; 2]>,
     pub nes_state: Arc<Mutex<crate::netplay::NetplayStateHandler>>,
     pub audio_stream: AudioStream,
 }
@@ -66,7 +67,7 @@ impl Emulator {
 
         let nes_state = Arc::new(Mutex::new(nes_state));
         let (command_tx, command_rx) = channel();
-        let inputs = Arc::new(RwLock::new([JoypadState(0); MAX_PLAYERS]));
+        let inputs = Arc::new([AtomicU8::new(0), AtomicU8::new(0)]);
         let frame_buffer = VideoBufferPool::new();
 
         tokio::task::spawn({
@@ -114,7 +115,10 @@ impl Emulator {
                     }
 
                     nes_state.advance(
-                        *inputs.read().unwrap(),
+                        [
+                            JoypadState(inputs[0].load(std::sync::atomic::Ordering::Relaxed)),
+                            JoypadState(inputs[1].load(std::sync::atomic::Ordering::Relaxed)),
+                        ],
                         &mut NESBuffers {
                             audio: tx.as_mut(),
                             video: frame_buffer.push_ref().as_deref_mut().ok(),
@@ -127,7 +131,7 @@ impl Emulator {
         Ok(Self {
             frame_buffer,
             command_tx,
-            inputs,
+            shared_inputs: inputs,
             nes_state,
             audio_stream,
         })
