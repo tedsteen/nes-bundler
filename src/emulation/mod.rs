@@ -165,7 +165,6 @@ impl Emulator {
                     }
 
                     // drain pending netplay commands
-
                     while let Ok(cmd) = netplay_rx.try_recv() {
                         match cmd {
                             NetplayCommand::JoinGame(room_name) => nes_state.join_game(room_name),
@@ -182,7 +181,9 @@ impl Emulator {
 
                     // main work: advance emulator when we have room
                     if let Some(ref mut prod) = tx {
-                        if !prod.is_full() {
+                        //Try to keep about one frame of buffer
+                        //TODO: Check how long a frame is given the system (PAL, NTSC, Dency etc) and sample rate
+                        if prod.occupied_len() <= 735 * 1 {
                             nes_state.advance(
                                 [
                                     JoypadState(
@@ -201,16 +202,19 @@ impl Emulator {
                             shared_emulator_state.write().unwrap().frame = frame;
                             // 2) periodic SRAM snapshot (non-blocking check)
                             if frame % 100 == 0 {
-                                println!("TICK");
                                 use base64::Engine;
                                 use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
                                 if let Some(sram) = nes_state.save_sram() {
-                                    Settings::current_mut().save_state = Some(b64.encode(sram));
+                                    let sram = sram.to_vec();
+                                    // Do this in a blocking task as we want the main loop free from blocking code
+                                    tokio::task::spawn_blocking(move || {
+                                        Settings::current_mut().save_state = Some(b64.encode(sram));
+                                    });
                                 }
                             }
                         } else {
                             // back off a hair to avoid a busy loop when ring is full?
-                            //tokio::task::yield_now().await;
+                            tokio::task::yield_now().await;
                         }
                     }
                 }

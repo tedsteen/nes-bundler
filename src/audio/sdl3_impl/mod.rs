@@ -90,7 +90,7 @@ pub struct SDL3AudioStream {
 }
 impl SDL3AudioStream {
     fn new(audio_system: AudioSystem, device: AvailableAudioDevice, volume: u8) -> Self {
-        let (tx, rx) = RingbufType::new(735).split(); //One frame
+        let (tx, rx) = RingbufType::new(735 * 100).split();
         let volume = Arc::new(AtomicU8::new(volume));
         let (stream, take_back) = Self::create(
             audio_system.audio_subsystem.clone(),
@@ -135,7 +135,7 @@ impl SDL3AudioStream {
         .open_playback_stream_with_callback(
             &desired_spec,
             NesBundlerAudioCallback {
-                tmp: [0_f32; BUF as usize],
+                tmp: [0_f32; AUDIO_SCRATCH_SIZE as usize],
                 rx: Some(rx),
                 give_back,
                 volume,
@@ -169,10 +169,10 @@ impl SDL3AudioStream {
     }
 }
 
-const BUF: i32 = 4096;
+const AUDIO_SCRATCH_SIZE: i32 = 1024 * 8;
 
 pub struct NesBundlerAudioCallback {
-    tmp: [f32; BUF as usize],
+    tmp: [f32; AUDIO_SCRATCH_SIZE as usize],
     rx: Option<AudioConsumer>,
     give_back: Sender<AudioConsumer>,
     volume: Arc<AtomicU8>,
@@ -193,6 +193,7 @@ impl AudioCallback<f32> for NesBundlerAudioCallback {
 
             // zero-pad if we under-ran so we still hand over 'want' frames
             if n < want {
+                log::warn!("Buffer underrun ({n} < {requested})");
                 buf[n..want].fill(0.0);
             }
             let _ = stream.put_data_f32(&self.tmp[..want]); // Ignore errors in callback
