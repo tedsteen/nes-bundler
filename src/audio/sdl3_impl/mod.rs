@@ -90,7 +90,7 @@ pub struct SDL3AudioStream {
 }
 impl SDL3AudioStream {
     fn new(audio_system: AudioSystem, device: AvailableAudioDevice, volume: u8) -> Self {
-        let (tx, rx) = RingbufType::new(735 * 100).split();
+        let (tx, rx) = RingbufType::new(735 * 400).split();
         let volume = Arc::new(AtomicU8::new(volume));
         let (stream, take_back) = Self::create(
             audio_system.audio_subsystem.clone(),
@@ -135,7 +135,7 @@ impl SDL3AudioStream {
         .open_playback_stream_with_callback(
             &desired_spec,
             NesBundlerAudioCallback {
-                tmp: [0_f32; AUDIO_SCRATCH_SIZE as usize],
+                tmp: Vec::new(),
                 rx: Some(rx),
                 give_back,
                 volume,
@@ -169,10 +169,8 @@ impl SDL3AudioStream {
     }
 }
 
-const AUDIO_SCRATCH_SIZE: i32 = 1024 * 8;
-
 pub struct NesBundlerAudioCallback {
-    tmp: [f32; AUDIO_SCRATCH_SIZE as usize],
+    tmp: Vec<f32>,
     rx: Option<AudioConsumer>,
     give_back: Sender<AudioConsumer>,
     volume: Arc<AtomicU8>,
@@ -181,8 +179,15 @@ pub struct NesBundlerAudioCallback {
 impl AudioCallback<f32> for NesBundlerAudioCallback {
     fn callback(&mut self, stream: &mut AudioStream2, requested: i32) {
         if let Some(rx) = &mut self.rx {
-            let want = requested.min(self.tmp.len() as i32) as usize;
-            let buf = &mut self.tmp[..want];
+            let requested = requested as usize;
+
+            if requested > self.tmp.len() {
+                // Amortized growth (pow2). Avoids frequent reallocs.
+                let new_len = requested.next_power_of_two();
+                self.tmp.resize(new_len, 0.0);
+            }
+
+            let buf = &mut self.tmp[..requested];
             let n = rx.pop_slice(buf);
 
             // Apply volume
@@ -192,11 +197,11 @@ impl AudioCallback<f32> for NesBundlerAudioCallback {
             }
 
             // zero-pad if we under-ran so we still hand over 'want' frames
-            if n < want {
+            if n < requested {
                 log::warn!("Buffer underrun ({n} < {requested})");
-                buf[n..want].fill(0.0);
+                buf[n..requested].fill(0.0);
             }
-            let _ = stream.put_data_f32(&self.tmp[..want]); // Ignore errors in callback
+            let _ = stream.put_data_f32(&self.tmp[..requested]); // Ignore errors in callback
         }
     }
 }

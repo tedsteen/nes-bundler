@@ -144,6 +144,16 @@ impl NesStateHandler for NetplayStateHandler {
             _ => {}
         }
     }
+
+    fn get_samples_per_frame(&self) -> f32 {
+        match &self.netplay {
+            Some(NetplayState::Disconnected(a)) => a.state.get_samples_per_frame(),
+            Some(NetplayState::Connected(a)) => {
+                a.state.netplay_session.game_state.get_samples_per_frame()
+            }
+            _ => 0_f32,
+        }
+    }
 }
 
 impl NetplayStateHandler {

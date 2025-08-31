@@ -25,7 +25,19 @@ use crate::{
 pub struct TetanesNesState {
     control_deck: ControlDeck,
 }
-
+trait FromTetanesRegion {
+    fn from_tetanes_region(&self) -> crate::emulation::NesRegion;
+}
+impl FromTetanesRegion for NesRegion {
+    fn from_tetanes_region(&self) -> crate::emulation::NesRegion {
+        match self {
+            NesRegion::Ntsc => crate::emulation::NesRegion::Ntsc,
+            NesRegion::Pal => crate::emulation::NesRegion::Pal,
+            NesRegion::Dendy => crate::emulation::NesRegion::Dendy,
+            _ => panic!("Can't resolve region from {self:?}"),
+        }
+    }
+}
 trait ToTetanesRegion {
     fn to_tetanes_region(&self) -> NesRegion;
 }
@@ -214,5 +226,10 @@ impl NesStateHandler for TetanesNesState {
         self.control_deck
             .set_region(Settings::current_mut().get_nes_region().to_tetanes_region());
         self.control_deck.reset(kind);
+    }
+
+    fn get_samples_per_frame(&self) -> f32 {
+        self.control_deck.apu().sample_rate
+            / self.control_deck.region().from_tetanes_region().to_fps()
     }
 }

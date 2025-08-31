@@ -181,9 +181,8 @@ impl Emulator {
 
                     // main work: advance emulator when we have room
                     if let Some(ref mut prod) = tx {
-                        //Try to keep about one frame of buffer
-                        //TODO: Check how long a frame is given the system (PAL, NTSC, Dency etc) and sample rate
-                        if prod.occupied_len() <= 735 * 1 {
+                        //Keep 1 frame of audio buffer
+                        if prod.occupied_len() <= nes_state.get_samples_per_frame() as usize {
                             nes_state.advance(
                                 [
                                     JoypadState(
@@ -213,7 +212,7 @@ impl Emulator {
                                 }
                             }
                         } else {
-                            // back off a hair to avoid a busy loop when ring is full?
+                            // back off a hair to avoid a busy loop when ring is full
                             tokio::task::yield_now().await;
                         }
                     }
@@ -238,6 +237,7 @@ pub trait NesStateHandler {
     fn save_sram(&self) -> Option<&[u8]>;
     #[cfg(feature = "debug")]
     fn frame(&self) -> u32;
+    fn get_samples_per_frame(&self) -> f32;
 }
 
 #[derive(Clone, Serialize, Deserialize, Hash, Debug, PartialEq)]
