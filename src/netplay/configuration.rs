@@ -38,6 +38,27 @@ pub struct StaticNetplayServerConfiguration {
     pub ggrs: GGRSConfiguration,
     pub unlock_url: Option<String>,
 }
+impl Default for StaticNetplayServerConfiguration {
+    fn default() -> Self {
+        Self {
+            matchbox: MatchboxConfiguration {
+                server: "matchbox.netplay.tech:3536".to_string(),
+                ice: IceConfiguration {
+                    urls: vec![
+                        "stun:stun.l.google.com:19302".to_string(),
+                        "stun:stun1.l.google.com:19302".to_string(),
+                    ],
+                    credentials: IceCredentials::None,
+                },
+            },
+            ggrs: GGRSConfiguration {
+                max_prediction: 12,
+                input_delay: 2,
+            },
+            unlock_url: None,
+        }
+    }
+}
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct TurnOnServerConfiguration {

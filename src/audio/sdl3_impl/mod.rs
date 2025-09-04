@@ -11,6 +11,7 @@ use sdl3::audio::{
 };
 
 use crate::audio::{AudioProducer, AudioStream, AudioSystem, AvailableAudioDevice};
+use crate::emulation::DEFAULT_SAMPLE_RATE;
 
 #[derive(Debug, Clone)]
 pub struct SDL3AvailableAudioDevice {
@@ -116,7 +117,7 @@ impl SDL3AudioStream {
         Receiver<AudioConsumer>,
     ) {
         let desired_spec = AudioSpec {
-            freq: Some(44100),
+            freq: Some(DEFAULT_SAMPLE_RATE as i32),
             channels: Some(1),
             format: Some(AudioFormat::f32_sys()),
         };
@@ -198,7 +199,7 @@ impl AudioCallback<f32> for NesBundlerAudioCallback {
 
             // zero-pad if we under-ran so we still hand over 'want' frames
             if n < requested {
-                log::warn!("Buffer underrun ({n} < {requested})");
+                //log::warn!("Buffer underrun ({n} < {requested})");
                 buf[n..requested].fill(0.0);
             }
             let _ = stream.put_data_f32(&self.tmp[..requested]); // Ignore errors in callback

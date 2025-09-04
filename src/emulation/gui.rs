@@ -35,7 +35,11 @@ impl DebugGui {
 
         ui.label(format!(
             "Frame: {}",
-            emulator.shared_state.emulator_state.read().unwrap().frame
+            emulator
+                .shared_state
+                .emulator_state
+                .frame
+                .load(std::sync::atomic::Ordering::Relaxed)
         ));
         ui.end_row();
 

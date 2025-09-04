@@ -1,215 +1,250 @@
-use std::ops::{Deref, DerefMut};
+use self::connection::StartMethod;
+use std::time::Instant;
+
+use anyhow::Result;
+use tokio::sync::watch::Sender;
 
 use crate::{
-    emulation::{LocalNesState, NESBuffers, NesStateHandler},
+    emulation::{
+        LocalNesState, NESBuffers, NesStateHandler, SharedNetplayConnectedState, SharedNetplayState,
+    },
     input::JoypadState,
+    netplay::{
+        connection::{ConnectingSession, JoinOrHost, NetplayConnection},
+        session::{AdvanceError, NetplaySession},
+    },
     settings::MAX_PLAYERS,
-};
-use anyhow::Result;
-
-use self::{
-    connecting_state::{ConnectingState, StartMethod, StartState},
-    netplay_state::{Netplay, NetplayState},
 };
 
 pub mod configuration;
-pub mod connecting_state;
+pub mod connection;
 pub mod gui;
-mod netplay_session;
-mod netplay_state;
+pub mod session;
 
 #[cfg(feature = "debug")]
 mod stats;
 
-#[derive(Clone, Debug)]
-pub enum JoypadMapping {
-    P1,
-    P2,
+pub const MAX_ROOM_NAME_LEN: u8 = 4;
+
+pub struct Netplay {
+    shared_state_sender: Sender<SharedNetplayState>,
+    session: Option<NetplaySession>,
+    local_play_nes_state: LocalNesState,
 }
 
-impl JoypadMapping {
-    fn map(
-        &self,
-        joypad_state: [JoypadState; MAX_PLAYERS],
-        local_player_idx: usize,
-    ) -> [JoypadState; MAX_PLAYERS] {
-        match self {
-            JoypadMapping::P1 => {
-                if local_player_idx == 0 {
-                    [joypad_state[0], joypad_state[1]]
-                } else {
-                    [joypad_state[1], joypad_state[0]]
-                }
-            }
-            JoypadMapping::P2 => {
-                if local_player_idx == 0 {
-                    [joypad_state[1], joypad_state[0]]
-                } else {
-                    [joypad_state[0], joypad_state[1]]
-                }
-            }
-        }
-    }
-}
-
-pub struct NetplayStateHandler {
-    netplay: Option<NetplayState>,
-}
-
-#[derive(Clone)]
-pub struct NetplayNesState {
-    nes_state: LocalNesState,
-    frame: i32,
-    joypad_mapping: Option<JoypadMapping>,
-}
-
-impl NetplayNesState {
-    fn new(nes_state: LocalNesState) -> Self {
+impl Netplay {
+    pub fn new(
+        local_play_nes_state: LocalNesState,
+        shared_state_sender: Sender<SharedNetplayState>,
+    ) -> Self {
         Self {
-            nes_state,
-            frame: 0,
-            joypad_mapping: None,
+            shared_state_sender: shared_state_sender,
+            local_play_nes_state,
+            session: None,
         }
     }
-}
 
-impl Deref for NetplayNesState {
-    type Target = LocalNesState;
-    fn deref(&self) -> &LocalNesState {
-        &self.nes_state
+    fn swap_session(&mut self, netplay_connection: NetplayConnection) {
+        let _ = self.shared_state_sender.send(SharedNetplayState::Connected(
+            SharedNetplayConnectedState::Synchronizing,
+        ));
+        self.session
+            .replace(NetplaySession::new(netplay_connection));
     }
-}
 
-impl DerefMut for NetplayNesState {
-    fn deref_mut(&mut self) -> &mut LocalNesState {
-        &mut self.nes_state
+    async fn start(&mut self, start_method: StartMethod) -> Result<()> {
+        let connecting_session = ConnectingSession::connect(start_method.clone());
+
+        let _ = self
+            .shared_state_sender
+            .send(SharedNetplayState::Connecting(connecting_session.state));
+
+        self.swap_session(connecting_session.netplay_connection.await?);
+        Ok(())
     }
-}
 
-impl NesStateHandler for NetplayStateHandler {
-    fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers) {
-        #[cfg(feature = "debug")]
-        if let Some(NetplayState::Connected(netplay)) = &mut self.netplay {
-            let sess = &netplay.state.netplay_session.p2p_session;
-            if netplay.state.netplay_session.game_state.frame % 30 == 0 {
-                puffin::profile_scope!("Netplay stats");
-                for i in 0..MAX_PLAYERS {
-                    if let Ok(stats) = sess.network_stats(i) {
-                        if !sess.local_player_handles().contains(&i) {
-                            netplay.state.stats[i].push_stats(stats);
-                        }
+    async fn do_resume(&mut self) {
+        //TODO: Popup/info about the error? Or perhaps put the reason for the resume in the resume state below?
+        //TODO: PeerLost is peraps only one of the failures?
+        if let Some(current_session) = &mut self.session {
+            log::debug!(
+                "Resuming netplay to one of the frames {:?} and {:?}",
+                current_session.last_confirmed_game_state1.ggrs_frame,
+                current_session.last_confirmed_game_state2.ggrs_frame
+            );
+            let _ = self.shared_state_sender.send(SharedNetplayState::Resuming);
+
+            let netplay_server_configuration = &current_session.netplay_server_configuration;
+
+            let attempt1 = ConnectingSession::connect(StartMethod::Resume(
+                netplay_server_configuration.clone(),
+                current_session.last_confirmed_game_state1.clone(),
+            ))
+            .netplay_connection;
+
+            let attempt2 = ConnectingSession::connect(StartMethod::Resume(
+                netplay_server_configuration.clone(),
+                current_session.last_confirmed_game_state2.clone(),
+            ))
+            .netplay_connection;
+
+            futures::pin_mut!(attempt1);
+            futures::pin_mut!(attempt2);
+
+            let new_connection = loop {
+                tokio::select! {
+                    Ok(c) = attempt1 => {
+                        break c;
+                    }
+                    Ok(c) = attempt2 => {
+                        break c;
                     }
                 }
             };
+            self.swap_session(new_connection);
         }
+    }
 
-        if let Some(new_state) = self
-            .netplay
-            .take()
-            .map(|netplay| netplay.advance(joypad_state, buffers))
+    pub(crate) async fn find_game(&mut self) {
+        if let Err(e) = self.start(StartMethod::MatchWithRandom).await {
+            panic!("TODO: Failed to match with random game: {e:?}");
+        }
+    }
+
+    pub(crate) async fn host_game(&mut self) {
+        use rand::distr::{Alphanumeric, SampleString};
+        let room_name = Alphanumeric
+            .sample_string(&mut rand::rng(), MAX_ROOM_NAME_LEN.into())
+            .to_uppercase();
+        if let Err(e) = self
+            .start(StartMethod::Start(room_name, JoinOrHost::Host))
+            .await
         {
-            self.netplay = Some(new_state);
+            panic!("TODO: Failed to host game: {e:?}");
         }
     }
 
-    fn save_sram(&self) -> Option<&[u8]> {
-        // Saving is only supported when disconnected
-        match &self.netplay {
-            Some(NetplayState::Disconnected(s)) => s.state.save_sram(),
-            _ => None,
+    pub(crate) async fn join_game(&mut self, room_name: &str) {
+        if let Err(e) = self
+            .start(StartMethod::Start(room_name.to_string(), JoinOrHost::Join))
+            .await
+        {
+            panic!("TODO: Failed to join game: {e:?}");
         }
     }
 
-    #[cfg(feature = "debug")]
-    fn frame(&self) -> u32 {
-        match &self.netplay {
-            Some(NetplayState::Connected(s)) => s.state.netplay_session.game_state.frame(),
-            Some(NetplayState::Disconnected(s)) => s.state.frame(),
-            _ => 0,
-        }
+    pub(crate) fn cancel_connect(&self) {
+        todo!()
     }
 
-    fn set_speed(&mut self, speed: f32) {
-        match &mut self.netplay {
-            Some(NetplayState::Connected(s)) => s.state.netplay_session.game_state.set_speed(speed),
-            Some(NetplayState::Disconnected(s)) => s.state.set_speed(speed),
-            _ => {}
+    pub(crate) fn retry_connect(&self) {
+        todo!()
+    }
+
+    pub(crate) fn disconnect(&self) {
+        todo!()
+    }
+
+    pub(crate) fn resume(&self) {
+        todo!()
+    }
+}
+
+impl NesStateHandler for Netplay {
+    async fn advance(
+        &mut self,
+        joypad_state: [JoypadState; MAX_PLAYERS],
+        buffers: &mut NESBuffers<'_>,
+    ) {
+        if let Some(session) = &mut self.session {
+            let ggrs_is_running = matches!(
+                session.p2p_session.current_state(),
+                ggrs::SessionState::Running
+            );
+            let we_are_running = matches!(
+                *self.shared_state_sender.borrow(),
+                SharedNetplayState::Connected(SharedNetplayConnectedState::Running(..), ..)
+            );
+
+            let new_state = if we_are_running && !ggrs_is_running {
+                Some(SharedNetplayConnectedState::Synchronizing)
+            } else if !we_are_running && ggrs_is_running {
+                Some(SharedNetplayConnectedState::Running(Instant::now()))
+            } else {
+                None
+            };
+
+            if let Some(new_state) = new_state {
+                let _ = self
+                    .shared_state_sender
+                    .send(SharedNetplayState::Connected(new_state));
+            }
+
+            if let Err(AdvanceError::LostPeer) = session.advance(joypad_state, buffers).await {
+                self.do_resume().await;
+            }
+        } else {
+            self.local_play_nes_state
+                .advance(joypad_state, buffers)
+                .await;
         }
     }
 
     fn reset(&mut self, hard: bool) {
-        match &mut self.netplay {
-            Some(NetplayState::Connected(s)) => s.state.netplay_session.game_state.reset(hard),
-            Some(NetplayState::Disconnected(s)) => s.state.reset(hard),
-            _ => {}
+        // Only possible to reset the nes on a local game
+        self.local_play_nes_state.reset(hard);
+    }
+
+    fn set_speed(&mut self, speed: f32) {
+        if let Some(session) = &mut self.session {
+            session.current_game_state.nes_state.set_speed(speed);
+        } else {
+            self.local_play_nes_state.set_speed(speed)
         }
     }
 
     fn get_samples_per_frame(&self) -> f32 {
-        match &self.netplay {
-            Some(NetplayState::Disconnected(a)) => a.state.get_samples_per_frame(),
-            Some(NetplayState::Connected(a)) => {
-                a.state.netplay_session.game_state.get_samples_per_frame()
-            }
-            _ => 0_f32,
+        if let Some(session) = &self.session {
+            session.current_game_state.nes_state.get_samples_per_frame()
+        } else {
+            self.local_play_nes_state.get_samples_per_frame()
+        }
+    }
+
+    fn save_sram(&self) -> Option<&[u8]> {
+        if self.session.is_none() {
+            self.local_play_nes_state.save_sram()
+        } else {
+            //Only possible to save when playing locally
+            None
+        }
+    }
+
+    fn frame(&self) -> u32 {
+        if let Some(session) = &self.session {
+            session.current_game_state.nes_state.frame()
+        } else {
+            self.local_play_nes_state.frame()
         }
     }
 }
 
-impl NetplayStateHandler {
-    pub fn new() -> Result<Self> {
-        Ok(NetplayStateHandler {
-            netplay: Some(NetplayState::Disconnected(Netplay::new()?)),
-        })
-    }
-    //TODO: Everything below this line is retarded, fix
-    pub fn host_game(&mut self) {
-        self.netplay = self.netplay.take().map(|s| match s {
-            NetplayState::Disconnected(np) => np.host_game().expect("TODO"),
-            other => other,
-        });
-    }
-
-    pub(crate) fn join_game(&mut self, room_name: String) {
-        self.netplay = self.netplay.take().map(|s| match s {
-            NetplayState::Disconnected(np) => np.join_game(&room_name).expect("TODO"),
-            other => other,
-        });
-    }
-
-    pub(crate) fn find_game(&mut self) {
-        self.netplay = self.netplay.take().map(|s| match s {
-            NetplayState::Disconnected(np) => np.find_game().expect("TODO"),
-            other => other,
-        });
-    }
-
-    pub(crate) fn cancel_connect(&mut self) {
-        self.netplay = self.netplay.take().map(|s| match s {
-            NetplayState::Connecting(np) => NetplayState::Disconnected(np.cancel()),
-            other => other,
-        });
-    }
-
-    pub(crate) fn retry_connect(&mut self, start_method: StartMethod) {
-        self.netplay = self.netplay.take().map(|s| match s {
-            NetplayState::Connecting(np) => np.cancel().start(start_method),
-            other => other,
-        });
-    }
-
-    pub(crate) fn resume(&mut self) {
-        self.netplay = self.netplay.take().map(|s| match s {
-            NetplayState::Connected(np) => NetplayState::Resuming(np.resume()),
-            other => other,
-        });
-    }
-
-    pub(crate) fn disconnect(&mut self) {
-        self.netplay = self.netplay.take().map(|s| match s {
-            NetplayState::Failed(np) => NetplayState::Disconnected(np.disconnect()),
-            NetplayState::Connected(np) => NetplayState::Disconnected(np.disconnect()),
-            other => other,
-        });
-    }
-}
+// impl NesStateHandler for NetplayStateHandler {
+//     fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers) {
+//         #[cfg(feature = "debug")]
+//         if let Some(NetplayState::Connected(netplay)) = &mut self.netplay {
+//             let sess = &netplay.netplay_session.p2p_session;
+//             if netplay.netplay_session.current_game_state.frame % 30 == 0 {
+//                 puffin::profile_scope!("Netplay stats");
+//                 for i in 0..MAX_PLAYERS {
+//                     if let Ok(stats) = sess.network_stats(i) {
+//                         if !sess.local_player_handles().contains(&i) {
+//                             netplay.stats[i].push_stats(stats);
+//                         }
+//                     }
+//                 }
+//             };
+//         }
+//         self.advance(joypad_state, buffers);
+//     }
+// }

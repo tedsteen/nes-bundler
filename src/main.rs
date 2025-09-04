@@ -117,7 +117,7 @@ impl Application {
         );
         drop(settings);
 
-        let emulator = Emulator::new(stream)?;
+        let emulator = Emulator::new(stream);
         let audio_gui = AudioGui::new(audio_system.clone());
 
         let inputs = Inputs::new(SDL3Gamepads::new(

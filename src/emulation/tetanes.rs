@@ -14,7 +14,7 @@ use tetanes_core::{
     video::VideoFilter,
 };
 
-use super::{NESBuffers, NTSC_PAL, NesStateHandler, SAMPLE_RATE};
+use super::{DEFAULT_SAMPLE_RATE, NESBuffers, NTSC_PAL, NesStateHandler};
 use crate::{
     bundle::Bundle,
     input::JoypadState,
@@ -181,21 +181,27 @@ impl NesStateHandler for TetanesNesState {
         let apu = &mut self.control_deck.cpu_mut().bus.apu;
         let target_sample_rate = match apu.region {
             // Downsample a tiny bit extra to match the most common screen refresh rate (60hz)
-            NesRegion::Ntsc => SAMPLE_RATE * (crate::emulation::NesRegion::Ntsc.to_fps() / 60.0),
-            _ => SAMPLE_RATE,
+            NesRegion::Ntsc => {
+                DEFAULT_SAMPLE_RATE * (crate::emulation::NesRegion::Ntsc.to_fps() / 60.0)
+            }
+            _ => DEFAULT_SAMPLE_RATE,
         };
 
         let new_sample_rate = target_sample_rate * (1.0 / speed);
         let new_sample_period = Cpu::region_clock_rate(apu.region) / new_sample_rate;
 
         if apu.sample_period != new_sample_period {
-            log::debug!("Change emulation speed to {speed}x");
+            log::trace!("Change emulation speed to {speed}x");
             apu.filter_chain = FilterChain::new(apu.region, new_sample_rate);
             apu.sample_period = new_sample_period;
         }
     }
 
-    fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers) {
+    async fn advance(
+        &mut self,
+        joypad_state: [JoypadState; MAX_PLAYERS],
+        buffers: &mut NESBuffers<'_>,
+    ) {
         *self.control_deck.joypad_mut(Player::One) = Joypad::from_bytes((*joypad_state[0]).into());
         *self.control_deck.joypad_mut(Player::Two) = Joypad::from_bytes((*joypad_state[1]).into());
 
