@@ -51,18 +51,15 @@ impl SDL3AudioSystem {
             SDL3AvailableAudioDevice::new(self.audio_subsystem.default_playback_device().id());
         devices.push(default.clone());
 
-        if let Ok(others) = self
-            .audio_subsystem
-            .audio_playback_device_ids()
-            .map_err(|e| format!("TODO: Could not query for audio devices ({e:?})"))
-        {
-            devices.extend(
-                others
-                    .into_iter()
-                    .filter(|id| *id != default.audio_device_id)
-                    .map(SDL3AvailableAudioDevice::new),
-            );
-        }
+        devices.extend(
+            self.audio_subsystem
+                .audio_playback_device_ids()
+                .map_err(|e| format!("Could not query for audio devices ({e:?})"))
+                .unwrap()
+                .into_iter()
+                .filter(|id| *id != default.audio_device_id)
+                .map(SDL3AvailableAudioDevice::new),
+        );
 
         devices
     }
@@ -122,7 +119,7 @@ impl SDL3AudioStream {
         };
         let (give_back, take_back) = std::sync::mpsc::channel();
 
-        // TODO: Check if 735 is right for all systems (Pal, Ntsc, Dendy etc..)
+        // TODO: Calculate the correct buffer hint here
         sdl3::hint::set("SDL_AUDIO_DEVICE_SAMPLE_FRAMES", "735");
 
         let stream = AudioDevice::open_playback(
@@ -131,7 +128,7 @@ impl SDL3AudioStream {
             &desired_spec,
         )
         .map_err(anyhow::Error::msg)
-        .expect("TODO")
+        .expect("An audio device")
         .open_playback_stream_with_callback(
             &desired_spec,
             NesBundlerAudioCallback {
@@ -141,15 +138,15 @@ impl SDL3AudioStream {
                 volume,
             },
         )
-        .expect("TODO");
+        .expect("The stream to start");
 
-        stream.resume().expect("TODO");
+        stream.resume().expect("The stream to resume");
         (stream, take_back)
     }
 
     pub(crate) fn swap_output_device(&mut self, device: AvailableAudioDevice) {
         if let Some(stream) = self.audio_stream_with_callback.take() {
-            stream.pause().expect("TODO a paused stream");
+            stream.pause().expect("The stream to pause");
             drop(stream);
             let (stream, take_back) = Self::create(
                 self.audio_system.audio_subsystem.clone(),
@@ -210,6 +207,6 @@ impl Drop for NesBundlerAudioCallback {
     fn drop(&mut self) {
         self.give_back
             .send(self.rx.take().expect("an audio consumer"))
-            .expect("TODO: To be able to give back the audio consumer");
+            .expect("To be able to give back the audio consumer");
     }
 }

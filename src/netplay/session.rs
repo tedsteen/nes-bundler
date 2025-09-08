@@ -273,7 +273,6 @@ pub struct ResumingNetplaySession {
 impl ResumingNetplaySession {
     fn new(session_state: &mut ConnectedNetplaySession) -> Self {
         //TODO: Popup/info about the error? Or perhaps put the reason for the resume in the resume state below?
-        //TODO: PeerLost is peraps only one of the failures?
         log::debug!(
             "Resuming netplay to one of the frames {:?} and {:?}",
             session_state.last_confirmed_game_state1.ggrs_frame,
