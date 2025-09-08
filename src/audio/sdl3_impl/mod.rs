@@ -9,6 +9,7 @@ use sdl3::audio::{
     AudioCallback, AudioDevice, AudioDeviceID, AudioFormat, AudioSpec, AudioStream as AudioStream2,
     AudioStreamWithCallback,
 };
+use sdl3::sys::audio::SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
 
 use crate::audio::{AudioProducer, AudioStream, AudioSystem, AvailableAudioDevice};
 use crate::emulation::DEFAULT_SAMPLE_RATE;
@@ -24,9 +25,7 @@ impl SDL3AvailableAudioDevice {
 
     pub fn name(&self) -> String {
         match self.audio_device_id.id() {
-            sdl3_sys::audio::SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK => {
-                "Systems default speaker".to_string()
-            }
+            SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK => "Systems default speaker".to_string(),
             _ => self
                 .audio_device_id
                 .name()

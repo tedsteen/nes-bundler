@@ -2768,7 +2768,6 @@ dependencies = [
  "reqwest",
  "ringbuf",
  "sdl3",
- "sdl3-sys",
  "serde",
  "serde_yaml",
  "tetanes-core",
