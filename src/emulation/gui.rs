@@ -1,7 +1,5 @@
 use crate::{emulation::Emulator, main_view::gui::GuiComponent};
 
-use super::EmulatorCommand;
-
 #[cfg(feature = "debug")]
 struct DebugGui {
     pub speed: f32,
@@ -51,7 +49,7 @@ impl DebugGui {
             let _ = emulator
                 .shared_state
                 .emulator_command_tx
-                .try_send(EmulatorCommand::SetSpeed(1.0));
+                .try_send(crate::emulation::EmulatorCommand::SetSpeed(1.0));
         }
 
         if self.override_speed {
@@ -60,7 +58,7 @@ impl DebugGui {
             let _ = emulator
                 .shared_state
                 .emulator_command_tx
-                .try_send(EmulatorCommand::SetSpeed(self.speed));
+                .try_send(crate::emulation::EmulatorCommand::SetSpeed(self.speed));
         }
         ui.end_row();
     }

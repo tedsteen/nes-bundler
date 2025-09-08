@@ -5,11 +5,12 @@ use serde::Deserialize;
 
 use crate::{
     bundle::Bundle,
-    emulation::{Emulator, NetplayCommandBus, SharedNetplayConnectedState, SharedNetplayState},
+    emulation::Emulator,
     gui::{MenuButton, esc_pressed},
     main_view::gui::{MainGui, MainMenuState},
     netplay::{
-        MAX_ROOM_NAME_LEN,
+        MAX_ROOM_NAME_LEN, NetplayCommand, NetplayCommandBus, SharedNetplayConnectedState,
+        SharedNetplayState,
         connection::{ConnectingState, StartMethod},
     },
 };
@@ -69,26 +70,42 @@ fn ui_button(text: &str) -> Button<'_> {
 
 impl NetplayGui {
     pub fn ui(&mut self, ui: &mut Ui, emulator: &mut Emulator) {
-        let netplay_tx = &emulator.shared_state.netplay_command_tx;
-        let ted = emulator.shared_state.netplay_receiver.borrow();
+        let netplay_tx = &emulator.shared_state.netplay.command_tx;
+        let shared_netplay_state = emulator.shared_state.netplay.receiver.borrow();
 
-        match &*ted {
+        match &*shared_netplay_state {
             SharedNetplayState::Disconnected => {
-                self.ui_disconnected(ui, &emulator.shared_state.netplay_command_tx);
+                self.ui_disconnected(ui, &emulator.shared_state.netplay.command_tx);
             }
             SharedNetplayState::Connecting(netplay_connecting) => {
                 self.ui_connecting(
                     ui,
                     &netplay_connecting.borrow(),
-                    &emulator.shared_state.netplay_command_tx,
+                    &emulator.shared_state.netplay.command_tx,
                 );
             }
-            SharedNetplayState::Connected(netplay_connected, ..) => {
+            SharedNetplayState::Connected(netplay_connected) => {
                 self.ui_connected(
                     ui,
                     netplay_connected,
-                    &emulator.shared_state.netplay_command_tx,
+                    &emulator.shared_state.netplay.command_tx,
                 );
+                #[cfg(feature = "debug")]
+                {
+                    ui.vertical_centered(|ui| {
+                        ui.collapsing("Stats", |ui| {
+                            let stats = &*emulator.shared_state.netplay.stats.read().unwrap();
+                            Self::stats_ui(ui, &stats[0], 0);
+                            Self::stats_ui(ui, &stats[1], 1);
+                        });
+                        if ui.button("Fake connection lost").clicked() {
+                            use crate::netplay::NetplayCommand;
+
+                            let _ = netplay_tx.try_send(NetplayCommand::Resume);
+                        }
+                    });
+                    ui.end_row();
+                }
             }
             SharedNetplayState::Resuming => {
                 ui.vertical_centered(|ui| {
@@ -97,17 +114,49 @@ impl NetplayGui {
                         .ui(ui);
                 });
                 ui.end_row();
-                let disconnect_clicked = ui
+                if ui
                     .vertical_centered(|ui| ui_button("Disconnect").ui(ui).clicked())
-                    .inner;
+                    .inner
+                {
+                    let _ = netplay_tx.try_send(NetplayCommand::CancelConnect);
+                }
                 ui.end_row();
 
                 if esc_pressed(ui.ctx()) {
                     MainGui::set_main_menu_state(MainMenuState::Main);
                 }
-
-                if disconnect_clicked {
-                    let _ = netplay_tx.try_send(crate::emulation::NetplayCommand::CancelConnect);
+            }
+            SharedNetplayState::Failed(reason) => {
+                ui.vertical_centered(|ui| {
+                    Label::new(MenuButton::ui_text(
+                        "CONNECTION FAILED",
+                        MenuButton::ACTIVE_COLOR,
+                    ))
+                    .selectable(false)
+                    .ui(ui);
+                });
+                ui.end_row();
+                ui.vertical_centered(|ui| {
+                    Label::new(ui_text_small(reason, MenuButton::ACTIVE_COLOR))
+                        .selectable(false)
+                        .ui(ui);
+                });
+                ui.end_row();
+                if ui
+                    .vertical_centered(|ui| ui_button("Retry").ui(ui).clicked())
+                    .inner
+                {
+                    let _ = netplay_tx.try_send(NetplayCommand::RetryConnect);
+                }
+                ui.end_row();
+                ui.vertical_centered(|ui| {
+                    if ui_button("Cancel").ui(ui).clicked() || esc_pressed(ui.ctx()) {
+                        let _ = netplay_tx.try_send(NetplayCommand::CancelConnect);
+                    }
+                });
+                ui.end_row();
+                if esc_pressed(ui.ctx()) {
+                    MainGui::set_main_menu_state(MainMenuState::Main);
                 }
             }
         };
@@ -131,7 +180,7 @@ impl NetplayGui {
         }
 
         Some(
-            match &*emulator.shared_state.netplay_receiver.borrow() {
+            match &*emulator.shared_state.netplay.receiver.borrow() {
                 // Connecting is a modal state, you can't see any messages when in the netplay UI anyway
                 SharedNetplayState::Connecting(_) => None,
                 SharedNetplayState::Resuming => Some("Trying to reconnect...".to_string()),
@@ -231,8 +280,7 @@ impl NetplayGui {
                 self.room_name = None;
                 match action {
                     Action::Join(room_name) => {
-                        let _ = netplay_tx
-                            .try_send(crate::emulation::NetplayCommand::JoinGame(room_name));
+                        let _ = netplay_tx.try_send(NetplayCommand::JoinGame(room_name));
                     }
                 }
             }
@@ -245,7 +293,7 @@ impl NetplayGui {
                         .ui(ui)
                         .clicked()
                     {
-                        let _ = netplay_tx.try_send(crate::emulation::NetplayCommand::FindGame);
+                        let _ = netplay_tx.try_send(NetplayCommand::FindGame);
                     }
                 });
                 ui.end_row();
@@ -257,7 +305,7 @@ impl NetplayGui {
                         .ui(ui)
                         .clicked()
                     {
-                        let _ = netplay_tx.try_send(crate::emulation::NetplayCommand::HostGame);
+                        let _ = netplay_tx.try_send(NetplayCommand::HostGame);
                     }
                 });
                 ui.end_row();
@@ -319,7 +367,7 @@ impl NetplayGui {
 
                     ui.vertical_centered(|ui| {
                         if ui.button("Retry").clicked() {
-                            let _ = netplay_tx.send(crate::emulation::NetplayCommand::RetryConnect);
+                            let _ = netplay_tx.send(NetplayCommand::RetryConnect);
                         }
                     });
                 } else {
@@ -413,7 +461,7 @@ impl NetplayGui {
 
         ui.vertical_centered(|ui| {
             if ui_button("Cancel").ui(ui).clicked() || esc_pressed(ui.ctx()) {
-                let _ = netplay_tx.try_send(crate::emulation::NetplayCommand::CancelConnect);
+                let _ = netplay_tx.try_send(NetplayCommand::CancelConnect);
             }
         });
     }
@@ -437,33 +485,6 @@ impl NetplayGui {
                         .ui(ui);
                 });
                 ui.end_row();
-
-                ui.vertical_centered(|ui| {
-                    if ui_button("Disconnect").ui(ui).clicked() {
-                        let _ = netplay_tx.try_send(crate::emulation::NetplayCommand::Disconnect);
-                    }
-                });
-                ui.end_row();
-
-                if esc_pressed(ui.ctx()) {
-                    MainGui::set_main_menu_state(MainMenuState::Main);
-                }
-
-                #[cfg(feature = "debug")]
-                {
-                    ui.vertical_centered(|ui| {
-                        //TODO: Re-enable this
-                        // ui.collapsing("Stats", |ui| {
-                        //     Self::stats_ui(ui, &netplay_connected.state.stats[0], 0);
-                        //     Self::stats_ui(ui, &netplay_connected.state.stats[1], 1);
-                        // });
-                        if ui.button("Fake connection lost").clicked() {
-                            log::debug!("Manually resuming connection (faking a lost connection)");
-                            let _ = netplay_tx.try_send(crate::emulation::NetplayCommand::Resume);
-                        }
-                    });
-                    ui.end_row();
-                }
             }
             SharedNetplayConnectedState::Synchronizing => {
                 ui.vertical_centered(|ui| {
@@ -473,6 +494,16 @@ impl NetplayGui {
                 });
                 ui.end_row();
             }
+        }
+        ui.vertical_centered(|ui| {
+            if ui_button("Disconnect").ui(ui).clicked() {
+                let _ = netplay_tx.try_send(NetplayCommand::Disconnect);
+            }
+        });
+        ui.end_row();
+
+        if esc_pressed(ui.ctx()) {
+            MainGui::set_main_menu_state(MainMenuState::Main);
         }
     }
 

@@ -1,4 +1,4 @@
-use std::{io::Cursor, ops::Deref};
+use std::{fmt::Debug, io::Cursor, ops::Deref};
 
 use anyhow::Result;
 
@@ -217,7 +217,6 @@ impl NesStateHandler for TetanesNesState {
         }
     }
 
-    #[cfg(feature = "debug")]
     fn frame(&self) -> u32 {
         self.control_deck.frame_number()
     }
@@ -237,5 +236,13 @@ impl NesStateHandler for TetanesNesState {
     fn get_samples_per_frame(&self) -> f32 {
         self.control_deck.apu().sample_rate
             / self.control_deck.region().from_tetanes_region().to_fps()
+    }
+}
+
+impl Debug for TetanesNesState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TetanesNesState")
+            .field("frame", &self.control_deck.frame_number())
+            .finish()
     }
 }

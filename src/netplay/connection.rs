@@ -11,7 +11,7 @@ use tokio::sync::watch::{Receiver, Sender, channel};
 
 use crate::bundle::Bundle;
 use crate::netplay::configuration::TurnOnServerConfiguration;
-use crate::netplay::session::NetplayNesState;
+use crate::netplay::session::{JoypadMapping, NetplayNesState};
 use crate::settings::MAX_PLAYERS;
 
 use super::configuration::{
@@ -19,6 +19,7 @@ use super::configuration::{
     StaticNetplayServerConfiguration,
 };
 
+#[derive(Debug)]
 pub enum ConnectingState {
     Idle, //Initial state.
     LoadingNetplayServerConfiguration,
@@ -29,8 +30,6 @@ pub enum ConnectingState {
     ),
 }
 
-//TODO: Some kind of type state pattern for the ConnectingSession where only certain methods are available per state and where a shared version of that state is also propagated.
-//      Probably same for NetplaySession (or maybe only for NetplaySession?? Probably for both...)
 pub struct NetplayConnection {
     pub socket: WebRtcSocket,
     pub netplay_server_configuration: StaticNetplayServerConfiguration,
@@ -38,15 +37,16 @@ pub struct NetplayConnection {
 }
 pub struct ConnectingSession {
     pub state: Receiver<ConnectingState>,
+    pub start_method: StartMethod,
     pub netplay_connection: Pin<Box<dyn Future<Output = Result<NetplayConnection>>>>,
 }
 
 impl ConnectingSession {
     pub fn connect(start_method: StartMethod) -> Self {
         let (state_sender, state) = channel(ConnectingState::Idle);
-
+        let start_method_cloned = start_method.clone();
         let netplay_connection = async move {
-            let netplay_config = match &start_method {
+            let netplay_config = match &start_method_cloned {
                 StartMethod::Resume(netplay_server_configuration, ..) => {
                     netplay_server_configuration.clone()
                 }
@@ -65,10 +65,11 @@ impl ConnectingSession {
                 },
             };
 
-            ConnectingSession::peer_up(state_sender, start_method, netplay_config).await
+            ConnectingSession::peer_up(state_sender, start_method_cloned, netplay_config).await
         };
         Self {
             state,
+            start_method,
             netplay_connection: Box::pin(netplay_connection),
         }
     }
@@ -137,9 +138,8 @@ impl ConnectingSession {
             }
             IceCredentials::None => (None, None),
         };
-
+        let room_url = format!("ws://{matchbox_server}/{room_name}");
         let (mut socket, loop_fut) = {
-            let room_url = format!("ws://{matchbox_server}/{room_name}");
             let ice_server = RtcIceServerConfig {
                 urls: netplay_server_configuration.matchbox.ice.urls.clone(),
                 username,
@@ -149,7 +149,7 @@ impl ConnectingSession {
             log::debug!(
                 "Peering up through WebRTC socket:\nroom_url={room_url:?},\nice_server={ice_server:?}"
             );
-            WebRtcSocketBuilder::new(room_url)
+            WebRtcSocketBuilder::new(room_url.clone())
                 .ice_server(ice_server)
                 .add_channel(ChannelConfig::unreliable())
                 .build()
@@ -170,27 +170,20 @@ impl ConnectingSession {
                     }
                 }
             }
-            println!("BROKE THE LOOP!!");
         });
-
-        let res = loop {
-            socket.update_peers();
+        loop {
+            socket.try_update_peers().map_err(|e| {
+                anyhow::Error::msg(format!("Could not connect to {room_url:} ({e:?})"))
+            })?;
 
             let connected_peers = socket.connected_peers().count();
-            //dbg!(connected_peers);
+
             if connected_peers >= MAX_PLAYERS {
-                break Err("Room is Full".to_string());
+                anyhow::bail!("Room is Full");
             }
 
             let remaining = MAX_PLAYERS - (connected_peers + 1);
             if remaining <= 0 {
-                break Ok(());
-            }
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        };
-
-        match res {
-            Ok(_) => {
                 log::debug!("Got all players!");
 
                 let initial_state = match &start_method {
@@ -201,16 +194,22 @@ impl ConnectingSession {
 
                         Some(state)
                     }
-                    _ => None,
+                    StartMethod::Start(_, join_or_host) => {
+                        Some(NetplayNesState::new(match join_or_host {
+                            JoinOrHost::Host => JoypadMapping::P1,
+                            JoinOrHost::Join => JoypadMapping::P2,
+                        }))
+                    }
+                    StartMethod::MatchWithRandom => None,
                 };
 
-                Ok(NetplayConnection {
+                break Ok(NetplayConnection {
                     socket,
                     netplay_server_configuration,
                     initial_state,
-                })
+                });
             }
-            Err(_) => anyhow::bail!("TODO"),
+            tokio::time::sleep(Duration::from_millis(16)).await;
         }
     }
 
@@ -253,7 +252,7 @@ pub enum JoinOrHost {
     Host,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum StartMethod {
     Start(RoomName, JoinOrHost),
     Resume(StaticNetplayServerConfiguration, NetplayNesState),
@@ -303,4 +302,12 @@ pub enum TurnOnResponse {
 pub struct BasicConfiguration {
     unlock_url: String,
     conf: StaticNetplayServerConfiguration,
+}
+
+impl Debug for ConnectingSession {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConnectingSession")
+            .field("state", &*self.state.borrow())
+            .finish()
+    }
 }
