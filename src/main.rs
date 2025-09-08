@@ -17,6 +17,7 @@ use winit::application::ApplicationHandler;
 use winit::window::Window;
 
 use crate::audio::AudioSystem;
+use crate::emulation::SharedEmulator;
 use crate::emulation::gui::EmulatorGui;
 use crate::settings::Settings;
 use crate::window::Fullscreen;
@@ -81,7 +82,7 @@ struct Application {
     mouse_hide_timeout: Duration,
     audio_gui: AudioGui,
     inputs_gui: InputsGui,
-    emulator: Emulator,
+    shared_emulator: SharedEmulator,
     sdl_event_pump: EventPump,
     emulator_gui: EmulatorGui,
 }
@@ -98,21 +99,21 @@ impl Application {
 
         let audio_system = AudioSystem::new(sdl3_context.audio().expect("An SDL audio subsystem"));
         let mut settings = Settings::current_mut();
-        let stream = audio_system.start_stream(
+        let mut stream = audio_system.start_stream(
             settings.audio.get_selected_device(&audio_system),
             settings.audio.volume,
         );
         drop(settings);
 
-        let emulator = Emulator::new(stream);
-        let audio_gui = AudioGui::new(audio_system.clone());
+        let emulator = Emulator::new(&mut stream);
+        let audio_gui = AudioGui::new(audio_system.clone(), stream);
 
         let inputs = Inputs::new(SDL3Gamepads::new(
             sdl3_context.gamepad().map_err(anyhow::Error::msg)?,
         ));
         let inputs_gui = InputsGui::new(inputs);
 
-        let emulator_gui = EmulatorGui::new();
+        let emulator_gui = EmulatorGui::new(emulator.shared_state.clone());
 
         let mouse_hide_timeout = Duration::from_secs(1);
         Ok(Self {
@@ -124,7 +125,7 @@ impl Application {
                 .expect("there to be an instant `mouse_hide_timeout` seconds in the past"),
             audio_gui,
             inputs_gui,
-            emulator,
+            shared_emulator: emulator.shared_state.emulator.clone(),
             emulator_gui,
             sdl_event_pump,
         })
@@ -142,7 +143,11 @@ impl ApplicationHandler for Application {
         let window = Arc::new(window);
 
         let renderer = block_on(Renderer::new(window.clone())).expect("a renderer to be created");
-        let main_view = MainView::new(renderer);
+        let main_view = MainView::new(
+            renderer,
+            self.shared_emulator.command_tx.clone(),
+            self.shared_emulator.frame_buffer.clone(),
+        );
         self.main_view = Some(main_view);
         self.window = Some(window);
     }
@@ -173,7 +178,6 @@ impl ApplicationHandler for Application {
                         &mut self.audio_gui,
                         &mut self.inputs_gui,
                         &mut self.emulator_gui,
-                        &mut self.emulator,
                     );
                     if let Some(window) = &self.window {
                         window.request_redraw();
@@ -204,9 +208,9 @@ impl ApplicationHandler for Application {
                 // Don't let the inputs control the game if the gui is showing
                 [JoypadState(0), JoypadState(0)]
             };
-            self.emulator.shared_inputs[0]
+            self.shared_emulator.inputs[0]
                 .store(*new_inputs[0], std::sync::atomic::Ordering::Relaxed);
-            self.emulator.shared_inputs[1]
+            self.shared_emulator.inputs[1]
                 .store(*new_inputs[1], std::sync::atomic::Ordering::Relaxed);
 
             main_view.handle_window_event(

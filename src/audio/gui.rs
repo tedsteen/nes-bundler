@@ -1,18 +1,23 @@
 use crate::{
-    audio::AudioSystem, emulation::Emulator, main_view::gui::GuiComponent, settings::Settings,
+    audio::{AudioStream, AudioSystem},
+    main_view::gui::GuiComponent,
+    settings::Settings,
 };
 use egui::{Slider, Ui};
 
 pub struct AudioGui {
-    pub audio_system: AudioSystem, // #[cfg(feature = "debug")]
-                                   // stats: AudioStats,
+    pub audio_system: AudioSystem,
+    audio_stream: AudioStream,
+    // #[cfg(feature = "debug")]
+    // stats: AudioStats,
 }
 
 impl AudioGui {
-    pub fn new(audio_system: AudioSystem) -> Self {
+    pub fn new(audio_system: AudioSystem, audio_stream: AudioStream) -> Self {
         Self {
             audio_system,
             //stats: AudioStats::new(),
+            audio_stream,
         }
     }
 }
@@ -54,7 +59,7 @@ impl AudioGui {
 // }
 
 impl GuiComponent for AudioGui {
-    fn ui(&mut self, ui: &mut Ui, emulator: &mut Emulator) {
+    fn ui(&mut self, ui: &mut Ui) {
         // #[cfg(feature = "debug")]
         // Self::stats_ui(ui, &self.stats);
         let available_devices = self.audio_system.get_available_devices();
@@ -77,7 +82,7 @@ impl GuiComponent for AudioGui {
                                 available_device.name(),
                             );
                             if a.changed() {
-                                emulator.audio_stream.swap_output_device(available_device);
+                                self.audio_stream.swap_output_device(available_device);
                             }
                         }
                     });
@@ -90,7 +95,7 @@ impl GuiComponent for AudioGui {
                 .add(Slider::new(&mut audio_settings.volume, 0..=100).suffix("%"))
                 .changed()
             {
-                emulator.audio_stream.set_volume(audio_settings.volume);
+                self.audio_stream.set_volume(audio_settings.volume);
             }
         });
     }

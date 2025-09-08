@@ -57,18 +57,29 @@ impl SharedEmulatorState {
 }
 
 #[derive(Clone)]
-pub struct SharedState {
-    pub emulator_command_tx: EmulatorCommandBus,
-    pub emulator_state: Arc<SharedEmulatorState>,
+pub struct SharedEmulator {
+    pub command_tx: EmulatorCommandBus,
+    pub state: Arc<SharedEmulatorState>,
 
+    pub frame_buffer: VideoBufferPool,
+    pub inputs: Arc<[AtomicU8; 2]>,
+}
+
+#[derive(Clone)]
+pub struct SharedState {
+    pub emulator: SharedEmulator,
     #[cfg(feature = "netplay")]
     pub netplay: crate::netplay::SharedNetplay,
 }
 impl SharedState {
     fn new(emulator_command_tx: EmulatorCommandBus) -> Self {
         Self {
-            emulator_command_tx: emulator_command_tx,
-            emulator_state: Arc::new(SharedEmulatorState::new()),
+            emulator: SharedEmulator {
+                command_tx: emulator_command_tx,
+                state: Arc::new(SharedEmulatorState::new()),
+                inputs: Arc::new([AtomicU8::new(0), AtomicU8::new(0)]),
+                frame_buffer: VideoBufferPool::new(),
+            },
 
             #[cfg(feature = "netplay")]
             netplay: crate::netplay::SharedNetplay::new(),
@@ -77,12 +88,7 @@ impl SharedState {
 }
 
 pub struct Emulator {
-    pub frame_buffer: VideoBufferPool,
-    pub shared_inputs: Arc<[AtomicU8; 2]>,
-
     pub shared_state: SharedState,
-
-    pub audio_stream: AudioStream,
 
     // We need to hold on to this to keep the thread alive
     _th: std::thread::JoinHandle<()>,
@@ -91,7 +97,7 @@ pub struct Emulator {
 pub const DEFAULT_SAMPLE_RATE: f32 = 44_100.0;
 
 impl Emulator {
-    pub fn new(mut audio_stream: AudioStream) -> Self {
+    pub fn new(audio_stream: &mut AudioStream) -> Self {
         #[allow(unused_mut)]
         let mut nes_state = new_local_nes_state();
 
@@ -100,24 +106,22 @@ impl Emulator {
 
             let shared_state = SharedState::new(emulator_tx.clone());
 
-            let inputs = Arc::new([AtomicU8::new(0), AtomicU8::new(0)]);
-            let frame_buffer = VideoBufferPool::new();
-
             let _th = std::thread::spawn({
                 let shared_state = shared_state.clone();
 
-                let inputs = inputs.clone();
-                let frame_buffer = frame_buffer.clone();
-
                 let mut emulator_rx = emulator_rx;
-                || {
+                move || {
                     let rt = tokio::runtime::Builder::new_current_thread()
                         .enable_all()
                         .build()
                         .unwrap();
+                    let inputs = shared_state.emulator.inputs.clone();
+                    let frame_buffer = shared_state.emulator.frame_buffer.clone();
+                    let shared_emulator = shared_state.emulator.clone();
+
                     #[cfg(feature = "netplay")]
                     let mut nes_state =
-                        crate::netplay::Netplay::new(nes_state, shared_state.clone());
+                        crate::netplay::Netplay::new(nes_state, shared_state.netplay.clone());
 
                     tokio::task::LocalSet::new().block_on(&rt, async move {
                         loop {
@@ -150,8 +154,8 @@ impl Emulator {
                                 nes_state.advance(joypad_state, buffers).await;
 
                                 let frame = nes_state.frame();
-                                shared_state
-                                    .emulator_state
+                                shared_emulator
+                                    .state
                                     .frame
                                     .store(frame, std::sync::atomic::Ordering::Relaxed);
 
@@ -176,13 +180,7 @@ impl Emulator {
                     });
                 }
             });
-            Self {
-                frame_buffer,
-                shared_inputs: inputs,
-                audio_stream,
-                shared_state,
-                _th,
-            }
+            Self { shared_state, _th }
         } else {
             panic!("No audio producer")
         }

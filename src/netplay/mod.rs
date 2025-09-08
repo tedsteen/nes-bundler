@@ -8,7 +8,7 @@ use tokio::sync::watch::channel;
 use self::connection::StartMethod;
 
 use crate::{
-    emulation::{LocalNesState, NESBuffers, NesStateHandler, SharedState},
+    emulation::{LocalNesState, NESBuffers, NesStateHandler},
     input::JoypadState,
     netplay::{
         connection::{ConnectingState, JoinOrHost},
@@ -92,20 +92,14 @@ pub struct Netplay {
 }
 
 impl Netplay {
-    pub fn new(local_play_nes_state: LocalNesState, shared_state: SharedState) -> Self {
+    pub fn new(local_play_nes_state: LocalNesState, shared_netplay: SharedNetplay) -> Self {
         Self {
             initial_local_nes_state: local_play_nes_state.clone(),
             session: NetplaySession::new(local_play_nes_state),
-            shared_state_sender: shared_state.netplay.sender,
-            netplay_rx: shared_state
-                .netplay
-                .command_rx
-                .write()
-                .unwrap()
-                .take()
-                .unwrap(),
+            shared_state_sender: shared_netplay.sender,
+            netplay_rx: shared_netplay.command_rx.write().unwrap().take().unwrap(),
             #[cfg(feature = "debug")]
-            stats: shared_state.netplay.stats.clone(),
+            stats: shared_netplay.stats.clone(),
         }
     }
 

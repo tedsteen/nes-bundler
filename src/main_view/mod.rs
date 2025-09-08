@@ -3,7 +3,9 @@ use egui::{Color32, Image, Vec2, load::SizedTexture};
 use crate::{
     Size,
     audio::gui::AudioGui,
-    emulation::{Emulator, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3, gui::EmulatorGui},
+    emulation::{
+        EmulatorCommandBus, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3, VideoBufferPool, gui::EmulatorGui,
+    },
     input::{
         KeyEvent, buttons::GamepadButton, gamepad::GamepadEvent, gui::InputsGui, keys::Modifiers,
     },
@@ -22,6 +24,7 @@ pub struct MainView {
     modifiers: Modifiers,
     nes_texture: Texture,
     renderer: Renderer,
+    frame_buffer: VideoBufferPool,
 }
 
 fn to_egui_key(gamepad_button: &GamepadButton) -> Option<egui::Key> {
@@ -59,13 +62,18 @@ fn to_egui_event(gamepad_event: &GamepadEvent) -> Option<egui::Event> {
 }
 
 impl MainView {
-    pub fn new(mut renderer: Renderer) -> Self {
+    pub fn new(
+        mut renderer: Renderer,
+        emulator_tx: EmulatorCommandBus,
+        frame_buffer: VideoBufferPool,
+    ) -> Self {
         Self {
-            main_gui: MainGui::new(renderer.window.clone()),
+            main_gui: MainGui::new(renderer.window.clone(), emulator_tx),
             modifiers: Modifiers::empty(),
 
             nes_texture: Texture::new(&mut renderer, NES_WIDTH, NES_HEIGHT, Some("nes frame")),
             renderer,
+            frame_buffer,
         }
     }
 
@@ -150,9 +158,8 @@ impl MainView {
         audio_gui: &mut AudioGui,
         inputs_gui: &mut InputsGui,
         emulator_gui: &mut EmulatorGui,
-        emulator: &mut Emulator,
     ) {
-        if let Some(nes_frame) = &emulator.frame_buffer.pop_ref() {
+        if let Some(nes_frame) = &self.frame_buffer.pop_ref() {
             self.nes_texture.update(&self.renderer.queue, nes_frame);
         }
 
@@ -207,7 +214,7 @@ impl MainView {
                         });
                     });
             }
-            main_gui.ui(ctx, audio_gui, inputs_gui, emulator_gui, emulator);
+            main_gui.ui(ctx, audio_gui, inputs_gui, emulator_gui);
         });
 
         match render_result {

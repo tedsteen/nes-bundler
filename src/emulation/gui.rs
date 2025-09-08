@@ -1,9 +1,12 @@
-use crate::{emulation::Emulator, main_view::gui::GuiComponent};
+#[cfg(feature = "debug")]
+use crate::emulation::SharedEmulator;
+use crate::{emulation::SharedState, main_view::gui::GuiComponent};
 
 #[cfg(feature = "debug")]
 struct DebugGui {
     pub speed: f32,
     pub override_speed: bool,
+    shared_emulator: SharedEmulator,
 }
 
 pub struct EmulatorGui {
@@ -14,28 +17,28 @@ pub struct EmulatorGui {
 }
 impl EmulatorGui {
     #[allow(unused_variables)]
-    pub fn new() -> Self {
+    pub fn new(shared_state: SharedState) -> Self {
         Self {
             #[cfg(feature = "netplay")]
-            netplay_gui: crate::netplay::gui::NetplayGui::new(),
+            netplay_gui: crate::netplay::gui::NetplayGui::new(shared_state.netplay.clone()),
             #[cfg(feature = "debug")]
             debug_gui: DebugGui {
                 speed: 1.0,
                 override_speed: false,
+                shared_emulator: shared_state.emulator.clone(),
             },
         }
     }
 }
 #[cfg(feature = "debug")]
 impl DebugGui {
-    fn ui(&mut self, ui: &mut egui::Ui, emulator: &mut Emulator) {
+    fn ui(&mut self, ui: &mut egui::Ui) {
         ui.end_row();
 
         ui.label(format!(
             "Frame: {}",
-            emulator
-                .shared_state
-                .emulator_state
+            self.shared_emulator
+                .state
                 .frame
                 .load(std::sync::atomic::Ordering::Relaxed)
         ));
@@ -46,18 +49,18 @@ impl DebugGui {
             .changed()
             && !self.override_speed
         {
-            let _ = emulator
-                .shared_state
-                .emulator_command_tx
+            let _ = self
+                .shared_emulator
+                .command_tx
                 .try_send(crate::emulation::EmulatorCommand::SetSpeed(1.0));
         }
 
         if self.override_speed {
             ui.end_row();
             ui.add(egui::Slider::new(&mut self.speed, 0.005..=2.0).suffix("x"));
-            let _ = emulator
-                .shared_state
-                .emulator_command_tx
+            let _ = self
+                .shared_emulator
+                .command_tx
                 .try_send(crate::emulation::EmulatorCommand::SetSpeed(self.speed));
         }
         ui.end_row();
@@ -66,17 +69,17 @@ impl DebugGui {
 
 impl GuiComponent for EmulatorGui {
     #[allow(unused_variables)]
-    fn ui(&mut self, ui: &mut egui::Ui, emulator: &mut Emulator) {
+    fn ui(&mut self, ui: &mut egui::Ui) {
         #[cfg(feature = "debug")]
-        self.debug_gui.ui(ui, emulator);
+        self.debug_gui.ui(ui);
 
         #[cfg(feature = "netplay")]
-        self.netplay_gui.ui(ui, emulator);
+        self.netplay_gui.ui(ui);
     }
 
     #[cfg(feature = "netplay")]
-    fn messages(&self, emulator: &Emulator) -> Option<Vec<String>> {
-        self.netplay_gui.messages(emulator)
+    fn messages(&self) -> Option<Vec<String>> {
+        self.netplay_gui.messages()
     }
 
     fn name(&self) -> Option<&str> {

@@ -1,5 +1,4 @@
 use crate::{
-    emulation::Emulator,
     input::{JoypadButton, JoypadState},
     main_view::gui::{GuiComponent, GuiEvent},
     settings::Settings,
@@ -151,7 +150,7 @@ impl GuiComponent for InputsGui {
         self.inputs.advance(gui_event);
     }
 
-    fn ui(&mut self, ui: &mut Ui, _emulator: &mut Emulator) {
+    fn ui(&mut self, ui: &mut Ui) {
         let instance = &mut self.inputs;
         let input_settings = &mut Settings::current_mut().input;
         let available_configurations = &mut input_settings
