@@ -210,7 +210,7 @@ impl ConnectingSession {
                     initial_state,
                 });
             }
-            tokio::time::sleep(Duration::from_millis(16)).await;
+            tokio::time::sleep(Duration::from_millis(1)).await;
         }
     }
 

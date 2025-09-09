@@ -144,7 +144,7 @@ impl ConnectedNetplaySession {
 
         match p2p_session.current_state() {
             ggrs::SessionState::Synchronizing => {
-                tokio::time::sleep(Duration::from_millis(16)).await;
+                tokio::time::sleep(Duration::from_millis(1)).await;
             }
             ggrs::SessionState::Running => {
                 for handle in p2p_session.local_player_handles() {
@@ -351,7 +351,7 @@ impl NetplaySession {
     }
 }
 
-const POLLING_TIMEOUT: Duration = Duration::from_millis(16);
+const POLLING_TIMEOUT: Duration = Duration::from_millis(1);
 impl NesStateHandler for NetplaySession {
     async fn advance(
         &mut self,
@@ -412,7 +412,7 @@ impl NesStateHandler for NetplaySession {
                 }
             }
             NetplaySession::Failed(..) => {
-                tokio::time::sleep(Duration::from_millis(16)).await;
+                tokio::time::sleep(Duration::from_millis(1)).await;
             }
         }
     }

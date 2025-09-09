@@ -157,6 +157,9 @@ impl Emulator {
                                 .frame
                                 .store(frame, std::sync::atomic::Ordering::Relaxed);
 
+                            //TODO: Figure out why this is needed
+                            tokio::task::yield_now().await;
+
                             // 2) periodic SRAM snapshot (non-blocking check)
                             if frame % 100 == 0 {
                                 use base64::Engine;
