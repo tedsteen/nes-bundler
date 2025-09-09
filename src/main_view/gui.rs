@@ -1,5 +1,5 @@
 use std::{
-    sync::{mpsc::Sender, Arc, OnceLock, RwLock},
+    sync::{Arc, OnceLock, RwLock},
     time::{Duration, Instant},
 };
 
@@ -11,9 +11,9 @@ use winit::dpi::LogicalSize;
 use crate::{
     audio::gui::AudioGui,
     bundle::Bundle,
-    emulation::{gui::EmulatorGui, EmulatorCommand},
-    gui::{esc_pressed, MenuButton},
-    input::{gamepad::GamepadEvent, gui::InputsGui, KeyEvent},
+    emulation::{EmulatorCommand, EmulatorCommandBus, gui::EmulatorGui},
+    gui::{MenuButton, esc_pressed},
+    input::{KeyEvent, gamepad::GamepadEvent, gui::InputsGui},
     settings::Settings,
 };
 
@@ -30,7 +30,7 @@ pub enum GuiEvent {
 
 pub trait GuiComponent {
     // Runs when gui is visible
-    fn ui(&mut self, _ui: &mut Ui) {}
+    fn ui(&mut self, ui: &mut Ui);
 
     fn messages(&self) -> Option<Vec<String>> {
         None
@@ -52,7 +52,7 @@ pub enum MainMenuState {
 pub struct MainGui {
     start_time: Instant,
     window: Arc<winit::window::Window>,
-    emulator_tx: Sender<EmulatorCommand>,
+    emulator_tx: EmulatorCommandBus,
 }
 
 impl MainGui {
@@ -75,7 +75,7 @@ impl MainGui {
     const MESSAGE_TEXT_BACKGROUND: Color32 = Color32::from_rgba_premultiplied(20, 20, 20, 200);
     const MESSAGE_TEXT_COLOR: Color32 = Color32::from_rgb(255, 255, 255);
 
-    pub fn new(window: Arc<winit::window::Window>, emulator_tx: Sender<EmulatorCommand>) -> Self {
+    pub fn new(window: Arc<winit::window::Window>, emulator_tx: EmulatorCommandBus) -> Self {
         Self {
             start_time: Instant::now(),
             window,
@@ -214,7 +214,7 @@ impl MainGui {
                                             {
                                                 let _ = self
                                                     .emulator_tx
-                                                    .send(EmulatorCommand::Reset(true));
+                                                    .try_send(EmulatorCommand::Reset(true));
                                             }
                                         }
                                     });

@@ -1,22 +1,15 @@
-use std::sync::{Arc, Mutex, mpsc::Sender};
-
-use crate::main_view::gui::GuiComponent;
-
-use super::{EmulatorCommand, StateHandler};
+#[cfg(feature = "debug")]
+use crate::emulation::SharedEmulator;
+use crate::{emulation::SharedState, main_view::gui::GuiComponent};
 
 #[cfg(feature = "debug")]
 struct DebugGui {
-    nes_state: Arc<Mutex<StateHandler>>,
-    emulator_tx: Sender<EmulatorCommand>,
-
     pub speed: f32,
     pub override_speed: bool,
+    shared_emulator: SharedEmulator,
 }
 
 pub struct EmulatorGui {
-    #[cfg(feature = "netplay")]
-    nes_state: Arc<Mutex<StateHandler>>,
-
     #[cfg(feature = "netplay")]
     pub netplay_gui: crate::netplay::gui::NetplayGui,
     #[cfg(feature = "debug")]
@@ -24,20 +17,16 @@ pub struct EmulatorGui {
 }
 impl EmulatorGui {
     #[allow(unused_variables)]
-    pub fn new(nes_state: Arc<Mutex<StateHandler>>, emulator_tx: Sender<EmulatorCommand>) -> Self {
+    pub fn new(shared_state: SharedState) -> Self {
         Self {
             #[cfg(feature = "netplay")]
-            netplay_gui: crate::netplay::gui::NetplayGui::new(),
+            netplay_gui: crate::netplay::gui::NetplayGui::new(shared_state.netplay.clone()),
             #[cfg(feature = "debug")]
             debug_gui: DebugGui {
-                nes_state: nes_state.clone(),
-                emulator_tx,
                 speed: 1.0,
                 override_speed: false,
+                shared_emulator: shared_state.emulator.clone(),
             },
-
-            #[cfg(feature = "netplay")]
-            nes_state,
         }
     }
 }
@@ -48,7 +37,10 @@ impl DebugGui {
 
         ui.label(format!(
             "Frame: {}",
-            super::NesStateHandler::frame(std::ops::Deref::deref(&self.nes_state.lock().unwrap()))
+            self.shared_emulator
+                .state
+                .frame
+                .load(std::sync::atomic::Ordering::Relaxed)
         ));
         ui.end_row();
 
@@ -57,13 +49,19 @@ impl DebugGui {
             .changed()
             && !self.override_speed
         {
-            let _ = self.emulator_tx.send(EmulatorCommand::SetSpeed(1.0));
+            let _ = self
+                .shared_emulator
+                .command_tx
+                .try_send(crate::emulation::EmulatorCommand::SetSpeed(1.0));
         }
 
         if self.override_speed {
             ui.end_row();
             ui.add(egui::Slider::new(&mut self.speed, 0.005..=2.0).suffix("x"));
-            let _ = self.emulator_tx.send(EmulatorCommand::SetSpeed(self.speed));
+            let _ = self
+                .shared_emulator
+                .command_tx
+                .try_send(crate::emulation::EmulatorCommand::SetSpeed(self.speed));
         }
         ui.end_row();
     }
@@ -76,12 +74,12 @@ impl GuiComponent for EmulatorGui {
         self.debug_gui.ui(ui);
 
         #[cfg(feature = "netplay")]
-        self.netplay_gui.ui(ui, &mut self.nes_state.lock().unwrap());
+        self.netplay_gui.ui(ui);
     }
 
     #[cfg(feature = "netplay")]
     fn messages(&self) -> Option<Vec<String>> {
-        self.netplay_gui.messages(&self.nes_state.lock().unwrap())
+        self.netplay_gui.messages()
     }
 
     fn name(&self) -> Option<&str> {

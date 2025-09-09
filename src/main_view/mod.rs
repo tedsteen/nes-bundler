@@ -1,21 +1,19 @@
-use std::sync::mpsc::Sender;
-
-use egui::{load::SizedTexture, Color32, Image, Vec2};
+use egui::{Color32, Image, Vec2, load::SizedTexture};
 
 use crate::{
+    Size,
     audio::gui::AudioGui,
     emulation::{
-        gui::EmulatorGui, EmulatorCommand, VideoBufferPool, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3,
+        EmulatorCommandBus, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3, VideoBufferPool, gui::EmulatorGui,
     },
     input::{
-        buttons::GamepadButton, gamepad::GamepadEvent, gui::InputsGui, keys::Modifiers, KeyEvent,
+        KeyEvent, buttons::GamepadButton, gamepad::GamepadEvent, gui::InputsGui, keys::Modifiers,
     },
-    integer_scaling::{calculate_size_corrected, MINIMUM_INTEGER_SCALING_SIZE},
+    integer_scaling::{MINIMUM_INTEGER_SCALING_SIZE, calculate_size_corrected},
     window::{
-        egui_winit_wgpu::{texture::Texture, Renderer},
         Fullscreen,
+        egui_winit_wgpu::{Renderer, texture::Texture},
     },
-    Size,
 };
 
 use self::gui::{GuiEvent, MainGui, ToGuiEvent};
@@ -26,6 +24,7 @@ pub struct MainView {
     modifiers: Modifiers,
     nes_texture: Texture,
     renderer: Renderer,
+    frame_buffer: VideoBufferPool,
 }
 
 fn to_egui_key(gamepad_button: &GamepadButton) -> Option<egui::Key> {
@@ -34,7 +33,7 @@ fn to_egui_key(gamepad_button: &GamepadButton) -> Option<egui::Key> {
         GamepadButton::DPadDown => Some(egui::Key::ArrowDown),
         GamepadButton::DPadLeft => Some(egui::Key::ArrowLeft),
         GamepadButton::DPadRight => Some(egui::Key::ArrowRight),
-        GamepadButton::A => Some(egui::Key::Enter),
+        GamepadButton::South => Some(egui::Key::Enter),
         GamepadButton::Guide => Some(egui::Key::Escape),
         _ => None,
     }
@@ -63,13 +62,18 @@ fn to_egui_event(gamepad_event: &GamepadEvent) -> Option<egui::Event> {
 }
 
 impl MainView {
-    pub fn new(mut renderer: Renderer, emulator_tx: Sender<EmulatorCommand>) -> Self {
+    pub fn new(
+        mut renderer: Renderer,
+        emulator_tx: EmulatorCommandBus,
+        frame_buffer: VideoBufferPool,
+    ) -> Self {
         Self {
             main_gui: MainGui::new(renderer.window.clone(), emulator_tx),
             modifiers: Modifiers::empty(),
 
             nes_texture: Texture::new(&mut renderer, NES_WIDTH, NES_HEIGHT, Some("nes frame")),
             renderer,
+            frame_buffer,
         }
     }
 
@@ -151,12 +155,11 @@ impl MainView {
 
     pub fn render(
         &mut self,
-        frame_buffer: &VideoBufferPool,
         audio_gui: &mut AudioGui,
         inputs_gui: &mut InputsGui,
         emulator_gui: &mut EmulatorGui,
     ) {
-        if let Some(nes_frame) = &frame_buffer.pop_ref() {
+        if let Some(nes_frame) = &self.frame_buffer.pop_ref() {
             self.nes_texture.update(&self.renderer.queue, nes_frame);
         }
 

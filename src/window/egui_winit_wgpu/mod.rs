@@ -43,17 +43,15 @@ impl Renderer {
             .expect("adapter to be crated");
 
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: None,
-                    required_features: wgpu::Features::empty(),
-                    // WebGL doesn't support all of wgpu's features, so if
-                    // we're building for the web we'll have to disable some.
-                    required_limits: Default::default(),
-                    memory_hints: Default::default(),
-                },
-                None, // Trace path
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                trace: wgpu::Trace::Off,
+                label: None,
+                required_features: wgpu::Features::empty(),
+                // WebGL doesn't support all of wgpu's features, so if
+                // we're building for the web we'll have to disable some.
+                required_limits: Default::default(),
+                memory_hints: Default::default(),
+            })
             .await?;
 
         let surface_caps = surface.get_capabilities(&adapter);

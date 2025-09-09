@@ -1,22 +1,23 @@
-use crate::{main_view::gui::GuiComponent, settings::Settings};
+use crate::{
+    audio::{AudioStream, AudioSystem},
+    main_view::gui::GuiComponent,
+    settings::Settings,
+};
 use egui::{Slider, Ui};
 
-use super::{
-    //debug::{AudioStat, AudioStats},
-    Audio,
-};
-
 pub struct AudioGui {
-    pub audio: Audio,
+    pub audio_system: AudioSystem,
+    audio_stream: AudioStream,
     // #[cfg(feature = "debug")]
     // stats: AudioStats,
 }
 
 impl AudioGui {
-    pub fn new(audio: Audio) -> Self {
+    pub fn new(audio_system: AudioSystem, audio_stream: AudioStream) -> Self {
         Self {
-            audio,
+            audio_system,
             //stats: AudioStats::new(),
+            audio_stream,
         }
     }
 }
@@ -61,48 +62,42 @@ impl GuiComponent for AudioGui {
     fn ui(&mut self, ui: &mut Ui) {
         // #[cfg(feature = "debug")]
         // Self::stats_ui(ui, &self.stats);
-        let available_device_names =
-            Audio::get_available_output_device_names_for_subsystem(&self.audio.audio_subsystem);
-        let new_device = {
-            let mut new_device = None;
-            let audio_settings = &mut Settings::current_mut().audio;
-            ui.horizontal(|ui| {
-                ui.label("Output");
-                let selected_device = &mut audio_settings.output_device;
-                if selected_device.is_none() {
-                    *selected_device = self.audio.get_default_device_name();
-                }
-                if let Some(selected_text) = selected_device.as_deref_mut() {
-                    egui::ComboBox::from_id_salt("audio-output")
-                        .width(160.0)
-                        .selected_text(selected_text.to_string())
-                        .show_ui(ui, |ui| {
-                            for name in available_device_names {
-                                if ui
-                                    .selectable_value(
-                                        selected_device,
-                                        Some(name.clone()),
-                                        name.clone(),
-                                    )
-                                    .changed()
-                                {
-                                    new_device = Some(name);
-                                }
+        let available_devices = self.audio_system.get_available_devices();
+        let audio_settings = &mut Settings::current_mut().audio;
+        ui.horizontal(|ui| {
+            ui.label("Output");
+            let selected_device = &mut audio_settings.output_device;
+            if selected_device.is_none() {
+                *selected_device = Some(self.audio_system.get_default_device().name())
+            }
+            if let Some(selected_text) = selected_device.as_deref_mut() {
+                egui::ComboBox::from_id_salt("audio-output")
+                    .width(160.0)
+                    .selected_text(selected_text.to_string())
+                    .show_ui(ui, |ui| {
+                        for available_device in available_devices {
+                            let a = ui.selectable_value(
+                                selected_device,
+                                Some(available_device.name()),
+                                available_device.name(),
+                            );
+                            if a.changed() {
+                                self.audio_stream.swap_output_device(available_device);
                             }
-                        });
-                }
-            });
+                        }
+                    });
+            }
+        });
 
-            ui.horizontal(|ui| {
-                ui.label("Volume");
-                ui.add(Slider::new(&mut audio_settings.volume, 0..=100).suffix("%"));
-            });
-
-            new_device
-        };
-        if let Some(new_device) = new_device {
-            self.audio.stream.set_output_device(Some(new_device));
-        }
+        ui.horizontal(|ui| {
+            ui.label("Volume");
+            if ui
+                .add(Slider::new(&mut audio_settings.volume, 0..=100).suffix("%"))
+                .changed()
+            {
+                self.audio_stream.set_volume(audio_settings.volume);
+            }
+        });
     }
 
     fn name(&self) -> Option<&str> {

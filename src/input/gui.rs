@@ -6,7 +6,7 @@ use crate::{
 use egui::{Color32, Grid, RichText, Ui};
 use serde::Deserialize;
 
-use super::{settings::InputSettings, InputConfiguration, Inputs, MapRequest};
+use super::{InputConfiguration, Inputs, MapRequest, settings::InputSettings};
 
 #[derive(Deserialize, Debug)]
 pub struct InputButtonsVoca {

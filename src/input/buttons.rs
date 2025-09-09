@@ -6,36 +6,47 @@ pub trait ToGamepadButton {
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub enum GamepadButton {
-    A,
-    B,
-    X,
-    Y,
+    South,
+    East,
+    West,
+    North,
+
     Back,
-    Guide,
+
     Start,
+    Guide,
+
     LeftStick,
     RightStick,
     LeftShoulder,
     RightShoulder,
+
     DPadUp,
     DPadDown,
     DPadLeft,
     DPadRight,
-    Misc1,
-    Paddle1,
-    Paddle2,
-    Paddle3,
-    Paddle4,
+
     Touchpad,
+
+    LeftPaddle1,
+    RightPaddle1,
+    LeftPaddle2,
+    RightPaddle2,
+
+    Misc1,
+    Misc2,
+    Misc3,
+    Misc4,
+    Misc5,
 }
 
 impl std::fmt::Display for GamepadButton {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            GamepadButton::A => write!(f, "A"),
-            GamepadButton::B => write!(f, "B"),
-            GamepadButton::X => write!(f, "X"),
-            GamepadButton::Y => write!(f, "Y"),
+            GamepadButton::South => write!(f, "South"),
+            GamepadButton::East => write!(f, "East"),
+            GamepadButton::West => write!(f, "West"),
+            GamepadButton::North => write!(f, "North"),
             GamepadButton::Back => write!(f, "Back"),
             GamepadButton::Start => write!(f, "Start"),
             GamepadButton::LeftStick => write!(f, "Stick Left"),
