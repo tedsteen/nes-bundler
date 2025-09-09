@@ -91,8 +91,6 @@ impl Application {
     fn new(_event_loop: &EventLoop<()>) -> anyhow::Result<Self> {
         // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
         sdl3::hint::set("SDL_JOYSTICK_THREAD", "1");
-        // TODO: Perhaps do this to fix this issue: https://github.com/libsdl-org/SDL/issues/7896#issuecomment-1616700934
-        //sdl3::hint::set("SDL_JOYSTICK_RAWINPUT", "0");
 
         let sdl3_context = sdl3::init().map_err(anyhow::Error::msg)?;
         let sdl_event_pump = sdl3_context.event_pump().map_err(anyhow::Error::msg)?;

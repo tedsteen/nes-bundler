@@ -121,7 +121,7 @@ impl SDL3Gamepads {
         if let Some(found_controller) = self
             .game_controller_subsystem
             .gamepads()
-            .expect("TODO get gamepads")
+            .expect("go get the gamepads")
             .iter()
             .find_map(|id| {
                 if input_id == id.to_input_id() && self.game_controller_subsystem.is_gamepad(*id) {

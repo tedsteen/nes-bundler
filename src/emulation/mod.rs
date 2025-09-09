@@ -157,7 +157,7 @@ impl Emulator {
                                 .frame
                                 .store(frame, std::sync::atomic::Ordering::Relaxed);
 
-                            //TODO: Figure out why this is needed
+                            //TODO: Figure out why this is needed (probably to avoid busy loop..)
                             tokio::task::yield_now().await;
 
                             // 2) periodic SRAM snapshot (non-blocking check)
