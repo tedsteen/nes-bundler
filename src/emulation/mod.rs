@@ -138,20 +138,26 @@ impl Emulator {
                             if audio_producer.occupied_len()
                                 <= nes_state.get_samples_per_frame() as usize
                             {
-                                let joypad_state = [
-                                    JoypadState(
-                                        inputs[0].load(std::sync::atomic::Ordering::Relaxed),
-                                    ),
-                                    JoypadState(
-                                        inputs[1].load(std::sync::atomic::Ordering::Relaxed),
-                                    ),
-                                ];
-                                let mut push_ref = frame_buffer.push_ref();
-                                let buffers = &mut NESBuffers {
-                                    audio: Some(&mut audio_producer),
-                                    video: push_ref.as_deref_mut().ok(),
-                                };
-                                nes_state.advance(joypad_state, buffers).await;
+                                let mut frame_result = frame_buffer.push_ref();
+
+                                nes_state
+                                    .advance(
+                                        [
+                                            JoypadState(
+                                                inputs[0]
+                                                    .load(std::sync::atomic::Ordering::Relaxed),
+                                            ),
+                                            JoypadState(
+                                                inputs[1]
+                                                    .load(std::sync::atomic::Ordering::Relaxed),
+                                            ),
+                                        ],
+                                        Some(NESBuffers {
+                                            audio: &mut audio_producer,
+                                            video: frame_result.as_deref_mut().ok(),
+                                        }),
+                                    )
+                                    .await;
 
                                 let frame = nes_state.frame();
                                 shared_emulator
@@ -188,7 +194,11 @@ impl Emulator {
 }
 
 pub trait NesStateHandler {
-    async fn advance(&mut self, joypad_state: [JoypadState; MAX_PLAYERS], buffers: &mut NESBuffers);
+    async fn advance(
+        &mut self,
+        joypad_state: [JoypadState; MAX_PLAYERS],
+        buffers: Option<NESBuffers>,
+    );
     fn reset(&mut self, hard: bool);
     fn set_speed(&mut self, speed: f32);
     fn save_sram(&self) -> Option<&[u8]>;
@@ -214,7 +224,7 @@ impl NesRegion {
 }
 
 pub struct NESBuffers<'a> {
-    pub audio: Option<&'a mut AudioProducer>,
+    pub audio: &'a mut AudioProducer,
     pub video: Option<&'a mut NESVideoFrame>,
 }
 

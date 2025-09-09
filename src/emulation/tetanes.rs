@@ -103,7 +103,7 @@ impl TetanesNesState {
         Ok(s)
     }
 
-    pub fn clock_frame_into(&mut self, buffers: &mut NESBuffers) -> Result<u64> {
+    pub fn clock_frame_into(&mut self, mut buffers: Option<NESBuffers>) -> Result<u64> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
@@ -111,33 +111,34 @@ impl TetanesNesState {
         //self.control_deck.cpu_mut().bus.apu.skip_mixing = false;
 
         let cycles = self.control_deck.clock_frame()?;
-        if let Some(video) = &mut buffers.video {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("copy buffers");
-            self.control_deck
-                .cpu()
-                .bus
-                .ppu
-                .frame_buffer()
-                .iter()
-                .enumerate()
-                .for_each(|(idx, &palette_index)| {
-                    let palette_index = palette_index as usize * 3;
-                    let pixel_index = idx * 4;
-                    video[pixel_index..pixel_index + 3]
-                        .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
-                });
-        }
-        if let Some(audio_producer) = &mut buffers.audio {
+        if let Some(buffers) = buffers.take() {
+            if let Some(video) = buffers.video {
+                #[cfg(feature = "debug")]
+                puffin::profile_scope!("copy buffers");
+                self.control_deck
+                    .cpu()
+                    .bus
+                    .ppu
+                    .frame_buffer()
+                    .iter()
+                    .enumerate()
+                    .for_each(|(idx, &palette_index)| {
+                        let palette_index = palette_index as usize * 3;
+                        let pixel_index = idx * 4;
+                        video[pixel_index..pixel_index + 3]
+                            .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
+                    });
+            }
+
             let samples = self.control_deck.cpu().bus.audio_samples();
-            audio_producer.push_slice(samples);
+            buffers.audio.push_slice(samples);
         }
 
         self.control_deck.clear_audio_samples();
         Ok(cycles)
     }
 
-    pub fn clock_frame_ahead_into(&mut self, buffers: &mut NESBuffers) -> Result<u64> {
+    pub fn clock_frame_ahead_into(&mut self, buffers: Option<NESBuffers>) -> Result<u64> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
@@ -200,7 +201,7 @@ impl NesStateHandler for TetanesNesState {
     async fn advance(
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        buffers: &mut NESBuffers<'_>,
+        buffers: Option<NESBuffers<'_>>,
     ) {
         *self.control_deck.joypad_mut(Player::One) = Joypad::from_bytes((*joypad_state[0]).into());
         *self.control_deck.joypad_mut(Player::Two) = Joypad::from_bytes((*joypad_state[1]).into());

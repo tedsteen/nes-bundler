@@ -1,11 +1,1 @@
 [env]
-# Ensure compatibility with macOS 11.3 and later
-#MACOSX_DEPLOYMENT_TARGET = "11.3"
-#MACOSX_DEPLOYMENT_TARGET="15.5"
-#CMAKE_OSX_DEPLOYMENT_TARGET="15.5"
-
-# [target.x86_64-pc-windows-msvc]
-# rustflags = ["-C", "target-feature=+crt-static"]
-
-# [target.i686-pc-windows-msvc]
-# rustflags = ["-C", "target-feature=+crt-static"]

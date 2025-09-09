@@ -138,7 +138,7 @@ impl ConnectedNetplaySession {
     pub async fn advance(
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        buffers: &mut NESBuffers<'_>,
+        mut buffers: Option<NESBuffers<'_>>,
     ) {
         let p2p_session = &mut self.p2p_session;
 
@@ -171,10 +171,6 @@ impl ConnectedNetplaySession {
                                 GgrsRequest::AdvanceFrame { inputs } => {
                                     let is_replay = self.current_game_state.ggrs_frame
                                         <= self.last_handled_ggrs_frame;
-                                    let no_buffers = &mut NESBuffers {
-                                        audio: None,
-                                        video: None,
-                                    };
 
                                     self.current_game_state
                                         .nes_state
@@ -186,7 +182,7 @@ impl ConnectedNetplaySession {
                                                 ],
                                                 self.local_player_index,
                                             ),
-                                            if is_replay { no_buffers } else { buffers },
+                                            if is_replay { None } else { buffers.take() },
                                         )
                                         .await;
 
@@ -360,7 +356,7 @@ impl NesStateHandler for NetplaySession {
     async fn advance(
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        buffers: &mut NESBuffers<'_>,
+        buffers: Option<NESBuffers<'_>>,
     ) {
         match self {
             NetplaySession::Disconnected(disconnected_session) => {

@@ -123,7 +123,7 @@ impl NesStateHandler for Netplay {
     async fn advance(
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
-        buffers: &mut NESBuffers<'_>,
+        buffers: Option<NESBuffers<'_>>,
     ) {
         // drain pending netplay commands
         #[cfg(feature = "netplay")]
