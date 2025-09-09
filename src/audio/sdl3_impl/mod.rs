@@ -177,15 +177,15 @@ pub struct NesBundlerAudioCallback {
 
 impl AudioCallback<f32> for NesBundlerAudioCallback {
     fn callback(&mut self, stream: &mut AudioStream2, requested: i32) {
+        let requested = requested as usize;
+
+        if requested > self.tmp.len() {
+            // Amortized growth (pow2). Avoids frequent reallocs.
+            let new_len = requested.next_power_of_two();
+            self.tmp.resize(new_len, 0.0);
+        }
+
         if let Some(rx) = &mut self.rx {
-            let requested = requested as usize;
-
-            if requested > self.tmp.len() {
-                // Amortized growth (pow2). Avoids frequent reallocs.
-                let new_len = requested.next_power_of_two();
-                self.tmp.resize(new_len, 0.0);
-            }
-
             let buf = &mut self.tmp[..requested];
             let got = rx.pop_slice(buf);
 
@@ -199,13 +199,15 @@ impl AudioCallback<f32> for NesBundlerAudioCallback {
                 buf[got..].fill(0.0);
             }
 
-            // zero-pad if we under-ran so we still hand over 'want' frames
+            // zero-pad if we under-ran so we still hand over 'requested' frames
             if got < requested {
                 //log::warn!("Buffer underrun ({got} < {requested})");
                 buf[got..requested].fill(0.0);
             }
-            let _ = stream.put_data_f32(&self.tmp[..requested]); // Ignore errors in callback
+        } else {
+            self.tmp[..requested].fill(0.0);
         }
+        let _ = stream.put_data_f32(&self.tmp[..requested]);
     }
 }
 

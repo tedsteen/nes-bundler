@@ -116,8 +116,10 @@ impl TetanesNesState {
                     });
             }
 
-            let samples = self.control_deck.cpu().bus.audio_samples();
-            buffers.audio.push_all(samples).await;
+            buffers
+                .audio
+                .push_all(self.control_deck.cpu().bus.audio_samples())
+                .await;
         }
 
         self.control_deck.clear_audio_samples();
