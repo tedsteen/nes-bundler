@@ -2,7 +2,6 @@ use std::{fmt::Debug, io::Cursor, ops::Deref};
 
 use anyhow::Result;
 
-use ringbuf::traits::Producer;
 use tetanes_core::{
     apu::filter::FilterChain,
     common::{NesRegion, Regional, Reset, ResetKind},
@@ -24,19 +23,6 @@ use crate::{
 #[derive(Clone)]
 pub struct TetanesNesState {
     control_deck: ControlDeck,
-}
-trait FromTetanesRegion {
-    fn from_tetanes_region(&self) -> crate::emulation::NesRegion;
-}
-impl FromTetanesRegion for NesRegion {
-    fn from_tetanes_region(&self) -> crate::emulation::NesRegion {
-        match self {
-            NesRegion::Ntsc => crate::emulation::NesRegion::Ntsc,
-            NesRegion::Pal => crate::emulation::NesRegion::Pal,
-            NesRegion::Dendy => crate::emulation::NesRegion::Dendy,
-            _ => panic!("Can't resolve region from {self:?}"),
-        }
-    }
 }
 trait ToTetanesRegion {
     fn to_tetanes_region(&self) -> NesRegion;
@@ -103,7 +89,7 @@ impl TetanesNesState {
         Ok(s)
     }
 
-    pub fn clock_frame_into(&mut self, mut buffers: Option<NESBuffers>) -> Result<u64> {
+    pub async fn clock_frame_into(&mut self, mut buffers: Option<NESBuffers<'_>>) -> Result<u64> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
@@ -131,14 +117,14 @@ impl TetanesNesState {
             }
 
             let samples = self.control_deck.cpu().bus.audio_samples();
-            buffers.audio.push_slice(samples);
+            buffers.audio.push_all(samples).await;
         }
 
         self.control_deck.clear_audio_samples();
         Ok(cycles)
     }
 
-    pub fn clock_frame_ahead_into(&mut self, buffers: Option<NESBuffers>) -> Result<u64> {
+    pub async fn clock_frame_ahead_into(&mut self, buffers: Option<NESBuffers<'_>>) -> Result<u64> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
@@ -161,7 +147,7 @@ impl TetanesNesState {
 
         // Discard audio and only output the future frame/audio
         self.control_deck.clear_audio_samples();
-        let cycles = self.clock_frame_into(buffers)?;
+        let cycles = self.clock_frame_into(buffers).await?;
 
         // Restore back to current frame
         {
@@ -207,6 +193,7 @@ impl NesStateHandler for TetanesNesState {
         *self.control_deck.joypad_mut(Player::Two) = Joypad::from_bytes((*joypad_state[1]).into());
 
         self.clock_frame_ahead_into(buffers)
+            .await
             .expect("NES to clock a frame");
     }
 
@@ -232,11 +219,6 @@ impl NesStateHandler for TetanesNesState {
         self.control_deck
             .set_region(Settings::current_mut().get_nes_region().to_tetanes_region());
         self.control_deck.reset(kind);
-    }
-
-    fn get_samples_per_frame(&self) -> f32 {
-        self.control_deck.apu().sample_rate
-            / self.control_deck.region().from_tetanes_region().to_fps()
     }
 }
 

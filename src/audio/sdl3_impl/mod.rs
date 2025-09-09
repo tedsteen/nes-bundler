@@ -2,8 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU8;
 use std::sync::mpsc::{Receiver, Sender};
 
-use ringbuf::storage::Heap;
-use ringbuf::traits::{Consumer, Split};
+use ringbuf::traits::Consumer;
 use sdl3::AudioSubsystem;
 use sdl3::audio::{
     AudioCallback, AudioDevice, AudioDeviceID, AudioFormat, AudioSpec, AudioStream as AudioStream2,
@@ -11,7 +10,8 @@ use sdl3::audio::{
 };
 use sdl3::sys::audio::SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
 
-use crate::audio::{AudioProducer, AudioStream, AudioSystem, AvailableAudioDevice};
+use crate::audio::pacer::{AudioConsumer, AudioProducer, make_paced_bridge_ringbuf_bulk_async};
+use crate::audio::{AudioStream, AudioSystem, AvailableAudioDevice};
 use crate::emulation::DEFAULT_SAMPLE_RATE;
 
 #[derive(Debug, Clone)]
@@ -75,8 +75,6 @@ impl SDL3AudioSystem {
         AudioStream::new(self.clone(), device, volume)
     }
 }
-type RingbufType = ringbuf::SharedRb<Heap<f32>>;
-type AudioConsumer = ringbuf::wrap::caching::Caching<std::sync::Arc<RingbufType>, false, true>;
 
 pub struct SDL3AudioStream {
     audio_system: AudioSystem,
@@ -84,10 +82,13 @@ pub struct SDL3AudioStream {
     pub tx: Option<AudioProducer>,
     take_back: Receiver<AudioConsumer>,
     volume: Arc<AtomicU8>,
+    _c: super::pacer::BridgeGuard,
 }
+
 impl SDL3AudioStream {
     fn new(audio_system: AudioSystem, device: AvailableAudioDevice, volume: u8) -> Self {
-        let (tx, rx) = RingbufType::new(735 * 400).split();
+        let (tx, rx, c) = make_paced_bridge_ringbuf_bulk_async(25.0, DEFAULT_SAMPLE_RATE as f64);
+
         let volume = Arc::new(AtomicU8::new(volume));
         let (stream, take_back) = Self::create(
             audio_system.audio_subsystem.clone(),
@@ -101,6 +102,7 @@ impl SDL3AudioStream {
             tx: Some(tx),
             take_back,
             volume,
+            _c: c,
         }
     }
     fn create(
@@ -185,18 +187,22 @@ impl AudioCallback<f32> for NesBundlerAudioCallback {
             }
 
             let buf = &mut self.tmp[..requested];
-            let n = rx.pop_slice(buf);
+            let got = rx.pop_slice(buf);
 
             // Apply volume
             let gain = (self.volume.load(std::sync::atomic::Ordering::Relaxed) as f32) / 100.0;
-            for x in &mut buf[..n] {
+            for x in &mut buf[..got] {
                 *x *= gain;
             }
 
+            if got < buf.len() {
+                buf[got..].fill(0.0);
+            }
+
             // zero-pad if we under-ran so we still hand over 'want' frames
-            if n < requested {
-                //log::warn!("Buffer underrun ({n} < {requested})");
-                buf[n..requested].fill(0.0);
+            if got < requested {
+                log::warn!("Buffer underrun ({got} < {requested})");
+                buf[got..requested].fill(0.0);
             }
             let _ = stream.put_data_f32(&self.tmp[..requested]); // Ignore errors in callback
         }

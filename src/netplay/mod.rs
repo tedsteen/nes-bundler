@@ -213,10 +213,6 @@ impl NesStateHandler for Netplay {
         self.session.set_speed(speed);
     }
 
-    fn get_samples_per_frame(&self) -> f32 {
-        self.session.get_samples_per_frame()
-    }
-
     fn save_sram(&self) -> Option<&[u8]> {
         self.session.save_sram()
     }

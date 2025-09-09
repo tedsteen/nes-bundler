@@ -7,14 +7,13 @@ use std::{
     },
 };
 
-use ringbuf::traits::Observer;
 use serde::{Deserialize, Serialize};
 
 use thingbuf::{Recycle, ThingBuf};
 use tokio::sync::mpsc::Sender;
 
 use crate::{
-    audio::{AudioProducer, AudioStream},
+    audio::{AudioStream, pacer::AudioProducer},
     emulation::tetanes::TetanesNesState,
     input::JoypadState,
     settings::{MAX_PLAYERS, Settings},
@@ -133,54 +132,42 @@ impl Emulator {
                                 }
                             }
 
-                            // main work: advance emulator when we have room
-                            //Keep 1 frame of audio buffer
-                            if audio_producer.occupied_len()
-                                <= nes_state.get_samples_per_frame() as usize
-                            {
-                                let mut frame_result = frame_buffer.push_ref();
+                            let mut frame_result = frame_buffer.push_ref();
 
-                                nes_state
-                                    .advance(
-                                        [
-                                            JoypadState(
-                                                inputs[0]
-                                                    .load(std::sync::atomic::Ordering::Relaxed),
-                                            ),
-                                            JoypadState(
-                                                inputs[1]
-                                                    .load(std::sync::atomic::Ordering::Relaxed),
-                                            ),
-                                        ],
-                                        Some(NESBuffers {
-                                            audio: &mut audio_producer,
-                                            video: frame_result.as_deref_mut().ok(),
-                                        }),
-                                    )
-                                    .await;
+                            nes_state
+                                .advance(
+                                    [
+                                        JoypadState(
+                                            inputs[0].load(std::sync::atomic::Ordering::Relaxed),
+                                        ),
+                                        JoypadState(
+                                            inputs[1].load(std::sync::atomic::Ordering::Relaxed),
+                                        ),
+                                    ],
+                                    Some(NESBuffers {
+                                        audio: &mut audio_producer,
+                                        video: frame_result.as_deref_mut().ok(),
+                                    }),
+                                )
+                                .await;
 
-                                let frame = nes_state.frame();
-                                shared_emulator
-                                    .state
-                                    .frame
-                                    .store(frame, std::sync::atomic::Ordering::Relaxed);
+                            let frame = nes_state.frame();
+                            shared_emulator
+                                .state
+                                .frame
+                                .store(frame, std::sync::atomic::Ordering::Relaxed);
 
-                                // 2) periodic SRAM snapshot (non-blocking check)
-                                if frame % 100 == 0 {
-                                    use base64::Engine;
-                                    use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
-                                    if let Some(sram) = nes_state.save_sram() {
-                                        let sram = sram.to_vec();
-                                        // Do this in a blocking task as we want the main loop free from blocking code
-                                        tokio::task::spawn_blocking(move || {
-                                            Settings::current_mut().save_state =
-                                                Some(b64.encode(sram));
-                                        });
-                                    }
+                            // 2) periodic SRAM snapshot (non-blocking check)
+                            if frame % 100 == 0 {
+                                use base64::Engine;
+                                use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+                                if let Some(sram) = nes_state.save_sram() {
+                                    let sram = sram.to_vec();
+                                    // Do this in a blocking task as we want the main loop free from blocking code
+                                    tokio::task::spawn_blocking(move || {
+                                        Settings::current_mut().save_state = Some(b64.encode(sram));
+                                    });
                                 }
-                            } else {
-                                // back off a hair to avoid a busy loop when ring is full
-                                tokio::task::yield_now().await;
                             }
                         }
                     });
@@ -203,7 +190,6 @@ pub trait NesStateHandler {
     fn set_speed(&mut self, speed: f32);
     fn save_sram(&self) -> Option<&[u8]>;
     fn frame(&self) -> u32;
-    fn get_samples_per_frame(&self) -> f32;
 }
 
 #[derive(Clone, Serialize, Deserialize, Hash, Debug, PartialEq)]

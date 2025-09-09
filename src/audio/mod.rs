@@ -1,7 +1,8 @@
-use ringbuf::{SharedRb, storage::Heap};
 use serde::{Deserialize, Serialize};
 
 use crate::audio::sdl3_impl::{SDL3AudioStream, SDL3AudioSystem, SDL3AvailableAudioDevice};
+
+pub mod pacer;
 
 pub mod gui;
 mod sdl3_impl;
@@ -9,8 +10,6 @@ mod sdl3_impl;
 pub type AudioSystem = SDL3AudioSystem;
 pub type AudioStream = SDL3AudioStream;
 pub type AvailableAudioDevice = SDL3AvailableAudioDevice;
-pub type AudioProducer =
-    ringbuf::wrap::caching::Caching<std::sync::Arc<SharedRb<Heap<f32>>>, true, false>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct AudioSettings {

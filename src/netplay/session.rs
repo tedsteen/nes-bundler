@@ -455,18 +455,6 @@ impl NesStateHandler for NetplaySession {
             }
         }
     }
-
-    fn get_samples_per_frame(&self) -> f32 {
-        match self {
-            NetplaySession::Connecting(..)
-            | NetplaySession::Resuming(..)
-            | NetplaySession::Failed(..) => 0.0,
-            NetplaySession::Connected(s) => s.current_game_state.nes_state.get_samples_per_frame(),
-            NetplaySession::Disconnected(disconnected_session) => {
-                disconnected_session.local_nes_state.get_samples_per_frame()
-            }
-        }
-    }
 }
 
 impl Debug for ConnectedNetplaySession {
