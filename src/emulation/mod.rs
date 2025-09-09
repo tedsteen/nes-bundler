@@ -22,10 +22,10 @@ use crate::{
 pub mod gui;
 pub mod tetanes;
 pub type LocalNesState = TetanesNesState;
-pub fn new_local_nes_state() -> LocalNesState {
+pub fn new_local_nes_state(load_sram: bool) -> LocalNesState {
     LocalNesState::start_rom(
         &crate::bundle::Bundle::current().rom,
-        true,
+        load_sram,
         Settings::current_mut().get_nes_region(),
     )
     .expect("Failed to start ROM")
@@ -98,7 +98,7 @@ pub const DEFAULT_SAMPLE_RATE: f32 = 44_100.0;
 impl Emulator {
     pub fn new(audio_stream: &mut AudioStream) -> Self {
         #[allow(unused_mut)]
-        let mut nes_state = new_local_nes_state();
+        let mut nes_state = new_local_nes_state(true);
 
         if let Some(mut audio_producer) = audio_stream.tx.take() {
             let (emulator_tx, emulator_rx) = tokio::sync::mpsc::channel(1);
