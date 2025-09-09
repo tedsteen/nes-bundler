@@ -43,6 +43,7 @@ pub struct ConnectingSession {
 
 impl ConnectingSession {
     pub fn connect(start_method: StartMethod) -> Self {
+        log::debug!("Connecting: {start_method:?}");
         let (state_sender, state) = channel(ConnectingState::Idle);
         let start_method_cloned = start_method.clone();
         let netplay_connection = async move {
@@ -78,11 +79,12 @@ impl ConnectingSession {
         state_sender: Sender<ConnectingState>,
         turn_on_conf: &TurnOnServerConfiguration,
     ) -> Result<StaticNetplayServerConfiguration, TurnOnError> {
+        log::debug!("Loading netplay configuration: {turn_on_conf:?}");
         let _ = state_sender.send(ConnectingState::LoadingNetplayServerConfiguration);
 
         let netplay_id = turn_on_conf.get_netplay_id();
         let url = format!("{0}/{netplay_id}", turn_on_conf.url);
-        log::debug!("Fetching TurnOn config from server: {}", url);
+        log::debug!("Fetching TurnOn config from server: {url}");
 
         let reqwest_client = reqwest::Client::new();
         let res = reqwest_client
@@ -92,8 +94,6 @@ impl ConnectingSession {
             .map_err(|e| TurnOnError {
                 description: format!("Could not connect: {e}"),
             })?;
-
-        log::debug!("Response from TurnOn server: {:?}", res);
 
         if res.status().is_success() {
             res.json().await.map_err(|e| TurnOnError {
@@ -105,7 +105,7 @@ impl ConnectingSession {
             })
         }
         .and_then(|mut resp| {
-            log::debug!("Got TurnOn config response: {:?}", resp);
+            log::debug!("Got TurnOn config response: {resp:?}");
 
             let netplay_server_configuration = match &mut resp {
                 TurnOnResponse::Basic(BasicConfiguration { unlock_url, conf }) => {
@@ -171,6 +171,7 @@ impl ConnectingSession {
                 }
             }
         });
+        log::debug!("Getting players...");
         loop {
             socket.try_update_peers().map_err(|e| {
                 anyhow::Error::msg(format!("Could not connect to {room_url:} ({e:?})"))

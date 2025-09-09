@@ -393,6 +393,7 @@ impl NesStateHandler for NetplaySession {
                     .events()
                     .any(|e| matches!(e, ggrs::GgrsEvent::Disconnected { .. }))
                 {
+                    log::warn!("Peer disconnected, resuming...");
                     *self = NetplaySession::resume(session_state);
                 } else {
                     session_state.advance(joypad_state, buffers).await;

@@ -133,7 +133,7 @@ impl Emulator {
                             }
 
                             let mut frame_result = frame_buffer.push_ref();
-
+                            //println!("ADVANCE {:?}", std::time::Instant::now());
                             nes_state
                                 .advance(
                                     [

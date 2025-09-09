@@ -201,7 +201,7 @@ impl AudioCallback<f32> for NesBundlerAudioCallback {
 
             // zero-pad if we under-ran so we still hand over 'want' frames
             if got < requested {
-                log::warn!("Buffer underrun ({got} < {requested})");
+                //log::warn!("Buffer underrun ({got} < {requested})");
                 buf[got..requested].fill(0.0);
             }
             let _ = stream.put_data_f32(&self.tmp[..requested]); // Ignore errors in callback
