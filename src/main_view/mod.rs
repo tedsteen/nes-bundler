@@ -1,4 +1,4 @@
-use egui::{Color32, Image, Vec2, load::SizedTexture};
+use std::sync::Arc;
 
 use crate::{
     Size,
@@ -15,6 +15,9 @@ use crate::{
         egui_winit_wgpu::{Renderer, texture::Texture},
     },
 };
+use egui::{Color32, Image, Vec2, load::SizedTexture};
+use futures::executor::block_on;
+use winit::window::Window;
 
 use self::gui::{GuiEvent, MainGui, ToGuiEvent};
 pub mod gui;
@@ -25,6 +28,7 @@ pub struct MainView {
     nes_texture: Texture,
     renderer: Renderer,
     frame_buffer: VideoBufferPool,
+    pub window: Arc<Window>,
 }
 
 fn to_egui_key(gamepad_button: &GamepadButton) -> Option<egui::Key> {
@@ -63,10 +67,13 @@ fn to_egui_event(gamepad_event: &GamepadEvent) -> Option<egui::Event> {
 
 impl MainView {
     pub fn new(
-        mut renderer: Renderer,
+        window: Window,
         emulator_tx: EmulatorCommandBus,
         frame_buffer: VideoBufferPool,
     ) -> Self {
+        let window = Arc::new(window);
+        let mut renderer =
+            block_on(Renderer::new(window.clone())).expect("a renderer to be created");
         Self {
             main_gui: MainGui::new(renderer.window.clone(), emulator_tx),
             modifiers: Modifiers::empty(),
@@ -74,6 +81,7 @@ impl MainView {
             nes_texture: Texture::new(&mut renderer, NES_WIDTH, NES_HEIGHT, Some("nes frame")),
             renderer,
             frame_buffer,
+            window,
         }
     }
 

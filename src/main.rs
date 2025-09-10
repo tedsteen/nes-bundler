@@ -5,7 +5,6 @@
 use audio::gui::AudioGui;
 use bundle::Bundle;
 
-use futures::executor::block_on;
 use input::gamepad::ToGamepadEvent;
 use input::gui::InputsGui;
 use input::sdl3_impl::SDL3Gamepads;
@@ -14,7 +13,6 @@ use main_view::MainView;
 
 use sdl3::EventPump;
 use winit::application::ApplicationHandler;
-use winit::window::Window;
 
 use crate::audio::AudioSystem;
 use crate::emulation::SharedEmulator;
@@ -23,9 +21,7 @@ use crate::settings::Settings;
 use crate::window::Fullscreen;
 use emulation::Emulator;
 use integer_scaling::MINIMUM_INTEGER_SCALING_SIZE;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
-use window::egui_winit_wgpu::Renderer;
 
 use emulation::{NES_HEIGHT, NES_WIDTH_4_3};
 use window::create_window;
@@ -75,7 +71,6 @@ fn main() {
 }
 
 struct Application {
-    window: Option<Arc<Window>>,
     main_view: Option<MainView>,
 
     last_mouse_touch: Instant,
@@ -115,7 +110,6 @@ impl Application {
 
         let mouse_hide_timeout = Duration::from_secs(1);
         Ok(Self {
-            window: None,
             main_view: None,
             mouse_hide_timeout,
             last_mouse_touch: Instant::now()
@@ -138,22 +132,19 @@ impl ApplicationHandler for Application {
             event_loop,
         )
         .expect("a window to be created");
-        let window = Arc::new(window);
 
-        let renderer = block_on(Renderer::new(window.clone())).expect("a renderer to be created");
         let main_view = MainView::new(
-            renderer,
+            window,
             self.shared_emulator.command_tx.clone(),
             self.shared_emulator.frame_buffer.clone(),
         );
         self.main_view = Some(main_view);
-        self.window = Some(window);
     }
 
     fn new_events(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop, cause: StartCause) {
-        if let Some(window) = &self.window {
+        if let Some(main_view) = &self.main_view {
             if cause == StartCause::Init && Bundle::current().config.start_in_fullscreen {
-                window.toggle_fullscreen();
+                main_view.window.toggle_fullscreen();
             }
         }
     }
@@ -177,9 +168,7 @@ impl ApplicationHandler for Application {
                         &mut self.inputs_gui,
                         &mut self.emulator_gui,
                     );
-                    if let Some(window) = &self.window {
-                        window.request_redraw();
-                    }
+                    main_view.window.request_redraw();
                 }
                 WindowEvent::MouseInput { .. } | WindowEvent::CursorMoved { .. } => {
                     self.last_mouse_touch = Instant::now();
@@ -217,15 +206,13 @@ impl ApplicationHandler for Application {
                 &mut self.inputs_gui,
                 &mut self.emulator_gui,
             );
-            if let Some(window) = &self.window {
-                window.set_cursor_visible(
-                    !(window.is_fullscreen()
-                        && !main_view.main_gui.visible()
-                        && Instant::now()
-                            .duration_since(self.last_mouse_touch)
-                            .gt(&self.mouse_hide_timeout)),
-                );
-            }
+            main_view.window.set_cursor_visible(
+                !(main_view.window.is_fullscreen()
+                    && !main_view.main_gui.visible()
+                    && Instant::now()
+                        .duration_since(self.last_mouse_touch)
+                        .gt(&self.mouse_hide_timeout)),
+            );
         }
     }
 }
