@@ -115,6 +115,9 @@ impl TetanesNesState {
     }
 
     fn clock_frame(&mut self) {
+        #[cfg(feature = "debug")]
+        puffin::profile_function!();
+
         let frame_number = self.cpu.bus.ppu.frame_number();
 
         while self.cpu.bus.ppu.frame_number() == frame_number {
@@ -149,9 +152,13 @@ impl TetanesNesState {
                     },
                 );
             }
+            {
+                #[cfg(feature = "debug")]
+                puffin::profile_scope!("Pushing audio");
 
-            buffers.audio.push_all(self.cpu.bus.audio_samples()).await;
-            self.clear_audio_samples();
+                buffers.audio.push_all(self.cpu.bus.audio_samples()).await;
+                self.clear_audio_samples();
+            }
         }
     }
 
