@@ -1,19 +1,23 @@
 use std::{
-    sync::{Arc, OnceLock, RwLock},
+    sync::{OnceLock, RwLock},
     time::{Duration, Instant},
 };
 
 use egui::{
-    Align2, Button, Color32, Context, FontId, Label, Margin, Response, RichText, Style, Ui, Widget,
+    Align2, Button, Color32, Context, FontId, Image, Label, Margin, Response, RichText, Style,
+    TextureId, Ui, Vec2, Widget, load::SizedTexture,
 };
-use winit::dpi::LogicalSize;
 
 use crate::{
+    Size,
     audio::gui::AudioGui,
     bundle::Bundle,
-    emulation::{EmulatorCommand, EmulatorCommandBus, gui::EmulatorGui},
+    emulation::{
+        EmulatorCommand, EmulatorCommandBus, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3, gui::EmulatorGui,
+    },
     gui::{MenuButton, esc_pressed},
     input::{KeyEvent, gamepad::GamepadEvent, gui::InputsGui},
+    integer_scaling::{MINIMUM_INTEGER_SCALING_SIZE, calculate_size_corrected},
     settings::Settings,
 };
 
@@ -51,8 +55,10 @@ pub enum MainMenuState {
 }
 pub struct MainGui {
     start_time: Instant,
-    window: Arc<winit::window::Window>,
     emulator_tx: EmulatorCommandBus,
+    audio_gui: AudioGui,
+    pub inputs_gui: InputsGui,
+    emulator_gui: EmulatorGui,
 }
 
 impl MainGui {
@@ -75,11 +81,18 @@ impl MainGui {
     const MESSAGE_TEXT_BACKGROUND: Color32 = Color32::from_rgba_premultiplied(20, 20, 20, 200);
     const MESSAGE_TEXT_COLOR: Color32 = Color32::from_rgb(255, 255, 255);
 
-    pub fn new(window: Arc<winit::window::Window>, emulator_tx: EmulatorCommandBus) -> Self {
+    pub fn new(
+        emulator_tx: EmulatorCommandBus,
+        audio_gui: AudioGui,
+        inputs_gui: InputsGui,
+        emulator_gui: EmulatorGui,
+    ) -> Self {
         Self {
             start_time: Instant::now(),
-            window,
             emulator_tx,
+            audio_gui,
+            inputs_gui,
+            emulator_gui,
         }
     }
 
@@ -102,13 +115,9 @@ impl MainGui {
         res.inner
     }
 
-    fn ui_main_container(
-        window: &Arc<winit::window::Window>,
-        title: Option<&str>,
-        ctx: &Context,
-        content: impl FnOnce(&mut Ui),
-    ) {
-        let size: LogicalSize<f32> = window.inner_size().to_logical(window.scale_factor());
+    fn ui_main_container(title: Option<&str>, ctx: &Context, content: impl FnOnce(&mut Ui)) {
+        let screen_rect = ctx.input(|a| a.screen_rect());
+
         let window_title = title.unwrap_or("");
         egui::Window::new(window_title)
             .title_bar(title.is_some())
@@ -117,7 +126,8 @@ impl MainGui {
             .movable(false)
             .frame(egui::Frame::window(&Style::default()).inner_margin(Margin::same(20)))
             .pivot(Align2::CENTER_CENTER)
-            .fixed_pos([size.width / 2.0, size.height / 2.0])
+            .fixed_pos(screen_rect.center())
+            //.fixed_pos([size.width / 2.0, size.height / 2.0])
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     egui::Grid::new(format!("main_menu_grid_{window_title}"))
@@ -127,13 +137,57 @@ impl MainGui {
                 });
             });
     }
-    pub fn ui(
-        &mut self,
-        ctx: &Context,
-        audio_gui: &mut AudioGui,
-        inputs_gui: &mut InputsGui,
-        emulator_gui: &mut EmulatorGui,
-    ) {
+
+    pub const MENU_TINT: Color32 = Color32::from_rgb(50, 50, 50);
+
+    pub fn ui(&mut self, ctx: &Context, nes_texture_id: TextureId) {
+        #[cfg(feature = "debug")]
+        puffin::profile_scope!("ui");
+
+        {
+            #[cfg(feature = "debug")]
+            puffin::profile_scope!("NES Frame");
+            egui::CentralPanel::default()
+                .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
+                .show(ctx, |ui| {
+                    let available_size = ui.available_size();
+                    let new_size = if available_size.x < MINIMUM_INTEGER_SCALING_SIZE.width as f32
+                        || available_size.y < MINIMUM_INTEGER_SCALING_SIZE.height as f32
+                    {
+                        let width = NES_WIDTH_4_3;
+                        let ratio_height = available_size.y / NES_HEIGHT as f32;
+                        let ratio_width = available_size.x / width as f32;
+                        let ratio = f32::min(ratio_height, ratio_width);
+                        Size::new(
+                            (width as f32 * ratio) as u32,
+                            (NES_HEIGHT as f32 * ratio) as u32,
+                        )
+                    } else {
+                        calculate_size_corrected(
+                            available_size.x as u32,
+                            available_size.y as u32,
+                            NES_WIDTH,
+                            NES_HEIGHT,
+                            4.0,
+                            3.0,
+                        )
+                    };
+
+                    ui.centered_and_justified(|ui| {
+                        let mut nes_image = Image::from_texture(SizedTexture::new(
+                            nes_texture_id,
+                            Vec2 {
+                                x: new_size.width as f32,
+                                y: new_size.height as f32,
+                            },
+                        ));
+                        if self.visible() {
+                            nes_image = nes_image.tint(Self::MENU_TINT);
+                        }
+                        ui.add(nes_image);
+                    });
+                });
+        }
         {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("Main ui");
@@ -143,12 +197,12 @@ impl MainGui {
             }
             match Self::main_menu_state() {
                 MainMenuState::Main => {
-                    Self::ui_main_container(&self.window, None, ctx, |ui| {
+                    Self::ui_main_container(None, ctx, |ui| {
                         if Self::menu_item_ui(ui, "BACK").clicked() || esc_pressed(ctx) {
                             Self::set_main_menu_state(MainMenuState::Closed);
                         }
 
-                        if let Some(name) = emulator_gui.name() {
+                        if let Some(name) = self.emulator_gui.name() {
                             if Self::menu_item_ui(ui, name.to_uppercase()).clicked() {
                                 Self::set_main_menu_state(MainMenuState::Netplay);
                             }
@@ -171,22 +225,22 @@ impl MainGui {
                     });
                 }
                 MainMenuState::Settings => {
-                    Self::ui_main_container(&self.window, Some("Settings"), ctx, |ui| {
+                    Self::ui_main_container(Some("Settings"), ctx, |ui| {
                         ui.vertical(|ui| {
-                            if let Some(name) = audio_gui.name() {
+                            if let Some(name) = self.audio_gui.name() {
                                 ui.vertical_centered(|ui| {
                                     ui.heading(name);
                                 });
-                                audio_gui.ui(ui);
+                                self.audio_gui.ui(ui);
                             }
                             ui.add_space(10.0);
                             ui.separator();
                             ui.add_space(10.0);
-                            if let Some(name) = inputs_gui.name() {
+                            if let Some(name) = self.inputs_gui.name() {
                                 ui.vertical_centered(|ui| {
                                     ui.heading(name);
                                 });
-                                inputs_gui.ui(ui);
+                                self.inputs_gui.ui(ui);
                             }
 
                             if Bundle::current().config.supported_nes_regions.len() > 1 {
@@ -237,10 +291,10 @@ impl MainGui {
                     });
                 }
                 MainMenuState::Netplay => {
-                    if emulator_gui.name().is_some() {
-                        let name = emulator_gui.name().expect("a name").to_owned();
-                        Self::ui_main_container(&self.window, Some(&name), ctx, |ui| {
-                            emulator_gui.ui(ui);
+                    if self.emulator_gui.name().is_some() {
+                        let name = self.emulator_gui.name().expect("a name").to_owned();
+                        Self::ui_main_container(Some(&name), ctx, |ui| {
+                            self.emulator_gui.ui(ui);
                         });
                     }
                 }
@@ -258,8 +312,11 @@ impl MainGui {
                 )
                 .show(ctx, |ui| {
                     ui.vertical_centered(|ui| {
-                        let gui_components: &mut [&mut dyn GuiComponent] =
-                            &mut [audio_gui, inputs_gui, emulator_gui];
+                        let gui_components: &mut [&mut dyn GuiComponent] = &mut [
+                            &mut self.audio_gui,
+                            &mut self.inputs_gui,
+                            &mut self.emulator_gui,
+                        ];
                         for gui in gui_components.iter_mut() {
                             if gui.name().is_some() {
                                 {
@@ -279,15 +336,12 @@ impl MainGui {
         }
     }
 
-    pub fn handle_event(
-        &mut self,
-        gui_event: &GuiEvent,
-        audio_gui: &mut AudioGui,
-        inputs_gui: &mut InputsGui,
-        emulator_gui: &mut EmulatorGui,
-    ) {
-        let gui_components: &mut [&mut dyn GuiComponent] =
-            &mut [audio_gui, inputs_gui, emulator_gui];
+    pub fn handle_event(&mut self, gui_event: &GuiEvent) {
+        let gui_components: &mut [&mut dyn GuiComponent] = &mut [
+            &mut self.audio_gui,
+            &mut self.inputs_gui,
+            &mut self.emulator_gui,
+        ];
 
         for gui in gui_components {
             gui.handle_event(gui_event);
