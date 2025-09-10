@@ -1,30 +1,26 @@
-use egui::{Color32, Image, Vec2, load::SizedTexture};
+use std::sync::Arc;
 
 use crate::{
-    Size,
-    audio::gui::AudioGui,
-    emulation::{
-        EmulatorCommandBus, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3, VideoBufferPool, gui::EmulatorGui,
-    },
-    input::{
-        KeyEvent, buttons::GamepadButton, gamepad::GamepadEvent, gui::InputsGui, keys::Modifiers,
-    },
-    integer_scaling::{MINIMUM_INTEGER_SCALING_SIZE, calculate_size_corrected},
+    emulation::{NES_HEIGHT, NES_WIDTH, VideoBufferPool},
+    input::{KeyEvent, buttons::GamepadButton, gamepad::GamepadEvent, keys::Modifiers},
     window::{
         Fullscreen,
         egui_winit_wgpu::{Renderer, texture::Texture},
     },
 };
 
+use futures::executor::block_on;
+use winit::window::Window;
+
 use self::gui::{GuiEvent, MainGui, ToGuiEvent};
 pub mod gui;
 
 pub struct MainView {
-    pub main_gui: MainGui,
     modifiers: Modifiers,
     nes_texture: Texture,
     renderer: Renderer,
     frame_buffer: VideoBufferPool,
+    pub window: Arc<Window>,
 }
 
 fn to_egui_key(gamepad_button: &GamepadButton) -> Option<egui::Key> {
@@ -62,27 +58,24 @@ fn to_egui_event(gamepad_event: &GamepadEvent) -> Option<egui::Event> {
 }
 
 impl MainView {
-    pub fn new(
-        mut renderer: Renderer,
-        emulator_tx: EmulatorCommandBus,
-        frame_buffer: VideoBufferPool,
-    ) -> Self {
+    pub fn new(window: Window, frame_buffer: VideoBufferPool) -> Self {
+        let window = Arc::new(window);
+        let mut renderer =
+            block_on(Renderer::new(window.clone())).expect("a renderer to be created");
         Self {
-            main_gui: MainGui::new(renderer.window.clone(), emulator_tx),
             modifiers: Modifiers::empty(),
 
             nes_texture: Texture::new(&mut renderer, NES_WIDTH, NES_HEIGHT, Some("nes frame")),
             renderer,
             frame_buffer,
+            window,
         }
     }
 
     pub fn handle_window_event(
         &mut self,
         window_event: &winit::event::WindowEvent,
-        audio_gui: &mut AudioGui,
-        inputs_gui: &mut InputsGui,
-        emulator_gui: &mut EmulatorGui,
+        main_gui: &mut MainGui,
     ) {
         if let winit::event::WindowEvent::Resized(physical_size) = window_event {
             self.renderer.resize(*physical_size);
@@ -95,18 +88,12 @@ impl MainView {
             .consumed
         {
             if let Some(winit_gui_event) = &window_event.to_gui_event() {
-                self.handle_gui_event(winit_gui_event, audio_gui, inputs_gui, emulator_gui);
+                self.handle_gui_event(winit_gui_event, main_gui);
             }
         }
     }
 
-    pub fn handle_gui_event(
-        &mut self,
-        gui_event: &GuiEvent,
-        audio_gui: &mut AudioGui,
-        inputs_gui: &mut InputsGui,
-        emulator_gui: &mut EmulatorGui,
-    ) {
+    pub fn handle_gui_event(&mut self, gui_event: &GuiEvent, main_gui: &mut MainGui) {
         use gui::GuiEvent::Keyboard;
 
         let consumed = match gui_event {
@@ -121,7 +108,7 @@ impl MainView {
             _ => {
                 if let GuiEvent::Gamepad(gamepad_event) = gui_event {
                     if let Some(event) = to_egui_event(gamepad_event) {
-                        if self.main_gui.visible() {
+                        if main_gui.visible() {
                             // If the gui is visible convert gamepad events to fake input events so we can control the ui with the gamepad
                             self.renderer.egui.state.egui_input_mut().events.push(event)
                         } else {
@@ -146,75 +133,18 @@ impl MainView {
             }
         };
         if !consumed {
-            self.main_gui
-                .handle_event(gui_event, audio_gui, inputs_gui, emulator_gui);
+            main_gui.handle_event(gui_event);
         }
     }
 
-    pub const MENU_TINT: Color32 = Color32::from_rgb(50, 50, 50);
-
-    pub fn render(
-        &mut self,
-        audio_gui: &mut AudioGui,
-        inputs_gui: &mut InputsGui,
-        emulator_gui: &mut EmulatorGui,
-    ) {
+    pub fn render(&mut self, main_gui: &mut MainGui) {
         if let Some(nes_frame) = &self.frame_buffer.pop_ref() {
             self.nes_texture.update(&self.renderer.queue, nes_frame);
         }
 
         let nes_texture_id = self.nes_texture.get_id();
-        let main_gui = &mut self.main_gui;
         let render_result = self.renderer.render(move |ctx| {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("ui");
-
-            {
-                #[cfg(feature = "debug")]
-                puffin::profile_scope!("NES Frame");
-                egui::CentralPanel::default()
-                    .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
-                    .show(ctx, |ui| {
-                        let available_size = ui.available_size();
-                        let new_size = if available_size.x
-                            < MINIMUM_INTEGER_SCALING_SIZE.width as f32
-                            || available_size.y < MINIMUM_INTEGER_SCALING_SIZE.height as f32
-                        {
-                            let width = NES_WIDTH_4_3;
-                            let ratio_height = available_size.y / NES_HEIGHT as f32;
-                            let ratio_width = available_size.x / width as f32;
-                            let ratio = f32::min(ratio_height, ratio_width);
-                            Size::new(
-                                (width as f32 * ratio) as u32,
-                                (NES_HEIGHT as f32 * ratio) as u32,
-                            )
-                        } else {
-                            calculate_size_corrected(
-                                available_size.x as u32,
-                                available_size.y as u32,
-                                NES_WIDTH,
-                                NES_HEIGHT,
-                                4.0,
-                                3.0,
-                            )
-                        };
-
-                        ui.centered_and_justified(|ui| {
-                            let mut nes_image = Image::from_texture(SizedTexture::new(
-                                nes_texture_id,
-                                Vec2 {
-                                    x: new_size.width as f32,
-                                    y: new_size.height as f32,
-                                },
-                            ));
-                            if main_gui.visible() {
-                                nes_image = nes_image.tint(Self::MENU_TINT);
-                            }
-                            ui.add(nes_image);
-                        });
-                    });
-            }
-            main_gui.ui(ctx, audio_gui, inputs_gui, emulator_gui);
+            main_gui.ui(ctx, nes_texture_id);
         });
 
         match render_result {

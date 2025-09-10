@@ -101,7 +101,7 @@ pub fn make_paced_bridge_ringbuf_bulk_async(
     let mut pacer = PacerSec::new(device_sr_hz, target_sec, kp, ki);
     let mut scratch = vec![0.0f32; (device_sr_hz * 0.050).ceil() as usize + 64]; // ~≤50ms
 
-    let worker = thread::spawn(move || {
+    let _worker = thread::spawn(move || {
         loop {
             if stop_worker.load(Ordering::Relaxed) {
                 break;
@@ -135,10 +135,7 @@ pub fn make_paced_bridge_ringbuf_bulk_async(
             space_notify,
         },
         dn_rx,
-        BridgeGuard {
-            _stop,
-            _worker: worker,
-        },
+        BridgeGuard { _stop, _worker },
     )
 }
 

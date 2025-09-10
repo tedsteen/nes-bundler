@@ -59,7 +59,7 @@ pub struct NetplayNesState {
 impl NetplayNesState {
     pub fn new(joypad_mapping: JoypadMapping) -> Self {
         Self {
-            nes_state: new_local_nes_state(),
+            nes_state: new_local_nes_state(false),
             ggrs_frame: 0,
             joypad_mapping,
         }

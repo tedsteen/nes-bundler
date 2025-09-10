@@ -1,16 +1,22 @@
-use std::{fmt::Debug, io::Cursor, ops::Deref};
+use std::{
+    fmt::Debug,
+    io::{Cursor, Read},
+    ops::Deref,
+};
 
 use anyhow::Result;
 
 use tetanes_core::{
     apu::filter::FilterChain,
-    common::{NesRegion, Regional, Reset, ResetKind},
-    control_deck::{Config, ControlDeck, HeadlessMode, MapperRevisionsConfig},
+    bus::Bus,
+    cart::Cart,
+    common::{Clock, NesRegion, Regional, Reset, ResetKind},
+    control_deck::{LoadedRom, MapperRevisionsConfig},
     cpu::Cpu,
     fs,
-    input::{FourPlayer, Joypad, Player},
+    input::{JoypadBtnState, Player},
+    mapper::Mapper,
     mem::RamState,
-    video::VideoFilter,
 };
 
 use super::{DEFAULT_SAMPLE_RATE, NESBuffers, NTSC_PAL, NesStateHandler};
@@ -22,7 +28,8 @@ use crate::{
 
 #[derive(Clone)]
 pub struct TetanesNesState {
-    control_deck: ControlDeck,
+    cpu: Cpu,
+    battery_backed: bool,
 }
 trait ToTetanesRegion {
     fn to_tetanes_region(&self) -> NesRegion;
@@ -45,109 +52,140 @@ impl TetanesNesState {
         region: &crate::emulation::NesRegion,
     ) -> Result<Self> {
         let region = region.to_tetanes_region();
-        let config = Config {
-            filter: VideoFilter::Pixellate,
-            region,
-            ram_state: RamState::Random,
-            four_player: FourPlayer::Disabled,
-            zapper: false,
-            genie_codes: vec![],
-            concurrent_dpad: false,
-            channels_enabled: [true; 6],
-            headless_mode: HeadlessMode::empty(),
-            cycle_accurate: false,
-            data_dir: Config::default_data_dir(),
-            mapper_revisions: MapperRevisionsConfig::default(),
-            emulate_ppu_warmup: false,
-        };
-        log::debug!("Starting ROM with configuration {config:?}");
-        let mut control_deck = ControlDeck::with_config(config);
-        //control_deck.set_cycle_accurate(false); //TODO: Add as a bundle config?
-        control_deck.load_rom(Bundle::current().config.name.clone(), &mut Cursor::new(rom))?;
 
-        if load_sram {
-            if let Some(true) = control_deck.cart_battery_backed() {
-                if let Some(b64_encoded_sram) = &Settings::current().save_state {
-                    use base64::Engine;
-                    use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
-                    match b64.decode(b64_encoded_sram) {
-                        Ok(sram) => {
-                            log::info!("Loading SRAM save state");
-                            control_deck.cpu_mut().bus.load_sram(sram);
-                        }
-                        Err(err) => {
-                            log::warn!("Failed to base64 decode sram: {err:?}");
-                        }
+        log::debug!("Starting ROM with system region {region:?}");
+        let mut cpu = Cpu::new(Bus::new(region, RamState::Random));
+        let loaded_rom = Self::load_rom(
+            &mut cpu,
+            Bundle::current().config.name.clone(),
+            &mut Cursor::new(rom),
+        )?;
+        let battery_backed = loaded_rom.battery_backed;
+
+        if load_sram && battery_backed {
+            if let Some(b64_encoded_sram) = &Settings::current().save_state {
+                use base64::Engine;
+                use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+                match b64.decode(b64_encoded_sram) {
+                    Ok(sram) => {
+                        log::info!("Loading SRAM save state");
+                        cpu.bus.load_sram(sram);
+                    }
+                    Err(err) => {
+                        log::warn!("Failed to base64 decode sram: {err:?}");
                     }
                 }
             }
         }
 
-        control_deck.set_region(region);
-        let mut s = Self { control_deck };
-        s.set_speed(1.0); // Trigger the correct sample rate
+        let mut s = Self {
+            cpu,
+            battery_backed,
+        };
+        s.set_speed(1.0); // Triggers the correct sample rate
         Ok(s)
     }
 
-    pub async fn clock_frame_into(&mut self, mut buffers: Option<NESBuffers<'_>>) -> Result<u64> {
+    fn load_rom<S: ToString, F: Read>(cpu: &mut Cpu, name: S, rom: &mut F) -> Result<LoadedRom> {
+        let name = name.to_string();
+        let cart = Cart::from_rom(&name, rom, cpu.bus.ram_state).expect("Cart to load");
+
+        let loaded_rom = LoadedRom {
+            name: name.clone(),
+            battery_backed: cart.battery_backed(),
+            region: cart.region(),
+        };
+        cpu.bus.load_cart(cart);
+        Self::update_mapper_revisions(cpu, MapperRevisionsConfig::default());
+        cpu.reset(ResetKind::Hard);
+        Ok(loaded_rom)
+    }
+
+    fn update_mapper_revisions(cpu: &mut Cpu, mapper_revisions: MapperRevisionsConfig) {
+        match &mut cpu.bus.ppu.bus.mapper {
+            Mapper::Txrom(mapper) => {
+                mapper.set_revision(mapper_revisions.mmc3);
+            }
+            Mapper::Bf909x(mapper) => {
+                mapper.set_revision(mapper_revisions.bf909);
+            }
+            // Remaining mappers all have more concrete detection via ROM headers
+            _ => (),
+        }
+    }
+
+    fn clock_frame(&mut self) {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
-        self.control_deck.cpu_mut().bus.ppu.skip_rendering = false;
+        let frame_number = self.cpu.bus.ppu.frame_number();
+
+        while self.cpu.bus.ppu.frame_number() == frame_number {
+            self.cpu.clock();
+        }
+        self.cpu.bus.apu.clock_flush();
+    }
+
+    fn clear_audio_samples(&mut self) {
+        self.cpu.bus.clear_audio_samples();
+    }
+
+    pub async fn clock_frame_into(&mut self, mut buffers: Option<NESBuffers<'_>>) {
+        #[cfg(feature = "debug")]
+        puffin::profile_function!();
+
+        self.cpu.bus.ppu.skip_rendering = false;
         //self.control_deck.cpu_mut().bus.apu.skip_mixing = false;
 
-        let cycles = self.control_deck.clock_frame()?;
+        self.clock_frame();
+
         if let Some(buffers) = buffers.take() {
             if let Some(video) = buffers.video {
                 #[cfg(feature = "debug")]
                 puffin::profile_scope!("copy buffers");
-                self.control_deck
-                    .cpu()
-                    .bus
-                    .ppu
-                    .frame_buffer()
-                    .iter()
-                    .enumerate()
-                    .for_each(|(idx, &palette_index)| {
+                self.cpu.bus.ppu.frame_buffer().iter().enumerate().for_each(
+                    |(idx, &palette_index)| {
                         let palette_index = palette_index as usize * 3;
                         let pixel_index = idx * 4;
                         video[pixel_index..pixel_index + 3]
                             .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
-                    });
+                    },
+                );
             }
+            {
+                #[cfg(feature = "debug")]
+                puffin::profile_scope!("Pushing audio");
 
-            let samples = self.control_deck.cpu().bus.audio_samples();
-            buffers.audio.push_all(samples).await;
+                buffers.audio.push_all(self.cpu.bus.audio_samples()).await;
+                self.clear_audio_samples();
+            }
         }
-
-        self.control_deck.clear_audio_samples();
-        Ok(cycles)
     }
 
-    pub async fn clock_frame_ahead_into(&mut self, buffers: Option<NESBuffers<'_>>) -> Result<u64> {
+    pub async fn clock_frame_ahead_into(&mut self, buffers: Option<NESBuffers<'_>>) -> Result<()> {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
-        self.control_deck.cpu_mut().bus.ppu.skip_rendering = true;
+        self.cpu.bus.ppu.skip_rendering = true;
         //self.control_deck.cpu_mut().bus.apu.skip_mixing = true;
         // Clock current frame and discard video
         {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("clock frame");
-            self.control_deck.clock_frame()?;
+            self.clock_frame();
         }
 
         // Save state so we can rewind
         let state = {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("serialize");
-            postcard::to_allocvec(self.control_deck.cpu())
+            postcard::to_allocvec(&self.cpu)
                 .map_err(|err| fs::Error::SerializationFailed(err.to_string()))?
         };
 
         // Discard audio and only output the future frame/audio
-        self.control_deck.clear_audio_samples();
-        let cycles = self.clock_frame_into(buffers).await?;
+        self.clear_audio_samples();
+        self.clock_frame_into(buffers).await;
 
         // Restore back to current frame
         {
@@ -155,17 +193,34 @@ impl TetanesNesState {
             puffin::profile_scope!("deserialize and load");
             let state = postcard::from_bytes(state.deref())
                 .map_err(|err| fs::Error::DeserializationFailed(err.to_string()))?;
-            self.control_deck.load_cpu(state);
+            self.cpu.load(state);
         }
 
-        Ok(cycles)
+        Ok(())
+    }
+
+    fn sram(&self) -> &[u8] {
+        self.cpu.bus.sram()
+    }
+
+    fn reset(&mut self, hard: bool) {
+        let kind = if hard {
+            ResetKind::Hard
+        } else {
+            ResetKind::Soft
+        };
+        self.cpu.reset(kind);
+    }
+
+    fn set_region(&mut self, region: NesRegion) {
+        self.cpu.set_region(region);
     }
 }
 
 impl NesStateHandler for TetanesNesState {
     fn set_speed(&mut self, speed: f32) {
         let speed = speed.max(0.005);
-        let apu = &mut self.control_deck.cpu_mut().bus.apu;
+        let apu = &mut self.cpu.bus.apu;
         let target_sample_rate = match apu.region {
             // Downsample a tiny bit extra to match the most common screen refresh rate (60hz)
             NesRegion::Ntsc => {
@@ -189,8 +244,10 @@ impl NesStateHandler for TetanesNesState {
         joypad_state: [JoypadState; MAX_PLAYERS],
         buffers: Option<NESBuffers<'_>>,
     ) {
-        *self.control_deck.joypad_mut(Player::One) = Joypad::from_bytes((*joypad_state[0]).into());
-        *self.control_deck.joypad_mut(Player::Two) = Joypad::from_bytes((*joypad_state[1]).into());
+        self.cpu.bus.input.joypad_mut(Player::One).buttons =
+            JoypadBtnState::from_bits_truncate(*joypad_state[0] as u16);
+        self.cpu.bus.input.joypad_mut(Player::Two).buttons =
+            JoypadBtnState::from_bits_truncate(*joypad_state[1] as u16);
 
         self.clock_frame_ahead_into(buffers)
             .await
@@ -198,34 +255,29 @@ impl NesStateHandler for TetanesNesState {
     }
 
     fn save_sram(&self) -> Option<&[u8]> {
-        if let Some(true) = self.control_deck.cart_battery_backed() {
-            Some(self.control_deck.sram())
+        if self.battery_backed {
+            Some(self.sram())
         } else {
             None
         }
     }
 
     fn frame(&self) -> u32 {
-        self.control_deck.frame_number()
+        self.cpu.bus.ppu.frame_number()
     }
 
     fn reset(&mut self, hard: bool) {
-        let kind = if hard {
-            ResetKind::Hard
-        } else {
-            ResetKind::Soft
-        };
         //Set the region in case it has been changed since last start/reset
-        self.control_deck
-            .set_region(Settings::current_mut().get_nes_region().to_tetanes_region());
-        self.control_deck.reset(kind);
+        self.set_region(Settings::current_mut().get_nes_region().to_tetanes_region());
+        self.reset(hard);
     }
 }
 
 impl Debug for TetanesNesState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TetanesNesState")
-            .field("frame", &self.control_deck.frame_number())
+            .field("frame", &self.frame())
+            .field("battery_backed", &self.battery_backed)
             .finish()
     }
 }

@@ -55,9 +55,9 @@ egui = { version = "0.32", default-features = false, features = [
 ] }
 egui_plot = { version = "0.33", optional = true }
 
-puffin = { version = "0.19", optional = true }
-# TODO: Use stable version of puffin_egui when 0.32 is released
-puffin_egui = { git="https://github.com/EmbarkStudios/puffin.git", rev="32499573b89246385373b6288295fff830154635", optional = true }
+# TODO: Use stable version of puffin and puffin_egui when 0.32 is released
+puffin = { git = "https://github.com/EmbarkStudios/puffin.git", rev = "32499573b89246385373b6288295fff830154635", optional = true }
+puffin_egui = { git = "https://github.com/EmbarkStudios/puffin.git", rev = "32499573b89246385373b6288295fff830154635", optional = true }
 
 egui-winit = "0.32"
 egui-wgpu = "0.32"
@@ -80,7 +80,7 @@ matchbox_socket = { version = "0.12", features = ["ggrs"], optional = true }
 futures-timer = { version = "3", features = ["wasm-bindgen"], optional = true }
 ggrs = { version = "0.11", optional = true }
 uuid = { version = "1", features = ["v4"], optional = true }
-reqwest = { version = "0.12", features = ["json"], optional = true }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"], optional = true }
 md5 = { version = "0.8", optional = true }
 
 [build-dependencies]
