@@ -115,6 +115,7 @@ impl Application {
         })
     }
 }
+
 impl ApplicationHandler for Application {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let window = create_window(
@@ -125,8 +126,10 @@ impl ApplicationHandler for Application {
         )
         .expect("a window to be created");
 
-        let main_view = MainView::new(window, self.shared_emulator.frame_buffer.clone());
-        self.main_view = Some(main_view);
+        self.main_view = Some(MainView::new(
+            window,
+            self.shared_emulator.frame_buffer.clone(),
+        ));
     }
 
     fn new_events(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop, cause: StartCause) {
@@ -136,10 +139,6 @@ impl ApplicationHandler for Application {
             }
         }
     }
-
-    // fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
-    //     self.audio_gui.audio.sync_audio_devices();
-    // }
 
     fn window_event(
         &mut self,
