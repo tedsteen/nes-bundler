@@ -84,6 +84,7 @@ pub struct ConnectedNetplaySession {
     pub last_confirmed_game_state1: NetplayNesState,
     pub last_confirmed_game_state2: NetplayNesState,
     start_time: Instant,
+    last_running_time: Instant,
 }
 
 impl ConnectedNetplaySession {
@@ -132,6 +133,7 @@ impl ConnectedNetplaySession {
             last_handled_ggrs_frame: -1,
             current_game_state: initial_state.clone(),
             start_time: Instant::now(),
+            last_running_time: Instant::now(),
         }
     }
 
@@ -147,6 +149,7 @@ impl ConnectedNetplaySession {
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
             ggrs::SessionState::Running => {
+                self.last_running_time = Instant::now();
                 for handle in p2p_session.local_player_handles() {
                     p2p_session
                         .add_local_input(handle, *joypad_state[0])
@@ -235,7 +238,10 @@ impl ConnectedNetplaySession {
 
     fn to_shared_state(&self) -> SharedNetplayConnectedState {
         match self.p2p_session.current_state() {
-            ggrs::SessionState::Synchronizing => SharedNetplayConnectedState::Synchronizing,
+            ggrs::SessionState::Synchronizing => SharedNetplayConnectedState::Synchronizing(
+                self.last_running_time,
+                self.netplay_server_configuration.unlock_url.clone(),
+            ),
             ggrs::SessionState::Running => SharedNetplayConnectedState::Running(self.start_time),
         }
     }

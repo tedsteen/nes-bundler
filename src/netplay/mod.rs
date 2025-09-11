@@ -34,13 +34,14 @@ pub enum NetplayCommand {
     CancelConnect,
     RetryConnect,
 
-    #[cfg(feature = "debug")] // Only used to fake disconnects
-    Resume,
     Disconnect,
 }
 pub type NetplayCommandBus = tokio::sync::mpsc::Sender<NetplayCommand>;
 pub enum SharedNetplayConnectedState {
-    Synchronizing,
+    Synchronizing(
+        Instant,        // Start time
+        Option<String>, //Unlock url
+    ),
     Running(Instant /* Start time */),
 }
 pub enum SharedNetplayState {
@@ -162,19 +163,11 @@ impl NesStateHandler for Netplay {
                     | NetplaySession::Failed(FailedNetplaySession { start_method, .. }) => {
                         self.session = NetplaySession::start(start_method.clone());
                     }
+                    NetplaySession::Connected(current_state) => {
+                        self.session = NetplaySession::resume(current_state)
+                    }
                     state => {
                         log::warn!("Ignored retry command in state {state:?}");
-                    }
-                },
-
-                #[cfg(feature = "debug")] //Only used to fake disconnects
-                NetplayCommand::Resume => match &mut self.session {
-                    NetplaySession::Connected(s) => {
-                        log::debug!("Manually resuming connection (faking a lost connection)");
-                        self.session = NetplaySession::resume(s);
-                    }
-                    state => {
-                        log::warn!("Ignored resume command in state {state:?}");
                     }
                 },
 
