@@ -11,10 +11,34 @@ pub type AudioSystem = SDL3AudioSystem;
 pub type AudioStream = SDL3AudioStream;
 pub type AvailableAudioDevice = SDL3AvailableAudioDevice;
 
+pub const MAX_AUDIO_LATENCY_MICROS: u32 = 40_000;
+pub const MIN_AUDIO_LATENCY_MICROS: u32 = 8_000;
+
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct AudioSettings {
     pub volume: u8,
     pub output_device: Option<String>,
+    #[serde(
+        default = "AudioSettings::default_latency_micros",
+        deserialize_with = "AudioSettings::de_latency"
+    )]
+    pub latency_micros: u32, // In μs
+}
+
+impl AudioSettings {
+    pub const fn default_latency_micros() -> u32 {
+        16_000
+    }
+    fn de_latency<'de, D>(deserializer: D) -> Result<u32, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let mut v = u32::deserialize(deserializer)?;
+        if !(MIN_AUDIO_LATENCY_MICROS..MAX_AUDIO_LATENCY_MICROS).contains(&v) {
+            v = AudioSettings::default_latency_micros();
+        }
+        Ok(v)
+    }
 }
 
 impl AudioSettings {

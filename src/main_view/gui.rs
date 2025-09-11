@@ -127,7 +127,6 @@ impl MainGui {
             .frame(egui::Frame::window(&Style::default()).inner_margin(Margin::same(20)))
             .pivot(Align2::CENTER_CENTER)
             .fixed_pos(screen_rect.center())
-            //.fixed_pos([size.width / 2.0, size.height / 2.0])
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     egui::Grid::new(format!("main_menu_grid_{window_title}"))

@@ -7,147 +7,258 @@ use ringbuf::{
 use std::{
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicU64, Ordering},
     },
     thread,
     time::{Duration, Instant},
 };
 use tokio::sync::Notify;
 
-type RingbufType<T> = SharedRb<Heap<T>>;
-type SampleConsumer<T> = Caching<Arc<RingbufType<T>>, false, true>;
-type SampleProducer<T> = Caching<Arc<RingbufType<T>>, true, false>;
+use crate::audio::MAX_AUDIO_LATENCY_MICROS;
 
-pub type AudioConsumer = SampleConsumer<f32>;
+/* ---------- ring aliases ---------- */
+type Rb<T> = SharedRb<Heap<T>>;
+type Cons<T> = Caching<Arc<Rb<T>>, false, true>;
+type Prod<T> = Caching<Arc<Rb<T>>, true, false>;
+pub type AudioConsumer = Cons<f32>;
 
-pub struct PacerSec {
-    pub device_sr_hz: f64,
-    pub target_sec: f64,
-    pub kp: f64,
-    pub ki: f64,
-    integ: f64,
-    last: Instant,
-    frac: f64,
+/* ---------- shared params (atomic f64 via bits) ---------- */
+#[derive(Default)]
+struct Params {
+    target_s_bits: AtomicU64,
+    kp_bits: AtomicU64,
+    ki_bits: AtomicU64,
 }
-impl PacerSec {
-    pub fn new(sr: f64, target: f64, kp: f64, ki: f64) -> Self {
+impl Params {
+    fn new(target_s: f64, kp: f64, ki: f64) -> Self {
         Self {
-            device_sr_hz: sr,
-            target_sec: target,
-            kp,
-            ki,
-            integ: 0.0,
-            last: Instant::now(),
-            frac: 0.0,
+            target_s_bits: AtomicU64::new(target_s.to_bits()),
+            kp_bits: AtomicU64::new(kp.to_bits()),
+            ki_bits: AtomicU64::new(ki.to_bits()),
         }
     }
-    pub fn compute(&mut self, queued_samples: usize) -> usize {
+    #[inline]
+    fn target_s(&self) -> f64 {
+        f64::from_bits(self.target_s_bits.load(Ordering::Acquire))
+    }
+    #[inline]
+    fn kp(&self) -> f64 {
+        f64::from_bits(self.kp_bits.load(Ordering::Acquire))
+    }
+    #[inline]
+    fn ki(&self) -> f64 {
+        f64::from_bits(self.ki_bits.load(Ordering::Acquire))
+    }
+}
+
+/* ---------- pacer ---------- */
+struct Pacer {
+    sr_hz: f64,
+    integ: f64,
+    frac: f64,
+    last: Instant,
+    params: Arc<Params>,
+}
+impl Pacer {
+    fn new(sr_hz: f64, params: Arc<Params>) -> Self {
+        Self {
+            sr_hz,
+            integ: 0.0,
+            frac: 0.0,
+            last: Instant::now(),
+            params,
+        }
+    }
+
+    /// How many samples to move downstream this tick.
+    #[inline]
+    fn compute(&mut self, dn_queued_samples: usize) -> usize {
+        let target_s = self.params.target_s();
+        let kp = self.params.kp();
+        let ki = self.params.ki();
+
+        // hard guard (~10ms above target => stop feeding)
+        let over_margin = (self.sr_hz * 0.010).round() as usize;
+        let target_samp = (self.sr_hz * target_s).round() as usize;
+        if dn_queued_samples > target_samp.saturating_add(over_margin) {
+            self.frac = 0.0;
+            self.integ = self.integ.min(0.0); // mild anti-windup
+            self.last = Instant::now();
+            return 0;
+        }
+
         let now = Instant::now();
         let dt = (now - self.last).as_secs_f64().max(1e-6);
         self.last = now;
 
-        let queued_sec = (queued_samples as f64) / self.device_sr_hz;
-        let err = queued_sec - self.target_sec;
-        self.integ = (self.integ + err * dt).clamp(-self.target_sec, self.target_sec);
+        let dn_sec = (dn_queued_samples as f64) / self.sr_hz;
+        let err = dn_sec - target_s;
+        self.integ = (self.integ + err * dt).clamp(-target_s, target_s);
 
-        let base = self.device_sr_hz * dt + self.frac;
-        let corr = (self.kp * err + self.ki * self.integ) * self.device_sr_hz;
-        let want = base - corr;
+        let base = self.sr_hz * dt + self.frac;
+        let corr = (kp * err + ki * self.integ) * self.sr_hz;
+        let want = (base - corr).clamp(0.0, self.sr_hz * 0.050); // ≤50ms/tick
 
-        let n = want.floor().clamp(0.0, self.device_sr_hz * 0.050) as usize; // ≤50ms/tick
+        let n = want.floor() as usize;
         self.frac = want - n as f64;
         n
     }
 }
 
+/* ---------- producer ---------- */
 pub struct AudioProducer {
-    tx: SampleProducer<f32>,
+    tx: Prod<f32>,
     space_notify: Arc<Notify>,
+    params: Arc<Params>,
+    sr_hz: f64,
+    up_factor: f64,
+    hyst: usize,
+    _worker: thread::JoinHandle<()>,
 }
 impl AudioProducer {
+    #[inline]
+    fn up_occ(&self) -> usize {
+        self.tx.occupied_len()
+    }
+    #[inline]
+    fn soft_cap_samples(&self) -> usize {
+        ((self.sr_hz * self.params.target_s() * self.up_factor).ceil() as usize).max(1)
+    }
+
     pub async fn push_all(&mut self, mut data: &[f32]) {
         while !data.is_empty() {
-            let wrote = self.tx.push_slice(data);
+            let soft = self.soft_cap_samples();
+            let thresh = soft.saturating_sub(self.hyst);
+
+            // backpressure: wait while over threshold
+            while self.up_occ() > thresh {
+                self.space_notify.notified().await;
+            }
+
+            // write up to threshold (or try whole slice once if plan==0)
+            let room = thresh.saturating_sub(self.up_occ());
+            let plan = room.min(data.len());
+            let wrote = if plan == 0 {
+                self.tx.push_slice(data)
+            } else {
+                self.tx.push_slice(&data[..plan])
+            };
+
             data = &data[wrote..];
-            if !data.is_empty() {
+
+            if wrote == 0 {
+                // ring full rn, wait for worker to drain
                 self.space_notify.notified().await;
             }
         }
     }
 }
 
-pub struct BridgeGuard {
-    _stop: Arc<AtomicBool>,
-    _worker: thread::JoinHandle<()>,
+/* ---------- external control ---------- */
+#[derive(Clone)]
+pub struct BridgeCtl {
+    params: Arc<Params>,
+    max_s: f64,
+}
+impl BridgeCtl {
+    pub fn set_latency_ms(&self, latency_ms: f64) {
+        let s = (latency_ms / 1000.0).min(self.max_s);
+        let (kp, ki) = gains_for(s);
+        self.params
+            .target_s_bits
+            .store(s.to_bits(), Ordering::Release);
+        self.params.kp_bits.store(kp.to_bits(), Ordering::Release);
+        self.params.ki_bits.store(ki.to_bits(), Ordering::Release);
+    }
 }
 
+/* ---------- factory ---------- */
 pub fn make_paced_bridge_ringbuf_bulk_async(
     latency_ms: f64,
     device_sr_hz: f64,
-) -> (AudioProducer, SampleConsumer<f32>, BridgeGuard) {
-    let target_sec = (latency_ms) / 1000.0;
-    let (kp, ki) = auto_gains_for_latency(target_sec);
-    let (up_cap, dn_cap) = bridge_caps(device_sr_hz, target_sec);
+) -> (AudioProducer, AudioConsumer, BridgeCtl) {
+    let max_s = (MAX_AUDIO_LATENCY_MICROS as f64) / 1_000_000.0;
+    let target_s = (latency_ms / 1000.0).min(max_s);
 
-    let (up_tx, mut up_rx) = RingbufType::<f32>::new(up_cap).split();
-    let (mut dn_tx, dn_rx) = RingbufType::<f32>::new(dn_cap).split();
+    let (kp, ki) = gains_for(target_s);
+    let (up_cap, dn_cap) = caps(device_sr_hz, max_s);
 
-    let space_notify = Arc::new(Notify::new());
-    let space_notify_worker = space_notify.clone();
+    let (up_tx, mut up_rx) = Rb::<f32>::new(up_cap).split();
+    let (mut dn_tx, dn_rx) = Rb::<f32>::new(dn_cap).split();
 
-    let _stop = Arc::new(AtomicBool::new(false));
-    let stop_worker = _stop.clone();
+    let notify = Arc::new(Notify::new());
+    let notify_w = notify.clone();
 
-    let mut pacer = PacerSec::new(device_sr_hz, target_sec, kp, ki);
-    let mut scratch = vec![0.0f32; (device_sr_hz * 0.050).ceil() as usize + 64]; // ~≤50ms
+    let params = Arc::new(Params::new(target_s, kp, ki));
+    let ctl = BridgeCtl {
+        params: params.clone(),
+        max_s,
+    };
+
+    let mut pacer = Pacer::new(device_sr_hz, params.clone());
+
+    // one scratch ≈ 50ms + guard
+    let scratch = (device_sr_hz * 0.050).ceil() as usize + 64;
+    let mut buf = vec![0.0f32; scratch];
+
+    // producer side: keep ~up_factor × target buffered upstream; wake when < threshold
+    let up_factor = 6.0;
+    let hyst = scratch;
 
     let _worker = thread::spawn(move || {
         loop {
-            if stop_worker.load(Ordering::Relaxed) {
-                break;
+            // wake threshold for producers
+            let soft_up =
+                ((pacer.sr_hz * pacer.params.target_s() * up_factor).ceil() as usize).max(1);
+            let wake_threshold = soft_up.saturating_sub(scratch);
+
+            // move paced chunk downstream
+            let want = pacer.compute(dn_tx.occupied_len()).min(buf.len());
+            let pulled = if want > 0 {
+                up_rx.pop_slice(&mut buf[..want])
+            } else {
+                0
+            };
+
+            if pulled > 0 {
+                let _ = dn_tx.push_slice(&buf[..pulled]);
             }
 
-            let want = pacer.compute(dn_tx.occupied_len()).min(scratch.len());
-            //println!("WAINT {want}");
-            if want > 0 {
-                // read up to `want` from upstream in one go
-                let pulled = up_rx.pop_slice(&mut scratch[..want]);
-                if pulled > 0 {
-                    // write as much as fits downstream
-                    let _pushed = dn_tx.push_slice(&scratch[..pulled]);
-
-                    //println!("Shuffled {_pushed} bytes");
-
-                    // if downstream couldn’t take it all, the remainder will be retried next loop
-                    // signal the producer there is space upstream now
-                    space_notify_worker.notify_waiters();
-                }
+            // wake producers when upstream backlog is sufficiently low OR nothing to pull
+            if up_rx.occupied_len() <= wake_threshold || pulled == 0 || want == 0 {
+                notify_w.notify_waiters();
             }
 
-            // gentle cadence
+            // 1ms tick is plenty; avoids hot spin
             thread::sleep(Duration::from_millis(1));
         }
     });
 
-    (
-        AudioProducer {
-            tx: up_tx,
-            space_notify,
-        },
-        dn_rx,
-        BridgeGuard { _stop, _worker },
-    )
+    let producer = AudioProducer {
+        tx: up_tx,
+        space_notify: notify,
+        params,
+        sr_hz: device_sr_hz,
+        up_factor,
+        hyst,
+        _worker,
+    };
+
+    (producer, dn_rx, ctl)
 }
 
-fn auto_gains_for_latency(target_sec: f64) -> (f64, f64) {
-    let t = target_sec.clamp(0.010, 0.080);
-    let kp = (0.15 * 0.030) / t; // same kp as above
-    let gamma = 100.0; // integral time ~100× target
-    let ki = (kp / (gamma * t)).clamp(0.01, 0.12);
+/* ---------- heuristics ---------- */
+#[inline]
+fn gains_for(target_s: f64) -> (f64, f64) {
+    // simple PI tuning: P ~ 1/target, I slower than P by ~100×target
+    let kp = (0.15 * 0.030) / target_s;
+    let ki = (kp / (100.0 * target_s)).clamp(0.01, 0.12);
     (kp, ki)
 }
-fn bridge_caps(device_sr_hz: f64, target_sec: f64) -> (usize, usize) {
-    let up = (device_sr_hz * target_sec * 6.0).ceil() as usize; // upstream ~6× target
-    let dn = (device_sr_hz * target_sec * 3.0).ceil() as usize; // downstream ~3× target
+
+#[inline]
+fn caps(sr_hz: f64, max_target_s: f64) -> (usize, usize) {
+    let up = (sr_hz * max_target_s * 6.0).ceil() as usize;
+    let dn = (sr_hz * max_target_s * 3.0).ceil() as usize;
     (up.max(256), dn.max(256))
 }
