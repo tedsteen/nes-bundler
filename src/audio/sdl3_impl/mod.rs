@@ -76,7 +76,8 @@ impl SDL3AudioSystem {
         let mut settings = Settings::current_mut();
         let device = settings.audio.get_selected_device(self);
         let volume = settings.audio.volume;
-        AudioStream::new(self.clone(), device, volume)
+        let latency_micros = settings.audio.latency_micros;
+        AudioStream::new(self.clone(), device, volume, latency_micros)
     }
 }
 
@@ -86,12 +87,20 @@ pub struct SDL3AudioStream {
     pub tx: Option<AudioProducer>,
     take_back: Receiver<AudioConsumer>,
     volume: Arc<AtomicU8>,
-    _c: super::pacer::BridgeGuard,
+    ctl: super::pacer::BridgeCtl,
 }
 
 impl SDL3AudioStream {
-    fn new(audio_system: AudioSystem, device: AvailableAudioDevice, volume: u8) -> Self {
-        let (tx, rx, c) = make_paced_bridge_ringbuf_bulk_async(25.0, DEFAULT_SAMPLE_RATE as f64);
+    fn new(
+        audio_system: AudioSystem,
+        device: AvailableAudioDevice,
+        volume: u8,
+        latency_micros: u32,
+    ) -> Self {
+        let (tx, rx, ctl) = make_paced_bridge_ringbuf_bulk_async(
+            latency_micros as f64 / 1_000.0,
+            DEFAULT_SAMPLE_RATE as f64,
+        );
 
         let volume = Arc::new(AtomicU8::new(volume));
         let (stream, take_back) = Self::create(
@@ -106,7 +115,7 @@ impl SDL3AudioStream {
             tx: Some(tx),
             take_back,
             volume,
-            _c: c,
+            ctl,
         }
     }
     fn create(
@@ -126,7 +135,7 @@ impl SDL3AudioStream {
         let (give_back, take_back) = std::sync::mpsc::channel();
 
         // TODO: Calculate the correct buffer hint here
-        sdl3::hint::set("SDL_AUDIO_DEVICE_SAMPLE_FRAMES", "735");
+        sdl3::hint::set("SDL_AUDIO_DEVICE_SAMPLE_FRAMES", &format!("{}", 735 / 16));
 
         let stream = AudioDevice::open_playback(
             &audio_subsystem,
@@ -169,6 +178,10 @@ impl SDL3AudioStream {
     pub(crate) fn set_volume(&mut self, volume: u8) {
         self.volume
             .store(volume, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub(crate) fn set_latency(&self, latency_micros: u32) {
+        self.ctl.set_latency_ms(latency_micros as f64 / 1000.0);
     }
 }
 

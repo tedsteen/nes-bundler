@@ -49,6 +49,7 @@ impl DebugGui {
             .changed()
             && !self.override_speed
         {
+            self.speed = 1.0;
             let _ = self
                 .shared_emulator
                 .command_tx
@@ -57,11 +58,15 @@ impl DebugGui {
 
         if self.override_speed {
             ui.end_row();
-            ui.add(egui::Slider::new(&mut self.speed, 0.005..=2.0).suffix("x"));
-            let _ = self
-                .shared_emulator
-                .command_tx
-                .try_send(crate::emulation::EmulatorCommand::SetSpeed(self.speed));
+            if ui
+                .add(egui::Slider::new(&mut self.speed, 0.01..=2.0).suffix("x"))
+                .changed()
+            {
+                let _ = self
+                    .shared_emulator
+                    .command_tx
+                    .try_send(crate::emulation::EmulatorCommand::SetSpeed(self.speed));
+            }
         }
         ui.end_row();
     }

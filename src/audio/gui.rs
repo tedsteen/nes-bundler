@@ -1,5 +1,5 @@
 use crate::{
-    audio::{AudioStream, AudioSystem},
+    audio::{AudioStream, AudioSystem, MAX_AUDIO_LATENCY_MICROS, MIN_AUDIO_LATENCY_MICROS},
     main_view::gui::GuiComponent,
     settings::Settings,
 };
@@ -96,6 +96,23 @@ impl GuiComponent for AudioGui {
                 .changed()
             {
                 self.audio_stream.set_volume(audio_settings.volume);
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label("Latency");
+            if ui
+                .add(
+                    Slider::new(
+                        &mut audio_settings.latency_micros,
+                        MIN_AUDIO_LATENCY_MICROS..=MAX_AUDIO_LATENCY_MICROS,
+                    )
+                    .suffix("ms")
+                    .custom_formatter(|ns, _| format!("{}", ns / 1000.0))
+                    .logarithmic(true),
+                )
+                .changed()
+            {
+                self.audio_stream.set_latency(audio_settings.latency_micros);
             }
         });
     }
