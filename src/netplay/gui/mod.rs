@@ -93,7 +93,7 @@ impl NetplayGui {
                         if ui.button("Fake connection lost").clicked() {
                             use crate::netplay::NetplayCommand;
 
-                            let _ = netplay_tx.try_send(NetplayCommand::Resume);
+                            let _ = netplay_tx.try_send(NetplayCommand::RetryConnect);
                         }
                     });
                     ui.end_row();
@@ -347,105 +347,82 @@ impl NetplayGui {
                         .ui(ui);
                 });
             }
-            ConnectingState::PeeringUp(start_method, unlock_url, start_time) => {
-                if let Some(unlock_url) = Self::needs_unlocking(*start_time, unlock_url) {
-                    ui.vertical_centered(|ui| {
-                        ui.set_width(300.0);
-                        ui.horizontal_wrapped(|ui| {
-                            ui.spacing_mut().item_spacing.x = 0.0;
-                            ui.label("We're having trouble connecting you, click ");
-                            ui.hyperlink_to("here", unlock_url)
-                                .on_hover_cursor(egui::CursorIcon::PointingHand);
-                            ui.label(" to unlock Netplay!");
-                        });
-                    });
-                    ui.end_row();
-
-                    ui.vertical_centered(|ui| {
-                        if ui.button("Retry").clicked() {
-                            let _ = self
-                                .shared_netplay
-                                .command_tx
-                                .send(NetplayCommand::RetryConnect);
-                        }
-                    });
-                } else {
-                    match start_method {
-                        StartMethod::Start(.., room_name, join_or_host) => {
-                            use super::connection::JoinOrHost::*;
-                            match join_or_host {
-                                Join => {
-                                    ui.vertical_centered(|ui| {
-                                        Label::new(MenuButton::ui_text(
-                                            netplay_voca.joining_private_game.clone(),
-                                            MenuButton::ACTIVE_COLOR,
-                                        ))
-                                        .selectable(false)
-                                        .ui(ui);
-                                    });
-                                }
-
-                                Host => {
-                                    ui.vertical_centered(|ui| {
-                                        Label::new(MenuButton::ui_text(
-                                            netplay_voca.hosting_private_game.clone(),
-                                            MenuButton::ACTIVE_COLOR,
-                                        ))
-                                        .selectable(false)
-                                        .ui(ui);
-                                    });
-                                }
-                            }
-                            ui.end_row();
-
-                            ui.vertical_centered(|ui| {
-                                Label::new(ui_text_small(
-                                    "WAITING FOR SECOND PLAYER",
-                                    MenuButton::ACTIVE_COLOR,
-                                ))
-                                .selectable(false)
-                                .ui(ui);
-                            });
-
-                            ui.end_row();
-
-                            ui.vertical_centered(|ui| {
-                                Label::new(MenuButton::ui_text("CODE", MenuButton::ACTIVE_COLOR))
+            ConnectingState::PeeringUp(start_method) => {
+                match start_method {
+                    StartMethod::Start(.., room_name, join_or_host) => {
+                        use super::connection::JoinOrHost::*;
+                        match join_or_host {
+                            Join => {
+                                ui.vertical_centered(|ui| {
+                                    Label::new(MenuButton::ui_text(
+                                        netplay_voca.joining_private_game.clone(),
+                                        MenuButton::ACTIVE_COLOR,
+                                    ))
                                     .selectable(false)
                                     .ui(ui);
-                            });
-                            ui.end_row();
-                            ui.vertical_centered(|ui| {
-                                Label::new(MenuButton::ui_text(
-                                    room_name,
-                                    Color32::from_rgb(255, 225, 0),
-                                ))
-                                .ui(ui);
-                            });
-                        }
-                        StartMethod::MatchWithRandom => {
-                            ui.vertical_centered(|ui| {
-                                Label::new(MenuButton::ui_text(
-                                    netplay_voca.finding_public_game.clone(),
-                                    MenuButton::ACTIVE_COLOR,
-                                ))
-                                .selectable(false)
-                                .ui(ui);
-                            });
-                            ui.end_row();
+                                });
+                            }
 
-                            ui.vertical_centered(|ui| {
-                                Label::new(ui_text_small(
-                                    "WAITING FOR SECOND PLAYER",
-                                    MenuButton::ACTIVE_COLOR,
-                                ))
+                            Host => {
+                                ui.vertical_centered(|ui| {
+                                    Label::new(MenuButton::ui_text(
+                                        netplay_voca.hosting_private_game.clone(),
+                                        MenuButton::ACTIVE_COLOR,
+                                    ))
+                                    .selectable(false)
+                                    .ui(ui);
+                                });
+                            }
+                        }
+                        ui.end_row();
+
+                        ui.vertical_centered(|ui| {
+                            Label::new(ui_text_small(
+                                "WAITING FOR SECOND PLAYER",
+                                MenuButton::ACTIVE_COLOR,
+                            ))
+                            .selectable(false)
+                            .ui(ui);
+                        });
+
+                        ui.end_row();
+
+                        ui.vertical_centered(|ui| {
+                            Label::new(MenuButton::ui_text("CODE", MenuButton::ACTIVE_COLOR))
                                 .selectable(false)
                                 .ui(ui);
-                            });
-                        }
-                        StartMethod::Resume(..) => {
-                            //This is used internally during the `NetplayState::Resuming` state
-                        }
+                        });
+                        ui.end_row();
+                        ui.vertical_centered(|ui| {
+                            Label::new(MenuButton::ui_text(
+                                room_name,
+                                Color32::from_rgb(255, 225, 0),
+                            ))
+                            .ui(ui);
+                        });
+                    }
+                    StartMethod::MatchWithRandom => {
+                        ui.vertical_centered(|ui| {
+                            Label::new(MenuButton::ui_text(
+                                netplay_voca.finding_public_game.clone(),
+                                MenuButton::ACTIVE_COLOR,
+                            ))
+                            .selectable(false)
+                            .ui(ui);
+                        });
+                        ui.end_row();
+
+                        ui.vertical_centered(|ui| {
+                            Label::new(ui_text_small(
+                                "WAITING FOR SECOND PLAYER",
+                                MenuButton::ACTIVE_COLOR,
+                            ))
+                            .selectable(false)
+                            .ui(ui);
+                        });
+                    }
+                    StartMethod::Resume(..) => {
+                        //This is used internally during the `NetplayState::Resuming` state
                     }
                 }
             }
@@ -488,12 +465,35 @@ impl NetplayGui {
                 });
                 ui.end_row();
             }
-            SharedNetplayConnectedState::Synchronizing => {
+            SharedNetplayConnectedState::Synchronizing(start_time, unlock_url) => {
                 ui.vertical_centered(|ui| {
                     Label::new(MenuButton::ui_text("PAIRING UP", MenuButton::ACTIVE_COLOR))
                         .selectable(false)
                         .ui(ui);
                 });
+                ui.end_row();
+                if let Some(unlock_url) = Self::needs_unlocking(*start_time, unlock_url) {
+                    ui.vertical_centered(|ui| {
+                        ui.set_width(300.0);
+                        ui.horizontal_wrapped(|ui| {
+                            ui.spacing_mut().item_spacing.x = 0.0;
+                            ui.label("We're having trouble connecting you, click ");
+                            ui.hyperlink_to("here", unlock_url)
+                                .on_hover_cursor(egui::CursorIcon::PointingHand);
+                            ui.label(" to unlock Netplay!");
+                        });
+                    });
+                    ui.end_row();
+
+                    ui.vertical_centered(|ui| {
+                        if ui.button("Retry").clicked() {
+                            let _ = self
+                                .shared_netplay
+                                .command_tx
+                                .try_send(NetplayCommand::RetryConnect);
+                        }
+                    });
+                }
                 ui.end_row();
             }
         }

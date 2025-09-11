@@ -6,7 +6,7 @@ use matchbox_socket::{ChannelConfig, RtcIceServerConfig, WebRtcSocket, WebRtcSoc
 use serde::Deserialize;
 use std::fmt::Debug;
 use std::pin::Pin;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::watch::{Receiver, Sender, channel};
 
 use crate::bundle::Bundle;
@@ -23,11 +23,7 @@ use super::configuration::{
 pub enum ConnectingState {
     Idle, //Initial state.
     LoadingNetplayServerConfiguration,
-    PeeringUp(
-        StartMethod,
-        Option<String>, /* Unlock url */
-        Instant,        /* Start time */
-    ),
+    PeeringUp(StartMethod),
 }
 
 pub struct NetplayConnection {
@@ -124,11 +120,7 @@ impl ConnectingSession {
         netplay_server_configuration: StaticNetplayServerConfiguration,
     ) -> Result<NetplayConnection> {
         let matchbox_server = &netplay_server_configuration.matchbox.server;
-        let _ = state_sender.send(ConnectingState::PeeringUp(
-            start_method.clone(),
-            netplay_server_configuration.unlock_url.clone(),
-            Instant::now(),
-        ));
+        let _ = state_sender.send(ConnectingState::PeeringUp(start_method.clone()));
 
         let room_name = start_method.to_room_name();
 
