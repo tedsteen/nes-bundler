@@ -16,7 +16,7 @@ use tetanes_core::{
     fs,
     input::{JoypadBtnState, Player},
     mapper::Mapper,
-    mem::RamState,
+    mem::{Memory, RamState},
 };
 
 use super::{DEFAULT_SAMPLE_RATE, NESBuffers, NTSC_PAL, NesStateHandler};
@@ -69,7 +69,9 @@ impl TetanesNesState {
                 match b64.decode(b64_encoded_sram) {
                     Ok(sram) => {
                         log::info!("Loading SRAM save state");
-                        cpu.bus.load_sram(sram);
+                        let mut mem = Memory::new(sram.len());
+                        mem.copy_from_slice(&sram);
+                        cpu.bus.load_sram(mem);
                     }
                     Err(err) => {
                         log::warn!("Failed to base64 decode sram: {err:?}");

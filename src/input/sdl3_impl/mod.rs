@@ -1,5 +1,6 @@
 use sdl3::GamepadSubsystem;
 use sdl3::gamepad::Gamepad;
+use sdl3::joystick::JoystickId;
 
 use super::buttons::ToGamepadButton;
 use super::{InputConfiguration, ToInputId};
@@ -27,6 +28,12 @@ impl SDL3GamepadState {
 impl ToInputId for u32 {
     fn to_input_id(&self) -> InputId {
         self.to_string()
+    }
+}
+
+impl ToInputId for JoystickId {
+    fn to_input_id(&self) -> InputId {
+        self.0.to_string()
     }
 }
 
