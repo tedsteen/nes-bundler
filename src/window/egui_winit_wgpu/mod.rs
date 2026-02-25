@@ -51,6 +51,7 @@ impl Renderer {
                 // we're building for the web we'll have to disable some.
                 required_limits: Default::default(),
                 memory_hints: Default::default(),
+                experimental_features: Default::default(),
             })
             .await?;
 

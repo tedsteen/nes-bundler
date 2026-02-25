@@ -116,7 +116,7 @@ impl MainGui {
     }
 
     fn ui_main_container(title: Option<&str>, ctx: &Context, content: impl FnOnce(&mut Ui)) {
-        let screen_rect = ctx.input(|a| a.screen_rect());
+        let screen_rect = ctx.input(|a| a.content_rect());
 
         let window_title = title.unwrap_or("");
         egui::Window::new(window_title)

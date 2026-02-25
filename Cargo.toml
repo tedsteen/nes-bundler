@@ -39,7 +39,7 @@ anyhow = "1.0"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 bitflags = "2"
-rand = "0.9"
+rand = "0.10"
 
 tokio = { version = "1", features = [
   "rt",
@@ -49,23 +49,23 @@ tokio = { version = "1", features = [
 ] }
 futures = "0.3"
 
-egui = { version = "0.32", default-features = false, features = [
+egui = { version = "0.33", default-features = false, features = [
   "bytemuck",
   "default_fonts",
 ] }
-egui_plot = { version = "0.33", optional = true }
+egui_plot = { version = "0.34", optional = true }
 
-# TODO: Use stable version of puffin and puffin_egui when 0.32 is released
-puffin = { git = "https://github.com/EmbarkStudios/puffin.git", rev = "32499573b89246385373b6288295fff830154635", optional = true }
-puffin_egui = { git = "https://github.com/EmbarkStudios/puffin.git", rev = "32499573b89246385373b6288295fff830154635", optional = true }
+# TODO: Use stable version of puffin and puffin_egui when 0.33 is released
+puffin = { git = "https://github.com/blip-radar/puffin.git", rev = "4a51e9f504f584e2e68a404cf24812bbb1be2300", optional = true }
+puffin_egui = { git = "https://github.com/blip-radar/puffin.git", rev = "4a51e9f504f584e2e68a404cf24812bbb1be2300", optional = true }
 
-egui-winit = "0.32"
-egui-wgpu = "0.32"
+egui-winit = "0.33"
+egui-wgpu = "0.33"
 winit = "0.30"
-wgpu = { version = "25", features = ["dx12", "metal"] }
+wgpu = { version = "27", features = ["dx12", "metal"] }
 raw-window-handle = "0.6"
 
-sdl3 = { version = "0.16", features = ["build-from-source-static"] }
+sdl3 = { version = "0.17", features = ["build-from-source-static"] }
 
 tetanes-core = { git = "https://github.com/lukexor/tetanes.git" }
 postcard = { version = "1.1", features = ["alloc"] }
@@ -76,11 +76,11 @@ base64 = "0.22"
 directories = "6.0"
 
 # Netplay deps
-matchbox_socket = { version = "0.13", features = ["ggrs"], optional = true }
+matchbox_socket = { version = "0.14", features = ["ggrs"], optional = true }
 futures-timer = { version = "3", features = ["wasm-bindgen"], optional = true }
 ggrs = { version = "0.11", optional = true }
 uuid = { version = "1", features = ["v4"], optional = true }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"], optional = true }
+reqwest = { version = "0.13", default-features = false, features = ["json"], optional = true }
 md5 = { version = "0.8", optional = true }
 
 [build-dependencies]

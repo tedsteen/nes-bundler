@@ -31,7 +31,7 @@ impl SDL3AvailableAudioDevice {
                 .audio_device_id
                 .name()
                 .inspect_err(|e| log::warn!("Could not get name of output device {e:?}"))
-                .unwrap_or(format!("No name ({:})", self.audio_device_id.id())),
+                .unwrap_or_else(|_| format!("No name ({})", self.audio_device_id.id().value())),
         }
     }
 }
