@@ -22,8 +22,15 @@ type Cons<T> = Caching<Arc<Rb<T>>, false, true>;
 type Prod<T> = Caching<Arc<Rb<T>>, true, false>;
 pub type AudioConsumer = Cons<f32>;
 
+/* ---------- constants ---------- */
+/// Upstream ring capacity as a multiple of the max target buffer.
+const UP_FACTOR: f64 = 6.0;
+/// Maximum samples drained per pacer tick (~50 ms).
+const MAX_TICK_S: f64 = 0.050;
+/// Hard-stop margin: stop feeding downstream when this far above target.
+const OVER_MARGIN_S: f64 = 0.010;
+
 /* ---------- shared params (atomic f64 via bits) ---------- */
-#[derive(Default)]
 struct Params {
     target_s_bits: AtomicU64,
     kp_bits: AtomicU64,
@@ -49,6 +56,15 @@ impl Params {
     fn ki(&self) -> f64 {
         f64::from_bits(self.ki_bits.load(Ordering::Acquire))
     }
+}
+
+/* ---------- helpers ---------- */
+/// How many upstream samples the producer may queue before blocking.
+/// 1× target keeps upstream transit latency equal to the configured target,
+/// so total end-to-end latency ≈ 2× target rather than a large multiple.
+#[inline]
+fn up_thresh_samples(sr_hz: f64, target_s: f64) -> usize {
+    (sr_hz * target_s).round() as usize
 }
 
 /* ---------- pacer ---------- */
@@ -77,8 +93,8 @@ impl Pacer {
         let kp = self.params.kp();
         let ki = self.params.ki();
 
-        // hard guard (~10ms above target => stop feeding)
-        let over_margin = (self.sr_hz * 0.010).round() as usize;
+        // Hard guard: stop feeding when downstream is OVER_MARGIN_S above target.
+        let over_margin = (self.sr_hz * OVER_MARGIN_S).round() as usize;
         let target_samp = (self.sr_hz * target_s).round() as usize;
         if dn_queued_samples > target_samp.saturating_add(over_margin) {
             self.frac = 0.0;
@@ -97,7 +113,7 @@ impl Pacer {
 
         let base = self.sr_hz * dt + self.frac;
         let corr = (kp * err + ki * self.integ) * self.sr_hz;
-        let want = (base - corr).clamp(0.0, self.sr_hz * 0.050); // ≤50ms/tick
+        let want = (base - corr).clamp(0.0, self.sr_hz * MAX_TICK_S);
 
         let n = want.floor() as usize;
         self.frac = want - n as f64;
@@ -111,8 +127,6 @@ pub struct AudioProducer {
     space_notify: Arc<Notify>,
     params: Arc<Params>,
     sr_hz: f64,
-    up_factor: f64,
-    hyst: usize,
     _worker: thread::JoinHandle<()>,
 }
 impl AudioProducer {
@@ -120,34 +134,22 @@ impl AudioProducer {
     fn up_occ(&self) -> usize {
         self.tx.occupied_len()
     }
-    #[inline]
-    fn soft_cap_samples(&self) -> usize {
-        ((self.sr_hz * self.params.target_s() * self.up_factor).ceil() as usize).max(1)
-    }
 
     pub async fn push_all(&mut self, mut data: &[f32]) {
         while !data.is_empty() {
-            let soft = self.soft_cap_samples();
-            let thresh = soft.saturating_sub(self.hyst);
+            let thresh = up_thresh_samples(self.sr_hz, self.params.target_s());
 
-            // backpressure: wait while over threshold
-            while self.up_occ() > thresh {
+            // backpressure: wait while at or over threshold
+            while self.up_occ() >= thresh {
                 self.space_notify.notified().await;
             }
 
-            // write up to threshold (or try whole slice once if plan==0)
-            let room = thresh.saturating_sub(self.up_occ());
-            let plan = room.min(data.len());
-            let wrote = if plan == 0 {
-                self.tx.push_slice(data)
-            } else {
-                self.tx.push_slice(&data[..plan])
-            };
-
+            let room = thresh - self.up_occ();
+            let wrote = self.tx.push_slice(&data[..room.min(data.len())]);
             data = &data[wrote..];
 
             if wrote == 0 {
-                // ring full rn, wait for worker to drain
+                // ring full; wait for worker to drain
                 self.space_notify.notified().await;
             }
         }
@@ -197,50 +199,45 @@ pub fn make_paced_bridge_ringbuf_bulk_async(
 
     let mut pacer = Pacer::new(device_sr_hz, params.clone());
 
-    // one scratch ≈ 50ms + guard
-    let scratch = (device_sr_hz * 0.050).ceil() as usize + 64;
+    // scratch buffer sized for one MAX_TICK_S window plus a small pad
+    let scratch = (device_sr_hz * MAX_TICK_S).ceil() as usize + 64;
     let mut buf = vec![0.0f32; scratch];
 
-    // producer side: keep ~up_factor × target buffered upstream; wake when < threshold
-    let up_factor = 6.0;
-    let hyst = scratch;
+    let _worker = thread::Builder::new()
+        .name("audio-pacer".into())
+        .spawn(move || {
+            loop {
+                // wake producers when upstream drops back to or below the write threshold
+                let wake_threshold = up_thresh_samples(pacer.sr_hz, pacer.params.target_s());
 
-    let _worker = thread::spawn(move || {
-        loop {
-            // wake threshold for producers
-            let soft_up =
-                ((pacer.sr_hz * pacer.params.target_s() * up_factor).ceil() as usize).max(1);
-            let wake_threshold = soft_up.saturating_sub(scratch);
+                // move paced chunk downstream
+                let want = pacer.compute(dn_tx.occupied_len()).min(buf.len());
+                let pulled = if want > 0 {
+                    up_rx.pop_slice(&mut buf[..want])
+                } else {
+                    0
+                };
 
-            // move paced chunk downstream
-            let want = pacer.compute(dn_tx.occupied_len()).min(buf.len());
-            let pulled = if want > 0 {
-                up_rx.pop_slice(&mut buf[..want])
-            } else {
-                0
-            };
+                if pulled > 0 {
+                    let _ = dn_tx.push_slice(&buf[..pulled]);
+                }
 
-            if pulled > 0 {
-                let _ = dn_tx.push_slice(&buf[..pulled]);
+                // wake producers when upstream backlog is sufficiently low OR nothing was pulled
+                if up_rx.occupied_len() <= wake_threshold || pulled == 0 {
+                    notify_w.notify_waiters();
+                }
+
+                // 1ms tick is plenty; avoids hot spin
+                thread::sleep(Duration::from_millis(1));
             }
-
-            // wake producers when upstream backlog is sufficiently low OR nothing to pull
-            if up_rx.occupied_len() <= wake_threshold || pulled == 0 || want == 0 {
-                notify_w.notify_waiters();
-            }
-
-            // 1ms tick is plenty; avoids hot spin
-            thread::sleep(Duration::from_millis(1));
-        }
-    });
+        })
+        .expect("failed to spawn audio-pacer thread");
 
     let producer = AudioProducer {
         tx: up_tx,
         space_notify: notify,
         params,
         sr_hz: device_sr_hz,
-        up_factor,
-        hyst,
         _worker,
     };
 
@@ -250,7 +247,8 @@ pub fn make_paced_bridge_ringbuf_bulk_async(
 /* ---------- heuristics ---------- */
 #[inline]
 fn gains_for(target_s: f64) -> (f64, f64) {
-    // simple PI tuning: P ~ 1/target, I slower than P by ~100×target
+    // PI tuning: at 30 ms target kp ≈ 0.15; scales inversely with target.
+    // ki is set ~100× target slower than kp, clamped to a safe range.
     let kp = (0.15 * 0.030) / target_s;
     let ki = (kp / (100.0 * target_s)).clamp(0.01, 0.12);
     (kp, ki)
@@ -258,7 +256,7 @@ fn gains_for(target_s: f64) -> (f64, f64) {
 
 #[inline]
 fn caps(sr_hz: f64, max_target_s: f64) -> (usize, usize) {
-    let up = (sr_hz * max_target_s * 6.0).ceil() as usize;
+    let up = (sr_hz * max_target_s * UP_FACTOR).ceil() as usize;
     let dn = (sr_hz * max_target_s * 3.0).ceil() as usize;
     (up.max(256), dn.max(256))
 }
