@@ -21,7 +21,6 @@ use super::configuration::{
 
 #[derive(Debug)]
 pub enum ConnectingState {
-    Idle, //Initial state.
     LoadingNetplayServerConfiguration,
     PeeringUp(StartMethod),
 }
@@ -40,7 +39,7 @@ pub struct ConnectingSession {
 impl ConnectingSession {
     pub fn connect(start_method: StartMethod) -> Self {
         log::debug!("Connecting: {start_method:?}");
-        let (state_sender, state) = channel(ConnectingState::Idle);
+        let (state_sender, state) = channel(ConnectingState::PeeringUp(start_method.clone()));
         let start_method_cloned = start_method.clone();
         let netplay_connection = async move {
             let netplay_config = match &start_method_cloned {
@@ -50,14 +49,18 @@ impl ConnectingSession {
                 _ => match &Bundle::current().config.netplay.server {
                     NetplayServerConfiguration::Static(static_conf) => static_conf.clone(),
                     NetplayServerConfiguration::TurnOn(turn_on_conf) => {
+                        let client = reqwest::Client::new();
                         ConnectingSession::retry(|| {
                             ConnectingSession::load_netplay_server_configuration(
                                 state_sender.clone(),
                                 turn_on_conf,
+                                client.clone(),
                             )
                         })
                         .await
-                        .unwrap_or_default()
+                        .map_err(|e| {
+                            anyhow::anyhow!("Failed to load netplay configuration: {e:?}")
+                        })?
                     }
                 },
             };
@@ -74,6 +77,7 @@ impl ConnectingSession {
     async fn load_netplay_server_configuration(
         state_sender: Sender<ConnectingState>,
         turn_on_conf: &TurnOnServerConfiguration,
+        client: reqwest::Client,
     ) -> Result<StaticNetplayServerConfiguration, TurnOnError> {
         log::debug!("Loading netplay configuration: {turn_on_conf:?}");
         let _ = state_sender.send(ConnectingState::LoadingNetplayServerConfiguration);
@@ -82,14 +86,9 @@ impl ConnectingSession {
         let url = format!("{0}/{netplay_id}", turn_on_conf.url);
         log::debug!("Fetching TurnOn config from server: {url}");
 
-        let reqwest_client = reqwest::Client::new();
-        let res = reqwest_client
-            .get(url)
-            .send()
-            .await
-            .map_err(|e| TurnOnError {
-                description: format!("Could not connect: {e}"),
-            })?;
+        let res = client.get(url).send().await.map_err(|e| TurnOnError {
+            description: format!("Could not connect: {e}"),
+        })?;
 
         if res.status().is_success() {
             res.json().await.map_err(|e| TurnOnError {
@@ -163,8 +162,15 @@ impl ConnectingSession {
                 }
             }
         });
+        const PEER_UP_TIMEOUT: Duration = Duration::from_secs(30);
+        let peer_up_deadline = std::time::Instant::now() + PEER_UP_TIMEOUT;
+
         log::debug!("Getting players...");
         loop {
+            if std::time::Instant::now() >= peer_up_deadline {
+                anyhow::bail!("Timed out waiting for players to connect");
+            }
+
             socket.try_update_peers().map_err(|e| {
                 anyhow::Error::msg(format!("Could not connect to {room_url:} ({e:?})"))
             })?;
@@ -176,7 +182,7 @@ impl ConnectingSession {
             }
 
             let remaining = MAX_PLAYERS - (connected_peers + 1);
-            if remaining <= 0 {
+            if remaining == 0 {
                 log::debug!("Got all players!");
 
                 let initial_state = match &start_method {

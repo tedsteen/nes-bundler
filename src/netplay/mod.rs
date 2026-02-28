@@ -1,7 +1,7 @@
-use std::{
-    sync::{Arc, RwLock},
-    time::Instant,
-};
+use std::time::Instant;
+
+#[cfg(feature = "debug")]
+use std::sync::{Arc, RwLock};
 
 use tokio::sync::watch::channel;
 
@@ -57,27 +57,28 @@ pub struct SharedNetplay {
     pub command_tx: NetplayCommandBus,
     pub receiver: tokio::sync::watch::Receiver<SharedNetplayState>,
     pub sender: tokio::sync::watch::Sender<SharedNetplayState>,
-    pub command_rx: Arc<RwLock<Option<tokio::sync::mpsc::Receiver<NetplayCommand>>>>,
 
     #[cfg(feature = "debug")]
     pub stats: Arc<RwLock<[crate::netplay::stats::NetplayStats; crate::settings::MAX_PLAYERS]>>,
 }
 impl SharedNetplay {
-    pub fn new() -> Self {
+    pub fn new() -> (Self, tokio::sync::mpsc::Receiver<NetplayCommand>) {
         let (command_tx, command_rx) = tokio::sync::mpsc::channel(1);
         let (sender, receiver) = channel(SharedNetplayState::Disconnected);
-        Self {
-            command_tx,
-            command_rx: Arc::new(RwLock::new(Some(command_rx))),
-            receiver,
-            sender,
+        (
+            Self {
+                command_tx,
+                receiver,
+                sender,
 
-            #[cfg(feature = "debug")]
-            stats: Arc::new(RwLock::new([
-                crate::netplay::stats::NetplayStats::new(),
-                crate::netplay::stats::NetplayStats::new(),
-            ])),
-        }
+                #[cfg(feature = "debug")]
+                stats: Arc::new(RwLock::new([
+                    crate::netplay::stats::NetplayStats::new(),
+                    crate::netplay::stats::NetplayStats::new(),
+                ])),
+            },
+            command_rx,
+        )
     }
 }
 
@@ -93,12 +94,16 @@ pub struct Netplay {
 }
 
 impl Netplay {
-    pub fn new(local_play_nes_state: LocalNesState, shared_netplay: SharedNetplay) -> Self {
+    pub fn new(
+        local_play_nes_state: LocalNesState,
+        shared_netplay: SharedNetplay,
+        netplay_rx: tokio::sync::mpsc::Receiver<NetplayCommand>,
+    ) -> Self {
         Self {
             initial_local_nes_state: local_play_nes_state.clone(),
             session: NetplaySession::new(local_play_nes_state),
             shared_state_sender: shared_netplay.sender,
-            netplay_rx: shared_netplay.command_rx.write().unwrap().take().unwrap(),
+            netplay_rx,
             #[cfg(feature = "debug")]
             stats: shared_netplay.stats.clone(),
         }
@@ -127,7 +132,6 @@ impl NesStateHandler for Netplay {
         buffers: Option<NESBuffers<'_>>,
     ) {
         // drain pending netplay commands
-        #[cfg(feature = "netplay")]
         while let Ok(cmd) = self.netplay_rx.try_recv() {
             use crate::netplay::{
                 connection::ConnectingSession,

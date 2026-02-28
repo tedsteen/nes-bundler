@@ -71,7 +71,10 @@ pub struct SharedState {
     pub netplay: crate::netplay::SharedNetplay,
 }
 impl SharedState {
-    fn new(emulator_command_tx: EmulatorCommandBus) -> Self {
+    fn new(
+        emulator_command_tx: EmulatorCommandBus,
+        #[cfg(feature = "netplay")] netplay: crate::netplay::SharedNetplay,
+    ) -> Self {
         Self {
             emulator: SharedEmulator {
                 command_tx: emulator_command_tx,
@@ -81,7 +84,7 @@ impl SharedState {
             },
 
             #[cfg(feature = "netplay")]
-            netplay: crate::netplay::SharedNetplay::new(),
+            netplay,
         }
     }
 }
@@ -103,7 +106,14 @@ impl Emulator {
         if let Some(mut audio_producer) = audio_stream.tx.take() {
             let (emulator_tx, emulator_rx) = tokio::sync::mpsc::channel(1);
 
-            let shared_state = SharedState::new(emulator_tx.clone());
+            #[cfg(feature = "netplay")]
+            let (shared_netplay, netplay_command_rx) = crate::netplay::SharedNetplay::new();
+
+            let shared_state = SharedState::new(
+                emulator_tx.clone(),
+                #[cfg(feature = "netplay")]
+                shared_netplay,
+            );
 
             let _th = std::thread::spawn({
                 let shared_state = shared_state.clone();
@@ -119,8 +129,11 @@ impl Emulator {
                     let shared_emulator = shared_state.emulator.clone();
 
                     #[cfg(feature = "netplay")]
-                    let mut nes_state =
-                        crate::netplay::Netplay::new(nes_state, shared_state.netplay.clone());
+                    let mut nes_state = crate::netplay::Netplay::new(
+                        nes_state,
+                        shared_state.netplay.clone(),
+                        netplay_command_rx,
+                    );
 
                     tokio::task::LocalSet::new().block_on(&rt, async move {
                         loop {

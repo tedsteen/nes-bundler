@@ -81,8 +81,8 @@ pub struct ConnectedNetplaySession {
 
     pub last_handled_ggrs_frame: i32,
     pub current_game_state: NetplayNesState,
-    pub last_confirmed_game_state1: NetplayNesState,
-    pub last_confirmed_game_state2: NetplayNesState,
+    pub older_confirmed_state: NetplayNesState,
+    pub newer_confirmed_state: NetplayNesState,
     start_time: Instant,
     last_running_time: Instant,
 }
@@ -128,8 +128,8 @@ impl ConnectedNetplaySession {
             netplay_server_configuration,
             local_player_index,
 
-            last_confirmed_game_state1: initial_state.clone(),
-            last_confirmed_game_state2: initial_state.clone(),
+            older_confirmed_state: initial_state.clone(),
+            newer_confirmed_state: initial_state.clone(),
             last_handled_ggrs_frame: -1,
             current_game_state: initial_state.clone(),
             start_time: Instant::now(),
@@ -198,10 +198,10 @@ impl ConnectedNetplaySession {
                                             == 0
                                         {
                                             mem::swap(
-                                                &mut self.last_confirmed_game_state1,
-                                                &mut self.last_confirmed_game_state2,
+                                                &mut self.older_confirmed_state,
+                                                &mut self.newer_confirmed_state,
                                             );
-                                            self.last_confirmed_game_state2 =
+                                            self.newer_confirmed_state =
                                                 self.current_game_state.clone()
                                         }
                                     }
@@ -271,14 +271,16 @@ impl ConnectingNetplaySession {
 pub struct ResumingNetplaySession {
     attempt1: ConnectingSession,
     attempt2: ConnectingSession,
+    attempt1_failed: bool,
+    attempt2_failed: bool,
 }
 impl ResumingNetplaySession {
     fn new(session_state: &mut ConnectedNetplaySession) -> Self {
         //TODO: Popup/info about the error? Or perhaps put the reason for the resume in the resume state below?
         log::debug!(
             "Resuming netplay to one of the frames {:?} and {:?}",
-            session_state.last_confirmed_game_state1.ggrs_frame,
-            session_state.last_confirmed_game_state2.ggrs_frame
+            session_state.older_confirmed_state.ggrs_frame,
+            session_state.newer_confirmed_state.ggrs_frame
         );
         //let _ = connected.session_state.shared_state_sender.send(SharedNetplayState::Resuming);
 
@@ -286,12 +288,14 @@ impl ResumingNetplaySession {
         Self {
             attempt1: ConnectingSession::connect(StartMethod::Resume(
                 netplay_server_configuration.clone(),
-                session_state.last_confirmed_game_state1.clone(),
+                session_state.older_confirmed_state.clone(),
             )),
             attempt2: ConnectingSession::connect(StartMethod::Resume(
                 netplay_server_configuration.clone(),
-                session_state.last_confirmed_game_state2.clone(),
+                session_state.newer_confirmed_state.clone(),
             )),
+            attempt1_failed: false,
+            attempt2_failed: false,
         }
     }
 }
@@ -405,16 +409,51 @@ impl NesStateHandler for NetplaySession {
                     session_state.advance(joypad_state, buffers).await;
                 }
             }
-            NetplaySession::Resuming(resuming_netplay_session) => {
-                //TODO: Handle if both fails
-                tokio::select! {
-                    _ = tokio::time::sleep(POLLING_TIMEOUT) => {},
-                    Ok(c) = &mut resuming_netplay_session.attempt1.netplay_connection => {
-                        *self = NetplaySession::connect(c);
+            NetplaySession::Resuming(resuming) => {
+                enum ResumeOutcome {
+                    Connected(NetplayConnection),
+                    Attempt1Failed,
+                    Attempt2Failed,
+                    Timeout,
+                }
+                let outcome = tokio::select! {
+                    _ = tokio::time::sleep(POLLING_TIMEOUT) => ResumeOutcome::Timeout,
+                    result = &mut resuming.attempt1.netplay_connection, if !resuming.attempt1_failed => {
+                        match result {
+                            Ok(c) => ResumeOutcome::Connected(c),
+                            Err(_) => ResumeOutcome::Attempt1Failed,
+                        }
                     }
-                    Ok(c) = &mut resuming_netplay_session.attempt2.netplay_connection => {
-                        *self = NetplaySession::connect(c);
+                    result = &mut resuming.attempt2.netplay_connection, if !resuming.attempt2_failed => {
+                        match result {
+                            Ok(c) => ResumeOutcome::Connected(c),
+                            Err(_) => ResumeOutcome::Attempt2Failed,
+                        }
                     }
+                };
+                match outcome {
+                    ResumeOutcome::Connected(c) => *self = NetplaySession::connect(c),
+                    ResumeOutcome::Attempt1Failed => {
+                        resuming.attempt1_failed = true;
+                        if resuming.attempt2_failed {
+                            let start_method = resuming.attempt1.start_method.clone();
+                            *self = NetplaySession::fail(
+                                anyhow::anyhow!("Failed to resume connection"),
+                                start_method,
+                            );
+                        }
+                    }
+                    ResumeOutcome::Attempt2Failed => {
+                        resuming.attempt2_failed = true;
+                        if resuming.attempt1_failed {
+                            let start_method = resuming.attempt1.start_method.clone();
+                            *self = NetplaySession::fail(
+                                anyhow::anyhow!("Failed to resume connection"),
+                                start_method,
+                            );
+                        }
+                    }
+                    ResumeOutcome::Timeout => {}
                 }
             }
             NetplaySession::Failed(..) => {
@@ -474,14 +513,8 @@ impl Debug for ConnectedNetplaySession {
             )
             .field("last_handled_ggrs_frame", &self.last_handled_ggrs_frame)
             .field("current_game_state", &self.current_game_state)
-            .field(
-                "last_confirmed_game_state1",
-                &self.last_confirmed_game_state1,
-            )
-            .field(
-                "last_confirmed_game_state2",
-                &self.last_confirmed_game_state2,
-            )
+            .field("older_confirmed_state", &self.older_confirmed_state)
+            .field("newer_confirmed_state", &self.newer_confirmed_state)
             .field("start_time", &self.start_time)
             .finish()
     }

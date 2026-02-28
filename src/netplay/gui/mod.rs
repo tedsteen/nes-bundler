@@ -171,17 +171,13 @@ impl NetplayGui {
             return None;
         }
 
-        Some(
-            match &*self.shared_netplay.receiver.borrow() {
-                // Connecting is a modal state, you can't see any messages when in the netplay UI anyway
-                SharedNetplayState::Connecting(_) => None,
-                SharedNetplayState::Resuming => Some("Trying to reconnect...".to_string()),
-                _ => None,
+        let message = match &*self.shared_netplay.receiver.borrow() {
+            SharedNetplayState::Resuming => {
+                Some(format!("{} - Trying to reconnect...", self.name().expect("a name")))
             }
-            .iter()
-            .map(|msg| format!("{} - {msg}", self.name().expect("a name")))
-            .collect(),
-        )
+            _ => None,
+        };
+        Some(message.into_iter().collect())
     }
 
     fn ui_disconnected(&mut self, ui: &mut Ui) {
@@ -337,10 +333,7 @@ impl NetplayGui {
     fn ui_connecting(&mut self, ui: &mut Ui, netplay_connecting: &ConnectingState) {
         let netplay_voca = &Bundle::current().config.vocabulary.netplay;
         match netplay_connecting {
-            ConnectingState::Idle => {
-                //Will never be this state. TODO: Remove it
-            }
-            ConnectingState::LoadingNetplayServerConfiguration => {
+                ConnectingState::LoadingNetplayServerConfiguration => {
                 ui.vertical_centered(|ui| {
                     Label::new(MenuButton::ui_text("CONNECTING", MenuButton::ACTIVE_COLOR))
                         .selectable(false)

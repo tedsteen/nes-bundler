@@ -80,7 +80,7 @@ matchbox_socket = { version = "0.14", features = ["ggrs"], optional = true }
 futures-timer = { version = "3", features = ["wasm-bindgen"], optional = true }
 ggrs = { version = "0.11", optional = true }
 uuid = { version = "1", features = ["v4"], optional = true }
-reqwest = { version = "0.13", default-features = false, features = ["json"], optional = true }
+reqwest = { version = "0.13", default-features = false, features = ["json", "native-tls"], optional = true }
 md5 = { version = "0.8", optional = true }
 
 [build-dependencies]

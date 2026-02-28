@@ -30,9 +30,9 @@ impl NetplayStats {
 
     pub fn push_stats(&mut self, stat: NetworkStats) {
         let duration = Instant::now().duration_since(self.start_time);
-        self.stats.push_back(NetplayStat { duration, stat });
         if self.stats.len() == STATS_HISTORY {
             self.stats.pop_front();
         }
+        self.stats.push_back(NetplayStat { duration, stat });
     }
 }
