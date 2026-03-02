@@ -6,8 +6,8 @@ use ringbuf::{
 };
 use std::{
     sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
     },
     thread,
     time::{Duration, Instant},
@@ -30,31 +30,30 @@ const MAX_TICK_S: f64 = 0.050;
 /// Hard-stop margin: stop feeding downstream when this far above target.
 const OVER_MARGIN_S: f64 = 0.010;
 
-/* ---------- shared params (atomic f64 via bits) ---------- */
-struct Params {
-    target_s_bits: AtomicU64,
-    kp_bits: AtomicU64,
-    ki_bits: AtomicU64,
+/* ---------- shared params ---------- */
+/// All three PI parameters are updated together under a single lock so the
+/// pacer thread never observes a partially-updated state.
+#[derive(Clone, Copy)]
+struct ParamsInner {
+    target_s: f64,
+    kp: f64,
+    ki: f64,
 }
+
+struct Params(Mutex<ParamsInner>);
+
 impl Params {
     fn new(target_s: f64, kp: f64, ki: f64) -> Self {
-        Self {
-            target_s_bits: AtomicU64::new(target_s.to_bits()),
-            kp_bits: AtomicU64::new(kp.to_bits()),
-            ki_bits: AtomicU64::new(ki.to_bits()),
-        }
+        Self(Mutex::new(ParamsInner { target_s, kp, ki }))
     }
+
     #[inline]
-    fn target_s(&self) -> f64 {
-        f64::from_bits(self.target_s_bits.load(Ordering::Acquire))
+    fn get(&self) -> ParamsInner {
+        *self.0.lock().unwrap()
     }
-    #[inline]
-    fn kp(&self) -> f64 {
-        f64::from_bits(self.kp_bits.load(Ordering::Acquire))
-    }
-    #[inline]
-    fn ki(&self) -> f64 {
-        f64::from_bits(self.ki_bits.load(Ordering::Acquire))
+
+    fn set(&self, target_s: f64, kp: f64, ki: f64) {
+        *self.0.lock().unwrap() = ParamsInner { target_s, kp, ki };
     }
 }
 
@@ -89,9 +88,7 @@ impl Pacer {
     /// How many samples to move downstream this tick.
     #[inline]
     fn compute(&mut self, dn_queued_samples: usize) -> usize {
-        let target_s = self.params.target_s();
-        let kp = self.params.kp();
-        let ki = self.params.ki();
+        let ParamsInner { target_s, kp, ki } = self.params.get();
 
         // Hard guard: stop feeding when downstream is OVER_MARGIN_S above target.
         let over_margin = (self.sr_hz * OVER_MARGIN_S).round() as usize;
@@ -127,8 +124,19 @@ pub struct AudioProducer {
     space_notify: Arc<Notify>,
     params: Arc<Params>,
     sr_hz: f64,
-    _worker: thread::JoinHandle<()>,
+    stop: Arc<AtomicBool>,
+    _worker: Option<thread::JoinHandle<()>>,
 }
+
+impl Drop for AudioProducer {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        if let Some(handle) = self._worker.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
 impl AudioProducer {
     #[inline]
     fn up_occ(&self) -> usize {
@@ -137,7 +145,7 @@ impl AudioProducer {
 
     pub async fn push_all(&mut self, mut data: &[f32]) {
         while !data.is_empty() {
-            let thresh = up_thresh_samples(self.sr_hz, self.params.target_s());
+            let thresh = up_thresh_samples(self.sr_hz, self.params.get().target_s);
 
             // backpressure: wait while at or over threshold
             while self.up_occ() >= thresh {
@@ -166,11 +174,7 @@ impl BridgeCtl {
     pub fn set_latency_ms(&self, latency_ms: f64) {
         let s = (latency_ms / 1000.0).min(self.max_s);
         let (kp, ki) = gains_for(s);
-        self.params
-            .target_s_bits
-            .store(s.to_bits(), Ordering::Release);
-        self.params.kp_bits.store(kp.to_bits(), Ordering::Release);
-        self.params.ki_bits.store(ki.to_bits(), Ordering::Release);
+        self.params.set(s, kp, ki);
     }
 }
 
@@ -203,12 +207,16 @@ pub fn make_paced_bridge_ringbuf_bulk_async(
     let scratch = (device_sr_hz * MAX_TICK_S).ceil() as usize + 64;
     let mut buf = vec![0.0f32; scratch];
 
+    let stop = Arc::new(AtomicBool::new(false));
+    let stop_w = stop.clone();
+
     let _worker = thread::Builder::new()
         .name("audio-pacer".into())
         .spawn(move || {
-            loop {
+            while !stop_w.load(Ordering::Acquire) {
                 // wake producers when upstream drops back to or below the write threshold
-                let wake_threshold = up_thresh_samples(pacer.sr_hz, pacer.params.target_s());
+                let wake_threshold =
+                    up_thresh_samples(pacer.sr_hz, pacer.params.get().target_s);
 
                 // move paced chunk downstream
                 let want = pacer.compute(dn_tx.occupied_len()).min(buf.len());
@@ -238,7 +246,8 @@ pub fn make_paced_bridge_ringbuf_bulk_async(
         space_notify: notify,
         params,
         sr_hz: device_sr_hz,
-        _worker,
+        stop,
+        _worker: Some(_worker),
     };
 
     (producer, dn_rx, ctl)

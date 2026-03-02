@@ -39,10 +39,8 @@ impl AudioSettings {
         }
         Ok(v)
     }
-}
 
-impl AudioSettings {
-    // Get's the currently selected device from settings and falls back to the default in case it is missing or not found on the system.
+    // Gets the currently selected device from settings and falls back to the default in case it is missing or not found on the system.
     pub(crate) fn get_selected_device(
         &mut self,
         audio_system: &AudioSystem,

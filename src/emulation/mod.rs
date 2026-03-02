@@ -103,8 +103,8 @@ impl Emulator {
         #[allow(unused_mut)]
         let mut nes_state = new_local_nes_state(true);
 
-        if let Some(mut audio_producer) = audio_stream.tx.take() {
-            let (emulator_tx, emulator_rx) = tokio::sync::mpsc::channel(1);
+        let mut audio_producer = audio_stream.take_producer();
+        let (emulator_tx, emulator_rx) = tokio::sync::mpsc::channel(1);
 
             #[cfg(feature = "netplay")]
             let (shared_netplay, netplay_state_sender, netplay_command_rx) =
@@ -191,10 +191,7 @@ impl Emulator {
                     });
                 }
             });
-            Self { shared_state, _th }
-        } else {
-            panic!("No audio producer")
-        }
+        Self { shared_state, _th }
     }
 }
 
