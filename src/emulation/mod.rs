@@ -107,7 +107,8 @@ impl Emulator {
             let (emulator_tx, emulator_rx) = tokio::sync::mpsc::channel(1);
 
             #[cfg(feature = "netplay")]
-            let (shared_netplay, netplay_command_rx) = crate::netplay::SharedNetplay::new();
+            let (shared_netplay, netplay_state_sender, netplay_command_rx) =
+                crate::netplay::SharedNetplay::new();
 
             let shared_state = SharedState::new(
                 emulator_tx.clone(),
@@ -132,6 +133,7 @@ impl Emulator {
                     let mut nes_state = crate::netplay::Netplay::new(
                         nes_state,
                         shared_state.netplay.clone(),
+                        netplay_state_sender,
                         netplay_command_rx,
                     );
 

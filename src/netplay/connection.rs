@@ -25,10 +25,21 @@ pub enum ConnectingState {
     PeeringUp(StartMethod),
 }
 
+/// Aborts the wrapped task when dropped.
+pub struct AbortOnDrop(tokio::task::JoinHandle<()>);
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
 pub struct NetplayConnection {
     pub socket: WebRtcSocket,
     pub netplay_server_configuration: StaticNetplayServerConfiguration,
     pub initial_state: Option<NetplayNesState>,
+    /// Keeps the WebRTC event loop alive for the duration of the session.
+    /// Aborted automatically when this is dropped.
+    pub loop_task: AbortOnDrop,
 }
 pub struct ConnectingSession {
     pub state: Receiver<ConnectingState>,
@@ -146,7 +157,10 @@ impl ConnectingSession {
                 .build()
         };
 
-        tokio::task::spawn(async move {
+        // Spawn the WebRTC event loop. The AbortOnDrop guard ensures the task is
+        // cancelled if peer_up is dropped (e.g. user cancels connecting) or when
+        // the NetplayConnection / ConnectedNetplaySession that owns it is dropped.
+        let loop_task = AbortOnDrop(tokio::task::spawn(async move {
             let loop_fut = loop_fut.fuse();
             let timeout = Delay::new(Duration::from_millis(100));
             pin_mut!(loop_fut, timeout);
@@ -161,7 +175,8 @@ impl ConnectingSession {
                     }
                 }
             }
-        });
+        }));
+
         const PEER_UP_TIMEOUT: Duration = Duration::from_secs(30);
         let peer_up_deadline = std::time::Instant::now() + PEER_UP_TIMEOUT;
 
@@ -206,6 +221,7 @@ impl ConnectingSession {
                     socket,
                     netplay_server_configuration,
                     initial_state,
+                    loop_task,
                 });
             }
             tokio::time::sleep(Duration::from_millis(1)).await;

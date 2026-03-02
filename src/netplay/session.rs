@@ -85,6 +85,7 @@ pub struct ConnectedNetplaySession {
     pub newer_confirmed_state: NetplayNesState,
     start_time: Instant,
     last_running_time: Instant,
+    _loop_task: crate::netplay::connection::AbortOnDrop,
 }
 
 impl ConnectedNetplaySession {
@@ -92,6 +93,7 @@ impl ConnectedNetplaySession {
         let mut socket = netplay_connection.socket;
         let netplay_server_configuration = netplay_connection.netplay_server_configuration.clone();
         let initial_state = netplay_connection.initial_state;
+        let loop_task = netplay_connection.loop_task;
 
         let ggrs_config = &netplay_server_configuration.ggrs;
         let mut sess_build = SessionBuilder::<GGRSConfig>::new()
@@ -134,6 +136,7 @@ impl ConnectedNetplaySession {
             current_game_state: initial_state.clone(),
             start_time: Instant::now(),
             last_running_time: Instant::now(),
+            _loop_task: loop_task,
         }
     }
 

@@ -7,7 +7,7 @@ impl NetplayGui {
         stats: &crate::netplay::stats::NetplayStats,
         player: usize,
     ) {
-        if !stats.get_ping().is_empty() {
+        if !stats.get_stats().is_empty() {
             ui.label(format!("Player {player}"));
             use egui_plot::{Line, Plot};
 
@@ -31,7 +31,7 @@ impl NetplayGui {
                     plot_ui.line(Line::new(
                         "Ping",
                         stats
-                            .get_ping()
+                            .get_stats()
                             .iter()
                             .map(|i| [i.duration.as_millis() as f64, i.stat.ping as f64])
                             .collect::<egui_plot::PlotPoints>(),
@@ -40,7 +40,7 @@ impl NetplayGui {
                     plot_ui.line(Line::new(
                         "Behind (local)",
                         stats
-                            .get_ping()
+                            .get_stats()
                             .iter()
                             .map(|i| {
                                 [
@@ -54,7 +54,7 @@ impl NetplayGui {
                     plot_ui.line(Line::new(
                         "Behind (remote)",
                         stats
-                            .get_ping()
+                            .get_stats()
                             .iter()
                             .map(|i| {
                                 [

@@ -24,7 +24,7 @@ impl NetplayStats {
         }
     }
 
-    pub fn get_ping(&self) -> &VecDeque<NetplayStat> {
+    pub fn get_stats(&self) -> &VecDeque<NetplayStat> {
         &self.stats
     }
 

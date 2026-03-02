@@ -56,20 +56,22 @@ pub enum SharedNetplayState {
 pub struct SharedNetplay {
     pub command_tx: NetplayCommandBus,
     pub receiver: tokio::sync::watch::Receiver<SharedNetplayState>,
-    pub sender: tokio::sync::watch::Sender<SharedNetplayState>,
 
     #[cfg(feature = "debug")]
     pub stats: Arc<RwLock<[crate::netplay::stats::NetplayStats; crate::settings::MAX_PLAYERS]>>,
 }
 impl SharedNetplay {
-    pub fn new() -> (Self, tokio::sync::mpsc::Receiver<NetplayCommand>) {
+    pub fn new() -> (
+        Self,
+        tokio::sync::watch::Sender<SharedNetplayState>,
+        tokio::sync::mpsc::Receiver<NetplayCommand>,
+    ) {
         let (command_tx, command_rx) = tokio::sync::mpsc::channel(1);
         let (sender, receiver) = channel(SharedNetplayState::Disconnected);
         (
             Self {
                 command_tx,
                 receiver,
-                sender,
 
                 #[cfg(feature = "debug")]
                 stats: Arc::new(RwLock::new([
@@ -77,6 +79,7 @@ impl SharedNetplay {
                     crate::netplay::stats::NetplayStats::new(),
                 ])),
             },
+            sender,
             command_rx,
         )
     }
@@ -96,16 +99,17 @@ pub struct Netplay {
 impl Netplay {
     pub fn new(
         local_play_nes_state: LocalNesState,
-        shared_netplay: SharedNetplay,
+        _shared_netplay: SharedNetplay, // only used when the debug feature is active
+        shared_state_sender: tokio::sync::watch::Sender<SharedNetplayState>,
         netplay_rx: tokio::sync::mpsc::Receiver<NetplayCommand>,
     ) -> Self {
         Self {
             initial_local_nes_state: local_play_nes_state.clone(),
             session: NetplaySession::new(local_play_nes_state),
-            shared_state_sender: shared_netplay.sender,
+            shared_state_sender,
             netplay_rx,
             #[cfg(feature = "debug")]
-            stats: shared_netplay.stats.clone(),
+            stats: _shared_netplay.stats.clone(),
         }
     }
 
