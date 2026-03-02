@@ -8,14 +8,14 @@ use egui::{
 use crate::{
     Size,
     audio::gui::AudioGui,
-    bundle::Bundle,
     emulation::{
-        EmulatorCommand, EmulatorCommandBus, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3, gui::EmulatorGui,
+        EmulatorCommand, EmulatorCommandBus, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3,
+        NesRegion, gui::EmulatorGui,
     },
     gui::{MenuButton, esc_pressed},
     input::{KeyEvent, gamepad::GamepadEvent, gui::InputsGui},
     integer_scaling::{MINIMUM_INTEGER_SCALING_SIZE, calculate_size_corrected},
-    settings::Settings,
+    settings::SettingsStore,
 };
 
 pub trait ToGuiEvent {
@@ -56,6 +56,8 @@ pub struct MainGui {
     audio_gui: AudioGui,
     pub inputs_gui: InputsGui,
     emulator_gui: EmulatorGui,
+    supported_nes_regions: Vec<NesRegion>,
+    settings: &'static SettingsStore,
     menu_state: MainMenuState,
 }
 
@@ -73,6 +75,8 @@ impl MainGui {
         audio_gui: AudioGui,
         inputs_gui: InputsGui,
         emulator_gui: EmulatorGui,
+        supported_nes_regions: Vec<NesRegion>,
+        settings: &'static SettingsStore,
     ) -> Self {
         Self {
             start_time: Instant::now(),
@@ -80,6 +84,8 @@ impl MainGui {
             audio_gui,
             inputs_gui,
             emulator_gui,
+            supported_nes_regions,
+            settings,
             menu_state: MainMenuState::Closed,
         }
     }
@@ -236,7 +242,7 @@ impl MainGui {
                                 self.inputs_gui.ui(ui);
                             }
 
-                            if Bundle::current().config.supported_nes_regions.len() > 1 {
+                            if self.supported_nes_regions.len() > 1 {
                                 ui.separator();
                                 ui.vertical_centered(|ui| {
                                     ui.heading("NES System");
@@ -248,12 +254,11 @@ impl MainGui {
                                     );
 
                                     ui.horizontal(|ui| {
-                                        for supported_region in
-                                            &Bundle::current().config.supported_nes_regions
-                                        {
+                                        let mut settings = self.settings.write();
+                                        for supported_region in &self.supported_nes_regions {
                                             if ui
                                                 .radio_value(
-                                                    Settings::current_mut().get_nes_region(),
+                                                    settings.get_nes_region(),
                                                     supported_region.clone(),
                                                     format!("{:?}", supported_region),
                                                 )

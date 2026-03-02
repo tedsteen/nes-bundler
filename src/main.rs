@@ -3,7 +3,6 @@
 #![deny(clippy::all)]
 
 use audio::gui::AudioGui;
-use bundle::Bundle;
 
 use input::gamepad::ToGamepadEvent;
 use input::gui::InputsGui;
@@ -15,6 +14,7 @@ use sdl3::EventPump;
 use winit::application::ApplicationHandler;
 
 use crate::audio::AudioSystem;
+use crate::app_context::AppContext;
 use crate::emulation::SharedEmulator;
 use crate::emulation::gui::EmulatorGui;
 use crate::window::Fullscreen;
@@ -30,6 +30,7 @@ use winit::event_loop::EventLoop;
 use crate::main_view::gui::{GuiEvent, MainGui};
 
 mod audio;
+mod app_context;
 mod bundle;
 mod emulation;
 mod gui;
@@ -49,15 +50,16 @@ fn main() {
         .collect::<String>()
         .contains(&"--print-netplay-id".to_string())
     {
+        let app = AppContext::global();
         if let netplay::configuration::NetplayServerConfiguration::TurnOn(turn_on_config) =
-            &Bundle::current().config.netplay.server
+            &app.config().netplay.server
         {
             println!("{0}", turn_on_config.get_netplay_id());
             std::process::exit(0);
         } else {
             eprintln!(
                 "Netplay id not applicable for {0:#?}",
-                Bundle::current().config.netplay.server
+                app.config().netplay.server
             );
             std::process::exit(1);
         }
@@ -70,6 +72,7 @@ fn main() {
 }
 
 struct Application {
+    app: &'static AppContext,
     main_view: Option<MainView>,
 
     last_mouse_touch: Instant,
@@ -80,7 +83,7 @@ struct Application {
 }
 
 impl Application {
-    fn new(_event_loop: &EventLoop<()>) -> anyhow::Result<Self> {
+    fn new(app: &'static AppContext, _event_loop: &EventLoop<()>) -> anyhow::Result<Self> {
         // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
         sdl3::hint::set("SDL_JOYSTICK_THREAD", "1");
 
@@ -89,7 +92,8 @@ impl Application {
 
         let audio_system = AudioSystem::new(sdl3_context.audio().expect("An SDL audio subsystem"));
 
-        let mut stream = audio_system.start_stream();
+        let settings = app.settings();
+        let mut stream = audio_system.start_stream(settings);
 
         let emulator = Emulator::new(&mut stream);
 
@@ -99,6 +103,7 @@ impl Application {
 
         let mouse_hide_timeout = Duration::from_secs(1);
         Ok(Self {
+            app,
             main_view: None,
             mouse_hide_timeout,
             last_mouse_touch: Instant::now()
@@ -108,9 +113,11 @@ impl Application {
             sdl_event_pump,
             main_gui: MainGui::new(
                 emulator.shared_state.emulator.command_tx.clone(),
-                AudioGui::new(audio_system.clone(), stream),
-                InputsGui::new(inputs),
+                AudioGui::new(audio_system.clone(), stream, settings),
+                InputsGui::new(inputs, settings),
                 EmulatorGui::new(emulator.shared_state.clone()),
+                app.config().supported_nes_regions.clone(),
+                settings,
             ),
         })
     }
@@ -119,7 +126,7 @@ impl Application {
 impl ApplicationHandler for Application {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let window = create_window(
-            &Bundle::current().config.name,
+            &self.app.config().name,
             MINIMUM_INTEGER_SCALING_SIZE,
             Size::new(NES_WIDTH_4_3, NES_HEIGHT),
             event_loop,
@@ -129,12 +136,13 @@ impl ApplicationHandler for Application {
         self.main_view = Some(MainView::new(
             window,
             self.shared_emulator.frame_buffer.clone(),
+            self.app.config().enable_vsync,
         ));
     }
 
     fn new_events(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop, cause: StartCause) {
         if let Some(main_view) = &self.main_view {
-            if cause == StartCause::Init && Bundle::current().config.start_in_fullscreen {
+            if cause == StartCause::Init && self.app.config().start_in_fullscreen {
                 main_view.window.toggle_fullscreen();
             }
         }
@@ -191,10 +199,11 @@ impl ApplicationHandler for Application {
 }
 
 fn run() -> anyhow::Result<()> {
+    let app_context = AppContext::global();
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
-    let app = &mut Application::new(&event_loop)?;
+    let app = &mut Application::new(app_context, &event_loop)?;
 
     event_loop.run_app(app)?;
 

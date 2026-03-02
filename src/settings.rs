@@ -64,18 +64,38 @@ pub struct Settings {
     nes_region: Option<NesRegion>,
 }
 
-impl Settings {
-    fn _current() -> &'static RwLock<Settings> {
-        static MEM: OnceLock<RwLock<Settings>> = OnceLock::new();
-        MEM.get_or_init(|| RwLock::new(Settings::load()))
+pub struct SettingsStore {
+    inner: RwLock<Settings>,
+}
+
+impl SettingsStore {
+    pub fn new() -> Self {
+        Self {
+            inner: RwLock::new(Settings::load()),
+        }
     }
 
+    pub fn global() -> &'static Self {
+        static MEM: OnceLock<SettingsStore> = OnceLock::new();
+        MEM.get_or_init(SettingsStore::new)
+    }
+
+    pub fn write(&self) -> AutoSavingSettings<'_> {
+        AutoSavingSettings::new(&self.inner)
+    }
+
+    pub fn read(&self) -> RwLockReadGuard<'_, Settings> {
+        self.inner.read().unwrap()
+    }
+}
+
+impl Settings {
     pub fn current_mut<'a>() -> AutoSavingSettings<'a> {
-        AutoSavingSettings::new(Self::_current())
+        SettingsStore::global().write()
     }
 
     pub fn current<'a>() -> RwLockReadGuard<'a, Settings> {
-        Self::_current().read().unwrap()
+        SettingsStore::global().read()
     }
 
     #[cfg(feature = "netplay")]

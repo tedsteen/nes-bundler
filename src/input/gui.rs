@@ -1,7 +1,7 @@
 use crate::{
     input::{JoypadButton, JoypadState},
     main_view::gui::{GuiComponent, GuiEvent, MainMenuState},
-    settings::Settings,
+    settings::SettingsStore,
 };
 use egui::{Color32, Grid, RichText, Ui};
 use serde::Deserialize;
@@ -42,13 +42,15 @@ impl Default for InputButtonsVoca {
 pub struct InputsGui {
     pub inputs: Inputs,
     mapping_request: Option<MapRequest>,
+    settings: &'static SettingsStore,
 }
 
 impl InputsGui {
-    pub fn new(inputs: Inputs) -> Self {
+    pub fn new(inputs: Inputs, settings: &'static SettingsStore) -> Self {
         Self {
             mapping_request: None,
             inputs,
+            settings,
         }
     }
 
@@ -147,12 +149,14 @@ impl InputsGui {
 
 impl GuiComponent for InputsGui {
     fn handle_event(&mut self, gui_event: &GuiEvent) {
-        self.inputs.advance(gui_event);
+        let mut settings = self.settings.write();
+        self.inputs.advance(gui_event, &mut settings.input);
     }
 
     fn ui(&mut self, ui: &mut Ui) -> Option<MainMenuState> {
         let instance = &mut self.inputs;
-        let input_settings = &mut Settings::current_mut().input;
+        let mut settings = self.settings.write();
+        let input_settings = &mut settings.input;
         let mut available_configurations = input_settings
             .configurations
             .values()

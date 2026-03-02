@@ -58,10 +58,10 @@ fn to_egui_event(gamepad_event: &GamepadEvent) -> Option<egui::Event> {
 }
 
 impl MainView {
-    pub fn new(window: Window, frame_buffer: VideoBufferPool) -> Self {
+    pub fn new(window: Window, frame_buffer: VideoBufferPool, enable_vsync: bool) -> Self {
         let window = Arc::new(window);
-        let mut renderer =
-            block_on(Renderer::new(window.clone())).expect("a renderer to be created");
+        let mut renderer = block_on(Renderer::new(window.clone(), enable_vsync))
+            .expect("a renderer to be created");
         Self {
             modifiers: Modifiers::empty(),
 

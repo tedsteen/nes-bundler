@@ -1,20 +1,26 @@
 use crate::{
     audio::{AudioStream, AudioSystem, MAX_AUDIO_LATENCY_MICROS, MIN_AUDIO_LATENCY_MICROS},
     main_view::gui::{GuiComponent, MainMenuState},
-    settings::Settings,
+    settings::SettingsStore,
 };
 use egui::{Slider, Ui};
 
 pub struct AudioGui {
     pub audio_system: AudioSystem,
     audio_stream: AudioStream,
+    settings: &'static SettingsStore,
 }
 
 impl AudioGui {
-    pub fn new(audio_system: AudioSystem, audio_stream: AudioStream) -> Self {
+    pub fn new(
+        audio_system: AudioSystem,
+        audio_stream: AudioStream,
+        settings: &'static SettingsStore,
+    ) -> Self {
         Self {
             audio_system,
             audio_stream,
+            settings,
         }
     }
 }
@@ -22,7 +28,8 @@ impl AudioGui {
 impl GuiComponent for AudioGui {
     fn ui(&mut self, ui: &mut Ui) -> Option<MainMenuState> {
         let available_devices = self.audio_system.get_available_devices();
-        let audio_settings = &mut Settings::current_mut().audio;
+        let mut settings = self.settings.write();
+        let audio_settings = &mut settings.audio;
         ui.horizontal(|ui| {
             ui.label("Output");
             let selected_device = &mut audio_settings.output_device;

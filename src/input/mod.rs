@@ -9,7 +9,7 @@ use self::{
 use crate::{
     bundle::Bundle,
     main_view::gui::GuiEvent,
-    settings::{MAX_PLAYERS, Settings},
+    settings::MAX_PLAYERS,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, fmt::Debug, ops::Deref};
@@ -183,7 +183,7 @@ impl Inputs {
         }
     }
 
-    pub fn advance(&mut self, event: &GuiEvent) {
+    pub fn advance(&mut self, event: &GuiEvent, input_settings: &mut InputSettings) {
         match event {
             GuiEvent::Keyboard(key_event) => {
                 self.keyboards.advance(key_event);
@@ -192,7 +192,6 @@ impl Inputs {
                 self.gamepads.advance(gamepad_event);
             }
         }
-        let input_settings = &mut Settings::current_mut().input;
         input_settings.reset_selected_disconnected_inputs(self);
 
         let pad1 =

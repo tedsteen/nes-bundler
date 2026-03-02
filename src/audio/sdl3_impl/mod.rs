@@ -13,7 +13,7 @@ use sdl3::sys::audio::SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
 use crate::audio::pacer::{AudioConsumer, AudioProducer, make_paced_bridge_ringbuf_bulk_async};
 use crate::audio::{AudioStream, AudioSystem, AvailableAudioDevice};
 use crate::emulation::DEFAULT_SAMPLE_RATE;
-use crate::settings::Settings;
+use crate::settings::SettingsStore;
 
 #[derive(Debug, Clone)]
 pub struct SDL3AvailableAudioDevice {
@@ -69,8 +69,8 @@ impl SDL3AudioSystem {
         SDL3AvailableAudioDevice::new(self.audio_subsystem.default_playback_device().id())
     }
 
-    pub fn start_stream(&self) -> AudioStream {
-        let mut settings = Settings::current_mut();
+    pub fn start_stream(&self, settings_store: &SettingsStore) -> AudioStream {
+        let mut settings = settings_store.write();
         let device = settings.audio.get_selected_device(self);
         let volume = settings.audio.volume;
         let latency_micros = settings.audio.latency_micros;
