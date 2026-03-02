@@ -284,8 +284,7 @@ impl MainGui {
                     });
                 }
                 MainMenuState::Netplay => {
-                    if self.emulator_gui.name().is_some() {
-                        let name = self.emulator_gui.name().expect("a name").to_owned();
+                    if let Some(name) = self.emulator_gui.name().map(str::to_owned) {
                         Self::ui_main_container(Some(&name), ctx, |ui| {
                             if let Some(new_state) = self.emulator_gui.ui(ui) {
                                 self.menu_state = new_state;

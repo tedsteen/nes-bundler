@@ -106,91 +106,91 @@ impl Emulator {
         let mut audio_producer = audio_stream.take_producer();
         let (emulator_tx, emulator_rx) = tokio::sync::mpsc::channel(1);
 
+        #[cfg(feature = "netplay")]
+        let (shared_netplay, netplay_state_sender, netplay_command_rx) =
+            crate::netplay::SharedNetplay::new();
+
+        let shared_state = SharedState::new(
+            emulator_tx.clone(),
             #[cfg(feature = "netplay")]
-            let (shared_netplay, netplay_state_sender, netplay_command_rx) =
-                crate::netplay::SharedNetplay::new();
+            shared_netplay,
+        );
 
-            let shared_state = SharedState::new(
-                emulator_tx.clone(),
+        let _th = std::thread::spawn({
+            let shared_state = shared_state.clone();
+
+            let mut emulator_rx = emulator_rx;
+            move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap();
+                let inputs = shared_state.emulator.inputs.clone();
+                let frame_buffer = shared_state.emulator.frame_buffer.clone();
+                let shared_emulator = shared_state.emulator.clone();
+
                 #[cfg(feature = "netplay")]
-                shared_netplay,
-            );
+                let mut nes_state = crate::netplay::Netplay::new(
+                    nes_state,
+                    shared_state.netplay.clone(),
+                    netplay_state_sender,
+                    netplay_command_rx,
+                );
 
-            let _th = std::thread::spawn({
-                let shared_state = shared_state.clone();
-
-                let mut emulator_rx = emulator_rx;
-                move || {
-                    let rt = tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .unwrap();
-                    let inputs = shared_state.emulator.inputs.clone();
-                    let frame_buffer = shared_state.emulator.frame_buffer.clone();
-                    let shared_emulator = shared_state.emulator.clone();
-
-                    #[cfg(feature = "netplay")]
-                    let mut nes_state = crate::netplay::Netplay::new(
-                        nes_state,
-                        shared_state.netplay.clone(),
-                        netplay_state_sender,
-                        netplay_command_rx,
-                    );
-
-                    tokio::task::LocalSet::new().block_on(&rt, async move {
-                        loop {
-                            // drain pending emulator commands
-                            while let Ok(cmd) = emulator_rx.try_recv() {
-                                match cmd {
-                                    EmulatorCommand::Reset(hard) => nes_state.reset(hard),
-                                    EmulatorCommand::SetSpeed(speed) => nes_state.set_speed(speed),
-                                }
-                            }
-
-                            let mut frame_result = frame_buffer.push_ref();
-                            //println!("ADVANCE {:?}", std::time::Instant::now());
-                            nes_state
-                                .advance(
-                                    [
-                                        JoypadState(
-                                            inputs[0].load(std::sync::atomic::Ordering::Relaxed),
-                                        ),
-                                        JoypadState(
-                                            inputs[1].load(std::sync::atomic::Ordering::Relaxed),
-                                        ),
-                                    ],
-                                    Some(NESBuffers {
-                                        audio: &mut audio_producer,
-                                        video: frame_result.as_deref_mut().ok(),
-                                    }),
-                                )
-                                .await;
-
-                            let frame = nes_state.frame();
-                            shared_emulator
-                                .state
-                                .frame
-                                .store(frame, std::sync::atomic::Ordering::Relaxed);
-
-                            //TODO: Figure out why this is needed (probably to avoid busy loop..)
-                            tokio::task::yield_now().await;
-
-                            // 2) periodic SRAM snapshot (non-blocking check)
-                            if frame % 100 == 0 {
-                                use base64::Engine;
-                                use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
-                                if let Some(sram) = nes_state.save_sram() {
-                                    let sram = sram.to_vec();
-                                    // Do this in a blocking task as we want the main loop free from blocking code
-                                    tokio::task::spawn_blocking(move || {
-                                        Settings::current_mut().save_state = Some(b64.encode(sram));
-                                    });
-                                }
+                tokio::task::LocalSet::new().block_on(&rt, async move {
+                    loop {
+                        // drain pending emulator commands
+                        while let Ok(cmd) = emulator_rx.try_recv() {
+                            match cmd {
+                                EmulatorCommand::Reset(hard) => nes_state.reset(hard),
+                                EmulatorCommand::SetSpeed(speed) => nes_state.set_speed(speed),
                             }
                         }
-                    });
-                }
-            });
+
+                        let mut frame_result = frame_buffer.push_ref();
+                        //println!("ADVANCE {:?}", std::time::Instant::now());
+                        nes_state
+                            .advance(
+                                [
+                                    JoypadState(
+                                        inputs[0].load(std::sync::atomic::Ordering::Relaxed),
+                                    ),
+                                    JoypadState(
+                                        inputs[1].load(std::sync::atomic::Ordering::Relaxed),
+                                    ),
+                                ],
+                                Some(NESBuffers {
+                                    audio: &mut audio_producer,
+                                    video: frame_result.as_deref_mut().ok(),
+                                }),
+                            )
+                            .await;
+
+                        let frame = nes_state.frame();
+                        shared_emulator
+                            .state
+                            .frame
+                            .store(frame, std::sync::atomic::Ordering::Relaxed);
+
+                        //TODO: Figure out why this is needed (probably to avoid busy loop..)
+                        tokio::task::yield_now().await;
+
+                        // 2) periodic SRAM snapshot (non-blocking check)
+                        if frame % 100 == 0 {
+                            use base64::Engine;
+                            use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+                            if let Some(sram) = nes_state.save_sram() {
+                                let sram = sram.to_vec();
+                                // Do this in a blocking task as we want the main loop free from blocking code
+                                tokio::task::spawn_blocking(move || {
+                                    Settings::current_mut().save_state = Some(b64.encode(sram));
+                                });
+                            }
+                        }
+                    }
+                });
+            }
+        });
         Self { shared_state, _th }
     }
 }

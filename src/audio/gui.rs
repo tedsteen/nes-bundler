@@ -29,18 +29,14 @@ impl GuiComponent for AudioGui {
             if selected_device.is_none() {
                 *selected_device = Some(self.audio_system.get_default_device().name())
             }
-            if let Some(selected_text) = selected_device.as_deref_mut() {
+            if let Some(selected_text) = selected_device.as_deref() {
                 egui::ComboBox::from_id_salt("audio-output")
                     .width(160.0)
-                    .selected_text(selected_text.to_string())
+                    .selected_text(selected_text)
                     .show_ui(ui, |ui| {
                         for available_device in available_devices {
                             let name = available_device.name();
-                            let a = ui.selectable_value(
-                                selected_device,
-                                Some(name.clone()),
-                                name,
-                            );
+                            let a = ui.selectable_value(selected_device, Some(name.clone()), name);
                             if a.changed() {
                                 self.audio_stream.swap_output_device(available_device);
                             }

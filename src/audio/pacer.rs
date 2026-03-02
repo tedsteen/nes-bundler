@@ -215,8 +215,7 @@ pub fn make_paced_bridge_ringbuf_bulk_async(
         .spawn(move || {
             while !stop_w.load(Ordering::Acquire) {
                 // wake producers when upstream drops back to or below the write threshold
-                let wake_threshold =
-                    up_thresh_samples(pacer.sr_hz, pacer.params.get().target_s);
+                let wake_threshold = up_thresh_samples(pacer.sr_hz, pacer.params.get().target_s);
 
                 // move paced chunk downstream
                 let want = pacer.compute(dn_tx.occupied_len()).min(buf.len());

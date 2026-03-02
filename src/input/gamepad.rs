@@ -1,4 +1,4 @@
-use super::{buttons::GamepadButton, InputId, JoypadMapping, JoypadState};
+use super::{InputId, JoypadMapping, JoypadState, buttons::GamepadButton};
 use std::collections::HashSet;
 
 pub type JoypadGamepadMapping = JoypadMapping<GamepadButton>;

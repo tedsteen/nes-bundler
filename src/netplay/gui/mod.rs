@@ -44,7 +44,10 @@ impl Default for NetplayVoca {
 
 enum DisconnectedState {
     Main,
-    JoiningWithCode { room_name: String, focus_requested: bool },
+    JoiningWithCode {
+        room_name: String,
+        focus_requested: bool,
+    },
 }
 
 pub struct NetplayGui {
@@ -74,9 +77,10 @@ fn ui_button(text: &str) -> Button<'_> {
 
 impl NetplayGui {
     pub fn ui(&mut self, ui: &mut Ui) -> Option<MainMenuState> {
-        let netplay_tx = &self.shared_netplay.command_tx.clone();
+        let netplay_tx = self.shared_netplay.command_tx.clone();
+        let receiver = self.shared_netplay.receiver.clone();
 
-        match &*self.shared_netplay.receiver.clone().borrow() {
+        match &*receiver.borrow() {
             SharedNetplayState::Disconnected => {
                 return self.ui_disconnected(ui);
             }
@@ -84,7 +88,7 @@ impl NetplayGui {
                 self.ui_connecting(ui, &netplay_connecting.borrow());
             }
             SharedNetplayState::Connected(netplay_connected) => {
-                let nav = self.ui_connected(ui, &netplay_connected, &netplay_tx.clone());
+                let nav = self.ui_connected(ui, netplay_connected, &netplay_tx);
                 #[cfg(feature = "debug")]
                 {
                     ui.vertical_centered(|ui| {
@@ -121,6 +125,7 @@ impl NetplayGui {
                 }
             }
             SharedNetplayState::Failed(reason) => {
+                let esc_was_pressed = esc_pressed(ui.ctx());
                 ui.vertical_centered(|ui| {
                     Label::new(MenuButton::ui_text(
                         "CONNECTION FAILED",
@@ -144,12 +149,12 @@ impl NetplayGui {
                 }
                 ui.end_row();
                 ui.vertical_centered(|ui| {
-                    if ui_button("Cancel").ui(ui).clicked() || esc_pressed(ui.ctx()) {
+                    if ui_button("Cancel").ui(ui).clicked() || esc_was_pressed {
                         let _ = netplay_tx.try_send(NetplayCommand::CancelConnect);
                     }
                 });
                 ui.end_row();
-                if esc_pressed(ui.ctx()) {
+                if esc_was_pressed {
                     return Some(MainMenuState::Main);
                 }
             }
@@ -158,15 +163,10 @@ impl NetplayGui {
     }
 
     fn needs_unlocking(start_time: Instant, unlock_url: &Option<String>) -> Option<String> {
-        if let Some(unlock_url) = unlock_url {
-            if Instant::now()
-                .duration_since(start_time)
-                .gt(&Duration::from_secs(5))
-            {
-                return Some(unlock_url.clone());
-            }
-        }
-        None
+        unlock_url.as_ref().and_then(|unlock_url| {
+            (Instant::now().duration_since(start_time) > Duration::from_secs(5))
+                .then(|| unlock_url.clone())
+        })
     }
 
     pub fn messages(&self, menu_state: &MainMenuState) -> Option<Vec<String>> {
@@ -197,7 +197,10 @@ impl NetplayGui {
         let command_tx = self.shared_netplay.command_tx.clone();
 
         let (transition, nav) = match &mut self.disconnected_state {
-            DisconnectedState::JoiningWithCode { room_name, focus_requested } => {
+            DisconnectedState::JoiningWithCode {
+                room_name,
+                focus_requested,
+            } => {
                 let mut join_action: Option<String> = None;
 
                 ui.vertical_centered(|ui| {
@@ -236,9 +239,7 @@ impl NetplayGui {
                         if ui
                             .add_enabled(
                                 !room_name.is_empty(),
-                                Button::new(
-                                    RichText::new("Join").font(FontId::proportional(30.0)),
-                                ),
+                                Button::new(RichText::new("Join").font(FontId::proportional(30.0))),
                             )
                             .clicked()
                         {
@@ -262,10 +263,12 @@ impl NetplayGui {
                     .inner;
                 ui.end_row();
 
-                if room_name.len() > MAX_ROOM_NAME_LEN.into() {
-                    *room_name = room_name[..MAX_ROOM_NAME_LEN.into()].to_string();
-                }
-                *room_name = room_name.to_uppercase();
+                let max_room_name_len = usize::from(MAX_ROOM_NAME_LEN);
+                *room_name = room_name
+                    .chars()
+                    .take(max_room_name_len)
+                    .collect::<String>()
+                    .to_uppercase();
 
                 if enter_pressed_in_room_input {
                     join_action = Some(room_name.clone());
@@ -291,7 +294,7 @@ impl NetplayGui {
 
                 if !netplay_voca.find_public_game.is_empty() {
                     ui.vertical_centered(|ui| {
-                        if MenuButton::new(netplay_voca.find_public_game.clone())
+                        if MenuButton::new(netplay_voca.find_public_game.as_str())
                             .ui(ui)
                             .clicked()
                         {
@@ -303,7 +306,7 @@ impl NetplayGui {
 
                 if !netplay_voca.host_private_game.is_empty() {
                     ui.vertical_centered(|ui| {
-                        if MenuButton::new(netplay_voca.host_private_game.clone())
+                        if MenuButton::new(netplay_voca.host_private_game.as_str())
                             .ui(ui)
                             .clicked()
                         {
@@ -315,7 +318,7 @@ impl NetplayGui {
 
                 if !netplay_voca.join_private_game.is_empty() {
                     ui.vertical_centered(|ui| {
-                        if MenuButton::new(netplay_voca.join_private_game.clone())
+                        if MenuButton::new(netplay_voca.join_private_game.as_str())
                             .ui(ui)
                             .clicked()
                         {
@@ -361,7 +364,7 @@ impl NetplayGui {
     fn ui_connecting(&mut self, ui: &mut Ui, netplay_connecting: &ConnectingState) {
         let netplay_voca = &Bundle::current().config.vocabulary.netplay;
         match netplay_connecting {
-                ConnectingState::LoadingNetplayServerConfiguration => {
+            ConnectingState::LoadingNetplayServerConfiguration => {
                 ui.vertical_centered(|ui| {
                     Label::new(MenuButton::ui_text("CONNECTING", MenuButton::ACTIVE_COLOR))
                         .selectable(false)
@@ -473,7 +476,7 @@ impl NetplayGui {
         netplay_tx: &NetplayCommandBus,
     ) -> Option<MainMenuState> {
         let mut nav = None;
-        match &netplay_connected {
+        match netplay_connected {
             SharedNetplayConnectedState::Running(start_time) => {
                 // Hide menu if we just managed to connect
                 if Instant::now().duration_since(*start_time).as_millis() < 200 {

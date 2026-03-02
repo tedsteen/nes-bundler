@@ -1,6 +1,6 @@
 use crate::{
-    input::keys::{KeyCode, Modifiers},
     Size,
+    input::keys::{KeyCode, Modifiers},
 };
 use anyhow::Result;
 use winit::{event_loop::ActiveEventLoop, window::Window};

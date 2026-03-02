@@ -1,5 +1,5 @@
 use super::MAX_PLAYERS;
-use crate::input::{gamepad::JoypadGamepadMapping, InputConfiguration, InputId, Inputs};
+use crate::input::{InputConfiguration, InputId, Inputs, gamepad::JoypadGamepadMapping};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, hash::Hash};
 

@@ -153,7 +153,7 @@ impl GuiComponent for InputsGui {
     fn ui(&mut self, ui: &mut Ui) -> Option<MainMenuState> {
         let instance = &mut self.inputs;
         let input_settings = &mut Settings::current_mut().input;
-        let available_configurations = &mut input_settings
+        let mut available_configurations = input_settings
             .configurations
             .values()
             .filter(|e| instance.is_connected(e))
@@ -169,7 +169,7 @@ impl GuiComponent for InputsGui {
                 Self::key_map_ui(
                     ui,
                     joypad_0,
-                    available_configurations,
+                    &available_configurations,
                     input_settings,
                     0,
                     &mut self.mapping_request,
@@ -179,7 +179,7 @@ impl GuiComponent for InputsGui {
                 Self::key_map_ui(
                     ui,
                     joypad_1,
-                    available_configurations,
+                    &available_configurations,
                     input_settings,
                     1,
                     &mut self.mapping_request,
