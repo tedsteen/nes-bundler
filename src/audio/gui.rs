@@ -1,6 +1,6 @@
 use crate::{
     audio::{AudioStream, AudioSystem, MAX_AUDIO_LATENCY_MICROS, MIN_AUDIO_LATENCY_MICROS},
-    main_view::gui::GuiComponent,
+    main_view::gui::{GuiComponent, MainMenuState},
     settings::Settings,
 };
 use egui::{Slider, Ui};
@@ -20,7 +20,7 @@ impl AudioGui {
 }
 
 impl GuiComponent for AudioGui {
-    fn ui(&mut self, ui: &mut Ui) {
+    fn ui(&mut self, ui: &mut Ui) -> Option<MainMenuState> {
         let available_devices = self.audio_system.get_available_devices();
         let audio_settings = &mut Settings::current_mut().audio;
         ui.horizontal(|ui| {
@@ -75,6 +75,7 @@ impl GuiComponent for AudioGui {
                 self.audio_stream.set_latency(audio_settings.latency_micros);
             }
         });
+        None
     }
 
     fn name(&self) -> Option<&str> {
