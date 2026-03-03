@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 use crate::input::JoypadState;
 use crate::main_view::MainView;
 use crate::main_view::gui::{GuiEvent, MainGui};
+use crate::settings::MAX_PLAYERS;
 use crate::window::Fullscreen;
 
 pub struct UiController {
@@ -46,13 +47,8 @@ impl UiController {
         main_view.handle_window_event(window_event, &mut self.main_gui);
     }
 
-    pub fn current_game_inputs(&self) -> [JoypadState; 2] {
-        if !self.main_gui.visible() {
-            self.main_gui.inputs_gui.inputs.joypads
-        } else {
-            // Don't let inputs control the game while gui is visible.
-            [JoypadState(0), JoypadState(0)]
-        }
+    pub fn current_game_inputs(&self) -> [JoypadState; MAX_PLAYERS] {
+        self.main_gui.game_inputs()
     }
 
     pub fn update_cursor_visibility(&self, main_view: &MainView) {

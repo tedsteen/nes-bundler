@@ -13,9 +13,9 @@ use crate::{
         gui::EmulatorGui,
     },
     gui::{MenuButton, esc_pressed},
-    input::{KeyEvent, gamepad::GamepadEvent, gui::InputsGui},
+    input::{JoypadState, KeyEvent, gamepad::GamepadEvent, gui::InputsGui},
     integer_scaling::{MINIMUM_INTEGER_SCALING_SIZE, calculate_size_corrected},
-    settings::SettingsStore,
+    settings::{MAX_PLAYERS, SettingsStore},
 };
 
 pub trait ToGuiEvent {
@@ -66,6 +66,16 @@ impl MainGui {
     // Convenience
     pub fn visible(&self) -> bool {
         !matches!(self.menu_state, MainMenuState::Closed)
+    }
+
+    /// Returns the current joypad states for all players, suppressed to zero while the menu
+    /// is open so that UI navigation keys don't accidentally feed into the emulator.
+    pub fn game_inputs(&self) -> [JoypadState; MAX_PLAYERS] {
+        if self.visible() {
+            [JoypadState(0); MAX_PLAYERS]
+        } else {
+            self.inputs_gui.inputs.joypads()
+        }
     }
 
     const MESSAGE_TEXT_BACKGROUND: Color32 = Color32::from_rgba_premultiplied(20, 20, 20, 200);

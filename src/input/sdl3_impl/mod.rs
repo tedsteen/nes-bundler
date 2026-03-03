@@ -46,7 +46,7 @@ impl GamepadState for SDL3GamepadState {
         &self.pressed_buttons
     }
 
-    fn toogle_button(&mut self, button: &GamepadButton, pressed: bool) {
+    fn toggle_button(&mut self, button: &GamepadButton, pressed: bool) {
         if pressed {
             self.pressed_buttons.insert(*button);
         } else {
@@ -60,7 +60,7 @@ pub struct SDL3Gamepads {
 }
 
 impl Gamepads for SDL3Gamepads {
-    fn get_joypad(&mut self, id: &InputId, mapping: &JoypadGamepadMapping) -> JoypadState {
+    fn get_joypad(&self, id: &InputId, mapping: &JoypadGamepadMapping) -> JoypadState {
         if let Some(state) = self.get_gamepad_by_input_id(id) {
             mapping.calculate_state(state.get_pressed_buttons())
         } else {
@@ -81,14 +81,14 @@ impl Gamepads for SDL3Gamepads {
             }
             GamepadEvent::ButtonDown { which, button, .. } => {
                 if let Some(gamepad_state) = self.get_gamepad(which.clone()) {
-                    gamepad_state.toogle_button(button, true);
+                    gamepad_state.toggle_button(button, true);
                 } else {
                     log::warn!("Button down on unmapped gamepad {:?}", which);
                 }
             }
             GamepadEvent::ButtonUp { which, button, .. } => {
                 if let Some(gamepad_state) = self.get_gamepad(which.clone()) {
-                    gamepad_state.toogle_button(button, false);
+                    gamepad_state.toggle_button(button, false);
                 } else {
                     log::warn!("Button up on unmapped gamepad {:?}", which);
                 }

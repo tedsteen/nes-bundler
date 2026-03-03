@@ -3,16 +3,12 @@ use std::collections::HashSet;
 
 pub type JoypadKeyboardMapping = JoypadMapping<KeyCode>;
 
+#[derive(Default)]
 pub struct Keyboards {
     pub pressed_keys: HashSet<KeyCode>,
 }
 
 impl Keyboards {
-    pub fn new() -> Self {
-        Keyboards {
-            pressed_keys: HashSet::new(),
-        }
-    }
     pub fn advance(&mut self, key_event: &KeyEvent) {
         match key_event {
             // NOTE: Ignore the escape key as it is used for main menu navigation
@@ -26,7 +22,7 @@ impl Keyboards {
         };
     }
 
-    pub fn get_joypad(&mut self, mapping: &JoypadKeyboardMapping) -> JoypadState {
+    pub fn get_joypad(&self, mapping: &JoypadKeyboardMapping) -> JoypadState {
         mapping.calculate_state(&self.pressed_keys)
     }
 }

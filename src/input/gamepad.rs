@@ -6,12 +6,12 @@ pub type JoypadGamepadMapping = JoypadMapping<GamepadButton>;
 pub trait GamepadState {
     fn is_connected(&self) -> bool;
     fn get_pressed_buttons(&self) -> &HashSet<GamepadButton>;
-    fn toogle_button(&mut self, button: &GamepadButton, on: bool);
+    fn toggle_button(&mut self, button: &GamepadButton, on: bool);
 }
 
 pub trait Gamepads {
     fn advance(&mut self, gamepad_event: &GamepadEvent);
-    fn get_joypad(&mut self, id: &InputId, mapping: &JoypadGamepadMapping) -> JoypadState;
+    fn get_joypad(&self, id: &InputId, mapping: &JoypadGamepadMapping) -> JoypadState;
     fn get_gamepad_by_input_id(&self, id: &InputId) -> Option<&dyn GamepadState>;
 }
 

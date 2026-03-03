@@ -373,7 +373,7 @@ impl NetplayGui {
             }
             ConnectingState::PeeringUp(start_method) => {
                 match start_method.as_ref() {
-                    StartMethod::Start(.., room_name, join_or_host) => {
+                    StartMethod::Start(room_name, join_or_host) => {
                         use super::connection::JoinOrHost::*;
                         match join_or_host {
                             Join => {

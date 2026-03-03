@@ -159,15 +159,13 @@ pub struct MapRequest {
 pub struct Inputs {
     keyboards: Keyboards,
     gamepads: SDL3Gamepads,
-    pub joypads: [JoypadState; MAX_PLAYERS],
+    joypads: [JoypadState; MAX_PLAYERS],
 }
 
 impl Inputs {
     pub fn new(gamepads: SDL3Gamepads) -> Self {
-        let keyboards = Keyboards::new();
-
         Self {
-            keyboards,
+            keyboards: Keyboards::default(),
             gamepads,
             joypads: [JoypadState(0), JoypadState(0)],
         }
@@ -185,9 +183,15 @@ impl Inputs {
         input_settings.reset_selected_disconnected_inputs(self);
 
         for player in 0..MAX_PLAYERS {
-            self.joypads[player] =
+            // Compute with &self first, then assign — avoids a simultaneous &self / &mut self conflict.
+            let state =
                 self.joypad_for_input_configuration(input_settings.selected_configuration(player));
+            self.joypads[player] = state;
         }
+    }
+
+    pub fn joypads(&self) -> [JoypadState; MAX_PLAYERS] {
+        self.joypads
     }
 
     pub fn get_joypad(&self, player: usize) -> JoypadState {
@@ -202,7 +206,7 @@ impl Inputs {
             .selected_configuration(player)
     }
 
-    fn joypad_for_input_configuration(&mut self, input_conf: &InputConfiguration) -> JoypadState {
+    fn joypad_for_input_configuration(&self, input_conf: &InputConfiguration) -> JoypadState {
         match &input_conf.kind {
             InputConfigurationKind::Keyboard(mapping) => self.keyboards.get_joypad(mapping),
             InputConfigurationKind::Gamepad(mapping) => {

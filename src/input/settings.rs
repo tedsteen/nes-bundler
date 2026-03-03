@@ -16,7 +16,7 @@ impl InputSettings {
         id: InputId,
         default: InputConfiguration,
     ) -> &InputConfiguration {
-        self.configurations.entry(id).or_insert_with(|| default)
+        self.configurations.entry(id).or_insert(default)
     }
 
     pub fn selected_configuration(&self, idx: usize) -> &InputConfiguration {

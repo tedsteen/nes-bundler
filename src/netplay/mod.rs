@@ -130,16 +130,10 @@ impl Netplay {
     }
 
     fn retry_connect(&mut self) {
-        use crate::netplay::{
-            connection::ConnectingSession,
-            session::{ConnectingNetplaySession, FailedNetplaySession},
-        };
+        use crate::netplay::{connection::ConnectingSession, session::FailedNetplaySession};
 
         match &mut self.session {
-            NetplaySession::Connecting(ConnectingNetplaySession {
-                connecting_session: ConnectingSession { start_method, .. },
-                ..
-            })
+            NetplaySession::Connecting(ConnectingSession { start_method, .. })
             | NetplaySession::Failed(FailedNetplaySession { start_method, .. }) => {
                 self.session = NetplaySession::start(start_method.clone());
             }
