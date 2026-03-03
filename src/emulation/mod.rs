@@ -26,7 +26,7 @@ pub fn new_local_nes_state(load_sram: bool) -> LocalNesState {
     LocalNesState::start_rom(
         &crate::bundle::Bundle::current().rom,
         load_sram,
-        Settings::current_mut().get_nes_region(),
+        Settings::current_mut().nes_region_mut(),
     )
     .expect("Failed to start ROM")
 }
@@ -41,6 +41,7 @@ static NTSC_PAL: &[u8] = include_bytes!("../../config/palette.pal");
 pub enum EmulatorCommand {
     Reset(bool),
     SetSpeed(f32),
+    Shutdown,
 }
 pub type EmulatorCommandBus = Sender<EmulatorCommand>;
 
@@ -71,7 +72,10 @@ pub struct SharedState {
     pub netplay: crate::netplay::SharedNetplay,
 }
 impl SharedState {
-    fn new(emulator_command_tx: EmulatorCommandBus) -> Self {
+    fn new(
+        emulator_command_tx: EmulatorCommandBus,
+        #[cfg(feature = "netplay")] netplay: crate::netplay::SharedNetplay,
+    ) -> Self {
         Self {
             emulator: SharedEmulator {
                 command_tx: emulator_command_tx,
@@ -81,104 +85,190 @@ impl SharedState {
             },
 
             #[cfg(feature = "netplay")]
-            netplay: crate::netplay::SharedNetplay::new(),
+            netplay,
         }
     }
 }
 
 pub struct Emulator {
     pub shared_state: SharedState,
-
-    // We need to hold on to this to keep the thread alive
-    _th: std::thread::JoinHandle<()>,
+    th: Option<std::thread::JoinHandle<()>>,
 }
 
 pub const DEFAULT_SAMPLE_RATE: f32 = 44_100.0;
 
-impl Emulator {
-    pub fn new(audio_stream: &mut AudioStream) -> Self {
-        #[allow(unused_mut)]
-        let mut nes_state = new_local_nes_state(true);
+struct EmulatorRuntime {
+    inputs: Arc<[AtomicU8; MAX_PLAYERS]>,
+    frame_buffer: VideoBufferPool,
+    shared_emulator: SharedEmulator,
+    emulator_rx: tokio::sync::mpsc::Receiver<EmulatorCommand>,
+    audio_producer: AudioProducer,
+    #[cfg(feature = "netplay")]
+    shared_netplay: crate::netplay::SharedNetplay,
+    #[cfg(feature = "netplay")]
+    netplay_state_sender: tokio::sync::watch::Sender<crate::netplay::SharedNetplayState>,
+    #[cfg(feature = "netplay")]
+    netplay_command_rx: tokio::sync::mpsc::Receiver<crate::netplay::NetplayCommand>,
+}
 
-        if let Some(mut audio_producer) = audio_stream.tx.take() {
-            let (emulator_tx, emulator_rx) = tokio::sync::mpsc::channel(1);
+impl EmulatorRuntime {
+    fn spawn(self, local_nes_state: LocalNesState) -> std::thread::JoinHandle<()> {
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
 
-            let shared_state = SharedState::new(emulator_tx.clone());
+            let EmulatorRuntime {
+                inputs,
+                frame_buffer,
+                shared_emulator,
+                mut emulator_rx,
+                mut audio_producer,
+                #[cfg(feature = "netplay")]
+                shared_netplay,
+                #[cfg(feature = "netplay")]
+                netplay_state_sender,
+                #[cfg(feature = "netplay")]
+                netplay_command_rx,
+            } = self;
 
-            let _th = std::thread::spawn({
-                let shared_state = shared_state.clone();
+            #[allow(unused_mut)]
+            let mut nes_state = local_nes_state;
+            #[cfg(feature = "netplay")]
+            let mut nes_state = crate::netplay::Netplay::new(
+                nes_state,
+                shared_netplay,
+                netplay_state_sender,
+                netplay_command_rx,
+            );
 
-                let mut emulator_rx = emulator_rx;
-                move || {
-                    let rt = tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .unwrap();
-                    let inputs = shared_state.emulator.inputs.clone();
-                    let frame_buffer = shared_state.emulator.frame_buffer.clone();
-                    let shared_emulator = shared_state.emulator.clone();
+            tokio::task::LocalSet::new().block_on(&rt, async move {
+                loop {
+                    if Emulator::drain_pending_commands(&mut emulator_rx, &mut nes_state) {
+                        break;
+                    }
 
-                    #[cfg(feature = "netplay")]
-                    let mut nes_state =
-                        crate::netplay::Netplay::new(nes_state, shared_state.netplay.clone());
+                    let mut frame_result = frame_buffer.push_ref();
+                    nes_state
+                        .advance(
+                            Emulator::read_input_states(&inputs),
+                            Some(NESBuffers {
+                                audio: &mut audio_producer,
+                                video: frame_result.as_deref_mut().ok(),
+                            }),
+                        )
+                        .await;
 
-                    tokio::task::LocalSet::new().block_on(&rt, async move {
-                        loop {
-                            // drain pending emulator commands
-                            while let Ok(cmd) = emulator_rx.try_recv() {
-                                match cmd {
-                                    EmulatorCommand::Reset(hard) => nes_state.reset(hard),
-                                    EmulatorCommand::SetSpeed(speed) => nes_state.set_speed(speed),
-                                }
-                            }
+                    let frame = nes_state.frame();
+                    shared_emulator
+                        .state
+                        .frame
+                        .store(frame, Emulator::FRAME_WRITE_ORDERING);
 
-                            let mut frame_result = frame_buffer.push_ref();
-                            //println!("ADVANCE {:?}", std::time::Instant::now());
-                            nes_state
-                                .advance(
-                                    [
-                                        JoypadState(
-                                            inputs[0].load(std::sync::atomic::Ordering::Relaxed),
-                                        ),
-                                        JoypadState(
-                                            inputs[1].load(std::sync::atomic::Ordering::Relaxed),
-                                        ),
-                                    ],
-                                    Some(NESBuffers {
-                                        audio: &mut audio_producer,
-                                        video: frame_result.as_deref_mut().ok(),
-                                    }),
-                                )
-                                .await;
+                    //TODO: Figure out why this is needed (probably to avoid busy loop..)
+                    tokio::task::yield_now().await;
 
-                            let frame = nes_state.frame();
-                            shared_emulator
-                                .state
-                                .frame
-                                .store(frame, std::sync::atomic::Ordering::Relaxed);
-
-                            //TODO: Figure out why this is needed (probably to avoid busy loop..)
-                            tokio::task::yield_now().await;
-
-                            // 2) periodic SRAM snapshot (non-blocking check)
-                            if frame % 100 == 0 {
-                                use base64::Engine;
-                                use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
-                                if let Some(sram) = nes_state.save_sram() {
-                                    let sram = sram.to_vec();
-                                    // Do this in a blocking task as we want the main loop free from blocking code
-                                    tokio::task::spawn_blocking(move || {
-                                        Settings::current_mut().save_state = Some(b64.encode(sram));
-                                    });
-                                }
-                            }
+                    // 2) periodic SRAM snapshot (non-blocking check)
+                    if frame.is_multiple_of(Emulator::SRAM_SNAPSHOT_INTERVAL_FRAMES) {
+                        use base64::Engine;
+                        use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+                        if let Some(sram) = nes_state.save_sram() {
+                            let sram = sram.to_vec();
+                            // Do this in a blocking task as we want the main loop free from blocking code
+                            tokio::task::spawn_blocking(move || {
+                                Settings::current_mut().save_state = Some(b64.encode(sram));
+                            });
                         }
-                    });
+                    }
                 }
             });
-            Self { shared_state, _th }
-        } else {
-            panic!("No audio producer")
+        })
+    }
+}
+
+impl Emulator {
+    const COMMAND_CHANNEL_CAPACITY: usize = 1;
+    /// Ordering used when the emulator thread *reads* the inputs written by the main thread.
+    /// Paired with `Release` stores in `GameRuntime::write_inputs` to form a proper
+    /// acquire-release pair, which is required for correctness on weak memory models (e.g. ARM).
+    pub(crate) const INPUT_READ_ORDERING: std::sync::atomic::Ordering =
+        std::sync::atomic::Ordering::Acquire;
+    /// Ordering used when the emulator thread *writes* the frame counter read by other threads.
+    const FRAME_WRITE_ORDERING: std::sync::atomic::Ordering = std::sync::atomic::Ordering::Release;
+    const SRAM_SNAPSHOT_INTERVAL_FRAMES: u32 = 100;
+
+    fn drain_pending_commands<N: NesStateHandler>(
+        emulator_rx: &mut tokio::sync::mpsc::Receiver<EmulatorCommand>,
+        nes_state: &mut N,
+    ) -> bool {
+        let mut should_shutdown = false;
+        while let Ok(cmd) = emulator_rx.try_recv() {
+            match cmd {
+                EmulatorCommand::Reset(hard) => nes_state.reset(hard),
+                EmulatorCommand::SetSpeed(speed) => nes_state.set_speed(speed),
+                EmulatorCommand::Shutdown => {
+                    should_shutdown = true;
+                }
+            }
+        }
+        should_shutdown
+    }
+
+    fn read_input_states(inputs: &[AtomicU8; MAX_PLAYERS]) -> [JoypadState; MAX_PLAYERS] {
+        [
+            JoypadState(inputs[0].load(Self::INPUT_READ_ORDERING)),
+            JoypadState(inputs[1].load(Self::INPUT_READ_ORDERING)),
+        ]
+    }
+
+    pub fn new(audio_stream: &mut AudioStream) -> Self {
+        let nes_state = new_local_nes_state(true);
+        let audio_producer = audio_stream.take_producer();
+        let (emulator_tx, emulator_rx) = tokio::sync::mpsc::channel(Self::COMMAND_CHANNEL_CAPACITY);
+
+        #[cfg(feature = "netplay")]
+        let (shared_netplay, netplay_state_sender, netplay_command_rx) =
+            crate::netplay::SharedNetplay::new();
+
+        let shared_state = SharedState::new(
+            emulator_tx.clone(),
+            #[cfg(feature = "netplay")]
+            shared_netplay,
+        );
+
+        let runtime = EmulatorRuntime {
+            inputs: shared_state.emulator.inputs.clone(),
+            frame_buffer: shared_state.emulator.frame_buffer.clone(),
+            shared_emulator: shared_state.emulator.clone(),
+            emulator_rx,
+            audio_producer,
+            #[cfg(feature = "netplay")]
+            shared_netplay: shared_state.netplay.clone(),
+            #[cfg(feature = "netplay")]
+            netplay_state_sender,
+            #[cfg(feature = "netplay")]
+            netplay_command_rx,
+        };
+        let thread_handle = runtime.spawn(nes_state);
+        Self {
+            shared_state,
+            th: Some(thread_handle),
+        }
+    }
+}
+
+impl Drop for Emulator {
+    fn drop(&mut self) {
+        let _ = self
+            .shared_state
+            .emulator
+            .command_tx
+            .blocking_send(EmulatorCommand::Shutdown);
+        if let Some(th) = self.th.take()
+            && let Err(e) = th.join()
+        {
+            log::warn!("Failed to join emulator thread: {e:?}");
         }
     }
 }

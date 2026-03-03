@@ -21,15 +21,25 @@ use super::configuration::{
 
 #[derive(Debug)]
 pub enum ConnectingState {
-    Idle, //Initial state.
     LoadingNetplayServerConfiguration,
-    PeeringUp(StartMethod),
+    PeeringUp(Box<StartMethod>),
+}
+
+/// Aborts the wrapped task when dropped.
+pub struct AbortOnDrop(tokio::task::JoinHandle<()>);
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
 }
 
 pub struct NetplayConnection {
     pub socket: WebRtcSocket,
     pub netplay_server_configuration: StaticNetplayServerConfiguration,
     pub initial_state: Option<NetplayNesState>,
+    /// Keeps the WebRTC event loop alive for the duration of the session.
+    /// Aborted automatically when this is dropped.
+    pub loop_task: AbortOnDrop,
 }
 pub struct ConnectingSession {
     pub state: Receiver<ConnectingState>,
@@ -40,7 +50,8 @@ pub struct ConnectingSession {
 impl ConnectingSession {
     pub fn connect(start_method: StartMethod) -> Self {
         log::debug!("Connecting: {start_method:?}");
-        let (state_sender, state) = channel(ConnectingState::Idle);
+        let (state_sender, state) =
+            channel(ConnectingState::PeeringUp(Box::new(start_method.clone())));
         let start_method_cloned = start_method.clone();
         let netplay_connection = async move {
             let netplay_config = match &start_method_cloned {
@@ -50,14 +61,18 @@ impl ConnectingSession {
                 _ => match &Bundle::current().config.netplay.server {
                     NetplayServerConfiguration::Static(static_conf) => static_conf.clone(),
                     NetplayServerConfiguration::TurnOn(turn_on_conf) => {
+                        let client = reqwest::Client::new();
                         ConnectingSession::retry(|| {
                             ConnectingSession::load_netplay_server_configuration(
                                 state_sender.clone(),
                                 turn_on_conf,
+                                client.clone(),
                             )
                         })
                         .await
-                        .unwrap_or_default()
+                        .map_err(|e| {
+                            anyhow::anyhow!("Failed to load netplay configuration: {e:?}")
+                        })?
                     }
                 },
             };
@@ -74,22 +89,18 @@ impl ConnectingSession {
     async fn load_netplay_server_configuration(
         state_sender: Sender<ConnectingState>,
         turn_on_conf: &TurnOnServerConfiguration,
+        client: reqwest::Client,
     ) -> Result<StaticNetplayServerConfiguration, TurnOnError> {
         log::debug!("Loading netplay configuration: {turn_on_conf:?}");
         let _ = state_sender.send(ConnectingState::LoadingNetplayServerConfiguration);
 
-        let netplay_id = turn_on_conf.get_netplay_id();
+        let netplay_id = turn_on_conf.resolved_netplay_id();
         let url = format!("{0}/{netplay_id}", turn_on_conf.url);
         log::debug!("Fetching TurnOn config from server: {url}");
 
-        let reqwest_client = reqwest::Client::new();
-        let res = reqwest_client
-            .get(url)
-            .send()
-            .await
-            .map_err(|e| TurnOnError {
-                description: format!("Could not connect: {e}"),
-            })?;
+        let res = client.get(url).send().await.map_err(|e| TurnOnError {
+            description: format!("Could not connect: {e}"),
+        })?;
 
         if res.status().is_success() {
             res.json().await.map_err(|e| TurnOnError {
@@ -100,7 +111,7 @@ impl ConnectingSession {
                 description: format!("Response was not successful: {:?}", res.text().await),
             })
         }
-        .and_then(|mut resp| {
+        .map(|mut resp| {
             log::debug!("Got TurnOn config response: {resp:?}");
 
             let netplay_server_configuration = match &mut resp {
@@ -110,7 +121,7 @@ impl ConnectingSession {
                 }
                 TurnOnResponse::Full(conf) => conf,
             };
-            Ok(netplay_server_configuration.clone())
+            netplay_server_configuration.clone()
         })
     }
 
@@ -120,7 +131,7 @@ impl ConnectingSession {
         netplay_server_configuration: StaticNetplayServerConfiguration,
     ) -> Result<NetplayConnection> {
         let matchbox_server = &netplay_server_configuration.matchbox.server;
-        let _ = state_sender.send(ConnectingState::PeeringUp(start_method.clone()));
+        let _ = state_sender.send(ConnectingState::PeeringUp(Box::new(start_method.clone())));
 
         let room_name = start_method.to_room_name();
 
@@ -147,7 +158,10 @@ impl ConnectingSession {
                 .build()
         };
 
-        tokio::task::spawn(async move {
+        // Spawn the WebRTC event loop. The AbortOnDrop guard ensures the task is
+        // cancelled if peer_up is dropped (e.g. user cancels connecting) or when
+        // the NetplayConnection / ConnectedNetplaySession that owns it is dropped.
+        let loop_task = AbortOnDrop(tokio::task::spawn(async move {
             let loop_fut = loop_fut.fuse();
             let timeout = Delay::new(Duration::from_millis(100));
             pin_mut!(loop_fut, timeout);
@@ -162,9 +176,17 @@ impl ConnectingSession {
                     }
                 }
             }
-        });
+        }));
+
+        const PEER_UP_TIMEOUT: Duration = Duration::from_secs(30);
+        let peer_up_deadline = std::time::Instant::now() + PEER_UP_TIMEOUT;
+
         log::debug!("Getting players...");
         loop {
+            if std::time::Instant::now() >= peer_up_deadline {
+                anyhow::bail!("Timed out waiting for players to connect");
+            }
+
             socket.try_update_peers().map_err(|e| {
                 anyhow::Error::msg(format!("Could not connect to {room_url:} ({e:?})"))
             })?;
@@ -176,12 +198,12 @@ impl ConnectingSession {
             }
 
             let remaining = MAX_PLAYERS - (connected_peers + 1);
-            if remaining <= 0 {
+            if remaining == 0 {
                 log::debug!("Got all players!");
 
                 let initial_state = match &start_method {
                     StartMethod::Resume(_, resumed_state) => {
-                        let mut state = resumed_state.clone();
+                        let mut state = resumed_state.as_ref().clone();
                         //ggrs will start over from 0
                         state.ggrs_frame = 0;
 
@@ -200,6 +222,7 @@ impl ConnectingSession {
                     socket,
                     netplay_server_configuration,
                     initial_state,
+                    loop_task,
                 });
             }
             tokio::time::sleep(Duration::from_millis(1)).await;
@@ -248,7 +271,7 @@ pub enum JoinOrHost {
 #[derive(Clone, Debug)]
 pub enum StartMethod {
     Start(RoomName, JoinOrHost),
-    Resume(StaticNetplayServerConfiguration, NetplayNesState),
+    Resume(StaticNetplayServerConfiguration, Box<NetplayNesState>),
     MatchWithRandom,
 }
 

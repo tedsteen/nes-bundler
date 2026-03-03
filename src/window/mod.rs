@@ -1,6 +1,6 @@
 use crate::{
-    input::keys::{KeyCode, Modifiers},
     Size,
+    input::keys::{KeyCode, Modifiers},
 };
 use anyhow::Result;
 use winit::{event_loop::ActiveEventLoop, window::Window};
@@ -41,5 +41,7 @@ pub fn create_window(
         use winit::platform::windows::IconExtWindows;
         window_attributes.with_window_icon(Some(winit::window::Icon::from_resource(1, None)?))
     };
-    Ok(event_loop.create_window(window_attributes).unwrap())
+    event_loop
+        .create_window(window_attributes)
+        .map_err(Into::into)
 }

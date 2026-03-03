@@ -13,7 +13,7 @@ use sdl3::sys::audio::SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
 use crate::audio::pacer::{AudioConsumer, AudioProducer, make_paced_bridge_ringbuf_bulk_async};
 use crate::audio::{AudioStream, AudioSystem, AvailableAudioDevice};
 use crate::emulation::DEFAULT_SAMPLE_RATE;
-use crate::settings::Settings;
+use crate::settings::SettingsStore;
 
 #[derive(Debug, Clone)]
 pub struct SDL3AvailableAudioDevice {
@@ -66,15 +66,13 @@ impl SDL3AudioSystem {
     }
 
     pub fn get_default_device(&self) -> SDL3AvailableAudioDevice {
-        self.get_available_devices()
-            .first()
-            .expect("At least a default device")
-            .clone()
+        SDL3AvailableAudioDevice::new(self.audio_subsystem.default_playback_device().id())
     }
 
-    pub fn start_stream(&self) -> AudioStream {
-        let mut settings = Settings::current_mut();
-        let device = settings.audio.get_selected_device(self);
+    pub fn start_stream(&self, settings_store: &SettingsStore) -> AudioStream {
+        let mut settings = settings_store.write();
+        let device = settings.audio.resolve_output_device(self);
+        settings.audio.sync_output_device_selection(&device);
         let volume = settings.audio.volume;
         let latency_micros = settings.audio.latency_micros;
         AudioStream::new(self.clone(), device, volume, latency_micros)
@@ -84,10 +82,16 @@ impl SDL3AudioSystem {
 pub struct SDL3AudioStream {
     audio_system: AudioSystem,
     audio_stream_with_callback: Option<AudioStreamWithCallback<NesBundlerAudioCallback>>,
-    pub tx: Option<AudioProducer>,
+    tx: Option<AudioProducer>,
     take_back: Receiver<AudioConsumer>,
     volume: Arc<AtomicU8>,
     ctl: super::pacer::BridgeCtl,
+}
+
+impl SDL3AudioStream {
+    pub fn take_producer(&mut self) -> AudioProducer {
+        self.tx.take().expect("AudioProducer already taken")
+    }
 }
 
 impl SDL3AudioStream {
@@ -134,8 +138,14 @@ impl SDL3AudioStream {
         };
         let (give_back, take_back) = std::sync::mpsc::channel();
 
-        // TODO: Calculate the correct buffer hint here
-        sdl3::hint::set("SDL_AUDIO_DEVICE_SAMPLE_FRAMES", &format!("{}", 735 / 16));
+        // SDL callback granularity: ~1 NTSC frame worth of samples divided into
+        // 16 slices gives ~45 samples (~1 ms at 44100 Hz), keeping latency low.
+        // TODO: derive from actual sample rate + region FPS (PAL needs ~55 samples).
+        const CALLBACK_FRAMES: u32 = 735 / 16;
+        sdl3::hint::set(
+            "SDL_AUDIO_DEVICE_SAMPLE_FRAMES",
+            &CALLBACK_FRAMES.to_string(),
+        );
 
         let stream = AudioDevice::open_playback(
             &audio_subsystem,
@@ -206,20 +216,13 @@ impl AudioCallback<f32> for NesBundlerAudioCallback {
             let buf = &mut self.tmp[..requested];
             let got = rx.pop_slice(buf);
 
-            // Apply volume
             let gain = (self.volume.load(std::sync::atomic::Ordering::Relaxed) as f32) / 100.0;
             for x in &mut buf[..got] {
                 *x *= gain;
             }
 
-            if got < buf.len() {
-                buf[got..].fill(0.0);
-            }
-
-            // zero-pad if we under-ran so we still hand over 'requested' frames
             if got < requested {
-                //log::warn!("Buffer underrun ({got} < {requested})");
-                buf[got..requested].fill(0.0);
+                buf[got..].fill(0.0);
             }
         } else {
             self.tmp[..requested].fill(0.0);

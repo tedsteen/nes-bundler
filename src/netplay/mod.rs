@@ -1,7 +1,7 @@
-use std::{
-    sync::{Arc, RwLock},
-    time::Instant,
-};
+use std::time::Instant;
+
+#[cfg(feature = "debug")]
+use std::sync::{Arc, RwLock};
 
 use tokio::sync::watch::channel;
 
@@ -56,32 +56,37 @@ pub enum SharedNetplayState {
 pub struct SharedNetplay {
     pub command_tx: NetplayCommandBus,
     pub receiver: tokio::sync::watch::Receiver<SharedNetplayState>,
-    pub sender: tokio::sync::watch::Sender<SharedNetplayState>,
-    pub command_rx: Arc<RwLock<Option<tokio::sync::mpsc::Receiver<NetplayCommand>>>>,
 
     #[cfg(feature = "debug")]
     pub stats: Arc<RwLock<[crate::netplay::stats::NetplayStats; crate::settings::MAX_PLAYERS]>>,
 }
 impl SharedNetplay {
-    pub fn new() -> Self {
-        let (command_tx, command_rx) = tokio::sync::mpsc::channel(1);
+    pub fn new() -> (
+        Self,
+        tokio::sync::watch::Sender<SharedNetplayState>,
+        tokio::sync::mpsc::Receiver<NetplayCommand>,
+    ) {
+        let (command_tx, command_rx) = tokio::sync::mpsc::channel(NETPLAY_COMMAND_CHANNEL_CAPACITY);
         let (sender, receiver) = channel(SharedNetplayState::Disconnected);
-        Self {
-            command_tx,
-            command_rx: Arc::new(RwLock::new(Some(command_rx))),
-            receiver,
-            sender,
+        (
+            Self {
+                command_tx,
+                receiver,
 
-            #[cfg(feature = "debug")]
-            stats: Arc::new(RwLock::new([
-                crate::netplay::stats::NetplayStats::new(),
-                crate::netplay::stats::NetplayStats::new(),
-            ])),
-        }
+                #[cfg(feature = "debug")]
+                stats: Arc::new(RwLock::new([
+                    crate::netplay::stats::NetplayStats::new(),
+                    crate::netplay::stats::NetplayStats::new(),
+                ])),
+            },
+            sender,
+            command_rx,
+        )
     }
 }
 
 pub const MAX_ROOM_NAME_LEN: u8 = 4;
+const NETPLAY_COMMAND_CHANNEL_CAPACITY: usize = 1;
 
 pub struct Netplay {
     shared_state_sender: tokio::sync::watch::Sender<SharedNetplayState>,
@@ -93,14 +98,19 @@ pub struct Netplay {
 }
 
 impl Netplay {
-    pub fn new(local_play_nes_state: LocalNesState, shared_netplay: SharedNetplay) -> Self {
+    pub fn new(
+        local_play_nes_state: LocalNesState,
+        _shared_netplay: SharedNetplay, // only used when the debug feature is active
+        shared_state_sender: tokio::sync::watch::Sender<SharedNetplayState>,
+        netplay_rx: tokio::sync::mpsc::Receiver<NetplayCommand>,
+    ) -> Self {
         Self {
             initial_local_nes_state: local_play_nes_state.clone(),
             session: NetplaySession::new(local_play_nes_state),
-            shared_state_sender: shared_netplay.sender,
-            netplay_rx: shared_netplay.command_rx.write().unwrap().take().unwrap(),
+            shared_state_sender,
+            netplay_rx,
             #[cfg(feature = "debug")]
-            stats: shared_netplay.stats.clone(),
+            stats: _shared_netplay.stats.clone(),
         }
     }
 
@@ -118,6 +128,41 @@ impl Netplay {
     fn disconnect(&mut self) {
         self.session = NetplaySession::new(self.initial_local_nes_state.clone());
     }
+
+    fn retry_connect(&mut self) {
+        use crate::netplay::{connection::ConnectingSession, session::FailedNetplaySession};
+
+        match &mut self.session {
+            NetplaySession::Connecting(ConnectingSession { start_method, .. })
+            | NetplaySession::Failed(FailedNetplaySession { start_method, .. }) => {
+                self.session = NetplaySession::start(start_method.clone());
+            }
+            NetplaySession::Connected(current_state) => {
+                self.session = NetplaySession::resume(current_state)
+            }
+            state => {
+                log::warn!("Ignored retry command in state {state:?}");
+            }
+        }
+    }
+
+    fn handle_command(&mut self, cmd: NetplayCommand) {
+        match cmd {
+            NetplayCommand::FindGame => self.start(StartMethod::MatchWithRandom),
+            NetplayCommand::HostGame => {
+                use rand::distr::{Alphanumeric, SampleString};
+                let room_name = Alphanumeric
+                    .sample_string(&mut rand::rng(), MAX_ROOM_NAME_LEN.into())
+                    .to_uppercase();
+                self.start(StartMethod::Start(room_name, JoinOrHost::Host));
+            }
+            NetplayCommand::JoinGame(room_name) => {
+                self.start(StartMethod::Start(room_name, JoinOrHost::Join));
+            }
+            NetplayCommand::CancelConnect | NetplayCommand::Disconnect => self.disconnect(),
+            NetplayCommand::RetryConnect => self.retry_connect(),
+        }
+    }
 }
 
 impl NesStateHandler for Netplay {
@@ -127,70 +172,24 @@ impl NesStateHandler for Netplay {
         buffers: Option<NESBuffers<'_>>,
     ) {
         // drain pending netplay commands
-        #[cfg(feature = "netplay")]
         while let Ok(cmd) = self.netplay_rx.try_recv() {
-            use crate::netplay::{
-                connection::ConnectingSession,
-                session::{ConnectingNetplaySession, FailedNetplaySession},
-            };
-
-            match cmd {
-                NetplayCommand::FindGame => {
-                    self.start(StartMethod::MatchWithRandom);
-                }
-
-                NetplayCommand::HostGame => {
-                    use rand::distr::{Alphanumeric, SampleString};
-                    let room_name = Alphanumeric
-                        .sample_string(&mut rand::rng(), MAX_ROOM_NAME_LEN.into())
-                        .to_uppercase();
-                    self.start(StartMethod::Start(room_name, JoinOrHost::Host));
-                }
-
-                NetplayCommand::JoinGame(room_name) => {
-                    self.start(StartMethod::Start(room_name.to_string(), JoinOrHost::Join));
-                }
-
-                NetplayCommand::CancelConnect => {
-                    self.disconnect();
-                }
-
-                NetplayCommand::RetryConnect => match &mut self.session {
-                    NetplaySession::Connecting(ConnectingNetplaySession {
-                        connecting_session: ConnectingSession { start_method, .. },
-                        ..
-                    })
-                    | NetplaySession::Failed(FailedNetplaySession { start_method, .. }) => {
-                        self.session = NetplaySession::start(start_method.clone());
-                    }
-                    NetplaySession::Connected(current_state) => {
-                        self.session = NetplaySession::resume(current_state)
-                    }
-                    state => {
-                        log::warn!("Ignored retry command in state {state:?}");
-                    }
-                },
-
-                NetplayCommand::Disconnect => {
-                    self.disconnect();
-                }
-            }
+            self.handle_command(cmd);
         }
         self.session.advance(joypad_state, buffers).await;
 
         #[cfg(feature = "debug")]
-        if let NetplaySession::Connected(connected_netplay_session) = &self.session {
-            if connected_netplay_session.current_game_state.ggrs_frame % 30 == 0 {
-                let sess = &connected_netplay_session.p2p_session;
-                puffin::profile_scope!("Netplay stats");
-                for i in 0..MAX_PLAYERS {
-                    if let Ok(stats) = sess.network_stats(i) {
-                        if !sess.local_player_handles().contains(&i) {
-                            self.stats.write().unwrap()[i].push_stats(stats);
-                        }
-                    }
+        if let NetplaySession::Connected(connected_netplay_session) = &self.session
+            && connected_netplay_session.current_game_state.ggrs_frame % 30 == 0
+        {
+            let sess = &connected_netplay_session.p2p_session;
+            puffin::profile_scope!("Netplay stats");
+            for i in 0..MAX_PLAYERS {
+                if let Ok(stats) = sess.network_stats(i)
+                    && !sess.local_player_handles().contains(&i)
+                {
+                    self.stats.write().unwrap()[i].push_stats(stats);
                 }
-            };
+            }
         }
 
         let _ = self

@@ -1,7 +1,7 @@
 use crate::{
     input::{JoypadButton, JoypadState},
-    main_view::gui::{GuiComponent, GuiEvent},
-    settings::Settings,
+    main_view::gui::{GuiComponent, GuiEvent, MainMenuState},
+    settings::SettingsStore,
 };
 use egui::{Color32, Grid, RichText, Ui};
 use serde::Deserialize;
@@ -42,13 +42,15 @@ impl Default for InputButtonsVoca {
 pub struct InputsGui {
     pub inputs: Inputs,
     mapping_request: Option<MapRequest>,
+    settings: &'static SettingsStore,
 }
 
 impl InputsGui {
-    pub fn new(inputs: Inputs) -> Self {
+    pub fn new(inputs: Inputs, settings: &'static SettingsStore) -> Self {
         Self {
             mapping_request: None,
             inputs,
+            settings,
         }
     }
 
@@ -62,7 +64,7 @@ impl InputsGui {
     ) {
         ui.label(format!("Player {}", player + 1));
         let selected_text = input_settings
-            .get_selected_configuration_mut(player)
+            .selected_configuration_mut(player)
             .name
             .to_string();
         egui::ComboBox::from_id_salt(format!("joypad-{}", player))
@@ -78,7 +80,7 @@ impl InputsGui {
                 }
             });
 
-        let input_configuration = input_settings.get_selected_configuration_mut(player);
+        let input_configuration = input_settings.selected_configuration_mut(player);
         Grid::new(format!("joypadmap_grid_{}", player))
             .num_columns(2)
             .striped(true)
@@ -147,13 +149,15 @@ impl InputsGui {
 
 impl GuiComponent for InputsGui {
     fn handle_event(&mut self, gui_event: &GuiEvent) {
-        self.inputs.advance(gui_event);
+        let mut settings = self.settings.write();
+        self.inputs.advance(gui_event, &mut settings.input);
     }
 
-    fn ui(&mut self, ui: &mut Ui) {
+    fn ui(&mut self, ui: &mut Ui) -> Option<MainMenuState> {
         let instance = &mut self.inputs;
-        let input_settings = &mut Settings::current_mut().input;
-        let available_configurations = &mut input_settings
+        let mut settings = self.settings.write();
+        let input_settings = &mut settings.input;
+        let mut available_configurations = input_settings
             .configurations
             .values()
             .filter(|e| instance.is_connected(e))
@@ -169,7 +173,7 @@ impl GuiComponent for InputsGui {
                 Self::key_map_ui(
                     ui,
                     joypad_0,
-                    available_configurations,
+                    &available_configurations,
                     input_settings,
                     0,
                     &mut self.mapping_request,
@@ -179,7 +183,7 @@ impl GuiComponent for InputsGui {
                 Self::key_map_ui(
                     ui,
                     joypad_1,
-                    available_configurations,
+                    &available_configurations,
                     input_settings,
                     1,
                     &mut self.mapping_request,
@@ -189,6 +193,7 @@ impl GuiComponent for InputsGui {
 
         self.inputs
             .remap_configuration(&mut self.mapping_request, input_settings);
+        None
     }
 
     fn name(&self) -> Option<&str> {

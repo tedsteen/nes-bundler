@@ -81,10 +81,11 @@ pub struct ConnectedNetplaySession {
 
     pub last_handled_ggrs_frame: i32,
     pub current_game_state: NetplayNesState,
-    pub last_confirmed_game_state1: NetplayNesState,
-    pub last_confirmed_game_state2: NetplayNesState,
+    pub older_confirmed_state: NetplayNesState,
+    pub newer_confirmed_state: NetplayNesState,
     start_time: Instant,
     last_running_time: Instant,
+    _loop_task: crate::netplay::connection::AbortOnDrop,
 }
 
 impl ConnectedNetplaySession {
@@ -92,12 +93,13 @@ impl ConnectedNetplaySession {
         let mut socket = netplay_connection.socket;
         let netplay_server_configuration = netplay_connection.netplay_server_configuration.clone();
         let initial_state = netplay_connection.initial_state;
+        let loop_task = netplay_connection.loop_task;
 
         let ggrs_config = &netplay_server_configuration.ggrs;
         let mut sess_build = SessionBuilder::<GGRSConfig>::new()
             .with_num_players(MAX_PLAYERS)
             .with_input_delay(ggrs_config.input_delay)
-            .with_fps(Settings::current_mut().get_nes_region().to_fps() as usize)
+            .with_fps(Settings::current_mut().nes_region_mut().to_fps() as usize)
             .unwrap()
             .with_max_prediction_window(ggrs_config.max_prediction);
 
@@ -128,12 +130,13 @@ impl ConnectedNetplaySession {
             netplay_server_configuration,
             local_player_index,
 
-            last_confirmed_game_state1: initial_state.clone(),
-            last_confirmed_game_state2: initial_state.clone(),
+            older_confirmed_state: initial_state.clone(),
+            newer_confirmed_state: initial_state.clone(),
             last_handled_ggrs_frame: -1,
             current_game_state: initial_state.clone(),
             start_time: Instant::now(),
             last_running_time: Instant::now(),
+            _loop_task: loop_task,
         }
     }
 
@@ -198,10 +201,10 @@ impl ConnectedNetplaySession {
                                             == 0
                                         {
                                             mem::swap(
-                                                &mut self.last_confirmed_game_state1,
-                                                &mut self.last_confirmed_game_state2,
+                                                &mut self.older_confirmed_state,
+                                                &mut self.newer_confirmed_state,
                                             );
-                                            self.last_confirmed_game_state2 =
+                                            self.newer_confirmed_state =
                                                 self.current_game_state.clone()
                                         }
                                     }
@@ -219,15 +222,14 @@ impl ConnectedNetplaySession {
                     }
                 }
 
-                if p2p_session.frames_ahead() > 0 {
+                let frames_ahead = p2p_session.frames_ahead();
+                if frames_ahead > 0 {
                     //https://www.desmos.com/calculator/zbntsowijd
-                    let speed = 0.8_f32
-                        .max(1.0 - 0.1 * (0.2 * p2p_session.frames_ahead() as f32).powf(2.0));
-                    log::trace!(
-                        "Frames ahead: {:?}, slowing down emulation ({speed}x)",
-                        p2p_session.frames_ahead()
+                    let speed = NETPLAY_MIN_SPEED.max(
+                        1.0 - NETPLAY_SPEED_CURVE_COEFF
+                            * (NETPLAY_SPEED_CURVE_SCALE * frames_ahead as f32).powi(2),
                     );
-
+                    log::trace!("Frames ahead: {frames_ahead}, slowing down emulation ({speed}x)");
                     self.current_game_state.nes_state.set_speed(speed);
                 } else {
                     self.current_game_state.nes_state.set_speed(1.0)
@@ -247,38 +249,19 @@ impl ConnectedNetplaySession {
     }
 }
 
-#[derive(Debug)]
-pub struct DisconnectedNetplaySession {
-    local_nes_state: LocalNesState,
-}
-impl DisconnectedNetplaySession {
-    fn new(local_play_nes_state: crate::emulation::tetanes::TetanesNesState) -> Self {
-        Self {
-            local_nes_state: local_play_nes_state,
-        }
-    }
-}
-
-pub struct ConnectingNetplaySession {
-    pub connecting_session: ConnectingSession,
-}
-
-impl ConnectingNetplaySession {
-    fn new(connecting_session: ConnectingSession) -> Self {
-        Self { connecting_session }
-    }
-}
 pub struct ResumingNetplaySession {
     attempt1: ConnectingSession,
     attempt2: ConnectingSession,
+    attempt1_failed: bool,
+    attempt2_failed: bool,
 }
 impl ResumingNetplaySession {
     fn new(session_state: &mut ConnectedNetplaySession) -> Self {
         //TODO: Popup/info about the error? Or perhaps put the reason for the resume in the resume state below?
         log::debug!(
             "Resuming netplay to one of the frames {:?} and {:?}",
-            session_state.last_confirmed_game_state1.ggrs_frame,
-            session_state.last_confirmed_game_state2.ggrs_frame
+            session_state.older_confirmed_state.ggrs_frame,
+            session_state.newer_confirmed_state.ggrs_frame
         );
         //let _ = connected.session_state.shared_state_sender.send(SharedNetplayState::Resuming);
 
@@ -286,12 +269,14 @@ impl ResumingNetplaySession {
         Self {
             attempt1: ConnectingSession::connect(StartMethod::Resume(
                 netplay_server_configuration.clone(),
-                session_state.last_confirmed_game_state1.clone(),
+                Box::new(session_state.older_confirmed_state.clone()),
             )),
             attempt2: ConnectingSession::connect(StartMethod::Resume(
                 netplay_server_configuration.clone(),
-                session_state.last_confirmed_game_state2.clone(),
+                Box::new(session_state.newer_confirmed_state.clone()),
             )),
+            attempt1_failed: false,
+            attempt2_failed: false,
         }
     }
 }
@@ -309,26 +294,24 @@ impl FailedNetplaySession {
     }
 }
 pub enum NetplaySession {
-    Disconnected(DisconnectedNetplaySession),
-    Connecting(ConnectingNetplaySession),
-    Connected(ConnectedNetplaySession),
+    Disconnected(Box<LocalNesState>),
+    Connecting(ConnectingSession),
+    Connected(Box<ConnectedNetplaySession>),
     Resuming(ResumingNetplaySession),
     Failed(FailedNetplaySession),
 }
 
 impl NetplaySession {
     pub(crate) fn new(local_play_nes_state: LocalNesState) -> Self {
-        Self::Disconnected(DisconnectedNetplaySession::new(local_play_nes_state))
+        Self::Disconnected(Box::new(local_play_nes_state))
     }
 
     pub(crate) fn start(start_method: StartMethod) -> NetplaySession {
-        let connecting_session = ConnectingSession::connect(start_method);
-
-        Self::Connecting(ConnectingNetplaySession::new(connecting_session))
+        Self::Connecting(ConnectingSession::connect(start_method))
     }
 
     fn connect(connection: NetplayConnection) -> Self {
-        Self::Connected(ConnectedNetplaySession::new(connection))
+        Self::Connected(Box::new(ConnectedNetplaySession::new(connection)))
     }
 
     pub fn resume(session_state: &mut ConnectedNetplaySession) -> NetplaySession {
@@ -341,23 +324,30 @@ impl NetplaySession {
     pub(crate) fn to_shared_state(&self) -> SharedNetplayState {
         match self {
             NetplaySession::Disconnected(..) => SharedNetplayState::Disconnected,
-            NetplaySession::Connecting(connecting_netplay_session) => {
-                SharedNetplayState::Connecting(
-                    connecting_netplay_session.connecting_session.state.clone(),
-                )
+            NetplaySession::Connecting(connecting_session) => {
+                SharedNetplayState::Connecting(connecting_session.state.clone())
             }
             NetplaySession::Connected(connected_netplay_session) => {
                 SharedNetplayState::Connected(connected_netplay_session.to_shared_state())
             }
             NetplaySession::Resuming(..) => SharedNetplayState::Resuming,
             NetplaySession::Failed(failed_session) => {
-                SharedNetplayState::Failed(failed_session.reason.to_string())
+                SharedNetplayState::Failed(failed_session.reason.clone())
             }
         }
     }
 }
 
 const POLLING_TIMEOUT: Duration = Duration::from_millis(1);
+
+/// Minimum emulation speed applied when this peer is ahead of the remote (80%).
+const NETPLAY_MIN_SPEED: f32 = 0.8;
+/// Input scale for the quadratic slowdown curve: controls how quickly the curve
+/// steepens as frames-ahead grows.
+/// See the interactive graph: https://www.desmos.com/calculator/zbntsowijd
+const NETPLAY_SPEED_CURVE_SCALE: f32 = 0.2;
+/// Strength coefficient for the quadratic term of the slowdown curve.
+const NETPLAY_SPEED_CURVE_COEFF: f32 = 0.1;
 impl NesStateHandler for NetplaySession {
     async fn advance(
         &mut self,
@@ -365,16 +355,11 @@ impl NesStateHandler for NetplaySession {
         buffers: Option<NESBuffers<'_>>,
     ) {
         match self {
-            NetplaySession::Disconnected(disconnected_session) => {
-                disconnected_session
-                    .local_nes_state
-                    .advance(joypad_state, buffers)
-                    .await;
+            NetplaySession::Disconnected(local_nes_state) => {
+                local_nes_state.advance(joypad_state, buffers).await;
             }
-            NetplaySession::Connecting(connecting_netplay_session) => {
-                let future_connection = &mut connecting_netplay_session
-                    .connecting_session
-                    .netplay_connection;
+            NetplaySession::Connecting(connecting_session) => {
+                let future_connection = &mut connecting_session.netplay_connection;
 
                 select! {
                     _ = tokio::time::sleep(POLLING_TIMEOUT) => {},
@@ -384,7 +369,7 @@ impl NesStateHandler for NetplaySession {
                                 *self = NetplaySession::connect(connection);
                             },
                             Err(e) => {
-                                *self = NetplaySession::fail(e, connecting_netplay_session.connecting_session.start_method.clone());
+                                *self = NetplaySession::fail(e, connecting_session.start_method.clone());
                             },
                         }
 
@@ -405,16 +390,51 @@ impl NesStateHandler for NetplaySession {
                     session_state.advance(joypad_state, buffers).await;
                 }
             }
-            NetplaySession::Resuming(resuming_netplay_session) => {
-                //TODO: Handle if both fails
-                tokio::select! {
-                    _ = tokio::time::sleep(POLLING_TIMEOUT) => {},
-                    Ok(c) = &mut resuming_netplay_session.attempt1.netplay_connection => {
-                        *self = NetplaySession::connect(c);
+            NetplaySession::Resuming(resuming) => {
+                enum ResumeOutcome {
+                    Connected(Box<NetplayConnection>),
+                    Attempt1Failed,
+                    Attempt2Failed,
+                    Timeout,
+                }
+                let outcome = tokio::select! {
+                    _ = tokio::time::sleep(POLLING_TIMEOUT) => ResumeOutcome::Timeout,
+                    result = &mut resuming.attempt1.netplay_connection, if !resuming.attempt1_failed => {
+                        match result {
+                            Ok(c) => ResumeOutcome::Connected(Box::new(c)),
+                            Err(_) => ResumeOutcome::Attempt1Failed,
+                        }
                     }
-                    Ok(c) = &mut resuming_netplay_session.attempt2.netplay_connection => {
-                        *self = NetplaySession::connect(c);
+                    result = &mut resuming.attempt2.netplay_connection, if !resuming.attempt2_failed => {
+                        match result {
+                            Ok(c) => ResumeOutcome::Connected(Box::new(c)),
+                            Err(_) => ResumeOutcome::Attempt2Failed,
+                        }
                     }
+                };
+                match outcome {
+                    ResumeOutcome::Connected(c) => *self = NetplaySession::connect(*c),
+                    ResumeOutcome::Attempt1Failed => {
+                        resuming.attempt1_failed = true;
+                        if resuming.attempt2_failed {
+                            let start_method = resuming.attempt1.start_method.clone();
+                            *self = NetplaySession::fail(
+                                anyhow::anyhow!("Failed to resume connection"),
+                                start_method,
+                            );
+                        }
+                    }
+                    ResumeOutcome::Attempt2Failed => {
+                        resuming.attempt2_failed = true;
+                        if resuming.attempt1_failed {
+                            let start_method = resuming.attempt1.start_method.clone();
+                            *self = NetplaySession::fail(
+                                anyhow::anyhow!("Failed to resume connection"),
+                                start_method,
+                            );
+                        }
+                    }
+                    ResumeOutcome::Timeout => {}
                 }
             }
             NetplaySession::Failed(..) => {
@@ -424,8 +444,8 @@ impl NesStateHandler for NetplaySession {
     }
 
     fn reset(&mut self, hard: bool) {
-        if let NetplaySession::Disconnected(disconnected_session) = self {
-            disconnected_session.local_nes_state.reset(hard);
+        if let NetplaySession::Disconnected(local_nes_state) = self {
+            local_nes_state.reset(hard);
         }
     }
 
@@ -437,15 +457,13 @@ impl NesStateHandler for NetplaySession {
                 //Noop when connecting, resuming or failed
             }
             NetplaySession::Connected(s) => s.current_game_state.nes_state.set_speed(speed),
-            NetplaySession::Disconnected(disconnected_session) => {
-                disconnected_session.local_nes_state.set_speed(speed)
-            }
+            NetplaySession::Disconnected(local_nes_state) => local_nes_state.set_speed(speed),
         }
     }
 
     fn save_sram(&self) -> Option<&[u8]> {
-        if let NetplaySession::Disconnected(disconnected_session) = self {
-            disconnected_session.local_nes_state.save_sram()
+        if let NetplaySession::Disconnected(local_nes_state) = self {
+            local_nes_state.save_sram()
         } else {
             None
         }
@@ -457,9 +475,7 @@ impl NesStateHandler for NetplaySession {
             | NetplaySession::Resuming(..)
             | NetplaySession::Failed(..) => 0,
             NetplaySession::Connected(s) => s.current_game_state.nes_state.frame(),
-            NetplaySession::Disconnected(disconnected_session) => {
-                disconnected_session.local_nes_state.frame()
-            }
+            NetplaySession::Disconnected(local_nes_state) => local_nes_state.frame(),
         }
     }
 }
@@ -474,23 +490,9 @@ impl Debug for ConnectedNetplaySession {
             )
             .field("last_handled_ggrs_frame", &self.last_handled_ggrs_frame)
             .field("current_game_state", &self.current_game_state)
-            .field(
-                "last_confirmed_game_state1",
-                &self.last_confirmed_game_state1,
-            )
-            .field(
-                "last_confirmed_game_state2",
-                &self.last_confirmed_game_state2,
-            )
+            .field("older_confirmed_state", &self.older_confirmed_state)
+            .field("newer_confirmed_state", &self.newer_confirmed_state)
             .field("start_time", &self.start_time)
-            .finish()
-    }
-}
-
-impl Debug for ConnectingNetplaySession {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ConnectingNetplaySession")
-            .field("connecting_session", &self.connecting_session)
             .finish()
     }
 }

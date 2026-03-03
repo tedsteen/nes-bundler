@@ -6,13 +6,9 @@ use self::{
     sdl3_impl::SDL3Gamepads,
     settings::InputSettings,
 };
-use crate::{
-    bundle::Bundle,
-    main_view::gui::GuiEvent,
-    settings::{MAX_PLAYERS, Settings},
-};
+use crate::{bundle::Bundle, main_view::gui::GuiEvent, settings::MAX_PLAYERS};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, fmt::Debug, ops::Deref};
+use std::{collections::HashSet, fmt::Debug, hash::Hash, ops::Deref};
 
 pub mod buttons;
 pub mod gamepad;
@@ -75,10 +71,7 @@ pub struct JoypadMapping<KeyType> {
     pub a: Option<KeyType>,
 }
 
-impl<KeyType> JoypadMapping<KeyType>
-where
-    KeyType: PartialEq + Debug,
-{
+impl<KeyType: Debug> JoypadMapping<KeyType> {
     pub fn lookup(&mut self, button: &JoypadButton) -> &mut Option<KeyType> {
         match button {
             JoypadButton::Up => &mut self.up,
@@ -93,9 +86,15 @@ where
             JoypadButton::A => &mut self.a,
         }
     }
+}
 
-    fn reverse_lookup(&self, key: &KeyType) -> HashSet<JoypadButton> {
-        [
+impl<KeyType: Eq + Hash + Debug> JoypadMapping<KeyType> {
+    /// Compute the joypad state from a set of currently-pressed keys.
+    ///
+    /// Iterates all 8 button mappings exactly once (O(8)), avoiding per-key
+    /// HashSet allocations that the previous reverse-lookup approach incurred.
+    fn calculate_state(&self, keys: &HashSet<KeyType>) -> JoypadState {
+        let bits = [
             (JoypadButton::Up, &self.up),
             (JoypadButton::Down, &self.down),
             (JoypadButton::Left, &self.left),
@@ -106,23 +105,14 @@ where
             (JoypadButton::A, &self.a),
         ]
         .into_iter()
-        .fold(HashSet::new(), |mut acc, (joypad_button, mapping)| {
-            if let Some(a_key) = mapping {
-                if key == a_key {
-                    acc.insert(joypad_button);
-                }
+        .fold(0u8, |acc, (button, mapping)| {
+            if mapping.as_ref().is_some_and(|k| keys.contains(k)) {
+                acc | button as u8
+            } else {
+                acc
             }
-            acc
-        })
-    }
-
-    fn calculate_state(&self, keys: &HashSet<KeyType>) -> JoypadState {
-        JoypadState(keys.iter().fold(0_u8, |mut acc, key| {
-            for button in self.reverse_lookup(key) {
-                acc |= button as u8;
-            }
-            acc
-        }))
+        });
+        JoypadState(bits)
     }
 }
 
@@ -169,21 +159,19 @@ pub struct MapRequest {
 pub struct Inputs {
     keyboards: Keyboards,
     gamepads: SDL3Gamepads,
-    pub joypads: [JoypadState; MAX_PLAYERS],
+    joypads: [JoypadState; MAX_PLAYERS],
 }
 
 impl Inputs {
     pub fn new(gamepads: SDL3Gamepads) -> Self {
-        let keyboards = Keyboards::new();
-
         Self {
-            keyboards,
+            keyboards: Keyboards::default(),
             gamepads,
             joypads: [JoypadState(0), JoypadState(0)],
         }
     }
 
-    pub fn advance(&mut self, event: &GuiEvent) {
+    pub fn advance(&mut self, event: &GuiEvent, input_settings: &mut InputSettings) {
         match event {
             GuiEvent::Keyboard(key_event) => {
                 self.keyboards.advance(key_event);
@@ -192,34 +180,33 @@ impl Inputs {
                 self.gamepads.advance(gamepad_event);
             }
         }
-        let input_settings = &mut Settings::current_mut().input;
         input_settings.reset_selected_disconnected_inputs(self);
 
-        let pad1 =
-            self.get_joypad_for_input_configuration(input_settings.get_selected_configuration(0));
-        let pad2 =
-            self.get_joypad_for_input_configuration(input_settings.get_selected_configuration(1));
+        for player in 0..MAX_PLAYERS {
+            // Compute with &self first, then assign — avoids a simultaneous &self / &mut self conflict.
+            let state =
+                self.joypad_for_input_configuration(input_settings.selected_configuration(player));
+            self.joypads[player] = state;
+        }
+    }
 
-        self.joypads[0] = pad1;
-        self.joypads[1] = pad2;
+    pub fn joypads(&self) -> [JoypadState; MAX_PLAYERS] {
+        self.joypads
     }
 
     pub fn get_joypad(&self, player: usize) -> JoypadState {
         self.joypads[player]
     }
 
-    pub fn get_default_conf(&self, player: usize) -> &InputConfiguration {
+    pub fn default_configuration(&self, player: usize) -> &InputConfiguration {
         Bundle::current()
             .config
             .default_settings
             .input
-            .get_selected_configuration(player)
+            .selected_configuration(player)
     }
 
-    fn get_joypad_for_input_configuration(
-        &mut self,
-        input_conf: &InputConfiguration,
-    ) -> JoypadState {
+    fn joypad_for_input_configuration(&self, input_conf: &InputConfiguration) -> JoypadState {
         match &input_conf.kind {
             InputConfigurationKind::Keyboard(mapping) => self.keyboards.get_joypad(mapping),
             InputConfigurationKind::Gamepad(mapping) => {
@@ -245,32 +232,28 @@ impl Inputs {
         input_settings: &mut InputSettings,
     ) {
         let mut remapped = false;
-        if let Some(map_request) = mapping_request {
-            if let Some(input_configuration) = &mut input_settings
-                .configurations
-                .get_mut(&map_request.input_id.clone())
-            {
-                let button = &map_request.button;
-                let input_configuration_id = input_configuration.id.clone();
-                match &mut input_configuration.kind {
-                    InputConfigurationKind::Keyboard(mapping) => {
-                        if let Some(code) = self.keyboards.pressed_keys.iter().next() {
-                            let _ = mapping.lookup(button).insert(*code);
-                            remapped = true;
-                        }
+        if let Some(map_request) = mapping_request
+            && let Some(input_configuration) =
+                input_settings.configurations.get_mut(&map_request.input_id)
+        {
+            let button = &map_request.button;
+            let input_configuration_id = input_configuration.id.clone();
+            match &mut input_configuration.kind {
+                InputConfigurationKind::Keyboard(mapping) => {
+                    if let Some(code) = self.keyboards.pressed_keys.iter().next() {
+                        let _ = mapping.lookup(button).insert(*code);
+                        remapped = true;
                     }
-                    InputConfigurationKind::Gamepad(mapping) => {
-                        let gamepads = &self.gamepads;
-                        if let Some(state) =
-                            gamepads.get_gamepad_by_input_id(&input_configuration_id)
-                        {
-                            if let Some(new_button) = state.get_pressed_buttons().iter().next() {
-                                //If there's any button pressed, use the first found... unless it's the reserved "Guide" button used for bringing up the main menu
-                                if !matches!(new_button, GamepadButton::Guide) {
-                                    let _ = mapping.lookup(button).insert(*new_button);
-                                    remapped = true;
-                                }
-                            }
+                }
+                InputConfigurationKind::Gamepad(mapping) => {
+                    let gamepads = &self.gamepads;
+                    if let Some(state) = gamepads.get_gamepad_by_input_id(&input_configuration_id)
+                        && let Some(new_button) = state.get_pressed_buttons().iter().next()
+                    {
+                        //If there's any button pressed, use the first found... unless it's the reserved "Guide" button used for bringing up the main menu
+                        if !matches!(new_button, GamepadButton::Guide) {
+                            let _ = mapping.lookup(button).insert(*new_button);
+                            remapped = true;
                         }
                     }
                 }

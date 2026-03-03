@@ -1,6 +1,9 @@
 #[cfg(feature = "debug")]
 use crate::emulation::SharedEmulator;
-use crate::{emulation::SharedState, main_view::gui::GuiComponent};
+use crate::{
+    emulation::SharedState,
+    main_view::gui::{GuiComponent, MainMenuState},
+};
 
 #[cfg(feature = "debug")]
 struct DebugGui {
@@ -11,7 +14,7 @@ struct DebugGui {
 
 pub struct EmulatorGui {
     #[cfg(feature = "netplay")]
-    pub netplay_gui: crate::netplay::gui::NetplayGui,
+    netplay_gui: crate::netplay::gui::NetplayGui,
     #[cfg(feature = "debug")]
     debug_gui: DebugGui,
 }
@@ -74,27 +77,30 @@ impl DebugGui {
 
 impl GuiComponent for EmulatorGui {
     #[allow(unused_variables)]
-    fn ui(&mut self, ui: &mut egui::Ui) {
+    fn ui(&mut self, ui: &mut egui::Ui) -> Option<MainMenuState> {
         #[cfg(feature = "debug")]
         self.debug_gui.ui(ui);
 
         #[cfg(feature = "netplay")]
-        self.netplay_gui.ui(ui);
+        return self.netplay_gui.ui(ui);
+
+        #[cfg(not(feature = "netplay"))]
+        None
     }
 
     #[cfg(feature = "netplay")]
-    fn messages(&self) -> Option<Vec<String>> {
-        self.netplay_gui.messages()
+    fn messages(&self, menu_state: &MainMenuState) -> Option<Vec<String>> {
+        self.netplay_gui.messages(menu_state)
     }
 
     fn name(&self) -> Option<&str> {
-        if cfg!(feature = "netplay") {
-            #[cfg(feature = "netplay")]
-            return self.netplay_gui.name();
-        } else if cfg!(feature = "debug") {
-            return Some("Debug");
-        }
+        #[cfg(feature = "netplay")]
+        return self.netplay_gui.name();
 
+        #[cfg(all(feature = "debug", not(feature = "netplay")))]
+        return Some("Debug");
+
+        #[cfg(not(any(feature = "netplay", feature = "debug")))]
         None
     }
 }

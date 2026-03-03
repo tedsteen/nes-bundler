@@ -6,7 +6,7 @@ use serde::Deserialize;
 use crate::{
     bundle::Bundle,
     gui::{MenuButton, esc_pressed},
-    main_view::gui::{MainGui, MainMenuState},
+    main_view::gui::MainMenuState,
     netplay::{
         MAX_ROOM_NAME_LEN, NetplayCommand, NetplayCommandBus, SharedNetplay,
         SharedNetplayConnectedState, SharedNetplayState,
@@ -42,17 +42,23 @@ impl Default for NetplayVoca {
     }
 }
 
+enum DisconnectedState {
+    Main,
+    JoiningWithCode {
+        room_name: String,
+        focus_requested: bool,
+    },
+}
+
 pub struct NetplayGui {
-    room_name: Option<String>,
-    last_screen: Option<&'static str>,
+    disconnected_state: DisconnectedState,
     shared_netplay: SharedNetplay,
 }
 
 impl NetplayGui {
     pub fn new(shared_netplay: SharedNetplay) -> Self {
         Self {
-            room_name: None,
-            last_screen: None,
+            disconnected_state: DisconnectedState::Main,
             shared_netplay,
         }
     }
@@ -70,18 +76,19 @@ fn ui_button(text: &str) -> Button<'_> {
 }
 
 impl NetplayGui {
-    pub fn ui(&mut self, ui: &mut Ui) {
-        let netplay_tx = &self.shared_netplay.command_tx.clone();
+    pub fn ui(&mut self, ui: &mut Ui) -> Option<MainMenuState> {
+        let netplay_tx = self.shared_netplay.command_tx.clone();
+        let receiver = self.shared_netplay.receiver.clone();
 
-        match &*self.shared_netplay.receiver.clone().borrow() {
+        match &*receiver.borrow() {
             SharedNetplayState::Disconnected => {
-                self.ui_disconnected(ui);
+                return self.ui_disconnected(ui);
             }
             SharedNetplayState::Connecting(netplay_connecting) => {
                 self.ui_connecting(ui, &netplay_connecting.borrow());
             }
             SharedNetplayState::Connected(netplay_connected) => {
-                self.ui_connected(ui, &netplay_connected, &netplay_tx.clone());
+                let nav = self.ui_connected(ui, netplay_connected, &netplay_tx);
                 #[cfg(feature = "debug")]
                 {
                     ui.vertical_centered(|ui| {
@@ -91,13 +98,12 @@ impl NetplayGui {
                             Self::stats_ui(ui, &stats[1], 1);
                         });
                         if ui.button("Fake connection lost").clicked() {
-                            use crate::netplay::NetplayCommand;
-
                             let _ = netplay_tx.try_send(NetplayCommand::RetryConnect);
                         }
                     });
                     ui.end_row();
                 }
+                return nav;
             }
             SharedNetplayState::Resuming => {
                 ui.vertical_centered(|ui| {
@@ -115,10 +121,11 @@ impl NetplayGui {
                 ui.end_row();
 
                 if esc_pressed(ui.ctx()) {
-                    MainGui::set_main_menu_state(MainMenuState::Main);
+                    return Some(MainMenuState::Main);
                 }
             }
             SharedNetplayState::Failed(reason) => {
+                let esc_was_pressed = esc_pressed(ui.ctx());
                 ui.vertical_centered(|ui| {
                     Label::new(MenuButton::ui_text(
                         "CONNECTION FAILED",
@@ -142,204 +149,221 @@ impl NetplayGui {
                 }
                 ui.end_row();
                 ui.vertical_centered(|ui| {
-                    if ui_button("Cancel").ui(ui).clicked() || esc_pressed(ui.ctx()) {
+                    if ui_button("Cancel").ui(ui).clicked() || esc_was_pressed {
                         let _ = netplay_tx.try_send(NetplayCommand::CancelConnect);
                     }
                 });
                 ui.end_row();
-                if esc_pressed(ui.ctx()) {
-                    MainGui::set_main_menu_state(MainMenuState::Main);
+                if esc_was_pressed {
+                    return Some(MainMenuState::Main);
                 }
             }
         };
+        None
     }
 
     fn needs_unlocking(start_time: Instant, unlock_url: &Option<String>) -> Option<String> {
-        if let Some(unlock_url) = unlock_url {
-            if Instant::now()
-                .duration_since(start_time)
-                .gt(&Duration::from_secs(5))
-            {
-                return Some(unlock_url.clone());
-            }
-        }
-        None
+        unlock_url.as_ref().and_then(|unlock_url| {
+            (Instant::now().duration_since(start_time) > Duration::from_secs(5))
+                .then(|| unlock_url.clone())
+        })
     }
-    pub fn messages(&self) -> Option<Vec<String>> {
-        if matches!(MainGui::main_menu_state(), MainMenuState::Netplay) {
+
+    pub fn messages(&self, menu_state: &MainMenuState) -> Option<Vec<String>> {
+        if matches!(menu_state, MainMenuState::Netplay) {
             // No need to show messages when the netplay menu is already showing status
             return None;
         }
 
-        Some(
-            match &*self.shared_netplay.receiver.borrow() {
-                // Connecting is a modal state, you can't see any messages when in the netplay UI anyway
-                SharedNetplayState::Connecting(_) => None,
-                SharedNetplayState::Resuming => Some("Trying to reconnect...".to_string()),
-                _ => None,
-            }
-            .iter()
-            .map(|msg| format!("{} - {msg}", self.name().expect("a name")))
-            .collect(),
-        )
+        match &*self.shared_netplay.receiver.borrow() {
+            SharedNetplayState::Resuming => Some(vec![format!(
+                "{} - Trying to reconnect...",
+                self.name().expect("a name")
+            )]),
+            _ => None,
+        }
     }
 
-    fn ui_disconnected(&mut self, ui: &mut Ui) {
-        if let Some(room_name) = &mut self.room_name {
-            enum Action {
-                Join(String),
-            }
+    fn ui_disconnected(&mut self, ui: &mut Ui) -> Option<MainMenuState> {
+        enum Transition {
+            Stay,
+            EnterJoinCode,
+            ReturnToMain,
+            JoinGame(String),
+        }
 
-            let mut action = None;
+        // Clone the sender upfront so closures inside the match arms don't
+        // need to borrow through `self` while `self.disconnected_state` is matched on.
+        let command_tx = self.shared_netplay.command_tx.clone();
 
-            ui.vertical_centered(|ui| {
-                Label::new(MenuButton::ui_text(
-                    Bundle::current()
-                        .config
-                        .vocabulary
-                        .netplay
-                        .join_private_game
-                        .clone(),
-                    MenuButton::ACTIVE_COLOR,
-                ))
-                .selectable(false)
-                .ui(ui);
-            });
-            ui.end_row();
+        let (transition, nav) = match &mut self.disconnected_state {
+            DisconnectedState::JoiningWithCode {
+                room_name,
+                focus_requested,
+            } => {
+                let mut join_action: Option<String> = None;
 
-            ui.vertical_centered(|ui| {
-                Label::new(ui_text_small("ENTER CODE", MenuButton::ACTIVE_COLOR))
+                ui.vertical_centered(|ui| {
+                    Label::new(MenuButton::ui_text(
+                        Bundle::current()
+                            .config
+                            .vocabulary
+                            .netplay
+                            .join_private_game
+                            .clone(),
+                        MenuButton::ACTIVE_COLOR,
+                    ))
                     .selectable(false)
                     .ui(ui);
-            });
-            ui.end_row();
+                });
+                ui.end_row();
 
-            let enter_pressed_in_room_input = ui
-                .vertical_centered(|ui| {
-                    let re = ui.add(
-                        TextEdit::singleline(room_name)
-                            .horizontal_align(Align::Center)
-                            .font(FontId::monospace(30.0))
-                            .desired_width(30.0 * 3.0)
-                            .vertical_align(Align::Center),
-                    );
-                    ui.add_space(10.0);
+                ui.vertical_centered(|ui| {
+                    Label::new(ui_text_small("ENTER CODE", MenuButton::ACTIVE_COLOR))
+                        .selectable(false)
+                        .ui(ui);
+                });
+                ui.end_row();
 
-                    if ui
-                        .add_enabled(
-                            !room_name.is_empty(),
-                            Button::new(RichText::new("Join").font(FontId::proportional(30.0))),
-                        )
-                        .clicked()
-                    {
-                        action = Some(Action::Join(room_name.clone()));
-                    }
-                    if !self.last_screen.eq(&Some("JOIN")) {
-                        re.request_focus();
-                    }
-                    if re.lost_focus() && re.ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        if room_name.is_empty() {
-                            re.request_focus();
-                            false
-                        } else {
-                            true
+                let enter_pressed_in_room_input = ui
+                    .vertical_centered(|ui| {
+                        let re = ui.add(
+                            TextEdit::singleline(room_name)
+                                .horizontal_align(Align::Center)
+                                .font(FontId::monospace(30.0))
+                                .desired_width(30.0 * 3.0)
+                                .vertical_align(Align::Center),
+                        );
+                        ui.add_space(10.0);
+
+                        if ui
+                            .add_enabled(
+                                !room_name.is_empty(),
+                                Button::new(RichText::new("Join").font(FontId::proportional(30.0))),
+                            )
+                            .clicked()
+                        {
+                            join_action = Some(room_name.clone());
                         }
-                    } else {
-                        false
-                    }
-                })
-                .inner;
-            ui.end_row();
+                        if !*focus_requested {
+                            re.request_focus();
+                            *focus_requested = true;
+                        }
+                        if re.lost_focus() && re.ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                            if room_name.is_empty() {
+                                re.request_focus();
+                                false
+                            } else {
+                                true
+                            }
+                        } else {
+                            false
+                        }
+                    })
+                    .inner;
+                ui.end_row();
 
-            if room_name.len() > 4 {
-                *room_name = room_name[..MAX_ROOM_NAME_LEN.into()].to_string();
-            }
-            *room_name = room_name.to_uppercase();
+                let max_room_name_len = usize::from(MAX_ROOM_NAME_LEN);
+                *room_name = room_name
+                    .chars()
+                    .take(max_room_name_len)
+                    .collect::<String>()
+                    .to_uppercase();
 
-            if enter_pressed_in_room_input {
-                action = Some(Action::Join(room_name.clone()));
-            }
-
-            ui.end_row();
-            ui.vertical_centered(|ui| {
-                if ui_button("Cancel").ui(ui).clicked() || esc_pressed(ui.ctx()) {
-                    self.room_name = None;
+                if enter_pressed_in_room_input {
+                    join_action = Some(room_name.clone());
                 }
-            });
-            self.last_screen = Some("JOIN");
 
-            if let Some(action) = action {
-                self.room_name = None;
-                match action {
-                    Action::Join(room_name) => {
-                        let _ = self
-                            .shared_netplay
-                            .command_tx
-                            .try_send(NetplayCommand::JoinGame(room_name));
-                    }
-                }
-            }
-        } else {
-            let netplay_voca = &Bundle::current().config.vocabulary.netplay;
-
-            if !netplay_voca.find_public_game.is_empty() {
+                ui.end_row();
+                let mut transition = Transition::Stay;
                 ui.vertical_centered(|ui| {
-                    if MenuButton::new(netplay_voca.find_public_game.clone())
-                        .ui(ui)
-                        .clicked()
-                    {
-                        let _ = self
-                            .shared_netplay
-                            .command_tx
-                            .try_send(NetplayCommand::FindGame);
+                    if ui_button("Cancel").ui(ui).clicked() || esc_pressed(ui.ctx()) {
+                        transition = Transition::ReturnToMain;
                     }
                 });
-                ui.end_row();
-            }
 
-            if !netplay_voca.host_private_game.is_empty() {
-                ui.vertical_centered(|ui| {
-                    if MenuButton::new(netplay_voca.host_private_game.clone())
-                        .ui(ui)
-                        .clicked()
-                    {
-                        let _ = self
-                            .shared_netplay
-                            .command_tx
-                            .try_send(NetplayCommand::HostGame);
-                    }
-                });
-                ui.end_row();
-            }
-
-            if !netplay_voca.join_private_game.is_empty() {
-                ui.vertical_centered(|ui| {
-                    if MenuButton::new(netplay_voca.join_private_game.clone())
-                        .ui(ui)
-                        .clicked()
-                    {
-                        self.room_name = Some(String::new())
-                    }
-                });
-                ui.end_row();
-            }
-            ui.vertical_centered(|ui| {
-                if ui_button("Close").ui(ui).clicked() || esc_pressed(ui.ctx()) {
-                    self.room_name = None;
-                    MainGui::set_main_menu_state(MainMenuState::Main);
+                if let Some(name) = join_action {
+                    transition = Transition::JoinGame(name);
                 }
-            });
+                (transition, None)
+            }
+            DisconnectedState::Main => {
+                let netplay_voca = &Bundle::current().config.vocabulary.netplay;
+                let mut transition = Transition::Stay;
+                let mut nav = None;
 
-            self.last_screen = Some("DISCONNECTED");
+                if !netplay_voca.find_public_game.is_empty() {
+                    ui.vertical_centered(|ui| {
+                        if MenuButton::new(netplay_voca.find_public_game.as_str())
+                            .ui(ui)
+                            .clicked()
+                        {
+                            let _ = command_tx.try_send(NetplayCommand::FindGame);
+                        }
+                    });
+                    ui.end_row();
+                }
+
+                if !netplay_voca.host_private_game.is_empty() {
+                    ui.vertical_centered(|ui| {
+                        if MenuButton::new(netplay_voca.host_private_game.as_str())
+                            .ui(ui)
+                            .clicked()
+                        {
+                            let _ = command_tx.try_send(NetplayCommand::HostGame);
+                        }
+                    });
+                    ui.end_row();
+                }
+
+                if !netplay_voca.join_private_game.is_empty() {
+                    ui.vertical_centered(|ui| {
+                        if MenuButton::new(netplay_voca.join_private_game.as_str())
+                            .ui(ui)
+                            .clicked()
+                        {
+                            transition = Transition::EnterJoinCode;
+                        }
+                    });
+                    ui.end_row();
+                }
+
+                ui.vertical_centered(|ui| {
+                    if ui_button("Close").ui(ui).clicked() || esc_pressed(ui.ctx()) {
+                        nav = Some(MainMenuState::Main);
+                    }
+                });
+
+                (transition, nav)
+            }
+        };
+
+        match transition {
+            Transition::Stay => {}
+            Transition::EnterJoinCode => {
+                self.disconnected_state = DisconnectedState::JoiningWithCode {
+                    room_name: String::new(),
+                    focus_requested: false,
+                };
+            }
+            Transition::ReturnToMain => {
+                self.disconnected_state = DisconnectedState::Main;
+            }
+            Transition::JoinGame(name) => {
+                self.disconnected_state = DisconnectedState::Main;
+                let _ = self
+                    .shared_netplay
+                    .command_tx
+                    .try_send(NetplayCommand::JoinGame(name));
+            }
         }
+
+        nav
     }
 
     fn ui_connecting(&mut self, ui: &mut Ui, netplay_connecting: &ConnectingState) {
         let netplay_voca = &Bundle::current().config.vocabulary.netplay;
         match netplay_connecting {
-            ConnectingState::Idle => {
-                //Will never be this state. TODO: Remove it
-            }
             ConnectingState::LoadingNetplayServerConfiguration => {
                 ui.vertical_centered(|ui| {
                     Label::new(MenuButton::ui_text("CONNECTING", MenuButton::ACTIVE_COLOR))
@@ -348,8 +372,8 @@ impl NetplayGui {
                 });
             }
             ConnectingState::PeeringUp(start_method) => {
-                match start_method {
-                    StartMethod::Start(.., room_name, join_or_host) => {
+                match start_method.as_ref() {
+                    StartMethod::Start(room_name, join_or_host) => {
                         use super::connection::JoinOrHost::*;
                         match join_or_host {
                             Join => {
@@ -450,12 +474,13 @@ impl NetplayGui {
         ui: &mut Ui,
         netplay_connected: &SharedNetplayConnectedState,
         netplay_tx: &NetplayCommandBus,
-    ) {
-        match &netplay_connected {
+    ) -> Option<MainMenuState> {
+        let mut nav = None;
+        match netplay_connected {
             SharedNetplayConnectedState::Running(start_time) => {
                 // Hide menu if we just managed to connect
                 if Instant::now().duration_since(*start_time).as_millis() < 200 {
-                    MainGui::set_main_menu_state(MainMenuState::Closed);
+                    nav = Some(MainMenuState::Closed);
                 }
 
                 ui.vertical_centered(|ui| {
@@ -505,8 +530,9 @@ impl NetplayGui {
         ui.end_row();
 
         if esc_pressed(ui.ctx()) {
-            MainGui::set_main_menu_state(MainMenuState::Main);
+            nav = Some(MainMenuState::Main);
         }
+        nav
     }
 
     pub fn name(&self) -> Option<&str> {

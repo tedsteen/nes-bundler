@@ -9,8 +9,6 @@ use gui::EguiRenderer;
 use wgpu::{PresentMode, TextureViewDescriptor};
 use winit::window::Window;
 
-use crate::bundle::Bundle;
-
 pub mod texture;
 
 pub struct Renderer {
@@ -25,7 +23,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub async fn new(window: Arc<Window>) -> Result<Self> {
+    pub async fn new(window: Arc<Window>, enable_vsync: bool) -> Result<Self> {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
@@ -65,7 +63,7 @@ impl Renderer {
             .find(|f| !f.is_srgb())
             .unwrap_or(surface_caps.formats[0]);
 
-        let present_mode = if Bundle::current().config.enable_vsync {
+        let present_mode = if enable_vsync {
             PresentMode::AutoVsync
         } else {
             [
