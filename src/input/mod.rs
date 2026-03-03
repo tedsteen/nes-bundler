@@ -8,7 +8,7 @@ use self::{
 };
 use crate::{bundle::Bundle, main_view::gui::GuiEvent, settings::MAX_PLAYERS};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, fmt::Debug, ops::Deref};
+use std::{collections::HashSet, fmt::Debug, hash::Hash, ops::Deref};
 
 pub mod buttons;
 pub mod gamepad;
@@ -71,10 +71,7 @@ pub struct JoypadMapping<KeyType> {
     pub a: Option<KeyType>,
 }
 
-impl<KeyType> JoypadMapping<KeyType>
-where
-    KeyType: PartialEq + Debug,
-{
+impl<KeyType: Debug> JoypadMapping<KeyType> {
     pub fn lookup(&mut self, button: &JoypadButton) -> &mut Option<KeyType> {
         match button {
             JoypadButton::Up => &mut self.up,
@@ -89,9 +86,15 @@ where
             JoypadButton::A => &mut self.a,
         }
     }
+}
 
-    fn reverse_lookup(&self, key: &KeyType) -> HashSet<JoypadButton> {
-        [
+impl<KeyType: Eq + Hash + Debug> JoypadMapping<KeyType> {
+    /// Compute the joypad state from a set of currently-pressed keys.
+    ///
+    /// Iterates all 8 button mappings exactly once (O(8)), avoiding per-key
+    /// HashSet allocations that the previous reverse-lookup approach incurred.
+    fn calculate_state(&self, keys: &HashSet<KeyType>) -> JoypadState {
+        let bits = [
             (JoypadButton::Up, &self.up),
             (JoypadButton::Down, &self.down),
             (JoypadButton::Left, &self.left),
@@ -102,23 +105,14 @@ where
             (JoypadButton::A, &self.a),
         ]
         .into_iter()
-        .fold(HashSet::new(), |mut acc, (joypad_button, mapping)| {
-            if let Some(a_key) = mapping
-                && key == a_key
-            {
-                acc.insert(joypad_button);
+        .fold(0u8, |acc, (button, mapping)| {
+            if mapping.as_ref().is_some_and(|k| keys.contains(k)) {
+                acc | button as u8
+            } else {
+                acc
             }
-            acc
-        })
-    }
-
-    fn calculate_state(&self, keys: &HashSet<KeyType>) -> JoypadState {
-        JoypadState(keys.iter().fold(0_u8, |mut acc, key| {
-            for button in self.reverse_lookup(key) {
-                acc |= button as u8;
-            }
-            acc
-        }))
+        });
+        JoypadState(bits)
     }
 }
 

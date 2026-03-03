@@ -222,15 +222,14 @@ impl ConnectedNetplaySession {
                     }
                 }
 
-                if p2p_session.frames_ahead() > 0 {
+                let frames_ahead = p2p_session.frames_ahead();
+                if frames_ahead > 0 {
                     //https://www.desmos.com/calculator/zbntsowijd
-                    let speed = 0.8_f32
-                        .max(1.0 - 0.1 * (0.2 * p2p_session.frames_ahead() as f32).powf(2.0));
-                    log::trace!(
-                        "Frames ahead: {:?}, slowing down emulation ({speed}x)",
-                        p2p_session.frames_ahead()
+                    let speed = NETPLAY_MIN_SPEED.max(
+                        1.0 - NETPLAY_SPEED_CURVE_COEFF
+                            * (NETPLAY_SPEED_CURVE_SCALE * frames_ahead as f32).powi(2),
                     );
-
+                    log::trace!("Frames ahead: {frames_ahead}, slowing down emulation ({speed}x)");
                     self.current_game_state.nes_state.set_speed(speed);
                 } else {
                     self.current_game_state.nes_state.set_speed(1.0)
@@ -255,7 +254,7 @@ pub struct DisconnectedNetplaySession {
     local_nes_state: LocalNesState,
 }
 impl DisconnectedNetplaySession {
-    fn new(local_play_nes_state: crate::emulation::tetanes::TetanesNesState) -> Self {
+    fn new(local_play_nes_state: LocalNesState) -> Self {
         Self {
             local_nes_state: local_play_nes_state,
         }
@@ -367,6 +366,15 @@ impl NetplaySession {
 }
 
 const POLLING_TIMEOUT: Duration = Duration::from_millis(1);
+
+/// Minimum emulation speed applied when this peer is ahead of the remote (80%).
+const NETPLAY_MIN_SPEED: f32 = 0.8;
+/// Input scale for the quadratic slowdown curve: controls how quickly the curve
+/// steepens as frames-ahead grows.
+/// See the interactive graph: https://www.desmos.com/calculator/zbntsowijd
+const NETPLAY_SPEED_CURVE_SCALE: f32 = 0.2;
+/// Strength coefficient for the quadratic term of the slowdown curve.
+const NETPLAY_SPEED_CURVE_COEFF: f32 = 0.1;
 impl NesStateHandler for NetplaySession {
     async fn advance(
         &mut self,

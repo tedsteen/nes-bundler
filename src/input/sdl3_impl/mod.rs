@@ -75,19 +75,7 @@ impl Gamepads for SDL3Gamepads {
     fn advance(&mut self, gamepad_event: &GamepadEvent) {
         match gamepad_event {
             GamepadEvent::ControllerAdded { which, .. } => {
-                if let Some(conf) = self.setup_gamepad_config(which.clone()) {
-                    let input_settings = &mut Settings::current_mut().input;
-                    // Automatically select a gamepad if it's connected and keyboard is currently selected.
-                    if let InputConfigurationKind::Keyboard(_) =
-                        input_settings.selected_configuration(0).kind
-                    {
-                        input_settings.selected[0] = conf.id;
-                    } else if let InputConfigurationKind::Keyboard(_) =
-                        input_settings.selected_configuration(1).kind
-                    {
-                        input_settings.selected[1] = conf.id;
-                    }
-                } else {
+                if !self.setup_gamepad_config(which.clone()) {
                     log::error!("Could not setup controller {:?}", which);
                 }
             }
@@ -124,8 +112,15 @@ impl SDL3Gamepads {
         self.all.get_mut(&Self::to_gamepad_id(&id))
     }
 
-    fn setup_gamepad_config(&mut self, input_id: InputId) -> Option<InputConfiguration> {
-        if let Some(found_controller) = self
+    /// Opens a newly connected controller, registers it, creates or retrieves its input
+    /// configuration, and auto-selects it for any player currently using a keyboard.
+    ///
+    /// All settings mutations are done under a single lock acquisition to avoid
+    /// saving the settings file twice and to prevent a window between two separate writes.
+    ///
+    /// Returns `true` if the controller was successfully set up, `false` otherwise.
+    fn setup_gamepad_config(&mut self, input_id: InputId) -> bool {
+        let Some(found_controller) = self
             .game_controller_subsystem
             .gamepads()
             .expect("go get the gamepads")
@@ -143,26 +138,47 @@ impl SDL3Gamepads {
                     None
                 }
             })
-        {
-            let instance_id = found_controller.id().unwrap().to_input_id();
-            let gamepad_id = Self::to_gamepad_id(&instance_id);
-            self.all.insert(
-                gamepad_id.clone(),
-                Box::new(SDL3GamepadState::new(found_controller)),
-            );
-            let input_settings = &mut Settings::current_mut().input;
-            let conf = input_settings.get_or_create_config(
+        else {
+            return false;
+        };
+
+        let instance_id = found_controller.id().unwrap().to_input_id();
+        let gamepad_id = Self::to_gamepad_id(&instance_id);
+        self.all.insert(
+            gamepad_id.clone(),
+            Box::new(SDL3GamepadState::new(found_controller)),
+        );
+
+        // Acquire the settings lock once for both the config creation and auto-selection.
+        let mut settings = Settings::current_mut();
+        let input_settings = &mut settings.input;
+        let default_mapping = input_settings.default_gamepad_mapping;
+        let conf_id = input_settings
+            .get_or_create_config(
                 gamepad_id.clone(),
                 InputConfiguration {
                     name: format!("🎮 Gamepad {}", instance_id),
                     id: gamepad_id,
-                    kind: InputConfigurationKind::Gamepad(input_settings.default_gamepad_mapping),
+                    kind: InputConfigurationKind::Gamepad(default_mapping),
                 },
-            );
-            Some(conf.clone())
-        } else {
-            None
+            )
+            .id
+            .clone();
+
+        // Automatically select this gamepad for the first player still using a keyboard.
+        if matches!(
+            input_settings.selected_configuration(0).kind,
+            InputConfigurationKind::Keyboard(_)
+        ) {
+            input_settings.selected[0] = conf_id;
+        } else if matches!(
+            input_settings.selected_configuration(1).kind,
+            InputConfigurationKind::Keyboard(_)
+        ) {
+            input_settings.selected[1] = conf_id;
         }
+
+        true
     }
 }
 

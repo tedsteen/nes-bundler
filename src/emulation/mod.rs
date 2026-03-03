@@ -164,7 +164,7 @@ impl EmulatorRuntime {
                     shared_emulator
                         .state
                         .frame
-                        .store(frame, Emulator::FRAME_ORDERING);
+                        .store(frame, Emulator::FRAME_WRITE_ORDERING);
 
                     //TODO: Figure out why this is needed (probably to avoid busy loop..)
                     tokio::task::yield_now().await;
@@ -189,8 +189,13 @@ impl EmulatorRuntime {
 
 impl Emulator {
     const COMMAND_CHANNEL_CAPACITY: usize = 1;
-    const INPUT_ORDERING: std::sync::atomic::Ordering = std::sync::atomic::Ordering::Relaxed;
-    const FRAME_ORDERING: std::sync::atomic::Ordering = std::sync::atomic::Ordering::Relaxed;
+    /// Ordering used when the emulator thread *reads* the inputs written by the main thread.
+    /// Paired with `Release` stores in `GameRuntime::write_inputs` to form a proper
+    /// acquire-release pair, which is required for correctness on weak memory models (e.g. ARM).
+    pub(crate) const INPUT_READ_ORDERING: std::sync::atomic::Ordering =
+        std::sync::atomic::Ordering::Acquire;
+    /// Ordering used when the emulator thread *writes* the frame counter read by other threads.
+    const FRAME_WRITE_ORDERING: std::sync::atomic::Ordering = std::sync::atomic::Ordering::Release;
     const SRAM_SNAPSHOT_INTERVAL_FRAMES: u32 = 100;
 
     fn drain_pending_commands<N: NesStateHandler>(
@@ -212,8 +217,8 @@ impl Emulator {
 
     fn read_input_states(inputs: &[AtomicU8; MAX_PLAYERS]) -> [JoypadState; MAX_PLAYERS] {
         [
-            JoypadState(inputs[0].load(Self::INPUT_ORDERING)),
-            JoypadState(inputs[1].load(Self::INPUT_ORDERING)),
+            JoypadState(inputs[0].load(Self::INPUT_READ_ORDERING)),
+            JoypadState(inputs[1].load(Self::INPUT_READ_ORDERING)),
         ]
     }
 
