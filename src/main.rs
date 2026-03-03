@@ -15,7 +15,6 @@ use winit::application::ApplicationHandler;
 
 use crate::audio::AudioSystem;
 use crate::app_context::AppContext;
-use crate::emulation::SharedEmulator;
 use crate::emulation::gui::EmulatorGui;
 use crate::window::Fullscreen;
 use emulation::Emulator;
@@ -68,7 +67,6 @@ fn main() {
     if let Err(e) = run() {
         log::error!("nes-bundler failed to run :(\n{:?}", e)
     }
-    std::process::exit(0);
 }
 
 struct Application {
@@ -77,7 +75,7 @@ struct Application {
 
     last_mouse_touch: Instant,
     mouse_hide_timeout: Duration,
-    shared_emulator: SharedEmulator,
+    emulator: Emulator,
     sdl_event_pump: EventPump,
     main_gui: MainGui,
 }
@@ -109,7 +107,6 @@ impl Application {
             last_mouse_touch: Instant::now()
                 .checked_sub(mouse_hide_timeout)
                 .expect("there to be an instant `mouse_hide_timeout` seconds in the past"),
-            shared_emulator: emulator.shared_state.emulator.clone(),
             sdl_event_pump,
             main_gui: MainGui::new(
                 emulator.shared_state.emulator.command_tx.clone(),
@@ -119,6 +116,7 @@ impl Application {
                 app.config().supported_nes_regions.clone(),
                 settings,
             ),
+            emulator,
         })
     }
 }
@@ -135,7 +133,7 @@ impl ApplicationHandler for Application {
 
         self.main_view = Some(MainView::new(
             window,
-            self.shared_emulator.frame_buffer.clone(),
+            self.emulator.shared_state.emulator.frame_buffer.clone(),
             self.app.config().enable_vsync,
         ));
     }
@@ -181,12 +179,16 @@ impl ApplicationHandler for Application {
                 // Don't let the inputs control the game if the gui is showing
                 [JoypadState(0), JoypadState(0)]
             };
-            self.shared_emulator.inputs[0]
+            self.emulator.shared_state.emulator.inputs[0]
                 .store(*new_inputs[0], std::sync::atomic::Ordering::Relaxed);
-            self.shared_emulator.inputs[1]
+            self.emulator.shared_state.emulator.inputs[1]
                 .store(*new_inputs[1], std::sync::atomic::Ordering::Relaxed);
 
             main_view.handle_window_event(&window_event, &mut self.main_gui);
+            if self.main_gui.take_exit_requested() {
+                event_loop.exit();
+                return;
+            }
             main_view.window.set_cursor_visible(
                 !(main_view.window.is_fullscreen()
                     && !self.main_gui.visible()

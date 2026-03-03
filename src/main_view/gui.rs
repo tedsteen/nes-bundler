@@ -58,6 +58,7 @@ pub struct MainGui {
     emulator_gui: EmulatorGui,
     supported_nes_regions: Vec<NesRegion>,
     settings: &'static SettingsStore,
+    exit_requested: bool,
     menu_state: MainMenuState,
 }
 
@@ -86,8 +87,13 @@ impl MainGui {
             emulator_gui,
             supported_nes_regions,
             settings,
+            exit_requested: false,
             menu_state: MainMenuState::Closed,
         }
+    }
+
+    pub fn take_exit_requested(&mut self) -> bool {
+        std::mem::take(&mut self.exit_requested)
     }
 
     fn message_ui(ui: &mut Ui, text: impl Into<String>) {
@@ -219,7 +225,7 @@ impl MainGui {
                         }
 
                         if Self::menu_item_ui(ui, "QUIT GAME").clicked() {
-                            std::process::exit(0);
+                            self.exit_requested = true;
                         }
                     });
                 }

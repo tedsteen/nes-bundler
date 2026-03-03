@@ -41,6 +41,7 @@ static NTSC_PAL: &[u8] = include_bytes!("../../config/palette.pal");
 pub enum EmulatorCommand {
     Reset(bool),
     SetSpeed(f32),
+    Shutdown,
 }
 pub type EmulatorCommandBus = Sender<EmulatorCommand>;
 
@@ -91,9 +92,7 @@ impl SharedState {
 
 pub struct Emulator {
     pub shared_state: SharedState,
-
-    // We need to hold on to this to keep the thread alive
-    _th: std::thread::JoinHandle<()>,
+    th: Option<std::thread::JoinHandle<()>>,
 }
 
 pub const DEFAULT_SAMPLE_RATE: f32 = 44_100.0;
@@ -139,12 +138,19 @@ impl Emulator {
 
                 tokio::task::LocalSet::new().block_on(&rt, async move {
                     loop {
+                        let mut should_shutdown = false;
                         // drain pending emulator commands
                         while let Ok(cmd) = emulator_rx.try_recv() {
                             match cmd {
                                 EmulatorCommand::Reset(hard) => nes_state.reset(hard),
                                 EmulatorCommand::SetSpeed(speed) => nes_state.set_speed(speed),
+                                EmulatorCommand::Shutdown => {
+                                    should_shutdown = true;
+                                }
                             }
+                        }
+                        if should_shutdown {
+                            break;
                         }
 
                         let mut frame_result = frame_buffer.push_ref();
@@ -191,7 +197,25 @@ impl Emulator {
                 });
             }
         });
-        Self { shared_state, _th }
+        Self {
+            shared_state,
+            th: Some(_th),
+        }
+    }
+}
+
+impl Drop for Emulator {
+    fn drop(&mut self) {
+        let _ = self
+            .shared_state
+            .emulator
+            .command_tx
+            .blocking_send(EmulatorCommand::Shutdown);
+        if let Some(th) = self.th.take() {
+            if let Err(e) = th.join() {
+                log::warn!("Failed to join emulator thread: {e:?}");
+            }
+        }
     }
 }
 
