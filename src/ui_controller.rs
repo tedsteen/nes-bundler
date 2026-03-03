@@ -37,7 +37,8 @@ impl UiController {
     ) {
         if matches!(
             window_event,
-            winit::event::WindowEvent::MouseInput { .. } | winit::event::WindowEvent::CursorMoved { .. }
+            winit::event::WindowEvent::MouseInput { .. }
+                | winit::event::WindowEvent::CursorMoved { .. }
         ) {
             self.last_mouse_touch = Instant::now();
         }

@@ -64,7 +64,7 @@ impl InputsGui {
     ) {
         ui.label(format!("Player {}", player + 1));
         let selected_text = input_settings
-            .get_selected_configuration_mut(player)
+            .selected_configuration_mut(player)
             .name
             .to_string();
         egui::ComboBox::from_id_salt(format!("joypad-{}", player))
@@ -80,7 +80,7 @@ impl InputsGui {
                 }
             });
 
-        let input_configuration = input_settings.get_selected_configuration_mut(player);
+        let input_configuration = input_settings.selected_configuration_mut(player);
         Grid::new(format!("joypadmap_grid_{}", player))
             .num_columns(2)
             .striped(true)

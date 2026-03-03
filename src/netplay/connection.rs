@@ -22,7 +22,7 @@ use super::configuration::{
 #[derive(Debug)]
 pub enum ConnectingState {
     LoadingNetplayServerConfiguration,
-    PeeringUp(StartMethod),
+    PeeringUp(Box<StartMethod>),
 }
 
 /// Aborts the wrapped task when dropped.
@@ -50,7 +50,8 @@ pub struct ConnectingSession {
 impl ConnectingSession {
     pub fn connect(start_method: StartMethod) -> Self {
         log::debug!("Connecting: {start_method:?}");
-        let (state_sender, state) = channel(ConnectingState::PeeringUp(start_method.clone()));
+        let (state_sender, state) =
+            channel(ConnectingState::PeeringUp(Box::new(start_method.clone())));
         let start_method_cloned = start_method.clone();
         let netplay_connection = async move {
             let netplay_config = match &start_method_cloned {
@@ -110,7 +111,7 @@ impl ConnectingSession {
                 description: format!("Response was not successful: {:?}", res.text().await),
             })
         }
-        .and_then(|mut resp| {
+        .map(|mut resp| {
             log::debug!("Got TurnOn config response: {resp:?}");
 
             let netplay_server_configuration = match &mut resp {
@@ -120,7 +121,7 @@ impl ConnectingSession {
                 }
                 TurnOnResponse::Full(conf) => conf,
             };
-            Ok(netplay_server_configuration.clone())
+            netplay_server_configuration.clone()
         })
     }
 
@@ -130,7 +131,7 @@ impl ConnectingSession {
         netplay_server_configuration: StaticNetplayServerConfiguration,
     ) -> Result<NetplayConnection> {
         let matchbox_server = &netplay_server_configuration.matchbox.server;
-        let _ = state_sender.send(ConnectingState::PeeringUp(start_method.clone()));
+        let _ = state_sender.send(ConnectingState::PeeringUp(Box::new(start_method.clone())));
 
         let room_name = start_method.to_room_name();
 
@@ -202,7 +203,7 @@ impl ConnectingSession {
 
                 let initial_state = match &start_method {
                     StartMethod::Resume(_, resumed_state) => {
-                        let mut state = resumed_state.clone();
+                        let mut state = resumed_state.as_ref().clone();
                         //ggrs will start over from 0
                         state.ggrs_frame = 0;
 
@@ -270,7 +271,7 @@ pub enum JoinOrHost {
 #[derive(Clone, Debug)]
 pub enum StartMethod {
     Start(RoomName, JoinOrHost),
-    Resume(StaticNetplayServerConfiguration, NetplayNesState),
+    Resume(StaticNetplayServerConfiguration, Box<NetplayNesState>),
     MatchWithRandom,
 }
 

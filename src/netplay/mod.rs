@@ -187,18 +187,18 @@ impl NesStateHandler for Netplay {
         self.session.advance(joypad_state, buffers).await;
 
         #[cfg(feature = "debug")]
-        if let NetplaySession::Connected(connected_netplay_session) = &self.session {
-            if connected_netplay_session.current_game_state.ggrs_frame % 30 == 0 {
-                let sess = &connected_netplay_session.p2p_session;
-                puffin::profile_scope!("Netplay stats");
-                for i in 0..MAX_PLAYERS {
-                    if let Ok(stats) = sess.network_stats(i) {
-                        if !sess.local_player_handles().contains(&i) {
-                            self.stats.write().unwrap()[i].push_stats(stats);
-                        }
-                    }
+        if let NetplaySession::Connected(connected_netplay_session) = &self.session
+            && connected_netplay_session.current_game_state.ggrs_frame % 30 == 0
+        {
+            let sess = &connected_netplay_session.p2p_session;
+            puffin::profile_scope!("Netplay stats");
+            for i in 0..MAX_PLAYERS {
+                if let Ok(stats) = sess.network_stats(i)
+                    && !sess.local_player_handles().contains(&i)
+                {
+                    self.stats.write().unwrap()[i].push_stats(stats);
                 }
-            };
+            }
         }
 
         let _ = self

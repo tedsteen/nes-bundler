@@ -1,6 +1,6 @@
-use std::sync::OnceLock;
 use crate::bundle::{BuildConfiguration, Bundle};
 use crate::settings::SettingsStore;
+use std::sync::OnceLock;
 
 pub struct AppContext {
     bundle: &'static Bundle,

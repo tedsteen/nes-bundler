@@ -86,10 +86,9 @@ impl MainView {
             .egui
             .handle_input(&self.renderer.window, window_event)
             .consumed
+            && let Some(winit_gui_event) = &window_event.to_gui_event()
         {
-            if let Some(winit_gui_event) = &window_event.to_gui_event() {
-                self.handle_gui_event(winit_gui_event, main_gui);
-            }
+            self.handle_gui_event(winit_gui_event, main_gui);
         }
     }
 
@@ -106,25 +105,25 @@ impl MainView {
                 .window
                 .check_and_set_fullscreen(self.modifiers, *key_code),
             _ => {
-                if let GuiEvent::Gamepad(gamepad_event) = gui_event {
-                    if let Some(event) = to_egui_event(gamepad_event) {
-                        if main_gui.visible() {
-                            // If the gui is visible convert gamepad events to fake input events so we can control the ui with the gamepad
-                            self.renderer.egui.state.egui_input_mut().events.push(event)
-                        } else {
-                            // If the gui is not visible pass on only the guide button
-                            if matches!(
-                                gamepad_event,
-                                GamepadEvent::ButtonDown {
-                                    button: GamepadButton::Guide,
-                                    ..
-                                } | GamepadEvent::ButtonUp {
-                                    button: GamepadButton::Guide,
-                                    ..
-                                }
-                            ) {
-                                self.renderer.egui.state.egui_input_mut().events.push(event)
+                if let GuiEvent::Gamepad(gamepad_event) = gui_event
+                    && let Some(event) = to_egui_event(gamepad_event)
+                {
+                    if main_gui.visible() {
+                        // If the gui is visible convert gamepad events to fake input events so we can control the ui with the gamepad
+                        self.renderer.egui.state.egui_input_mut().events.push(event)
+                    } else {
+                        // If the gui is not visible pass on only the guide button
+                        if matches!(
+                            gamepad_event,
+                            GamepadEvent::ButtonDown {
+                                button: GamepadButton::Guide,
+                                ..
+                            } | GamepadEvent::ButtonUp {
+                                button: GamepadButton::Guide,
+                                ..
                             }
+                        ) {
+                            self.renderer.egui.state.egui_input_mut().events.push(event)
                         }
                     }
                 }

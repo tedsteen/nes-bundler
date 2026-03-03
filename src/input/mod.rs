@@ -6,11 +6,7 @@ use self::{
     sdl3_impl::SDL3Gamepads,
     settings::InputSettings,
 };
-use crate::{
-    bundle::Bundle,
-    main_view::gui::GuiEvent,
-    settings::MAX_PLAYERS,
-};
+use crate::{bundle::Bundle, main_view::gui::GuiEvent, settings::MAX_PLAYERS};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, fmt::Debug, ops::Deref};
 
@@ -107,10 +103,10 @@ where
         ]
         .into_iter()
         .fold(HashSet::new(), |mut acc, (joypad_button, mapping)| {
-            if let Some(a_key) = mapping {
-                if key == a_key {
-                    acc.insert(joypad_button);
-                }
+            if let Some(a_key) = mapping
+                && key == a_key
+            {
+                acc.insert(joypad_button);
             }
             acc
         })
@@ -194,31 +190,25 @@ impl Inputs {
         }
         input_settings.reset_selected_disconnected_inputs(self);
 
-        let pad1 =
-            self.get_joypad_for_input_configuration(input_settings.get_selected_configuration(0));
-        let pad2 =
-            self.get_joypad_for_input_configuration(input_settings.get_selected_configuration(1));
-
-        self.joypads[0] = pad1;
-        self.joypads[1] = pad2;
+        for player in 0..MAX_PLAYERS {
+            self.joypads[player] =
+                self.joypad_for_input_configuration(input_settings.selected_configuration(player));
+        }
     }
 
     pub fn get_joypad(&self, player: usize) -> JoypadState {
         self.joypads[player]
     }
 
-    pub fn get_default_conf(&self, player: usize) -> &InputConfiguration {
+    pub fn default_configuration(&self, player: usize) -> &InputConfiguration {
         Bundle::current()
             .config
             .default_settings
             .input
-            .get_selected_configuration(player)
+            .selected_configuration(player)
     }
 
-    fn get_joypad_for_input_configuration(
-        &mut self,
-        input_conf: &InputConfiguration,
-    ) -> JoypadState {
+    fn joypad_for_input_configuration(&mut self, input_conf: &InputConfiguration) -> JoypadState {
         match &input_conf.kind {
             InputConfigurationKind::Keyboard(mapping) => self.keyboards.get_joypad(mapping),
             InputConfigurationKind::Gamepad(mapping) => {
@@ -244,32 +234,28 @@ impl Inputs {
         input_settings: &mut InputSettings,
     ) {
         let mut remapped = false;
-        if let Some(map_request) = mapping_request {
-            if let Some(input_configuration) = &mut input_settings
-                .configurations
-                .get_mut(&map_request.input_id.clone())
-            {
-                let button = &map_request.button;
-                let input_configuration_id = input_configuration.id.clone();
-                match &mut input_configuration.kind {
-                    InputConfigurationKind::Keyboard(mapping) => {
-                        if let Some(code) = self.keyboards.pressed_keys.iter().next() {
-                            let _ = mapping.lookup(button).insert(*code);
-                            remapped = true;
-                        }
+        if let Some(map_request) = mapping_request
+            && let Some(input_configuration) =
+                input_settings.configurations.get_mut(&map_request.input_id)
+        {
+            let button = &map_request.button;
+            let input_configuration_id = input_configuration.id.clone();
+            match &mut input_configuration.kind {
+                InputConfigurationKind::Keyboard(mapping) => {
+                    if let Some(code) = self.keyboards.pressed_keys.iter().next() {
+                        let _ = mapping.lookup(button).insert(*code);
+                        remapped = true;
                     }
-                    InputConfigurationKind::Gamepad(mapping) => {
-                        let gamepads = &self.gamepads;
-                        if let Some(state) =
-                            gamepads.get_gamepad_by_input_id(&input_configuration_id)
-                        {
-                            if let Some(new_button) = state.get_pressed_buttons().iter().next() {
-                                //If there's any button pressed, use the first found... unless it's the reserved "Guide" button used for bringing up the main menu
-                                if !matches!(new_button, GamepadButton::Guide) {
-                                    let _ = mapping.lookup(button).insert(*new_button);
-                                    remapped = true;
-                                }
-                            }
+                }
+                InputConfigurationKind::Gamepad(mapping) => {
+                    let gamepads = &self.gamepads;
+                    if let Some(state) = gamepads.get_gamepad_by_input_id(&input_configuration_id)
+                        && let Some(new_button) = state.get_pressed_buttons().iter().next()
+                    {
+                        //If there's any button pressed, use the first found... unless it's the reserved "Guide" button used for bringing up the main menu
+                        if !matches!(new_button, GamepadButton::Guide) {
+                            let _ = mapping.lookup(button).insert(*new_button);
+                            remapped = true;
                         }
                     }
                 }

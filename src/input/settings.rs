@@ -19,22 +19,19 @@ impl InputSettings {
         self.configurations.entry(id).or_insert_with(|| default)
     }
 
-    pub fn get_selected_configuration(&self, idx: usize) -> &InputConfiguration {
+    pub fn selected_configuration(&self, idx: usize) -> &InputConfiguration {
         self.configurations.get(&self.selected[idx]).unwrap()
     }
-    pub fn get_selected_configuration_mut(&mut self, idx: usize) -> &mut InputConfiguration {
+    pub fn selected_configuration_mut(&mut self, idx: usize) -> &mut InputConfiguration {
         self.configurations.get_mut(&self.selected[idx]).unwrap()
     }
 
     pub(crate) fn reset_selected_disconnected_inputs(&mut self, inputs: &Inputs) {
-        let input_conf = self.get_selected_configuration(0);
-        if !inputs.is_connected(input_conf) {
-            self.selected[0].clone_from(&inputs.get_default_conf(0).id);
-        }
-
-        let input_conf = self.get_selected_configuration(1);
-        if !inputs.is_connected(input_conf) {
-            self.selected[1].clone_from(&inputs.get_default_conf(1).id);
+        for player in 0..MAX_PLAYERS {
+            let input_conf = self.selected_configuration(player);
+            if !inputs.is_connected(input_conf) {
+                self.selected[player].clone_from(&inputs.default_configuration(player).id);
+            }
         }
     }
 }

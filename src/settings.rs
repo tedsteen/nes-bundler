@@ -99,7 +99,7 @@ impl Settings {
     }
 
     #[cfg(feature = "netplay")]
-    pub fn get_netplay_id(&mut self) -> String {
+    pub fn ensure_netplay_id(&mut self) -> String {
         self.netplay_id
             .get_or_insert_with(|| uuid::Uuid::new_v4().to_string())
             .to_string()
@@ -116,17 +116,16 @@ impl Settings {
 
         match &mut settings {
             Ok(settings) => {
-                let default_selected = default_settings.clone().input.selected;
+                let default_selected = default_settings.input.selected.clone();
                 //Make sure no gamepads are selected after loading settings (they will be autoselected later if they are connected)
-                if let InputConfigurationKind::Gamepad(_) =
-                    &settings.input.get_selected_configuration(0).kind
+                for (player, default_selected_input) in
+                    default_selected.iter().enumerate().take(MAX_PLAYERS)
                 {
-                    settings.input.selected[0].clone_from(&default_selected[0]);
-                }
-                if let InputConfigurationKind::Gamepad(_) =
-                    &settings.input.get_selected_configuration(1).kind
-                {
-                    settings.input.selected[1].clone_from(&default_selected[1]);
+                    if let InputConfigurationKind::Gamepad(_) =
+                        &settings.input.selected_configuration(player).kind
+                    {
+                        settings.input.selected[player].clone_from(default_selected_input);
+                    }
                 }
             }
             Err(e) => log::warn!(
@@ -160,8 +159,8 @@ impl Settings {
         hasher.finish()
     }
 
-    pub fn get_nes_region(&mut self) -> &mut NesRegion {
+    pub fn nes_region_mut(&mut self) -> &mut NesRegion {
         self.nes_region
-            .get_or_insert_with(|| Bundle::current().config.get_default_region().clone())
+            .get_or_insert_with(|| Bundle::current().config.default_region().clone())
     }
 }

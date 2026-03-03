@@ -26,7 +26,7 @@ pub fn new_local_nes_state(load_sram: bool) -> LocalNesState {
     LocalNesState::start_rom(
         &crate::bundle::Bundle::current().rom,
         load_sram,
-        Settings::current_mut().get_nes_region(),
+        Settings::current_mut().nes_region_mut(),
     )
     .expect("Failed to start ROM")
 }
@@ -182,7 +182,7 @@ impl Emulator {
                         tokio::task::yield_now().await;
 
                         // 2) periodic SRAM snapshot (non-blocking check)
-                        if frame % 100 == 0 {
+                        if frame.is_multiple_of(100) {
                             use base64::Engine;
                             use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
                             if let Some(sram) = nes_state.save_sram() {
@@ -211,10 +211,10 @@ impl Drop for Emulator {
             .emulator
             .command_tx
             .blocking_send(EmulatorCommand::Shutdown);
-        if let Some(th) = self.th.take() {
-            if let Err(e) = th.join() {
-                log::warn!("Failed to join emulator thread: {e:?}");
-            }
+        if let Some(th) = self.th.take()
+            && let Err(e) = th.join()
+        {
+            log::warn!("Failed to join emulator thread: {e:?}");
         }
     }
 }

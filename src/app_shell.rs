@@ -54,10 +54,11 @@ impl ApplicationHandler for AppShell {
     }
 
     fn new_events(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop, cause: StartCause) {
-        if let Some(main_view) = &self.main_view {
-            if cause == StartCause::Init && self.app.config().start_in_fullscreen {
-                main_view.window.toggle_fullscreen();
-            }
+        if let Some(main_view) = &self.main_view
+            && cause == StartCause::Init
+            && self.app.config().start_in_fullscreen
+        {
+            main_view.window.toggle_fullscreen();
         }
     }
 
@@ -67,32 +68,51 @@ impl ApplicationHandler for AppShell {
         _window_id: winit::window::WindowId,
         window_event: WindowEvent,
     ) {
-        if let Some(main_view) = &mut self.main_view {
-            match window_event {
-                WindowEvent::CloseRequested | WindowEvent::Destroyed => event_loop.exit(),
-                WindowEvent::RedrawRequested => {
-                    self.ui.render(main_view);
-                    main_view.window.request_redraw();
-                }
-                _ => {}
-            }
+        let Some(main_view) = &mut self.main_view else {
+            return;
+        };
 
-            for sdl_gui_event in self
-                .sdl_event_pump
-                .poll_iter()
-                .flat_map(|e| e.to_gamepad_event())
-                .map(GuiEvent::Gamepad)
-            {
-                self.ui.handle_gui_event(main_view, &sdl_gui_event);
-            }
+        Self::handle_window_action(event_loop, &mut self.ui, main_view, &window_event);
+        Self::forward_sdl_events(&mut self.sdl_event_pump, &mut self.ui, main_view);
 
-            self.runtime.write_inputs(self.ui.current_game_inputs());
-            self.ui.handle_window_event(main_view, &window_event);
-            if self.ui.take_exit_requested() {
-                event_loop.exit();
-                return;
+        self.runtime.write_inputs(self.ui.current_game_inputs());
+        self.ui.handle_window_event(main_view, &window_event);
+        if self.ui.take_exit_requested() {
+            event_loop.exit();
+            return;
+        }
+        self.ui.update_cursor_visibility(main_view);
+    }
+}
+
+impl AppShell {
+    fn handle_window_action(
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        ui: &mut UiController,
+        main_view: &mut MainView,
+        window_event: &WindowEvent,
+    ) {
+        match window_event {
+            WindowEvent::CloseRequested | WindowEvent::Destroyed => event_loop.exit(),
+            WindowEvent::RedrawRequested => {
+                ui.render(main_view);
+                main_view.window.request_redraw();
             }
-            self.ui.update_cursor_visibility(main_view);
+            _ => {}
+        }
+    }
+
+    fn forward_sdl_events(
+        sdl_event_pump: &mut EventPump,
+        ui: &mut UiController,
+        main_view: &mut MainView,
+    ) {
+        for gui_event in sdl_event_pump
+            .poll_iter()
+            .flat_map(|event| event.to_gamepad_event())
+            .map(GuiEvent::Gamepad)
+        {
+            ui.handle_gui_event(main_view, &gui_event);
         }
     }
 }

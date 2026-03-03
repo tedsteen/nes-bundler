@@ -79,11 +79,11 @@ impl Gamepads for SDL3Gamepads {
                     let input_settings = &mut Settings::current_mut().input;
                     // Automatically select a gamepad if it's connected and keyboard is currently selected.
                     if let InputConfigurationKind::Keyboard(_) =
-                        input_settings.get_selected_configuration(0).kind
+                        input_settings.selected_configuration(0).kind
                     {
                         input_settings.selected[0] = conf.id;
                     } else if let InputConfigurationKind::Keyboard(_) =
-                        input_settings.get_selected_configuration(1).kind
+                        input_settings.selected_configuration(1).kind
                     {
                         input_settings.selected[1] = conf.id;
                     }

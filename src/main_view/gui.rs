@@ -9,8 +9,8 @@ use crate::{
     Size,
     audio::gui::AudioGui,
     emulation::{
-        EmulatorCommand, EmulatorCommandBus, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3,
-        NesRegion, gui::EmulatorGui,
+        EmulatorCommand, EmulatorCommandBus, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3, NesRegion,
+        gui::EmulatorGui,
     },
     gui::{MenuButton, esc_pressed},
     input::{KeyEvent, gamepad::GamepadEvent, gui::InputsGui},
@@ -156,7 +156,7 @@ impl MainGui {
                 .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
                 .show(ctx, |ui| {
                     let available_size = ui.available_size();
-                    let new_size = if available_size.x < MINIMUM_INTEGER_SCALING_SIZE.width as f32
+                    let frame_size = if available_size.x < MINIMUM_INTEGER_SCALING_SIZE.width as f32
                         || available_size.y < MINIMUM_INTEGER_SCALING_SIZE.height as f32
                     {
                         let width = NES_WIDTH_4_3;
@@ -182,8 +182,8 @@ impl MainGui {
                         let mut nes_image = Image::from_texture(SizedTexture::new(
                             nes_texture_id,
                             Vec2 {
-                                x: new_size.width as f32,
-                                y: new_size.height as f32,
+                                x: frame_size.width as f32,
+                                y: frame_size.height as f32,
                             },
                         ));
                         if self.visible() {
@@ -207,10 +207,10 @@ impl MainGui {
                             self.menu_state = MainMenuState::Closed;
                         }
 
-                        if let Some(name) = self.emulator_gui.name() {
-                            if Self::menu_item_ui(ui, name.to_uppercase()).clicked() {
-                                self.menu_state = MainMenuState::Netplay;
-                            }
+                        if let Some(name) = self.emulator_gui.name()
+                            && Self::menu_item_ui(ui, name.to_uppercase()).clicked()
+                        {
+                            self.menu_state = MainMenuState::Netplay;
                         }
 
                         if Self::menu_item_ui(ui, "SETTINGS").clicked() {
@@ -264,7 +264,7 @@ impl MainGui {
                                         for supported_region in &self.supported_nes_regions {
                                             if ui
                                                 .radio_value(
-                                                    settings.get_nes_region(),
+                                                    settings.nes_region_mut(),
                                                     supported_region.clone(),
                                                     format!("{:?}", supported_region),
                                                 )

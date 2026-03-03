@@ -70,7 +70,7 @@ impl TurnOnServerConfiguration {
     pub fn get_netplay_id(&self) -> String {
         self.netplay_id
             .clone()
-            .unwrap_or_else(|| Settings::current_mut().get_netplay_id())
+            .unwrap_or_else(|| Settings::current_mut().ensure_netplay_id())
             .to_string()
     }
 }

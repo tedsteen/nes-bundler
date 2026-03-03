@@ -99,7 +99,7 @@ impl ConnectedNetplaySession {
         let mut sess_build = SessionBuilder::<GGRSConfig>::new()
             .with_num_players(MAX_PLAYERS)
             .with_input_delay(ggrs_config.input_delay)
-            .with_fps(Settings::current_mut().get_nes_region().to_fps() as usize)
+            .with_fps(Settings::current_mut().nes_region_mut().to_fps() as usize)
             .unwrap()
             .with_max_prediction_window(ggrs_config.max_prediction);
 
@@ -291,11 +291,11 @@ impl ResumingNetplaySession {
         Self {
             attempt1: ConnectingSession::connect(StartMethod::Resume(
                 netplay_server_configuration.clone(),
-                session_state.older_confirmed_state.clone(),
+                Box::new(session_state.older_confirmed_state.clone()),
             )),
             attempt2: ConnectingSession::connect(StartMethod::Resume(
                 netplay_server_configuration.clone(),
-                session_state.newer_confirmed_state.clone(),
+                Box::new(session_state.newer_confirmed_state.clone()),
             )),
             attempt1_failed: false,
             attempt2_failed: false,
@@ -316,16 +316,18 @@ impl FailedNetplaySession {
     }
 }
 pub enum NetplaySession {
-    Disconnected(DisconnectedNetplaySession),
+    Disconnected(Box<DisconnectedNetplaySession>),
     Connecting(ConnectingNetplaySession),
-    Connected(ConnectedNetplaySession),
+    Connected(Box<ConnectedNetplaySession>),
     Resuming(ResumingNetplaySession),
     Failed(FailedNetplaySession),
 }
 
 impl NetplaySession {
     pub(crate) fn new(local_play_nes_state: LocalNesState) -> Self {
-        Self::Disconnected(DisconnectedNetplaySession::new(local_play_nes_state))
+        Self::Disconnected(Box::new(DisconnectedNetplaySession::new(
+            local_play_nes_state,
+        )))
     }
 
     pub(crate) fn start(start_method: StartMethod) -> NetplaySession {
@@ -335,7 +337,7 @@ impl NetplaySession {
     }
 
     fn connect(connection: NetplayConnection) -> Self {
-        Self::Connected(ConnectedNetplaySession::new(connection))
+        Self::Connected(Box::new(ConnectedNetplaySession::new(connection)))
     }
 
     pub fn resume(session_state: &mut ConnectedNetplaySession) -> NetplaySession {
@@ -414,7 +416,7 @@ impl NesStateHandler for NetplaySession {
             }
             NetplaySession::Resuming(resuming) => {
                 enum ResumeOutcome {
-                    Connected(NetplayConnection),
+                    Connected(Box<NetplayConnection>),
                     Attempt1Failed,
                     Attempt2Failed,
                     Timeout,
@@ -423,19 +425,19 @@ impl NesStateHandler for NetplaySession {
                     _ = tokio::time::sleep(POLLING_TIMEOUT) => ResumeOutcome::Timeout,
                     result = &mut resuming.attempt1.netplay_connection, if !resuming.attempt1_failed => {
                         match result {
-                            Ok(c) => ResumeOutcome::Connected(c),
+                            Ok(c) => ResumeOutcome::Connected(Box::new(c)),
                             Err(_) => ResumeOutcome::Attempt1Failed,
                         }
                     }
                     result = &mut resuming.attempt2.netplay_connection, if !resuming.attempt2_failed => {
                         match result {
-                            Ok(c) => ResumeOutcome::Connected(c),
+                            Ok(c) => ResumeOutcome::Connected(Box::new(c)),
                             Err(_) => ResumeOutcome::Attempt2Failed,
                         }
                     }
                 };
                 match outcome {
-                    ResumeOutcome::Connected(c) => *self = NetplaySession::connect(c),
+                    ResumeOutcome::Connected(c) => *self = NetplaySession::connect(*c),
                     ResumeOutcome::Attempt1Failed => {
                         resuming.attempt1_failed = true;
                         if resuming.attempt2_failed {

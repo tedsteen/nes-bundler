@@ -62,20 +62,21 @@ impl TetanesNesState {
         )?;
         let battery_backed = loaded_rom.battery_backed;
 
-        if load_sram && battery_backed {
-            if let Some(b64_encoded_sram) = &Settings::current().save_state {
-                use base64::Engine;
-                use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
-                match b64.decode(b64_encoded_sram) {
-                    Ok(sram) => {
-                        log::info!("Loading SRAM save state");
-                        let mut mem = Memory::new(sram.len());
-                        mem.copy_from_slice(&sram);
-                        cpu.bus.load_sram(mem);
-                    }
-                    Err(err) => {
-                        log::warn!("Failed to base64 decode sram: {err:?}");
-                    }
+        if load_sram
+            && battery_backed
+            && let Some(b64_encoded_sram) = &Settings::current().save_state
+        {
+            use base64::Engine;
+            use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+            match b64.decode(b64_encoded_sram) {
+                Ok(sram) => {
+                    log::info!("Loading SRAM save state");
+                    let mut mem = Memory::new(sram.len());
+                    mem.copy_from_slice(&sram);
+                    cpu.bus.load_sram(mem);
+                }
+                Err(err) => {
+                    log::warn!("Failed to base64 decode sram: {err:?}");
                 }
             }
         }
@@ -270,7 +271,7 @@ impl NesStateHandler for TetanesNesState {
 
     fn reset(&mut self, hard: bool) {
         //Set the region in case it has been changed since last start/reset
-        self.set_region(Settings::current_mut().get_nes_region().to_tetanes_region());
+        self.set_region(Settings::current_mut().nes_region_mut().to_tetanes_region());
         self.reset(hard);
     }
 }

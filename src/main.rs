@@ -4,15 +4,15 @@
 
 use audio::gui::AudioGui;
 
+use input::Inputs;
 use input::gui::InputsGui;
 use input::sdl3_impl::SDL3Gamepads;
-use input::Inputs;
 
 use sdl3::EventPump;
 
-use crate::audio::AudioSystem;
-use crate::app_shell::AppShell;
 use crate::app_context::AppContext;
+use crate::app_shell::AppShell;
+use crate::audio::AudioSystem;
 use crate::emulation::gui::EmulatorGui;
 use crate::game_runtime::GameRuntime;
 use crate::ui_controller::UiController;
@@ -20,9 +20,9 @@ use winit::event_loop::EventLoop;
 
 use crate::main_view::gui::MainGui;
 
-mod audio;
-mod app_shell;
 mod app_context;
+mod app_shell;
+mod audio;
 mod bundle;
 mod emulation;
 mod game_runtime;
@@ -40,10 +40,7 @@ fn main() {
     init_logger();
 
     #[cfg(feature = "netplay")]
-    if std::env::args()
-        .collect::<String>()
-        .contains(&"--print-netplay-id".to_string())
-    {
+    if std::env::args().any(|arg| arg == "--print-netplay-id") {
         let app = AppContext::global();
         if let netplay::configuration::NetplayServerConfiguration::TurnOn(turn_on_config) =
             &app.config().netplay.server
