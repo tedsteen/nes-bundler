@@ -71,7 +71,8 @@ impl SDL3AudioSystem {
 
     pub fn start_stream(&self, settings_store: &SettingsStore) -> AudioStream {
         let mut settings = settings_store.write();
-        let device = settings.audio.get_selected_device(self);
+        let device = settings.audio.resolve_output_device(self);
+        settings.audio.sync_output_device_selection(&device);
         let volume = settings.audio.volume;
         let latency_micros = settings.audio.latency_micros;
         AudioStream::new(self.clone(), device, volume, latency_micros)

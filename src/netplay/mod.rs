@@ -66,7 +66,7 @@ impl SharedNetplay {
         tokio::sync::watch::Sender<SharedNetplayState>,
         tokio::sync::mpsc::Receiver<NetplayCommand>,
     ) {
-        let (command_tx, command_rx) = tokio::sync::mpsc::channel(1);
+        let (command_tx, command_rx) = tokio::sync::mpsc::channel(NETPLAY_COMMAND_CHANNEL_CAPACITY);
         let (sender, receiver) = channel(SharedNetplayState::Disconnected);
         (
             Self {
@@ -86,6 +86,7 @@ impl SharedNetplay {
 }
 
 pub const MAX_ROOM_NAME_LEN: u8 = 4;
+const NETPLAY_COMMAND_CHANNEL_CAPACITY: usize = 1;
 
 pub struct Netplay {
     shared_state_sender: tokio::sync::watch::Sender<SharedNetplayState>,
@@ -127,6 +128,47 @@ impl Netplay {
     fn disconnect(&mut self) {
         self.session = NetplaySession::new(self.initial_local_nes_state.clone());
     }
+
+    fn retry_connect(&mut self) {
+        use crate::netplay::{
+            connection::ConnectingSession,
+            session::{ConnectingNetplaySession, FailedNetplaySession},
+        };
+
+        match &mut self.session {
+            NetplaySession::Connecting(ConnectingNetplaySession {
+                connecting_session: ConnectingSession { start_method, .. },
+                ..
+            })
+            | NetplaySession::Failed(FailedNetplaySession { start_method, .. }) => {
+                self.session = NetplaySession::start(start_method.clone());
+            }
+            NetplaySession::Connected(current_state) => {
+                self.session = NetplaySession::resume(current_state)
+            }
+            state => {
+                log::warn!("Ignored retry command in state {state:?}");
+            }
+        }
+    }
+
+    fn handle_command(&mut self, cmd: NetplayCommand) {
+        match cmd {
+            NetplayCommand::FindGame => self.start(StartMethod::MatchWithRandom),
+            NetplayCommand::HostGame => {
+                use rand::distr::{Alphanumeric, SampleString};
+                let room_name = Alphanumeric
+                    .sample_string(&mut rand::rng(), MAX_ROOM_NAME_LEN.into())
+                    .to_uppercase();
+                self.start(StartMethod::Start(room_name, JoinOrHost::Host));
+            }
+            NetplayCommand::JoinGame(room_name) => {
+                self.start(StartMethod::Start(room_name, JoinOrHost::Join));
+            }
+            NetplayCommand::CancelConnect | NetplayCommand::Disconnect => self.disconnect(),
+            NetplayCommand::RetryConnect => self.retry_connect(),
+        }
+    }
 }
 
 impl NesStateHandler for Netplay {
@@ -137,52 +179,7 @@ impl NesStateHandler for Netplay {
     ) {
         // drain pending netplay commands
         while let Ok(cmd) = self.netplay_rx.try_recv() {
-            use crate::netplay::{
-                connection::ConnectingSession,
-                session::{ConnectingNetplaySession, FailedNetplaySession},
-            };
-
-            match cmd {
-                NetplayCommand::FindGame => {
-                    self.start(StartMethod::MatchWithRandom);
-                }
-
-                NetplayCommand::HostGame => {
-                    use rand::distr::{Alphanumeric, SampleString};
-                    let room_name = Alphanumeric
-                        .sample_string(&mut rand::rng(), MAX_ROOM_NAME_LEN.into())
-                        .to_uppercase();
-                    self.start(StartMethod::Start(room_name, JoinOrHost::Host));
-                }
-
-                NetplayCommand::JoinGame(room_name) => {
-                    self.start(StartMethod::Start(room_name.to_string(), JoinOrHost::Join));
-                }
-
-                NetplayCommand::CancelConnect => {
-                    self.disconnect();
-                }
-
-                NetplayCommand::RetryConnect => match &mut self.session {
-                    NetplaySession::Connecting(ConnectingNetplaySession {
-                        connecting_session: ConnectingSession { start_method, .. },
-                        ..
-                    })
-                    | NetplaySession::Failed(FailedNetplaySession { start_method, .. }) => {
-                        self.session = NetplaySession::start(start_method.clone());
-                    }
-                    NetplaySession::Connected(current_state) => {
-                        self.session = NetplaySession::resume(current_state)
-                    }
-                    state => {
-                        log::warn!("Ignored retry command in state {state:?}");
-                    }
-                },
-
-                NetplayCommand::Disconnect => {
-                    self.disconnect();
-                }
-            }
+            self.handle_command(cmd);
         }
         self.session.advance(joypad_state, buffers).await;
 

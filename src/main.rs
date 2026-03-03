@@ -45,7 +45,7 @@ fn main() {
         if let netplay::configuration::NetplayServerConfiguration::TurnOn(turn_on_config) =
             &app.config().netplay.server
         {
-            println!("{0}", turn_on_config.get_netplay_id());
+            println!("{0}", turn_on_config.resolved_netplay_id());
             std::process::exit(0);
         } else {
             eprintln!(

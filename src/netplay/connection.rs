@@ -94,7 +94,7 @@ impl ConnectingSession {
         log::debug!("Loading netplay configuration: {turn_on_conf:?}");
         let _ = state_sender.send(ConnectingState::LoadingNetplayServerConfiguration);
 
-        let netplay_id = turn_on_conf.get_netplay_id();
+        let netplay_id = turn_on_conf.resolved_netplay_id();
         let url = format!("{0}/{netplay_id}", turn_on_conf.url);
         log::debug!("Fetching TurnOn config from server: {url}");
 

@@ -40,12 +40,9 @@ impl AudioSettings {
         Ok(v)
     }
 
-    // Gets the currently selected device from settings and falls back to the default in case it is missing or not found on the system.
-    pub(crate) fn get_selected_device(
-        &mut self,
-        audio_system: &AudioSystem,
-    ) -> AvailableAudioDevice {
-        let chosen = self
+    // Resolves the output device from settings and falls back to the system default.
+    pub(crate) fn resolve_output_device(&self, audio_system: &AudioSystem) -> AvailableAudioDevice {
+        self
             .output_device
             .as_ref()
             .and_then(|want| {
@@ -62,9 +59,10 @@ impl AudioSettings {
                     );
                 }
                 audio_system.get_default_device()
-            });
+            })
+    }
 
-        self.output_device = Some(chosen.name());
-        chosen
+    pub(crate) fn sync_output_device_selection(&mut self, device: &AvailableAudioDevice) {
+        self.output_device = Some(device.name());
     }
 }

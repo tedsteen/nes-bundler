@@ -67,7 +67,7 @@ pub struct TurnOnServerConfiguration {
 }
 
 impl TurnOnServerConfiguration {
-    pub fn get_netplay_id(&self) -> String {
+    pub fn resolved_netplay_id(&self) -> String {
         self.netplay_id
             .clone()
             .unwrap_or_else(|| Settings::current_mut().ensure_netplay_id())
