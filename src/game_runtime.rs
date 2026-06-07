@@ -1,19 +1,17 @@
+use crate::app_event::AppEvent;
 use crate::audio::AudioStream;
 use crate::emulation::{Emulator, SharedState};
 use crate::input::JoypadState;
+use winit::event_loop::EventLoopProxy;
 
 pub struct GameRuntime {
     emulator: Emulator,
 }
 
 impl GameRuntime {
-    /// Ordering used when the main thread *writes* inputs consumed by the emulator thread.
-    /// Paired with `Acquire` loads in `Emulator::read_input_states`.
-    const INPUT_WRITE_ORDERING: std::sync::atomic::Ordering = std::sync::atomic::Ordering::Release;
-
-    pub fn new(audio_stream: &mut AudioStream) -> Self {
+    pub fn new(audio_stream: &mut AudioStream, event_proxy: EventLoopProxy<AppEvent>) -> Self {
         Self {
-            emulator: Emulator::new(audio_stream),
+            emulator: Emulator::new(audio_stream, event_proxy),
         }
     }
 
@@ -26,9 +24,6 @@ impl GameRuntime {
     }
 
     pub fn write_inputs(&self, joypads: [JoypadState; 2]) {
-        for (idx, joypad_state) in joypads.into_iter().enumerate() {
-            self.emulator.shared_state.emulator.inputs[idx]
-                .store(*joypad_state, Self::INPUT_WRITE_ORDERING);
-        }
+        self.emulator.shared_state.emulator.write_inputs(joypads);
     }
 }

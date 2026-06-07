@@ -9,8 +9,7 @@ use crate::{
     Size,
     audio::gui::AudioGui,
     emulation::{
-        EmulatorCommand, EmulatorCommandBus, NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3, NesRegion,
-        gui::EmulatorGui,
+        NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3, NesRegion, SharedEmulator, gui::EmulatorGui,
     },
     gui::{MenuButton, esc_pressed},
     input::{JoypadState, KeyEvent, gamepad::GamepadEvent, gui::InputsGui},
@@ -52,7 +51,7 @@ pub enum MainMenuState {
 }
 pub struct MainGui {
     start_time: Instant,
-    emulator_tx: EmulatorCommandBus,
+    emulator: SharedEmulator,
     audio_gui: AudioGui,
     pub inputs_gui: InputsGui,
     emulator_gui: EmulatorGui,
@@ -82,7 +81,7 @@ impl MainGui {
     const MESSAGE_TEXT_COLOR: Color32 = Color32::from_rgb(255, 255, 255);
 
     pub fn new(
-        emulator_tx: EmulatorCommandBus,
+        emulator: SharedEmulator,
         audio_gui: AudioGui,
         inputs_gui: InputsGui,
         emulator_gui: EmulatorGui,
@@ -91,7 +90,7 @@ impl MainGui {
     ) -> Self {
         Self {
             start_time: Instant::now(),
-            emulator_tx,
+            emulator,
             audio_gui,
             inputs_gui,
             emulator_gui,
@@ -289,9 +288,7 @@ impl MainGui {
                                                 )
                                                 .changed()
                                             {
-                                                let _ = self
-                                                    .emulator_tx
-                                                    .try_send(EmulatorCommand::Reset(true));
+                                                self.emulator.request_reset(true);
                                             }
                                         }
                                     });

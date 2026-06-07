@@ -3,17 +3,21 @@ use std::{
     ops::{Deref, DerefMut},
     sync::{
         Arc,
-        atomic::{AtomicU8, AtomicU32},
+        atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering},
     },
 };
 
 use serde::{Deserialize, Serialize};
 
 use thingbuf::{Recycle, ThingBuf};
-use tokio::sync::mpsc::Sender;
+use winit::event_loop::EventLoopProxy;
 
 use crate::{
-    audio::{AudioStream, pacer::AudioProducer},
+    app_event::AppEvent,
+    audio::{
+        AudioStream,
+        pacer::{AudioFlush, AudioProducer},
+    },
     emulation::tetanes::TetanesNesState,
     input::JoypadState,
     settings::{MAX_PLAYERS, Settings},
@@ -35,15 +39,6 @@ pub const NES_HEIGHT: u32 = 240;
 
 static NTSC_PAL: &[u8] = include_bytes!("../../config/palette.pal");
 
-#[allow(dead_code)] // Some commands are only sent by certain features
-#[derive(Debug)]
-pub enum EmulatorCommand {
-    Reset(bool),
-    SetSpeed(f32),
-    Shutdown,
-}
-pub type EmulatorCommandBus = Sender<EmulatorCommand>;
-
 pub struct SharedEmulatorState {
     frame: AtomicU32,
 }
@@ -56,12 +51,88 @@ impl SharedEmulatorState {
 }
 
 #[derive(Clone)]
+pub struct EmulatorControls {
+    speed: Arc<AtomicU32>,
+    inputs: Arc<[AtomicU8; MAX_PLAYERS]>,
+    reset: Arc<AtomicU8>,
+    shutdown: Arc<AtomicBool>,
+    audio_flush: AudioFlush,
+}
+
+impl EmulatorControls {
+    fn new(audio_flush: AudioFlush) -> Self {
+        Self {
+            speed: Arc::new(AtomicU32::new(1.0f32.to_bits())),
+            inputs: Arc::new([AtomicU8::new(0), AtomicU8::new(0)]),
+            reset: Arc::new(AtomicU8::new(Self::RESET_NONE)),
+            shutdown: Arc::new(AtomicBool::new(false)),
+            audio_flush,
+        }
+    }
+
+    const RESET_NONE: u8 = 0;
+    const RESET_SOFT: u8 = 1;
+    const RESET_HARD: u8 = 2;
+
+    #[cfg_attr(not(feature = "debug"), allow(dead_code))]
+    pub fn set_speed(&self, speed: f32) {
+        let speed = speed.to_bits();
+        if self.speed.swap(speed, Ordering::Relaxed) != speed {
+            self.audio_flush.flush();
+        }
+    }
+
+    pub(crate) fn speed(&self) -> f32 {
+        f32::from_bits(self.speed.load(Ordering::Relaxed))
+    }
+
+    pub fn write_inputs(&self, joypads: [JoypadState; MAX_PLAYERS]) {
+        for (idx, joypad_state) in joypads.into_iter().enumerate() {
+            self.inputs[idx].store(*joypad_state, Emulator::INPUT_WRITE_ORDERING);
+        }
+    }
+
+    fn read_inputs(&self) -> [JoypadState; MAX_PLAYERS] {
+        [
+            JoypadState(self.inputs[0].load(Emulator::INPUT_READ_ORDERING)),
+            JoypadState(self.inputs[1].load(Emulator::INPUT_READ_ORDERING)),
+        ]
+    }
+
+    pub fn request_reset(&self, hard: bool) {
+        let reset = if hard {
+            Self::RESET_HARD
+        } else {
+            Self::RESET_SOFT
+        };
+        self.reset.fetch_max(reset, Ordering::Release);
+        self.audio_flush.flush();
+    }
+
+    fn take_reset(&self) -> Option<bool> {
+        match self.reset.swap(Self::RESET_NONE, Ordering::AcqRel) {
+            Self::RESET_HARD => Some(true),
+            Self::RESET_SOFT => Some(false),
+            _ => None,
+        }
+    }
+
+    pub fn request_shutdown(&self) {
+        self.shutdown.store(true, Ordering::Release);
+        self.audio_flush.flush();
+    }
+
+    fn shutdown_requested(&self) -> bool {
+        self.shutdown.load(Ordering::Acquire)
+    }
+}
+
+#[derive(Clone)]
 pub struct SharedEmulator {
-    pub command_tx: EmulatorCommandBus,
     pub state: Arc<SharedEmulatorState>,
+    controls: EmulatorControls,
 
     pub frame_buffer: VideoBufferPool,
-    pub inputs: Arc<[AtomicU8; 2]>,
 }
 
 #[derive(Clone)]
@@ -70,16 +141,31 @@ pub struct SharedState {
     #[cfg(feature = "netplay")]
     pub netplay: crate::netplay::SharedNetplay,
 }
+
+impl SharedEmulator {
+    #[cfg_attr(not(feature = "debug"), allow(dead_code))]
+    pub fn set_speed(&self, speed: f32) {
+        self.controls.set_speed(speed);
+    }
+
+    pub fn write_inputs(&self, joypads: [JoypadState; MAX_PLAYERS]) {
+        self.controls.write_inputs(joypads);
+    }
+
+    pub fn request_reset(&self, hard: bool) {
+        self.controls.request_reset(hard);
+    }
+}
+
 impl SharedState {
     fn new(
-        emulator_command_tx: EmulatorCommandBus,
+        audio_flush: AudioFlush,
         #[cfg(feature = "netplay")] netplay: crate::netplay::SharedNetplay,
     ) -> Self {
         Self {
             emulator: SharedEmulator {
-                command_tx: emulator_command_tx,
                 state: Arc::new(SharedEmulatorState::new()),
-                inputs: Arc::new([AtomicU8::new(0), AtomicU8::new(0)]),
+                controls: EmulatorControls::new(audio_flush),
                 frame_buffer: VideoBufferPool::new(),
             },
 
@@ -97,10 +183,9 @@ pub struct Emulator {
 pub const DEFAULT_SAMPLE_RATE: f32 = 44_100.0;
 
 struct EmulatorRuntime {
-    inputs: Arc<[AtomicU8; MAX_PLAYERS]>,
     frame_buffer: VideoBufferPool,
     shared_emulator: SharedEmulator,
-    emulator_rx: tokio::sync::mpsc::Receiver<EmulatorCommand>,
+    event_proxy: EventLoopProxy<AppEvent>,
     audio_producer: AudioProducer,
     #[cfg(feature = "netplay")]
     shared_netplay: crate::netplay::SharedNetplay,
@@ -119,10 +204,9 @@ impl EmulatorRuntime {
                 .unwrap();
 
             let EmulatorRuntime {
-                inputs,
                 frame_buffer,
                 shared_emulator,
-                mut emulator_rx,
+                event_proxy,
                 mut audio_producer,
                 #[cfg(feature = "netplay")]
                 shared_netplay,
@@ -134,6 +218,7 @@ impl EmulatorRuntime {
 
             #[allow(unused_mut)]
             let mut nes_state = local_nes_state;
+            let controls = shared_emulator.controls.clone();
             #[cfg(feature = "netplay")]
             let mut nes_state = crate::netplay::Netplay::new(
                 nes_state,
@@ -144,20 +229,30 @@ impl EmulatorRuntime {
 
             tokio::task::LocalSet::new().block_on(&rt, async move {
                 loop {
-                    if Emulator::drain_pending_commands(&mut emulator_rx, &mut nes_state) {
+                    if controls.shutdown_requested() {
                         break;
+                    }
+                    if let Some(hard) = controls.take_reset() {
+                        nes_state.reset(hard);
                     }
 
                     let mut frame_result = frame_buffer.push_ref();
+                    let video_frame_available = frame_result.is_ok();
                     nes_state
                         .advance(
-                            Emulator::read_input_states(&inputs),
+                            controls.read_inputs(),
                             Some(NESBuffers {
                                 audio: &mut audio_producer,
                                 video: frame_result.as_deref_mut().ok(),
                             }),
+                            controls.speed(),
                         )
                         .await;
+                    drop(frame_result);
+
+                    if video_frame_available {
+                        let _ = event_proxy.send_event(AppEvent::NesFrameReady);
+                    }
 
                     let frame = nes_state.frame();
                     shared_emulator
@@ -187,60 +282,35 @@ impl EmulatorRuntime {
 }
 
 impl Emulator {
-    const COMMAND_CHANNEL_CAPACITY: usize = 1;
     /// Ordering used when the emulator thread *reads* the inputs written by the main thread.
     /// Paired with `Release` stores in `GameRuntime::write_inputs` to form a proper
     /// acquire-release pair, which is required for correctness on weak memory models (e.g. ARM).
     pub(crate) const INPUT_READ_ORDERING: std::sync::atomic::Ordering =
         std::sync::atomic::Ordering::Acquire;
+    const INPUT_WRITE_ORDERING: std::sync::atomic::Ordering = std::sync::atomic::Ordering::Release;
     /// Ordering used when the emulator thread *writes* the frame counter read by other threads.
     const FRAME_WRITE_ORDERING: std::sync::atomic::Ordering = std::sync::atomic::Ordering::Release;
     const SRAM_SNAPSHOT_INTERVAL_FRAMES: u32 = 100;
 
-    fn drain_pending_commands<N: NesStateHandler>(
-        emulator_rx: &mut tokio::sync::mpsc::Receiver<EmulatorCommand>,
-        nes_state: &mut N,
-    ) -> bool {
-        let mut should_shutdown = false;
-        while let Ok(cmd) = emulator_rx.try_recv() {
-            match cmd {
-                EmulatorCommand::Reset(hard) => nes_state.reset(hard),
-                EmulatorCommand::SetSpeed(speed) => nes_state.set_speed(speed),
-                EmulatorCommand::Shutdown => {
-                    should_shutdown = true;
-                }
-            }
-        }
-        should_shutdown
-    }
-
-    fn read_input_states(inputs: &[AtomicU8; MAX_PLAYERS]) -> [JoypadState; MAX_PLAYERS] {
-        [
-            JoypadState(inputs[0].load(Self::INPUT_READ_ORDERING)),
-            JoypadState(inputs[1].load(Self::INPUT_READ_ORDERING)),
-        ]
-    }
-
-    pub fn new(audio_stream: &mut AudioStream) -> Self {
+    pub fn new(audio_stream: &mut AudioStream, event_proxy: EventLoopProxy<AppEvent>) -> Self {
         let nes_state = new_local_nes_state(true);
         let audio_producer = audio_stream.take_producer();
-        let (emulator_tx, emulator_rx) = tokio::sync::mpsc::channel(Self::COMMAND_CHANNEL_CAPACITY);
+        let audio_flush = audio_producer.flush_handle();
 
         #[cfg(feature = "netplay")]
         let (shared_netplay, netplay_state_sender, netplay_command_rx) =
             crate::netplay::SharedNetplay::new();
 
         let shared_state = SharedState::new(
-            emulator_tx.clone(),
+            audio_flush,
             #[cfg(feature = "netplay")]
             shared_netplay,
         );
 
         let runtime = EmulatorRuntime {
-            inputs: shared_state.emulator.inputs.clone(),
             frame_buffer: shared_state.emulator.frame_buffer.clone(),
             shared_emulator: shared_state.emulator.clone(),
-            emulator_rx,
+            event_proxy,
             audio_producer,
             #[cfg(feature = "netplay")]
             shared_netplay: shared_state.netplay.clone(),
@@ -259,11 +329,7 @@ impl Emulator {
 
 impl Drop for Emulator {
     fn drop(&mut self) {
-        let _ = self
-            .shared_state
-            .emulator
-            .command_tx
-            .blocking_send(EmulatorCommand::Shutdown);
+        self.shared_state.emulator.controls.request_shutdown();
         if let Some(th) = self.th.take()
             && let Err(e) = th.join()
         {
@@ -277,9 +343,9 @@ pub trait NesStateHandler {
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
         buffers: Option<NESBuffers>,
+        speed: f32,
     );
     fn reset(&mut self, hard: bool);
-    fn set_speed(&mut self, speed: f32);
     fn save_sram(&mut self) -> Option<&[u8]>;
     fn frame(&self) -> u32;
 }

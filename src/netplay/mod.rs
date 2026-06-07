@@ -170,12 +170,13 @@ impl NesStateHandler for Netplay {
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
         buffers: Option<NESBuffers<'_>>,
+        speed: f32,
     ) {
         // drain pending netplay commands
         while let Ok(cmd) = self.netplay_rx.try_recv() {
             self.handle_command(cmd);
         }
-        self.session.advance(joypad_state, buffers).await;
+        self.session.advance(joypad_state, buffers, speed).await;
 
         #[cfg(feature = "debug")]
         if let NetplaySession::Connected(connected_netplay_session) = &self.session
@@ -199,10 +200,6 @@ impl NesStateHandler for Netplay {
 
     fn reset(&mut self, hard: bool) {
         self.session.reset(hard);
-    }
-
-    fn set_speed(&mut self, speed: f32) {
-        self.session.set_speed(speed);
     }
 
     fn save_sram(&mut self) -> Option<&[u8]> {

@@ -7,7 +7,7 @@ use ringbuf::{
 use std::{
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     thread,
     time::{Duration, Instant},
@@ -20,7 +20,33 @@ use crate::audio::MAX_AUDIO_LATENCY_MICROS;
 type Rb<T> = SharedRb<Heap<T>>;
 type Cons<T> = Caching<Arc<Rb<T>>, false, true>;
 type Prod<T> = Caching<Arc<Rb<T>>, true, false>;
-pub type AudioConsumer = Cons<f32>;
+
+pub struct AudioConsumer {
+    rx: Cons<f32>,
+    flush_generation: Arc<AtomicU64>,
+    observed_generation: u64,
+}
+
+impl AudioConsumer {
+    fn new(rx: Cons<f32>, flush_generation: Arc<AtomicU64>) -> Self {
+        let observed_generation = flush_generation.load(Ordering::Acquire);
+        Self {
+            rx,
+            flush_generation,
+            observed_generation,
+        }
+    }
+
+    pub fn pop_slice(&mut self, data: &mut [f32]) -> usize {
+        let generation = self.flush_generation.load(Ordering::Acquire);
+        if generation != self.observed_generation {
+            self.rx.clear();
+            self.observed_generation = generation;
+        }
+
+        self.rx.pop_slice(data)
+    }
+}
 
 /* ---------- constants ---------- */
 /// Upstream ring capacity as a multiple of the max target buffer.
@@ -29,6 +55,7 @@ const UP_FACTOR: f64 = 6.0;
 const MAX_TICK_S: f64 = 0.050;
 /// Hard-stop margin: stop feeding downstream when this far above target.
 const OVER_MARGIN_S: f64 = 0.010;
+const MIN_TARGET_S: f64 = 0.001;
 
 /* ---------- shared params ---------- */
 /// All three PI parameters are updated together under a single lock so the
@@ -85,6 +112,12 @@ impl Pacer {
         }
     }
 
+    fn reset(&mut self) {
+        self.integ = 0.0;
+        self.frac = 0.0;
+        self.last = Instant::now();
+    }
+
     /// How many samples to move downstream this tick.
     #[inline]
     fn compute(&mut self, dn_queued_samples: usize) -> usize {
@@ -122,10 +155,30 @@ impl Pacer {
 pub struct AudioProducer {
     tx: Prod<f32>,
     space_notify: Arc<Notify>,
+    flush_generation: Arc<AtomicU64>,
     params: Arc<Params>,
     sr_hz: f64,
     stop: Arc<AtomicBool>,
     _worker: Option<thread::JoinHandle<()>>,
+}
+
+pub struct AudioBridge {
+    pub producer: AudioProducer,
+    pub consumer: AudioConsumer,
+    pub control: AudioPacerControl,
+}
+
+#[derive(Clone)]
+pub struct AudioFlush {
+    generation: Arc<AtomicU64>,
+    notify: Arc<Notify>,
+}
+
+impl AudioFlush {
+    pub fn flush(&self) {
+        self.generation.fetch_add(1, Ordering::Release);
+        self.notify.notify_waiters();
+    }
 }
 
 impl Drop for AudioProducer {
@@ -143,13 +196,26 @@ impl AudioProducer {
         self.tx.occupied_len()
     }
 
+    #[inline]
+    fn flushed_since(&self, generation: u64) -> bool {
+        self.flush_generation.load(Ordering::Acquire) != generation
+    }
+
     pub async fn push_all(&mut self, mut data: &[f32]) {
+        let generation = self.flush_generation.load(Ordering::Acquire);
         while !data.is_empty() {
+            if self.flushed_since(generation) {
+                return;
+            }
+
             let thresh = up_thresh_samples(self.sr_hz, self.params.get().target_s);
 
             // backpressure: wait while at or over threshold
             while self.up_occ() >= thresh {
                 self.space_notify.notified().await;
+                if self.flushed_since(generation) {
+                    return;
+                }
             }
 
             let room = thresh - self.up_occ();
@@ -162,29 +228,35 @@ impl AudioProducer {
             }
         }
     }
+
+    pub fn flush_handle(&self) -> AudioFlush {
+        AudioFlush {
+            generation: Arc::clone(&self.flush_generation),
+            notify: Arc::clone(&self.space_notify),
+        }
+    }
 }
 
 /* ---------- external control ---------- */
 #[derive(Clone)]
-pub struct BridgeCtl {
+pub struct AudioPacerControl {
     params: Arc<Params>,
+    notify: Arc<Notify>,
     max_s: f64,
 }
-impl BridgeCtl {
+impl AudioPacerControl {
     pub fn set_latency_ms(&self, latency_ms: f64) {
-        let s = (latency_ms / 1000.0).min(self.max_s);
+        let s = (latency_ms / 1000.0).clamp(MIN_TARGET_S, self.max_s);
         let (kp, ki) = gains_for(s);
         self.params.set(s, kp, ki);
+        self.notify.notify_waiters();
     }
 }
 
 /* ---------- factory ---------- */
-pub fn make_paced_bridge_ringbuf_bulk_async(
-    latency_ms: f64,
-    device_sr_hz: f64,
-) -> (AudioProducer, AudioConsumer, BridgeCtl) {
+pub fn make_paced_bridge_ringbuf_bulk_async(latency_ms: f64, device_sr_hz: f64) -> AudioBridge {
     let max_s = (MAX_AUDIO_LATENCY_MICROS as f64) / 1_000_000.0;
-    let target_s = (latency_ms / 1000.0).min(max_s);
+    let target_s = (latency_ms / 1000.0).clamp(MIN_TARGET_S, max_s);
 
     let (kp, ki) = gains_for(target_s);
     let (up_cap, dn_cap) = caps(device_sr_hz, max_s);
@@ -196,8 +268,9 @@ pub fn make_paced_bridge_ringbuf_bulk_async(
     let notify_w = notify.clone();
 
     let params = Arc::new(Params::new(target_s, kp, ki));
-    let ctl = BridgeCtl {
+    let ctl = AudioPacerControl {
         params: params.clone(),
+        notify: notify.clone(),
         max_s,
     };
 
@@ -209,11 +282,22 @@ pub fn make_paced_bridge_ringbuf_bulk_async(
 
     let stop = Arc::new(AtomicBool::new(false));
     let stop_w = stop.clone();
+    let flush_generation = Arc::new(AtomicU64::new(0));
+    let flush_generation_w = Arc::clone(&flush_generation);
 
     let _worker = thread::Builder::new()
         .name("audio-pacer".into())
         .spawn(move || {
+            let mut last_generation = flush_generation_w.load(Ordering::Acquire);
             while !stop_w.load(Ordering::Acquire) {
+                let generation = flush_generation_w.load(Ordering::Acquire);
+                if generation != last_generation {
+                    up_rx.clear();
+                    pacer.reset();
+                    last_generation = generation;
+                    notify_w.notify_waiters();
+                }
+
                 // wake producers when upstream drops back to or below the write threshold
                 let wake_threshold = up_thresh_samples(pacer.sr_hz, pacer.params.get().target_s);
 
@@ -243,13 +327,20 @@ pub fn make_paced_bridge_ringbuf_bulk_async(
     let producer = AudioProducer {
         tx: up_tx,
         space_notify: notify,
+        flush_generation: Arc::clone(&flush_generation),
         params,
         sr_hz: device_sr_hz,
         stop,
         _worker: Some(_worker),
     };
 
-    (producer, dn_rx, ctl)
+    let consumer = AudioConsumer::new(dn_rx, Arc::clone(&flush_generation));
+
+    AudioBridge {
+        producer,
+        consumer,
+        control: ctl,
+    }
 }
 
 /* ---------- heuristics ---------- */

@@ -2,7 +2,6 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU8;
 use std::sync::mpsc::{Receiver, Sender};
 
-use ringbuf::traits::Consumer;
 use sdl3::AudioSubsystem;
 use sdl3::audio::{
     AudioCallback, AudioDevice, AudioDeviceID, AudioFormat, AudioSpec, AudioStream as AudioStream2,
@@ -10,7 +9,10 @@ use sdl3::audio::{
 };
 use sdl3::sys::audio::SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
 
-use crate::audio::pacer::{AudioConsumer, AudioProducer, make_paced_bridge_ringbuf_bulk_async};
+use crate::audio::pacer::{
+    AudioBridge, AudioConsumer, AudioPacerControl, AudioProducer,
+    make_paced_bridge_ringbuf_bulk_async,
+};
 use crate::audio::{AudioStream, AudioSystem, AvailableAudioDevice};
 use crate::emulation::DEFAULT_SAMPLE_RATE;
 use crate::settings::SettingsStore;
@@ -85,7 +87,7 @@ pub struct SDL3AudioStream {
     tx: Option<AudioProducer>,
     take_back: Receiver<AudioConsumer>,
     volume: Arc<AtomicU8>,
-    ctl: super::pacer::BridgeCtl,
+    ctl: AudioPacerControl,
 }
 
 impl SDL3AudioStream {
@@ -101,7 +103,11 @@ impl SDL3AudioStream {
         volume: u8,
         latency_micros: u32,
     ) -> Self {
-        let (tx, rx, ctl) = make_paced_bridge_ringbuf_bulk_async(
+        let AudioBridge {
+            producer,
+            consumer,
+            control: ctl,
+        } = make_paced_bridge_ringbuf_bulk_async(
             latency_micros as f64 / 1_000.0,
             DEFAULT_SAMPLE_RATE as f64,
         );
@@ -110,13 +116,13 @@ impl SDL3AudioStream {
         let (stream, take_back) = Self::create(
             audio_system.audio_subsystem.clone(),
             device,
-            rx,
+            consumer,
             volume.clone(),
         );
         Self {
             audio_stream_with_callback: Some(stream),
             audio_system,
-            tx: Some(tx),
+            tx: Some(producer),
             take_back,
             volume,
             ctl,

@@ -11,6 +11,7 @@ use input::sdl3_impl::SDL3Gamepads;
 use sdl3::EventPump;
 
 use crate::app_context::AppContext;
+use crate::app_event::AppEvent;
 use crate::app_shell::AppShell;
 use crate::audio::AudioSystem;
 use crate::emulation::gui::EmulatorGui;
@@ -21,6 +22,7 @@ use winit::event_loop::EventLoop;
 use crate::main_view::gui::MainGui;
 
 mod app_context;
+mod app_event;
 mod app_shell;
 mod audio;
 mod bundle;
@@ -63,8 +65,7 @@ fn main() {
 
 fn run() -> anyhow::Result<()> {
     let app_context = AppContext::global();
-    let event_loop = EventLoop::new()?;
-    event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+    let event_loop = EventLoop::<AppEvent>::with_user_event().build()?;
 
     // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
     sdl3::hint::set("SDL_JOYSTICK_THREAD", "1");
@@ -75,7 +76,7 @@ fn run() -> anyhow::Result<()> {
     let settings = app_context.settings();
     let mut stream = audio_system.start_stream(settings);
 
-    let runtime = GameRuntime::new(&mut stream);
+    let runtime = GameRuntime::new(&mut stream, event_loop.create_proxy());
     let shared_state = runtime.shared_state();
 
     let inputs = Inputs::new(SDL3Gamepads::new(
@@ -83,7 +84,7 @@ fn run() -> anyhow::Result<()> {
     ));
 
     let main_gui = MainGui::new(
-        shared_state.emulator.command_tx.clone(),
+        shared_state.emulator.clone(),
         AudioGui::new(audio_system.clone(), stream, settings),
         InputsGui::new(inputs, settings),
         EmulatorGui::new(shared_state),
