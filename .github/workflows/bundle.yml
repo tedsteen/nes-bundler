@@ -17,7 +17,6 @@ jobs:
     outputs:
       bundle_name: ${{ steps.set_bundle_name_and_version.outputs.bundle_name }}
       bundle_version: ${{ steps.set_bundle_name_and_version.outputs.bundle_version }}
-      file_bin: ${{ steps.compute_file_bin.outputs.file_bin }}
     steps:
       - name: Checkout config
         uses: actions/checkout@v7
@@ -40,12 +39,6 @@ jobs:
         run: |
           echo "bundle_name=$(yq '.name' config/config.yaml)" >> $GITHUB_OUTPUT
           echo "bundle_version=$(yq '.version // "${{ github.ref_name }}"' config/config.yaml)" >> $GITHUB_OUTPUT
-
-      - name: Compute file hash
-        id: compute_file_bin
-        if: github.event.client_payload.configuration_url != ''
-        run: |
-          echo "file_bin=$(sha224sum config.zip | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
       - name: Encrypt configuration
         if: github.event.client_payload.configuration_url != ''
@@ -114,7 +107,9 @@ jobs:
             -in config.zip.enc -out config.zip \
             -pass pass:${{ secrets.CONFIG_ZIP_PASSWORD }}
 
-          echo "FILE_BIN=${{ needs.prepare_config.outputs.file_bin }}" >> $GITHUB_ENV
+          FILE_BIN=$(sha224sum config.zip | cut -d' ' -f1)
+          echo "::add-mask::$FILE_BIN"
+          echo "FILE_BIN=$FILE_BIN" >> $GITHUB_ENV
 
           unzip -o -q config.zip -d config
 
@@ -276,6 +271,23 @@ jobs:
       - prepare_config
     runs-on: ubuntu-latest
     steps:
+      - name: Download encrypted configuration
+        if: ${{ !cancelled() }}
+        uses: actions/download-artifact@v8
+        with:
+          name: encrypted-configuration
+
+      - name: Decrypt configuration and get the bin
+        if: ${{ !cancelled() }}
+        run: |
+          openssl enc -d -aes-256-cbc \
+            -in config.zip.enc -out config.zip \
+            -pass pass:${{ secrets.CONFIG_ZIP_PASSWORD }}
+
+          FILE_BIN=$(sha224sum config.zip | cut -d' ' -f1)
+          echo "::add-mask::$FILE_BIN"
+          echo "FILE_BIN=$FILE_BIN" >> $GITHUB_ENV
+
       - name: Get email address
         if: ${{ !cancelled() }}
         run: |
@@ -285,9 +297,6 @@ jobs:
 
       - name: Prepare email
         if: success()
-        env:
-          FILE_BIN: ${{ needs.prepare_config.outputs.file_bin }}
-          BUNDLE_NAME: ${{ needs.prepare_config.outputs.bundle_name }}
         run: |
           cat <<EOF >> email.html
           <p>Click <a href="https://filebin.net/$FILE_BIN/">here</a> to download all the bundles.</p>
