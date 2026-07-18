@@ -33,7 +33,7 @@ jobs:
           echo "::add-mask::$CONFIGURATION_URL"
 
           curl -L -o config.zip "$CONFIGURATION_URL"
-          7z -y x config.zip -oconfig 2>&1 >/dev/null
+          unzip -o -q config.zip -d config
 
       - name: Get bundle name and version
         id: set_bundle_name_and_version
@@ -94,11 +94,11 @@ jobs:
         run: |
           if [[ $RUNNER_OS == "Windows" ]]; then
             echo "${WIX}bin" >> $GITHUB_PATH
-            choco install yq
           elif [[ $RUNNER_OS == "macOS" ]]; then
             rustup target add x86_64-apple-darwin
             rustup target add aarch64-apple-darwin
-            brew install create-dmg
+            curl -sLo /usr/local/bin/create-dmg https://github.com/create-dmg/create-dmg/raw/latest/create-dmg
+            chmod +x /usr/local/bin/create-dmg
           elif [[ $RUNNER_OS == "Linux" ]]; then
             sudo apt-get update
             sudo apt-get install -y libxcursor-dev libxi-dev libxrandr-dev libxss-dev libxtst-dev
@@ -119,7 +119,7 @@ jobs:
 
           echo "FILE_BIN=${{ needs.prepare_config.outputs.file_bin }}" >> $GITHUB_ENV
 
-          7z -y x config.zip -oconfig 2>&1 >/dev/null
+          unzip -o -q config.zip -d config
 
       - name: Build
         run: |
