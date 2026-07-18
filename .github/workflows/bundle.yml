@@ -17,6 +17,7 @@ jobs:
     outputs:
       bundle_name: ${{ steps.set_bundle_name_and_version.outputs.bundle_name }}
       bundle_version: ${{ steps.set_bundle_name_and_version.outputs.bundle_version }}
+      file_bin: ${{ steps.compute_file_bin.outputs.file_bin }}
     steps:
       - name: Checkout config
         uses: actions/checkout@v7
@@ -39,6 +40,14 @@ jobs:
         run: |
           echo "bundle_name=$(yq '.name' config/config.yaml)" >> $GITHUB_OUTPUT
           echo "bundle_version=$(yq '.version // "${{ github.ref_name }}"' config/config.yaml)" >> $GITHUB_OUTPUT
+
+      - name: Compute file hash
+        id: compute_file_bin
+        if: github.event.client_payload.configuration_url != ''
+        run: |
+          FILE_BIN=$(sha224sum config.zip | cut -d' ' -f1)
+          echo "::add-mask::$FILE_BIN"
+          echo "file_bin=$FILE_BIN" >> $GITHUB_OUTPUT
 
       - name: Encrypt configuration
         if: github.event.client_payload.configuration_url != ''
@@ -108,9 +117,7 @@ jobs:
             -in config.zip.enc -out config.zip \
             -pass pass:${{ secrets.CONFIG_ZIP_PASSWORD }}
 
-          FILE_BIN=$(sha224sum config.zip | cut -d' ' -f1)
-          echo "::add-mask::$FILE_BIN"
-          echo "FILE_BIN=$FILE_BIN" >> $GITHUB_ENV
+          echo "FILE_BIN=${{ needs.prepare_config.outputs.file_bin }}" >> $GITHUB_ENV
 
           7z -y x config.zip -oconfig 2>&1 >/dev/null
 
@@ -123,17 +130,12 @@ jobs:
             cargo build --locked --release $FEATURE_FLAG
             mv target/release/nes-bundler.exe ${BINARIES_PATH}/nes-bundler.exe
           elif [[ $RUNNER_OS == "macOS" ]]; then
-            mkdir -p target/release/
-
-            # x86
             cargo build --locked --release --target=x86_64-apple-darwin $FEATURE_FLAG &
-            # arm
             cargo build --locked --release --target=aarch64-apple-darwin $FEATURE_FLAG &
             wait
             lipo target/x86_64-apple-darwin/release/nes-bundler \
               target/aarch64-apple-darwin/release/nes-bundler \
               -create -output $BINARIES_PATH/nes-bundler
-
           elif [[ $RUNNER_OS == "Linux" ]]; then
             cargo build --locked --release $FEATURE_FLAG
             mv target/release/nes-bundler $BINARIES_PATH/nes-bundler
@@ -160,7 +162,7 @@ jobs:
 
       - name: Prepare Artifacts
         run: |
-          rm -rf artifacts || true
+          rm -rf artifacts
           mkdir artifacts
           ARTIFACTS=$(readlink -f artifacts)
           echo "ARTIFACTS=$ARTIFACTS" >> $GITHUB_ENV
@@ -178,8 +180,8 @@ jobs:
           elif [[ $RUNNER_OS == "macOS" ]]; then
             SIMPLE_BUNDLE_NAME="${{ needs.prepare_config.outputs.bundle_name }}"
             BUNDLE_APP_PATH="$RUNNER_TEMP/$SIMPLE_BUNDLE_NAME.app"
-            mkdir -p "$BUNDLE_APP_PATH/Contents/MacOS" || true
-            mkdir -p "$BUNDLE_APP_PATH/Contents/Resources" || true
+            mkdir -p "$BUNDLE_APP_PATH/Contents/MacOS"
+            mkdir -p "$BUNDLE_APP_PATH/Contents/Resources"
             cp $BUNDLE_CONFIG/macos/Info.plist "$BUNDLE_APP_PATH/Contents/"
 
             iconutil $BUNDLE_CONFIG/macos/bundle.iconset -c icns --output "$BUNDLE_APP_PATH/Contents/Resources/bundle.icns"
@@ -274,27 +276,9 @@ jobs:
     needs:
       - bundle
       - prepare_config
-    env:
-      BUNDLE_NAME: ${{ needs.prepare_config.outputs.bundle_name }}
-      BUNDLE_VERSION: ${{ needs.prepare_config.outputs.bundle_version }}
     if: github.event.client_payload.recipient_email != ''
     runs-on: ubuntu-latest
     steps:
-      - name: Download encrypted configuration
-        uses: actions/download-artifact@v8
-        with:
-          name: encrypted-configuration
-
-      - name: Decrypt configuration and get the bin
-        run: |
-          openssl enc -d -aes-256-cbc \
-            -in config.zip.enc -out config.zip \
-            -pass pass:${{ secrets.CONFIG_ZIP_PASSWORD }}
-
-          FILE_BIN=$(sha224sum config.zip | cut -d' ' -f1)
-          echo "::add-mask::$FILE_BIN"
-          echo "FILE_BIN=$FILE_BIN" >> $GITHUB_ENV
-
       - name: Get email address
         run: |
           RECIPIENT_EMAIL="$(jq -r '.client_payload.recipient_email' $GITHUB_EVENT_PATH)"
@@ -302,6 +286,9 @@ jobs:
           echo "RECIPIENT_EMAIL=$RECIPIENT_EMAIL" >> $GITHUB_ENV
 
       - name: Prepare email
+        env:
+          FILE_BIN: ${{ needs.prepare_config.outputs.file_bin }}
+          BUNDLE_NAME: ${{ needs.prepare_config.outputs.bundle_name }}
         run: |
           cat <<EOF >> email.html
           <p>Click <a href="https://filebin.net/$FILE_BIN/">here</a> to download all the bundles.</p>
@@ -315,7 +302,7 @@ jobs:
           server_port: 465
           username: ${{secrets.MAIL_USERNAME}}
           password: ${{secrets.MAIL_PASSWORD}}
-          subject: Your bundle for ${{ env.BUNDLE_NAME }} is ready!
+          subject: Your bundle for ${{ needs.prepare_config.outputs.bundle_name }} is ready!
           to: ${{ env.RECIPIENT_EMAIL }}
           from: NES Bundler
           html_body: file://email.html
@@ -328,7 +315,7 @@ jobs:
           server_port: 465
           username: ${{secrets.MAIL_USERNAME}}
           password: ${{secrets.MAIL_PASSWORD}}
-          subject: There was a problem bundling ${{ env.BUNDLE_NAME }}.
+          subject: There was a problem bundling ${{ needs.prepare_config.outputs.bundle_name }}.
           to: ${{ env.RECIPIENT_EMAIL }}
           from: NES Bundler
           body: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} for details.
