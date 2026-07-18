@@ -97,7 +97,7 @@ jobs:
           elif [[ $RUNNER_OS == "macOS" ]]; then
             rustup target add x86_64-apple-darwin
             rustup target add aarch64-apple-darwin
-            curl -sLo /usr/local/bin/create-dmg https://github.com/create-dmg/create-dmg/raw/latest/create-dmg
+            curl -sLo /usr/local/bin/create-dmg https://raw.githubusercontent.com/create-dmg/create-dmg/master/create-dmg
             chmod +x /usr/local/bin/create-dmg
           elif [[ $RUNNER_OS == "Linux" ]]; then
             sudo apt-get update
