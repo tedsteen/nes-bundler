@@ -279,12 +279,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Get email address
+        if: ${{ !cancelled() }}
         run: |
           RECIPIENT_EMAIL="$(jq -r '.client_payload.recipient_email' $GITHUB_EVENT_PATH)"
           echo "::add-mask::$RECIPIENT_EMAIL"
           echo "RECIPIENT_EMAIL=$RECIPIENT_EMAIL" >> $GITHUB_ENV
 
       - name: Prepare email
+        if: success()
         env:
           FILE_BIN: ${{ needs.prepare_config.outputs.file_bin }}
           BUNDLE_NAME: ${{ needs.prepare_config.outputs.bundle_name }}
