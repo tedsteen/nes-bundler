@@ -273,10 +273,10 @@ jobs:
 
   send_email:
     name: Send email
+    if: ${{ !cancelled() && github.event.client_payload.recipient_email != '' }}
     needs:
       - bundle
       - prepare_config
-    if: github.event.client_payload.recipient_email != ''
     runs-on: ubuntu-latest
     steps:
       - name: Get email address
