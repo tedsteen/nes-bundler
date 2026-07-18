@@ -43,7 +43,7 @@ jobs:
       - name: Encrypt configuration
         if: github.event.client_payload.configuration_url != ''
         run: |
-          openssl enc -aes-256-cbc -salt \
+          openssl enc -aes-256-cbc -pbkdf2 -salt \
           -in config.zip -out config.zip.enc \
           -pass pass:${{ secrets.CONFIG_ZIP_PASSWORD }}
 
@@ -103,7 +103,7 @@ jobs:
       - name: Decrypt and unpack configuration
         if: github.event.client_payload.configuration_url != ''
         run: |
-          openssl enc -d -aes-256-cbc \
+          openssl enc -d -aes-256-cbc -pbkdf2 \
             -in config.zip.enc -out config.zip \
             -pass pass:${{ secrets.CONFIG_ZIP_PASSWORD }}
 
@@ -280,7 +280,7 @@ jobs:
       - name: Decrypt configuration and get the bin
         if: ${{ !cancelled() }}
         run: |
-          openssl enc -d -aes-256-cbc \
+          openssl enc -d -aes-256-cbc -pbkdf2 \
             -in config.zip.enc -out config.zip \
             -pass pass:${{ secrets.CONFIG_ZIP_PASSWORD }}
 
