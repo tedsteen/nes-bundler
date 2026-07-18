@@ -45,9 +45,7 @@ jobs:
         id: compute_file_bin
         if: github.event.client_payload.configuration_url != ''
         run: |
-          FILE_BIN=$(sha224sum config.zip | cut -d' ' -f1)
-          echo "::add-mask::$FILE_BIN"
-          echo "file_bin=$FILE_BIN" >> $GITHUB_OUTPUT
+          echo "file_bin=$(sha224sum config.zip | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
       - name: Encrypt configuration
         if: github.event.client_payload.configuration_url != ''
