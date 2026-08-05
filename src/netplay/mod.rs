@@ -205,7 +205,7 @@ impl NesStateHandler for Netplay {
         self.session.set_speed(speed);
     }
 
-    fn save_sram(&self) -> Option<&[u8]> {
+    fn save_sram(&mut self) -> Option<&[u8]> {
         self.session.save_sram()
     }
 

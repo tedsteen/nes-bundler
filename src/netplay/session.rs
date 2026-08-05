@@ -461,7 +461,7 @@ impl NesStateHandler for NetplaySession {
         }
     }
 
-    fn save_sram(&self) -> Option<&[u8]> {
+    fn save_sram(&mut self) -> Option<&[u8]> {
         if let NetplaySession::Disconnected(local_nes_state) = self {
             local_nes_state.save_sram()
         } else {
