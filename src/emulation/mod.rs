@@ -23,12 +23,11 @@ pub mod gui;
 pub mod tetanes;
 pub type LocalNesState = TetanesNesState;
 pub fn new_local_nes_state(load_sram: bool) -> LocalNesState {
-    LocalNesState::start_rom(
-        &crate::bundle::Bundle::current().rom,
-        load_sram,
-        Settings::current_mut().nes_region_mut(),
-    )
-    .expect("Failed to start ROM")
+    // Bound out so the settings write guard is released before `start_rom`, which takes a read
+    // guard of its own to restore SRAM.
+    let region = Settings::current_mut().nes_region_mut().clone();
+    LocalNesState::start_rom(&crate::bundle::Bundle::current().rom, load_sram, &region)
+        .expect("Failed to start ROM")
 }
 pub const NES_WIDTH: u32 = 256;
 pub const NES_WIDTH_4_3: u32 = (NES_WIDTH as f32 * (4.0 / 3.0)) as u32;
