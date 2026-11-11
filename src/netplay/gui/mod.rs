@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use egui::{Align, Button, Color32, FontId, Label, RichText, TextEdit, Ui, Widget};
+use egui::{Align2, Button, Color32, FontId, Label, RichText, TextEdit, Ui, Widget};
 use serde::Deserialize;
 
 use crate::{
@@ -120,12 +120,12 @@ impl NetplayGui {
                 }
                 ui.end_row();
 
-                if esc_pressed(ui.ctx()) {
+                if esc_pressed(ui) {
                     return Some(MainMenuState::Main);
                 }
             }
             SharedNetplayState::Failed(reason) => {
-                let esc_was_pressed = esc_pressed(ui.ctx());
+                let esc_was_pressed = esc_pressed(ui);
                 ui.vertical_centered(|ui| {
                     Label::new(MenuButton::ui_text(
                         "CONNECTION FAILED",
@@ -229,10 +229,9 @@ impl NetplayGui {
                     .vertical_centered(|ui| {
                         let re = ui.add(
                             TextEdit::singleline(room_name)
-                                .horizontal_align(Align::Center)
+                                .align(Align2::CENTER_CENTER)
                                 .font(FontId::monospace(30.0))
-                                .desired_width(30.0 * 3.0)
-                                .vertical_align(Align::Center),
+                                .desired_width(30.0 * 3.0),
                         );
                         ui.add_space(10.0);
 
@@ -277,7 +276,7 @@ impl NetplayGui {
                 ui.end_row();
                 let mut transition = Transition::Stay;
                 ui.vertical_centered(|ui| {
-                    if ui_button("Cancel").ui(ui).clicked() || esc_pressed(ui.ctx()) {
+                    if ui_button("Cancel").ui(ui).clicked() || esc_pressed(ui) {
                         transition = Transition::ReturnToMain;
                     }
                 });
@@ -329,7 +328,7 @@ impl NetplayGui {
                 }
 
                 ui.vertical_centered(|ui| {
-                    if ui_button("Close").ui(ui).clicked() || esc_pressed(ui.ctx()) {
+                    if ui_button("Close").ui(ui).clicked() || esc_pressed(ui) {
                         nav = Some(MainMenuState::Main);
                     }
                 });
@@ -460,7 +459,7 @@ impl NetplayGui {
         ui.end_row();
 
         ui.vertical_centered(|ui| {
-            if ui_button("Cancel").ui(ui).clicked() || esc_pressed(ui.ctx()) {
+            if ui_button("Cancel").ui(ui).clicked() || esc_pressed(ui) {
                 let _ = self
                     .shared_netplay
                     .command_tx
@@ -529,7 +528,7 @@ impl NetplayGui {
         });
         ui.end_row();
 
-        if esc_pressed(ui.ctx()) {
+        if esc_pressed(ui) {
             nav = Some(MainMenuState::Main);
         }
         nav

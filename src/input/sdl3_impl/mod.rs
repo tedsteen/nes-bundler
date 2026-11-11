@@ -33,7 +33,7 @@ impl ToInputId for u32 {
 
 impl ToInputId for JoystickId {
     fn to_input_id(&self) -> InputId {
-        self.0.to_string()
+        u32::from(*self).to_input_id()
     }
 }
 
@@ -187,18 +187,16 @@ impl SDL3Gamepads {
 impl ToGamepadEvent for sdl3::event::Event {
     fn to_gamepad_event(&self) -> Option<GamepadEvent> {
         match self {
-            sdl3::event::Event::ControllerDeviceAdded { which, .. } => {
-                Some(GamepadEvent::ControllerAdded {
-                    which: which.to_input_id(),
-                })
-            }
-            sdl3::event::Event::ControllerButtonDown { which, button, .. } => button
+            sdl3::event::Event::GamepadAdded { which, .. } => Some(GamepadEvent::ControllerAdded {
+                which: which.to_input_id(),
+            }),
+            sdl3::event::Event::GamepadButtonDown { which, button, .. } => button
                 .to_gamepad_button()
                 .map(|button| GamepadEvent::ButtonDown {
                     which: which.to_input_id(),
                     button,
                 }),
-            sdl3::event::Event::ControllerButtonUp { which, button, .. } => button
+            sdl3::event::Event::GamepadButtonUp { which, button, .. } => button
                 .to_gamepad_button()
                 .map(|button| GamepadEvent::ButtonUp {
                     which: which.to_input_id(),
@@ -245,6 +243,7 @@ impl ToGamepadButton for sdl3::gamepad::Button {
             Misc3 => Some(GamepadButton::Misc3),
             Misc4 => Some(GamepadButton::Misc4),
             Misc5 => Some(GamepadButton::Misc5),
+            Misc6 => Some(GamepadButton::Misc6),
         }
     }
 }

@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
 use egui::{
-    Color32, Context, CornerRadius, CursorIcon, FontId, Id, KeyboardShortcut, RichText, Sense,
-    TextStyle, Ui, Vec2, Widget, WidgetInfo, WidgetText, WidgetType,
+    Color32, Context, CornerRadius, CursorIcon, FontId, Id, KeyboardShortcut, RichText, Role,
+    Sense, TextStyle, Ui, Vec2, Widget, WidgetInfo, WidgetText,
 };
 
 #[derive(Clone)]
@@ -62,13 +62,13 @@ impl Widget for MenuButton {
         desired_size.x += galley.size().x;
         desired_size.y = desired_size.y.max(galley.size().y);
         let (rect, mut response) = ui.allocate_at_least(desired_size, self.sense);
-        response.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, galley.text()));
+        response.widget_info(|| WidgetInfo::labeled(Role::Button, true, galley.text()));
 
         ui.memory_mut(|m| {
             let actual_focus_id = m.focused();
-            let parent_id = ui.id().value();
+            // One focus group per parent ui.
             let group = m.data.get_temp_mut_or_insert_with(
-                Id::new(format!("{}_{}", Self::GROUP_KEY, parent_id)),
+                ui.scope_id().with(Self::GROUP_KEY),
                 MenuButtonGroup::new,
             );
             let own_id = response.id;

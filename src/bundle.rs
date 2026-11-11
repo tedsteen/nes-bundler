@@ -72,15 +72,16 @@ impl Bundle {
         let external_config = fs::read_to_string(Path::new("config.yaml"))
             .inspect_err(|e| log::info!("Not using external config.yaml: {:?}", e))
             .map_err(anyhow::Error::msg)
-            .and_then(|config| serde_yaml::from_str(&config).map_err(anyhow::Error::msg));
+            .and_then(|config| serde_yaml_ng::from_str(&config).map_err(anyhow::Error::msg));
 
         let external_rom = fs::read(Path::new("rom.nes"))
             .inspect_err(|e| log::info!("Not using external rom.nes: {:?}", e));
 
         // Try to load from external bundle first and if that doesn't work fall back to the embedded bundle
 
-        let config: BuildConfiguration =
-            external_config.unwrap_or(serde_yaml::from_str(include_str!("../config/config.yaml"))?);
+        let config: BuildConfiguration = external_config.unwrap_or(serde_yaml_ng::from_str(
+            include_str!("../config/config.yaml"),
+        )?);
 
         let rom = external_rom.unwrap_or(include_bytes!("../config/rom.nes").to_vec());
 

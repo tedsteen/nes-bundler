@@ -1,8 +1,8 @@
 use std::time::{Duration, Instant};
 
 use egui::{
-    Align2, Button, Color32, Context, FontId, Image, Label, Margin, Response, RichText, Style,
-    TextureId, Ui, Vec2, Widget, load::SizedTexture,
+    Align, Align2, Button, Color32, Context, FontId, Image, Label, Layout, Margin, Response,
+    RichText, Style, TextureId, Ui, UiBuilder, Vec2, Widget, load::SizedTexture,
 };
 
 use crate::{
@@ -155,7 +155,7 @@ impl MainGui {
         f(&mut self.emulator_gui);
     }
 
-    pub fn ui(&mut self, ctx: &Context, nes_texture_id: TextureId) {
+    pub fn ui(&mut self, ui: &mut Ui, nes_texture_id: TextureId) {
         #[cfg(feature = "debug")]
         puffin::profile_scope!("ui");
 
@@ -164,7 +164,7 @@ impl MainGui {
             puffin::profile_scope!("NES Frame");
             egui::CentralPanel::default()
                 .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
-                .show(ctx, |ui| {
+                .show(ui, |ui| {
                     let available_size = ui.available_size();
                     let frame_size = if available_size.x < MINIMUM_INTEGER_SCALING_SIZE.width as f32
                         || available_size.y < MINIMUM_INTEGER_SCALING_SIZE.height as f32
@@ -201,19 +201,28 @@ impl MainGui {
                         }
                         ui.add(nes_image);
                     });
+
+                    // Messages are painted over the game, in the top of the screen.
+                    let messages_rect = ui.max_rect().shrink(Self::MESSAGES_MARGIN);
+                    ui.scope_builder(
+                        UiBuilder::new()
+                            .max_rect(messages_rect)
+                            .layout(Layout::top_down(Align::Center)),
+                        |ui| self.messages_ui(ui),
+                    );
                 });
         }
         {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("Main ui");
 
-            if !self.visible() && esc_pressed(ctx) {
+            if !self.visible() && esc_pressed(ui) {
                 self.menu_state = MainMenuState::Main;
             }
             match self.menu_state.clone() {
                 MainMenuState::Main => {
-                    Self::ui_main_container(None, ctx, |ui| {
-                        if Self::menu_item_ui(ui, "BACK").clicked() || esc_pressed(ctx) {
+                    Self::ui_main_container(None, ui, |ui| {
+                        if Self::menu_item_ui(ui, "BACK").clicked() || esc_pressed(ui) {
                             self.menu_state = MainMenuState::Closed;
                         }
 
@@ -240,7 +249,7 @@ impl MainGui {
                     });
                 }
                 MainMenuState::Settings => {
-                    Self::ui_main_container(Some("Settings"), ctx, |ui| {
+                    Self::ui_main_container(Some("Settings"), ui, |ui| {
                         ui.vertical(|ui| {
                             if let Some(name) = self.audio_gui.name() {
                                 ui.vertical_centered(|ui| {
@@ -296,7 +305,7 @@ impl MainGui {
                                 )
                                 .ui(ui)
                                 .clicked()
-                                    || esc_pressed(ui.ctx())
+                                    || esc_pressed(ui)
                                 {
                                     self.menu_state = MainMenuState::Main;
                                 }
@@ -306,7 +315,7 @@ impl MainGui {
                 }
                 MainMenuState::Netplay => {
                     if let Some(name) = self.emulator_gui.name().map(str::to_owned) {
-                        Self::ui_main_container(Some(&name), ctx, |ui| {
+                        Self::ui_main_container(Some(&name), ui, |ui| {
                             if let Some(new_state) = self.emulator_gui.ui(ui) {
                                 self.menu_state = new_state;
                             }
@@ -316,30 +325,21 @@ impl MainGui {
                 MainMenuState::Closed => {}
             }
         }
-        {
-            egui::TopBottomPanel::top("messages")
-                .show_separator_line(false)
-                .frame(
-                    egui::Frame::default()
-                        .fill(Color32::TRANSPARENT)
-                        .outer_margin(Margin::same(80))
-                        .inner_margin(Margin::ZERO),
-                )
-                .show(ctx, |ui| {
-                    ui.vertical_centered(|ui| {
-                        let menu_state = self.menu_state.clone();
-                        self.for_each_component(|gui| {
-                            if let Some(messages) = gui.messages(&menu_state) {
-                                for message in messages {
-                                    Self::message_ui(ui, message);
-                                }
-                            }
-                        });
-                        if self.start_time.elapsed() < Duration::from_secs(5) {
-                            Self::message_ui(ui, "Press ESC for menu");
-                        }
-                    });
-                });
+    }
+
+    const MESSAGES_MARGIN: f32 = 80.0;
+
+    fn messages_ui(&mut self, ui: &mut Ui) {
+        let menu_state = self.menu_state.clone();
+        self.for_each_component(|gui| {
+            if let Some(messages) = gui.messages(&menu_state) {
+                for message in messages {
+                    Self::message_ui(ui, message);
+                }
+            }
+        });
+        if self.start_time.elapsed() < Duration::from_secs(5) {
+            Self::message_ui(ui, "Press ESC for menu");
         }
     }
 

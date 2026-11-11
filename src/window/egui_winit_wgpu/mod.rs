@@ -3,10 +3,10 @@ mod gui;
 use std::sync::Arc;
 
 use anyhow::Result;
-use egui::Context;
+use egui::Ui;
 use egui_wgpu::ScreenDescriptor;
 use gui::EguiRenderer;
-use wgpu::{PresentMode, TextureViewDescriptor};
+use wgpu::{CurrentSurfaceTexture, PresentMode};
 use winit::window::Window;
 
 pub mod texture;
@@ -25,32 +25,22 @@ pub struct Renderer {
 impl Renderer {
     pub async fn new(window: Arc<Window>, enable_vsync: bool) -> Result<Self> {
         let size = window.inner_size();
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
-            ..Default::default()
-        });
+        // All backends (the default); the display handle lets GL present on Wayland.
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_with_display_handle(
+            Box::new(Arc::clone(&window)),
+        ));
         let surface = instance.create_surface(Arc::clone(&window))?;
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
+                ..Default::default()
             })
             .await
             .expect("adapter to be crated");
 
         let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                trace: wgpu::Trace::Off,
-                label: None,
-                required_features: wgpu::Features::empty(),
-                // WebGL doesn't support all of wgpu's features, so if
-                // we're building for the web we'll have to disable some.
-                required_limits: Default::default(),
-                memory_hints: Default::default(),
-                experimental_features: Default::default(),
-            })
+            .request_device(&wgpu::DeviceDescriptor::default())
             .await?;
 
         let surface_caps = surface.get_capabilities(&adapter);
@@ -84,6 +74,7 @@ impl Renderer {
             height: size.height,
             present_mode,
             alpha_mode: surface_caps.alpha_modes[0],
+            color_space: wgpu::SurfaceColorSpace::Auto,
             view_formats: vec![],
         };
         log::debug!("Surface configuration: {config:?}");
@@ -115,32 +106,37 @@ impl Renderer {
         }
     }
 
-    pub fn render(&mut self, mut run_ui: impl FnMut(&Context)) -> Result<(), wgpu::SurfaceError> {
+    /// Renders a frame, or skips it when the surface has no texture to give (e.g. the window is
+    /// occluded, or the surface had to be reconfigured).
+    pub fn render(&mut self, mut run_ui: impl FnMut(&mut Ui)) {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
-        let output = {
+        let (output, suboptimal) = {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("get_current_texture");
 
-            self.surface.get_current_texture()?
+            match self.surface.get_current_texture() {
+                CurrentSurfaceTexture::Success(texture) => (texture, false),
+                CurrentSurfaceTexture::Suboptimal(texture) => (texture, true),
+                CurrentSurfaceTexture::Timeout | CurrentSurfaceTexture::Occluded => return,
+                CurrentSurfaceTexture::Outdated | CurrentSurfaceTexture::Lost => {
+                    log::warn!("Surface lost or outdated, reconfiguring.");
+                    self.surface.configure(&self.device, &self.config);
+                    return;
+                }
+                CurrentSurfaceTexture::Validation => {
+                    log::warn!("Surface validation error, skipping frame.");
+                    return;
+                }
+            }
         };
 
         let view = {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("create_view");
 
-            output.texture.create_view(&TextureViewDescriptor {
-                label: None,
-                format: None,
-                dimension: None,
-                aspect: wgpu::TextureAspect::All,
-                base_mip_level: 0,
-                mip_level_count: None,
-                base_array_layer: 0,
-                array_layer_count: None,
-                usage: None,
-            })
+            output.texture.create_view(&Default::default())
         };
 
         let mut encoder = {
@@ -195,9 +191,11 @@ impl Renderer {
             #[cfg(feature = "debug")]
             puffin::profile_scope!("present");
 
-            output.present();
+            self.queue.present(output);
         }
 
-        Ok(())
+        if suboptimal {
+            self.surface.configure(&self.device, &self.config);
+        }
     }
 }

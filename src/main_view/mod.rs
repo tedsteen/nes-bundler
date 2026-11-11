@@ -142,24 +142,7 @@ impl MainView {
         }
 
         let nes_texture_id = self.nes_texture.get_id();
-        let render_result = self.renderer.render(move |ctx| {
-            main_gui.ui(ctx, nes_texture_id);
-        });
-
-        match render_result {
-            Ok(_) => {}
-            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                // Reconfigure the surface if it's lost or outdated
-                log::warn!("Surface lost or outdated, recreating.");
-                self.renderer.resize(self.renderer.size);
-            }
-            // The system is out of memory, we should probably quit
-            Err(wgpu::SurfaceError::OutOfMemory) => {
-                log::warn!("Out of memory when rendering")
-                // control_flow.exit(),
-            }
-            Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
-            Err(wgpu::SurfaceError::Other) => log::warn!("Other error"),
-        };
+        self.renderer
+            .render(move |ui| main_gui.ui(ui, nes_texture_id));
     }
 }

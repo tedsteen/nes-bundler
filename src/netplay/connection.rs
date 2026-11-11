@@ -296,8 +296,10 @@ impl StartMethod {
             }
         };
 
-        //TODO: matchbox will panic when we advance the frame on the ggrs session if we do not pass `next=2` here. See discussion (https://discord.com/channels/844211600009199626/1045611882691698688/1325596000928399495) for details.
-        //      revert this when the bug is fixed in matchbox.
+        // `next=2` makes the signaling server pair peers two by two: the second arrival completes a
+        // match and the room starts over empty. Without it a room is a full mesh, so random
+        // matchmaking (one shared room per ROM) would put everyone together, and a third player
+        // could join a private room.
         format!("{room_name}?next=2")
     }
 }

@@ -37,7 +37,7 @@ log = "0.4"
 env_logger = "0.11"
 anyhow = "1.0"
 serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.9"
+serde_yaml_ng = "0.10"
 bitflags = "2"
 rand = "0.10"
 
@@ -49,42 +49,42 @@ tokio = { version = "1", features = [
 ] }
 futures = "0.3"
 
-egui = { version = "0.33", default-features = false, features = [
+egui = { version = "0.37", default-features = false, features = [
   "bytemuck",
   "default_fonts",
 ] }
-egui_plot = { version = "0.34", optional = true }
+egui_plot = { version = "0.38", optional = true }
 
-# TODO: Use stable version of puffin and puffin_egui when 0.33 is released
-puffin = { git = "https://github.com/blip-radar/puffin.git", rev = "4a51e9f504f584e2e68a404cf24812bbb1be2300", optional = true }
-puffin_egui = { git = "https://github.com/blip-radar/puffin.git", rev = "4a51e9f504f584e2e68a404cf24812bbb1be2300", optional = true }
+# TODO: Use crates.io puffin and puffin_egui once a release supports egui 0.37 (puffin_egui 0.30 is on egui 0.33)
+puffin = { git = "https://github.com/EmbarkStudios/puffin.git", rev = "39c8970abd6a95871bcaf0d3581c494885f2edd5", optional = true }
+puffin_egui = { git = "https://github.com/EmbarkStudios/puffin.git", rev = "39c8970abd6a95871bcaf0d3581c494885f2edd5", optional = true }
 
-egui-winit = "0.33"
-egui-wgpu = "0.33"
+egui-winit = "0.37"
+egui-wgpu = "0.37"
 winit = "0.30"
-wgpu = { version = "27", features = ["dx12", "metal"] }
+wgpu = { version = "30", features = ["dx12", "metal"] }
 raw-window-handle = "0.6"
 
-sdl3 = { version = "0.17", features = ["build-from-source-static"] }
+sdl3 = { version = "0.22", features = ["build-from-source-static"] }
 
-tetanes-core = { git = "https://github.com/lukexor/tetanes.git" }
+tetanes-core = "0.17"
 thingbuf = "0.1"
-ringbuf = "0.4"
+ringbuf = "0.6"
 
-base64 = "0.22"
+base64 = "0.23"
 directories = "6.0"
 
 # Netplay deps
-matchbox_socket = { version = "0.14", features = ["ggrs"], optional = true }
+matchbox_socket = { version = "0.15", features = ["ggrs"], optional = true }
 futures-timer = { version = "3", features = ["wasm-bindgen"], optional = true }
-ggrs = { version = "0.11", optional = true }
+ggrs = { version = "0.13", optional = true }
 uuid = { version = "1", features = ["v4"], optional = true }
 reqwest = { version = "0.13", default-features = false, features = ["json", "native-tls"], optional = true }
 md5 = { version = "0.8", optional = true }
 
 [build-dependencies]
 anyhow = "1.0"
-serde_yaml = "0.9"
+serde_yaml_ng = "0.10"
 serde = { version = "1.0", features = ["derive"] }
 tinytemplate = "1.2"
 winres = "0.1"

@@ -24,7 +24,7 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=config/windows/wix/main.wxs-template");
 
     let mut bundle_config: BundleConfiguration =
-        serde_yaml::from_str(include_str!("config/config.yaml"))?;
+        serde_yaml_ng::from_str(include_str!("config/config.yaml"))?;
 
     if bundle_config.version.is_none() {
         bundle_config.version = Some(env!("CARGO_PKG_VERSION").to_string());

@@ -9,15 +9,16 @@ impl NetplayGui {
     ) {
         if !stats.get_stats().is_empty() {
             ui.label(format!("Player {player}"));
-            use egui_plot::{Line, Plot};
+            use egui_plot::{HoverPosition, Line, Plot};
 
-            Plot::new(format!("stats_plot_{player}"))
-                .label_formatter(|name, value| {
-                    if !name.is_empty() {
-                        format!("{name}: {}", value.y)
-                    } else {
-                        "".to_string()
-                    }
+            Plot::new(("stats_plot", player))
+                .label_formatter(|hover| match hover {
+                    HoverPosition::NearDataPoint {
+                        plot_name,
+                        position,
+                        ..
+                    } => Some(format!("{plot_name}: {}", position.y)),
+                    HoverPosition::Elsewhere { .. } => None,
                 })
                 .legend(
                     egui_plot::Legend::default()
