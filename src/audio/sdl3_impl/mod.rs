@@ -138,10 +138,11 @@ impl SDL3AudioStream {
         };
         let (give_back, take_back) = std::sync::mpsc::channel();
 
-        // SDL callback granularity: ~1 NTSC frame worth of samples divided into
-        // 16 slices gives ~45 samples (~1 ms at 44100 Hz), keeping latency low.
-        // TODO: derive from actual sample rate + region FPS (PAL needs ~55 samples).
-        const CALLBACK_FRAMES: u32 = 735 / 16;
+        // SDL callback granularity: 256 samples (~6 ms at 44100 Hz).
+        // PipeWire shrinks the whole graph's quantum to match this, and ~1 ms
+        // (45 samples) caused constant xruns on modest hardware. Must stay well
+        // under the default 16 ms latency target (~705 samples).
+        const CALLBACK_FRAMES: u32 = 256;
         sdl3::hint::set(
             "SDL_AUDIO_DEVICE_SAMPLE_FRAMES",
             &CALLBACK_FRAMES.to_string(),
