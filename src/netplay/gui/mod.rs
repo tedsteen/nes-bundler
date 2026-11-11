@@ -8,7 +8,7 @@ use crate::{
     gui::{MenuButton, esc_pressed},
     main_view::gui::MainMenuState,
     netplay::{
-        MAX_ROOM_NAME_LEN, NetplayCommand, NetplayCommandBus, SharedNetplay,
+        ConnectionPath, MAX_ROOM_NAME_LEN, NetplayCommand, NetplayCommandBus, SharedNetplay,
         SharedNetplayConnectedState, SharedNetplayState,
         connection::{ConnectingState, StartMethod},
     },
@@ -476,7 +476,7 @@ impl NetplayGui {
     ) -> Option<MainMenuState> {
         let mut nav = None;
         match netplay_connected {
-            SharedNetplayConnectedState::Running(start_time) => {
+            SharedNetplayConnectedState::Running(start_time, connection_path) => {
                 // Hide menu if we just managed to connect
                 if Instant::now().duration_since(*start_time).as_millis() < 200 {
                     nav = Some(MainMenuState::Closed);
@@ -486,6 +486,12 @@ impl NetplayGui {
                     Label::new(MenuButton::ui_text("CONNECTED!", MenuButton::ACTIVE_COLOR))
                         .selectable(false)
                         .ui(ui);
+                    if let Some(path) = connection_path {
+                        ui.label(match path {
+                            ConnectionPath::Direct => "Direct connection (peer to peer)",
+                            ConnectionPath::Relayed => "Relayed through a TURN server",
+                        });
+                    }
                 });
                 ui.end_row();
             }

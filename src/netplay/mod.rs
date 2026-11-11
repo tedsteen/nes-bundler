@@ -42,7 +42,19 @@ pub enum SharedNetplayConnectedState {
         Instant,        // Start time
         Option<String>, //Unlock url
     ),
-    Running(Instant /* Start time */),
+    Running(
+        Instant,                // Start time
+        Option<ConnectionPath>, // None until WebRTC reports it
+    ),
+}
+
+/// How the traffic to the other player travels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConnectionPath {
+    /// Peer to peer, possibly through NATs.
+    Direct,
+    /// Through a TURN server, ours or the other player's.
+    Relayed,
 }
 pub enum SharedNetplayState {
     Disconnected,
