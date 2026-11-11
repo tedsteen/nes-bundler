@@ -1,3 +1,4 @@
+use super::settings::InputSettings;
 use super::{InputId, JoypadMapping, JoypadState, buttons::GamepadButton};
 use std::collections::HashSet;
 
@@ -10,7 +11,7 @@ pub trait GamepadState {
 }
 
 pub trait Gamepads {
-    fn advance(&mut self, gamepad_event: &GamepadEvent);
+    fn advance(&mut self, gamepad_event: &GamepadEvent, input_settings: &mut InputSettings);
     fn get_joypad(&self, id: &InputId, mapping: &JoypadGamepadMapping) -> JoypadState;
     fn get_gamepad_by_input_id(&self, id: &InputId) -> Option<&dyn GamepadState>;
 }

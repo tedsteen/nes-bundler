@@ -177,7 +177,7 @@ impl Inputs {
                 self.keyboards.advance(key_event);
             }
             GuiEvent::Gamepad(gamepad_event) => {
-                self.gamepads.advance(gamepad_event);
+                self.gamepads.advance(gamepad_event, input_settings);
             }
         }
         input_settings.reset_selected_disconnected_inputs(self);

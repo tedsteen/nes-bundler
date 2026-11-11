@@ -3,10 +3,10 @@ use sdl3::gamepad::Gamepad;
 use sdl3::joystick::JoystickId;
 
 use super::buttons::ToGamepadButton;
+use super::settings::InputSettings;
 use super::{InputConfiguration, ToInputId};
 use super::{InputId, JoypadState, buttons::GamepadButton};
 use crate::input::InputConfigurationKind;
-use crate::settings::Settings;
 use std::collections::{HashMap, HashSet};
 
 use super::gamepad::{GamepadEvent, GamepadState, Gamepads, JoypadGamepadMapping, ToGamepadEvent};
@@ -72,10 +72,10 @@ impl Gamepads for SDL3Gamepads {
         self.all.get(id).map(|a| a.as_ref())
     }
 
-    fn advance(&mut self, gamepad_event: &GamepadEvent) {
+    fn advance(&mut self, gamepad_event: &GamepadEvent, input_settings: &mut InputSettings) {
         match gamepad_event {
             GamepadEvent::ControllerAdded { which, .. } => {
-                if !self.setup_gamepad_config(which.clone()) {
+                if !self.setup_gamepad_config(which.clone(), input_settings) {
                     log::error!("Could not setup controller {:?}", which);
                 }
             }
@@ -119,7 +119,11 @@ impl SDL3Gamepads {
     /// saving the settings file twice and to prevent a window between two separate writes.
     ///
     /// Returns `true` if the controller was successfully set up, `false` otherwise.
-    fn setup_gamepad_config(&mut self, input_id: InputId) -> bool {
+    fn setup_gamepad_config(
+        &mut self,
+        input_id: InputId,
+        input_settings: &mut InputSettings,
+    ) -> bool {
         let Some(found_controller) = self
             .game_controller_subsystem
             .gamepads()
@@ -149,9 +153,7 @@ impl SDL3Gamepads {
             Box::new(SDL3GamepadState::new(found_controller)),
         );
 
-        // Acquire the settings lock once for both the config creation and auto-selection.
-        let mut settings = Settings::current_mut();
-        let input_settings = &mut settings.input;
+        // The caller already holds the settings write lock; taking it again here deadlocks.
         let default_mapping = input_settings.default_gamepad_mapping;
         let conf_id = input_settings
             .get_or_create_config(
