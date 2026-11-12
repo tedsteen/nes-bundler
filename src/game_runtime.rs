@@ -15,9 +15,13 @@ impl GameRuntime {
         }
     }
 
-    /// Runs `frames` frames' worth of emulation, waiting up to `timeout` for it to finish.
-    pub fn tick(&self, frames: f32, timeout: Duration) {
-        self.emulator.shared_state.emulator.tick(frames, timeout);
+    /// Runs `frames` frames' worth of emulation, waiting up to `timeout` for it to finish. The
+    /// display runs the game at `speed` times its own frame rate.
+    pub fn tick(&self, frames: f32, speed: f32, timeout: Duration) {
+        self.emulator
+            .shared_state
+            .emulator
+            .tick(frames, speed, timeout);
     }
 
     pub fn shared_state(&self) -> SharedState {

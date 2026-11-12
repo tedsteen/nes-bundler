@@ -136,6 +136,11 @@ impl MainView {
         }
     }
 
+    /// Gets ready to draw the next frame; with vsync, waits for the last one to be on screen.
+    pub fn acquire(&mut self) -> bool {
+        self.renderer.acquire()
+    }
+
     /// Returns whether a frame was presented.
     pub fn render(&mut self, main_gui: &mut MainGui) -> bool {
         if let Some(nes_frame) = &self.frame_buffer.pop_ref() {

@@ -14,11 +14,14 @@ use crate::audio::{AudioStream, AudioSystem, AvailableAudioDevice};
 use crate::emulation::DEFAULT_SAMPLE_RATE;
 use crate::settings::SettingsStore;
 
-// SDL callback granularity: 256 samples (~6 ms at 44100 Hz).
-// PipeWire shrinks the whole graph's quantum to match this, and ~1 ms
-// (45 samples) caused constant xruns on modest hardware. Must stay well
-// under the minimum 8 ms latency target (~353 samples).
+// How many samples the sound card takes at a time. Smaller means less audio waiting in the device
+// and less headroom kept in the buffer. On Linux, PipeWire shrinks the whole graph's quantum to
+// match, and ~1 ms (45 samples) caused constant xruns on modest hardware, so it gets 256 (~6 ms);
+// elsewhere 128 (~3 ms) is routine.
+#[cfg(target_os = "linux")]
 const CALLBACK_FRAMES: u32 = 256;
+#[cfg(not(target_os = "linux"))]
+const CALLBACK_FRAMES: u32 = 128;
 
 #[derive(Debug, Clone)]
 pub struct SDL3AvailableAudioDevice {

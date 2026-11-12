@@ -14,6 +14,8 @@ use tokio::sync::Notify;
 struct State {
     /// Frames handed out and not yet taken by the emulator thread.
     credit: f32,
+    /// The display's speed with the last tick.
+    speed: f32,
     /// Ticks handed out, and the last one the emulator thread has finished.
     ticks: u64,
     done: u64,
@@ -34,11 +36,13 @@ impl FrameClock {
         self.0.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// Hands the emulator `frames` to run and waits up to `timeout` for it to run them.
-    pub fn tick(&self, frames: f32, timeout: Duration) {
+    /// Hands the emulator `frames` to run, at a display running the game `speed` times its own
+    /// frame rate, and waits up to `timeout` for it to run them.
+    pub fn tick(&self, frames: f32, speed: f32, timeout: Duration) {
         let tick = {
             let mut state = self.lock();
             state.credit += frames;
+            state.speed = speed;
             state.ticks += 1;
             state.ticks
         };
@@ -66,6 +70,7 @@ impl FrameClock {
         let mut state = self.lock();
         Credit {
             frames: std::mem::take(&mut state.credit),
+            speed: state.speed,
             tick: state.ticks,
         }
     }
@@ -80,5 +85,6 @@ impl FrameClock {
 
 pub struct Credit {
     pub frames: f32,
+    pub speed: f32,
     tick: u64,
 }

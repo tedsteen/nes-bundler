@@ -157,9 +157,10 @@ impl SharedEmulator {
         self.controls.request_reset(hard);
     }
 
-    /// Runs `frames` frames' worth of emulation, waiting up to `timeout` for it to finish.
-    pub fn tick(&self, frames: f32, timeout: std::time::Duration) {
-        self.controls.clock.tick(frames, timeout);
+    /// Runs `frames` frames' worth of emulation, waiting up to `timeout` for it to finish. The
+    /// display runs the game at `speed` times its own frame rate.
+    pub fn tick(&self, frames: f32, speed: f32, timeout: std::time::Duration) {
+        self.controls.clock.tick(frames, speed, timeout);
     }
 }
 
@@ -268,6 +269,7 @@ impl EmulatorRuntime {
                                 );
                             }
                             owed += credit.frames * pace - std::mem::take(&mut ran_on_own);
+                            audio_producer.set_display_speed(credit.speed);
                         }
                         // No tick: the display stalled (a hidden or minimized window, a window
                         // being dragged). Keep time on our own so the audio doesn't run dry.
@@ -276,6 +278,7 @@ impl EmulatorRuntime {
                                 log::debug!("Display stopped ticking, keeping time on our own");
                             }
                             let due = last_tick.elapsed().as_secs_f32() / frame_time * pace;
+                            audio_producer.set_display_speed(1.0);
                             owed += due;
                             ran_on_own += due;
                         }
@@ -338,11 +341,13 @@ impl PacingLog {
         let stats = audio.stats();
         let per_second = |count: u64| count as f32 / elapsed.as_secs_f32();
         log::debug!(
-            "Pacing: {:.2} frames/s, audio {:.1} ms buffered (target {:.1} ms), rate {:+.2}%, {:.0} samples/s in, {:.0} out, {} underruns",
+            "Pacing: {:.2} frames/s, audio margin {:.1} ms (target {:.1} ms, sound card bursts up to {:.1} ms), rate {:+.2}% (drift {:+.3}%), {:.0} samples/s in, {:.0} out, {} underruns",
             self.frames as f32 / elapsed.as_secs_f32(),
-            stats.buffered_ms,
+            stats.margin_ms,
             stats.target_ms,
+            stats.burst_ms,
             (stats.rate - 1.0) * 100.0,
+            stats.drift * 100.0,
             per_second(stats.pushed - self.pushed),
             per_second(stats.played - self.played),
             stats.underruns - self.underruns,

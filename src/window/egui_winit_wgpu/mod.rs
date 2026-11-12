@@ -6,7 +6,7 @@ use anyhow::Result;
 use egui::Ui;
 use egui_wgpu::ScreenDescriptor;
 use gui::EguiRenderer;
-use wgpu::{CurrentSurfaceTexture, PresentMode};
+use wgpu::{CurrentSurfaceTexture, PresentMode, SurfaceTexture};
 use winit::window::Window;
 
 pub mod texture;
@@ -20,6 +20,16 @@ pub struct Renderer {
 
     pub window: Arc<Window>,
     pub egui: gui::EguiRenderer,
+    /// The surface texture to draw the next frame into, acquired ahead of time (see `acquire`),
+    /// and whether the surface needs reconfiguring after presenting it.
+    next_frame: Option<(SurfaceTexture, bool)>,
+}
+
+impl Drop for Renderer {
+    fn drop(&mut self) {
+        // A surface texture has to go before its surface, which is declared (and dropped) first.
+        self.next_frame = None;
+    }
 }
 
 impl Renderer {
@@ -81,6 +91,7 @@ impl Renderer {
             size,
             window,
             egui,
+            next_frame: None,
         })
     }
 
@@ -90,6 +101,8 @@ impl Renderer {
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
+            // It's the old size.
+            self.next_frame = None;
             self.size = new_size;
             self.config.width = new_size.width;
             self.config.height = new_size.height;
@@ -97,30 +110,45 @@ impl Renderer {
         }
     }
 
-    /// Renders and presents a frame, or skips it when the surface has no texture to give (e.g. the
-    /// window is occluded, or the surface had to be reconfigured). Returns whether it presented.
+    /// Gets the surface texture for the next frame. With vsync this waits until the frame presented
+    /// last is on screen, so doing it right after presenting (rather than right before drawing)
+    /// lets the next frame start from the latest input. Returns whether there's a texture; not when
+    /// the window is occluded, for one.
+    pub fn acquire(&mut self) -> bool {
+        if self.next_frame.is_some() {
+            return true;
+        }
+        #[cfg(feature = "debug")]
+        puffin::profile_function!();
+
+        self.next_frame = match self.surface.get_current_texture() {
+            CurrentSurfaceTexture::Success(texture) => Some((texture, false)),
+            CurrentSurfaceTexture::Suboptimal(texture) => Some((texture, true)),
+            CurrentSurfaceTexture::Timeout | CurrentSurfaceTexture::Occluded => None,
+            CurrentSurfaceTexture::Outdated | CurrentSurfaceTexture::Lost => {
+                log::warn!("Surface lost or outdated, reconfiguring.");
+                self.surface.configure(&self.device, &self.config);
+                None
+            }
+            CurrentSurfaceTexture::Validation => {
+                log::warn!("Surface validation error, skipping frame.");
+                None
+            }
+        };
+        self.next_frame.is_some()
+    }
+
+    /// Renders and presents a frame into the acquired texture (acquiring one if needed). Returns
+    /// whether it presented.
     pub fn render(&mut self, mut run_ui: impl FnMut(&mut Ui)) -> bool {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
-        let (output, suboptimal) = {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("get_current_texture");
-
-            match self.surface.get_current_texture() {
-                CurrentSurfaceTexture::Success(texture) => (texture, false),
-                CurrentSurfaceTexture::Suboptimal(texture) => (texture, true),
-                CurrentSurfaceTexture::Timeout | CurrentSurfaceTexture::Occluded => return false,
-                CurrentSurfaceTexture::Outdated | CurrentSurfaceTexture::Lost => {
-                    log::warn!("Surface lost or outdated, reconfiguring.");
-                    self.surface.configure(&self.device, &self.config);
-                    return false;
-                }
-                CurrentSurfaceTexture::Validation => {
-                    log::warn!("Surface validation error, skipping frame.");
-                    return false;
-                }
-            }
+        if !self.acquire() {
+            return false;
+        }
+        let Some((output, suboptimal)) = self.next_frame.take() else {
+            return false;
         };
 
         let view = {
