@@ -1,5 +1,8 @@
 use std::time::{Duration, Instant};
 
+/// How long the laggy-connection warning stays up after the game last froze or rolled back far.
+const LAG_WARNING: Duration = Duration::from_secs(5);
+
 use egui::{Align2, Button, Color32, FontId, Label, RichText, TextEdit, Ui, Widget};
 use serde::Deserialize;
 
@@ -207,6 +210,14 @@ impl NetplayGui {
         match &*self.shared_netplay.receiver.borrow() {
             SharedNetplayState::Resuming => Some(vec![format!(
                 "{} - Trying to reconnect...",
+                self.name().expect("a name")
+            )]),
+            SharedNetplayState::Connected(SharedNetplayConnectedState::Running(
+                _,
+                _,
+                Some(last_lag),
+            )) if last_lag.elapsed() < LAG_WARNING => Some(vec![format!(
+                "{} - Laggy connection",
                 self.name().expect("a name")
             )]),
             _ => None,
@@ -511,7 +522,7 @@ impl NetplayGui {
     ) -> Option<MainMenuState> {
         let mut nav = None;
         match netplay_connected {
-            SharedNetplayConnectedState::Running(start_time, connection_path) => {
+            SharedNetplayConnectedState::Running(start_time, connection_path, _) => {
                 // Hide menu if we just managed to connect
                 if Instant::now().duration_since(*start_time).as_millis() < 200 {
                     nav = Some(MainMenuState::Closed);

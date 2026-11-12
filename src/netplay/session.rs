@@ -18,6 +18,7 @@ use crate::{
         configuration::StaticNetplayServerConfiguration,
         connection::{ConnectingSession, NetplayConnection, PeerUnreachable, StartMethod},
     },
+    recurrence::Recurrence,
     settings::{MAX_PLAYERS, Settings},
 };
 #[derive(Clone, Debug)]
@@ -98,6 +99,10 @@ pub struct ConnectedNetplaySession {
     logged_frames_ahead: i32,
     /// Frames in a row GGRS has had us wait for the other player's input.
     waited_frames: u32,
+    /// The game freezing for the other player's input, or rolling back far, to tell a laggy
+    /// connection from a one-off hiccup; and when it last did while laggy.
+    lag: Recurrence,
+    last_lag: Option<Instant>,
     log: NetplayLog,
     /// Kept for querying the WebRTC connection; GGRS owns its data channel.
     socket: WebRtcSocket,
@@ -163,6 +168,8 @@ impl ConnectedNetplaySession {
             catch_up_speed: 1.0,
             log: NetplayLog::new(),
             waited_frames: 0,
+            lag: Recurrence::new(LAG_TIMES, LAG_WITHIN),
+            last_lag: None,
             frame_time: 1.0 / fps,
             logged_frames_ahead: 0,
             socket,
@@ -213,6 +220,9 @@ impl ConnectedNetplaySession {
                         } else {
                             self.waited_frames += 1;
                             self.log.skipped += 1;
+                            if self.waited_frames == 1 && self.lag.record(Instant::now()) {
+                                self.last_lag = Some(Instant::now());
+                            }
                         }
                         // CPU time spent re-simulating after a misprediction (not waiting for audio).
                         let mut rollback: Option<(i32, Duration)> = None;
@@ -280,6 +290,9 @@ impl ConnectedNetplaySession {
                         }
                         if let Some((depth, spent)) = rollback {
                             Self::log_rollback(depth, spent);
+                            if depth >= LAG_ROLLBACK_FRAMES && self.lag.record(Instant::now()) {
+                                self.last_lag = Some(Instant::now());
+                            }
                             self.log.rollback(depth, spent);
                         }
                     }
@@ -397,9 +410,11 @@ impl ConnectedNetplaySession {
                 self.last_running_time,
                 self.netplay_server_configuration.unlock_url.clone(),
             ),
-            ggrs::SessionState::Running => {
-                SharedNetplayConnectedState::Running(self.start_time, self.connection_path)
-            }
+            ggrs::SessionState::Running => SharedNetplayConnectedState::Running(
+                self.start_time,
+                self.connection_path,
+                self.last_lag,
+            ),
         }
     }
 }
@@ -503,6 +518,13 @@ const POLLING_TIMEOUT: Duration = Duration::from_millis(1);
 
 /// Minimum emulation speed applied when this peer is ahead of the remote (95%). The audio has to
 /// stretch as much, and tetanes allows its rate to move 5% at most.
+/// The connection is laggy when the game freezes waiting for the other player's input, or rolls
+/// back at least `LAG_ROLLBACK_FRAMES` (a visible correction), `LAG_TIMES` times within
+/// `LAG_WITHIN`. Once is a hiccup.
+const LAG_TIMES: usize = 3;
+const LAG_WITHIN: Duration = Duration::from_secs(30);
+const LAG_ROLLBACK_FRAMES: i32 = 6;
+
 /// The most catching up changes the speed, either way (0.95x to 1.05x).
 const NETPLAY_MAX_SPEED_CHANGE: f32 = 0.05;
 /// A one-frame lead comes and goes all the time and only means 0.4% slower; ignore it.

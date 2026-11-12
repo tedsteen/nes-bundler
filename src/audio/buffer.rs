@@ -24,7 +24,7 @@ use ringbuf::{
     traits::{Consumer, Observer, Producer, Split},
 };
 
-use crate::audio::MAX_AUDIO_LATENCY_MICROS;
+use crate::{audio::MAX_AUDIO_LATENCY_MICROS, recurrence::Recurrence};
 
 /// How far rate control may stretch the audio either way, on top of what's known up front (see
 /// [`AudioProducer::set_display_speed`]). Arntzen's 0.5% is inaudible and covers any real clock
@@ -255,10 +255,8 @@ pub struct AudioConsumer {
     last_sample: f32,
     /// Samples into the fade-in after a refill.
     faded_in: usize,
-    /// When the sound cut out the last few times before (microseconds since `epoch`), oldest
-    /// overwritten first.
-    dropouts: [Option<u64>; STUTTER_DROPOUTS - 1],
-    next_dropout: usize,
+    /// The sound cutting out, to tell stuttering from a one-off.
+    dropouts: Recurrence,
 }
 
 impl AudioConsumer {
@@ -313,15 +311,17 @@ impl AudioConsumer {
         if got < out.len() {
             self.fade_out(&mut out[got..]);
             self.shared.underruns.fetch_add(1, Ordering::Relaxed);
-            let now = self.shared.epoch.elapsed().as_micros() as u64;
+            let now_micros = now.duration_since(self.shared.epoch).as_micros() as u64;
             let since_push =
-                now.saturating_sub(self.shared.last_push_micros.load(Ordering::Relaxed));
+                now_micros.saturating_sub(self.shared.last_push_micros.load(Ordering::Relaxed));
             let frame_micros = self.shared.last_push_samples.load(Ordering::Relaxed) as f32
                 / self.shared.sample_rate
                 * 1_000_000.0;
             let emulator_on_time = since_push as f32 <= frame_micros * ON_TIME_FRAMES;
-            if emulator_on_time {
-                self.record_dropout(now);
+            if emulator_on_time && self.dropouts.record(now) {
+                self.shared
+                    .last_stutter_micros
+                    .store(now_micros.max(1), Ordering::Relaxed);
             }
             log::debug!(
                 "Audio buffer ran dry ({got} of {} samples), {:.1} ms after the emulator last added audio{}",
@@ -336,17 +336,6 @@ impl AudioConsumer {
             self.start_refill();
         }
         got
-    }
-
-    fn record_dropout(&mut self, now: u64) {
-        // The oldest of the ones before, overwritten by this one.
-        let oldest = self.dropouts[self.next_dropout].replace(now);
-        self.next_dropout = (self.next_dropout + 1) % self.dropouts.len();
-        if oldest.is_some_and(|oldest| now - oldest <= STUTTER_WITHIN.as_micros() as u64) {
-            self.shared
-                .last_stutter_micros
-                .store(now.max(1), Ordering::Relaxed);
-        }
     }
 
     fn start_refill(&mut self) {
@@ -448,38 +437,11 @@ pub fn audio_buffer(
             burst: 0,
             last_sample: 0.0,
             faded_in: 0,
-            dropouts: [None; STUTTER_DROPOUTS - 1],
-            next_dropout: 0,
+            dropouts: Recurrence::new(STUTTER_DROPOUTS, STUTTER_WITHIN),
         },
         AudioBufferControl {
             shared,
             sample_rate,
         },
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const SECOND: u64 = 1_000_000;
-
-    #[test]
-    fn a_few_scattered_dropouts_are_not_stuttering() {
-        let (_tx, mut rx, ctl) = audio_buffer(8_000, 44_100.0, 128);
-        for second in [1, 20, 40, 60, 80] {
-            rx.record_dropout(second * SECOND);
-        }
-        assert!(ctl.since_stutter().is_none());
-    }
-
-    #[test]
-    fn dropouts_close_together_are_stuttering() {
-        let (_tx, mut rx, ctl) = audio_buffer(8_000, 44_100.0, 128);
-        rx.record_dropout(SECOND);
-        rx.record_dropout(10 * SECOND);
-        assert!(ctl.since_stutter().is_none());
-        rx.record_dropout(20 * SECOND);
-        assert!(ctl.since_stutter().is_some());
-    }
 }

@@ -32,6 +32,7 @@ mod integer_scaling;
 mod main_view;
 #[cfg(feature = "netplay")]
 mod netplay;
+mod recurrence;
 mod settings;
 mod ui_controller;
 mod window;
