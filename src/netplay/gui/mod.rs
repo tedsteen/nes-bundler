@@ -8,7 +8,7 @@ use crate::{
     gui::{MenuButton, esc_pressed},
     main_view::gui::MainMenuState,
     netplay::{
-        MAX_ROOM_NAME_LEN, NetplayCommand, NetplayCommandBus, SharedNetplay,
+        ConnectionPath, MAX_ROOM_NAME_LEN, NetplayCommand, NetplayCommandBus, SharedNetplay,
         SharedNetplayConnectedState, SharedNetplayState,
         connection::{ConnectingState, StartMethod},
     },
@@ -124,7 +124,7 @@ impl NetplayGui {
                     return Some(MainMenuState::Main);
                 }
             }
-            SharedNetplayState::Failed(reason) => {
+            SharedNetplayState::Failed(reason, unlock_url) => {
                 let esc_was_pressed = esc_pressed(ui);
                 ui.vertical_centered(|ui| {
                     Label::new(MenuButton::ui_text(
@@ -141,6 +141,10 @@ impl NetplayGui {
                         .ui(ui);
                 });
                 ui.end_row();
+                if let Some(unlock_url) = unlock_url {
+                    Self::unlock_prompt_ui(ui, unlock_url);
+                    ui.end_row();
+                }
                 if ui
                     .vertical_centered(|ui| ui_button("Retry").ui(ui).clicked())
                     .inner
@@ -160,6 +164,31 @@ impl NetplayGui {
             }
         };
         None
+    }
+
+    /// Explains that a relay could make the connection possible, and links to unlocking one.
+    fn unlock_prompt_ui(ui: &mut Ui, unlock_url: &str) {
+        ui.vertical_centered(|ui| {
+            ui.set_width(300.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                ui.label("We're having trouble connecting you, click ");
+                ui.hyperlink_to("here", unlock_url)
+                    .on_hover_cursor(egui::CursorIcon::PointingHand);
+                ui.label(" to unlock Netplay!");
+            });
+        });
+    }
+
+    fn retry_button_ui(&self, ui: &mut Ui) {
+        ui.vertical_centered(|ui| {
+            if ui.button("Retry").clicked() {
+                let _ = self
+                    .shared_netplay
+                    .command_tx
+                    .try_send(NetplayCommand::RetryConnect);
+            }
+        });
     }
 
     fn needs_unlocking(start_time: Instant, unlock_url: &Option<String>) -> Option<String> {
@@ -370,7 +399,7 @@ impl NetplayGui {
                         .ui(ui);
                 });
             }
-            ConnectingState::PeeringUp(start_method) => {
+            ConnectingState::PeeringUp(start_method, unlock_url) => {
                 match start_method.as_ref() {
                     StartMethod::Start(room_name, join_or_host) => {
                         use super::connection::JoinOrHost::*;
@@ -448,6 +477,12 @@ impl NetplayGui {
                         //This is used internally during the `NetplayState::Resuming` state
                     }
                 }
+                if let Some(unlock_url) = unlock_url {
+                    ui.end_row();
+                    Self::unlock_prompt_ui(ui, unlock_url);
+                    ui.end_row();
+                    self.retry_button_ui(ui);
+                }
             }
         }
 
@@ -476,7 +511,7 @@ impl NetplayGui {
     ) -> Option<MainMenuState> {
         let mut nav = None;
         match netplay_connected {
-            SharedNetplayConnectedState::Running(start_time) => {
+            SharedNetplayConnectedState::Running(start_time, connection_path) => {
                 // Hide menu if we just managed to connect
                 if Instant::now().duration_since(*start_time).as_millis() < 200 {
                     nav = Some(MainMenuState::Closed);
@@ -486,6 +521,12 @@ impl NetplayGui {
                     Label::new(MenuButton::ui_text("CONNECTED!", MenuButton::ACTIVE_COLOR))
                         .selectable(false)
                         .ui(ui);
+                    if let Some(path) = connection_path {
+                        ui.label(match path {
+                            ConnectionPath::Direct => "Direct connection (peer to peer)",
+                            ConnectionPath::Relayed => "Relayed through a TURN server",
+                        });
+                    }
                 });
                 ui.end_row();
             }
@@ -497,26 +538,9 @@ impl NetplayGui {
                 });
                 ui.end_row();
                 if let Some(unlock_url) = Self::needs_unlocking(*start_time, unlock_url) {
-                    ui.vertical_centered(|ui| {
-                        ui.set_width(300.0);
-                        ui.horizontal_wrapped(|ui| {
-                            ui.spacing_mut().item_spacing.x = 0.0;
-                            ui.label("We're having trouble connecting you, click ");
-                            ui.hyperlink_to("here", unlock_url)
-                                .on_hover_cursor(egui::CursorIcon::PointingHand);
-                            ui.label(" to unlock Netplay!");
-                        });
-                    });
+                    Self::unlock_prompt_ui(ui, &unlock_url);
                     ui.end_row();
-
-                    ui.vertical_centered(|ui| {
-                        if ui.button("Retry").clicked() {
-                            let _ = self
-                                .shared_netplay
-                                .command_tx
-                                .try_send(NetplayCommand::RetryConnect);
-                        }
-                    });
+                    self.retry_button_ui(ui);
                 }
                 ui.end_row();
             }

@@ -21,6 +21,7 @@ pub mod configuration;
 pub mod connection;
 pub mod gui;
 pub mod session;
+mod signaller;
 
 #[cfg(feature = "debug")]
 mod stats;
@@ -42,14 +43,29 @@ pub enum SharedNetplayConnectedState {
         Instant,        // Start time
         Option<String>, //Unlock url
     ),
-    Running(Instant /* Start time */),
+    Running(
+        Instant,                // Start time
+        Option<ConnectionPath>, // None until WebRTC reports it
+    ),
+}
+
+/// How the traffic to the other player travels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConnectionPath {
+    /// Peer to peer, possibly through NATs.
+    Direct,
+    /// Through a TURN server, ours or the other player's.
+    Relayed,
 }
 pub enum SharedNetplayState {
     Disconnected,
     Connecting(tokio::sync::watch::Receiver<ConnectingState>),
     Connected(SharedNetplayConnectedState),
     Resuming,
-    Failed(String),
+    Failed(
+        String,         // Reason
+        Option<String>, // Unlock url, when a relay might have made the connection possible
+    ),
 }
 
 #[derive(Clone)]

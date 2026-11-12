@@ -5,17 +5,18 @@ use std::{
 };
 
 use anyhow::Error;
+use ggrs::PlayerType;
 use ggrs::{Config, GgrsRequest, P2PSession, SessionBuilder};
-use matchbox_socket::PeerId;
+use matchbox_socket::{PeerId, WebRtcSocket};
 use tokio::select;
 
 use crate::{
     emulation::{LocalNesState, NESBuffers, NesStateHandler, new_local_nes_state},
     input::JoypadState,
     netplay::{
-        SharedNetplayConnectedState, SharedNetplayState,
+        ConnectionPath, SharedNetplayConnectedState, SharedNetplayState,
         configuration::StaticNetplayServerConfiguration,
-        connection::{ConnectingSession, NetplayConnection, StartMethod},
+        connection::{ConnectingSession, NetplayConnection, PeerUnreachable, StartMethod},
     },
     settings::{MAX_PLAYERS, Settings},
 };
@@ -91,6 +92,10 @@ pub struct ConnectedNetplaySession {
     /// Kept here rather than in the shared emulator controls: it changes often, and a speed
     /// change there flushes the audio.
     catch_up_speed: f32,
+    /// Kept for querying the WebRTC connection; GGRS owns its data channel.
+    socket: WebRtcSocket,
+    remote_peer: Option<PeerId>,
+    connection_path: Option<ConnectionPath>,
     _loop_task: crate::netplay::connection::AbortOnDrop,
 }
 
@@ -111,6 +116,10 @@ impl ConnectedNetplaySession {
             .with_max_prediction_window(ggrs_config.max_prediction);
 
         let players = socket.players();
+        let remote_peer = players.iter().find_map(|player| match player {
+            PlayerType::Remote(peer) => Some(*peer),
+            _ => None,
+        });
         for (i, player) in players.into_iter().enumerate() {
             sess_build = sess_build
                 .add_player(player, i)
@@ -144,6 +153,9 @@ impl ConnectedNetplaySession {
             start_time: Instant::now(),
             last_running_time: Instant::now(),
             catch_up_speed: 1.0,
+            socket,
+            remote_peer,
+            connection_path: None,
             _loop_task: loop_task,
         }
     }
@@ -155,6 +167,7 @@ impl ConnectedNetplaySession {
         speed: f32,
     ) {
         let speed = speed * self.catch_up_speed;
+        self.update_connection_path();
         let p2p_session = &mut self.p2p_session;
 
         match p2p_session.current_state() {
@@ -249,13 +262,44 @@ impl ConnectedNetplaySession {
         }
     }
 
+    /// Picks up the candidate pair WebRTC settled on, which can change during the connection.
+    fn update_connection_path(&mut self) {
+        // Peer changes are GGRS's business; this only refreshes the candidate pairs.
+        let _ = self.socket.try_update_peers();
+        let Some(peer) = self.remote_peer else {
+            return;
+        };
+        // Unknown until WebRTC reports the pair; is_relayed and candidate_pair come from the same pair.
+        let (Some(relayed), Some(pair)) = (
+            self.socket.is_relayed(peer),
+            self.socket.candidate_pair(peer),
+        ) else {
+            return;
+        };
+        let path = if relayed {
+            ConnectionPath::Relayed
+        } else {
+            ConnectionPath::Direct
+        };
+        if self.connection_path != Some(path) {
+            log::info!(
+                "Netplay connection to {peer} is {path:?} (local: {:?}, remote: {:?})",
+                pair.local,
+                pair.remote
+            );
+            self.connection_path = Some(path);
+        }
+    }
+
     fn to_shared_state(&self) -> SharedNetplayConnectedState {
         match self.p2p_session.current_state() {
             ggrs::SessionState::Synchronizing => SharedNetplayConnectedState::Synchronizing(
                 self.last_running_time,
                 self.netplay_server_configuration.unlock_url.clone(),
             ),
-            ggrs::SessionState::Running => SharedNetplayConnectedState::Running(self.start_time),
+            ggrs::SessionState::Running => {
+                SharedNetplayConnectedState::Running(self.start_time, self.connection_path)
+            }
         }
     }
 }
@@ -294,12 +338,17 @@ impl ResumingNetplaySession {
 #[derive(Debug)]
 pub struct FailedNetplaySession {
     reason: String,
+    unlock_url: Option<String>,
     pub start_method: StartMethod,
 }
 impl FailedNetplaySession {
-    fn new(reason: String, start_method: StartMethod) -> Self {
+    fn new(error: Error, start_method: StartMethod) -> Self {
+        log::warn!("Netplay failed: {error:#}");
         Self {
-            reason,
+            reason: error.to_string(),
+            unlock_url: error
+                .downcast_ref::<PeerUnreachable>()
+                .and_then(|unreachable| unreachable.unlock_url.clone()),
             start_method,
         }
     }
@@ -329,7 +378,7 @@ impl NetplaySession {
         Self::Resuming(ResumingNetplaySession::new(session_state))
     }
     fn fail(error: Error, start_method: StartMethod) -> Self {
-        Self::Failed(FailedNetplaySession::new(error.to_string(), start_method))
+        Self::Failed(FailedNetplaySession::new(error, start_method))
     }
 
     pub(crate) fn to_shared_state(&self) -> SharedNetplayState {
@@ -342,9 +391,10 @@ impl NetplaySession {
                 SharedNetplayState::Connected(connected_netplay_session.to_shared_state())
             }
             NetplaySession::Resuming(..) => SharedNetplayState::Resuming,
-            NetplaySession::Failed(failed_session) => {
-                SharedNetplayState::Failed(failed_session.reason.clone())
-            }
+            NetplaySession::Failed(failed_session) => SharedNetplayState::Failed(
+                failed_session.reason.clone(),
+                failed_session.unlock_url.clone(),
+            ),
         }
     }
 }

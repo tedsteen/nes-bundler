@@ -9,7 +9,16 @@ publish = false
 [features]
 default = []
 
-netplay = ["matchbox_socket", "ggrs", "futures-timer", "uuid", "reqwest", "md5"]
+netplay = [
+  "matchbox_socket",
+  "ggrs",
+  "futures-timer",
+  "uuid",
+  "reqwest",
+  "md5",
+  "async-tungstenite",
+  "serde_json",
+]
 debug = ["egui_plot", "puffin", "puffin_egui"]
 
 # Playable framerates in development
@@ -81,6 +90,9 @@ ggrs = { version = "0.13", optional = true }
 uuid = { version = "1", features = ["v4"], optional = true }
 reqwest = { version = "0.13", default-features = false, features = ["json", "native-tls"], optional = true }
 md5 = { version = "0.8", optional = true }
+# For our copy of matchbox's signaller (src/netplay/signaller.rs); same versions as matchbox_socket.
+async-tungstenite = { version = "0.35", default-features = false, features = ["smol-runtime"], optional = true }
+serde_json = { version = "1", optional = true }
 
 [build-dependencies]
 anyhow = "1.0"
