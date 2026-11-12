@@ -239,6 +239,7 @@ impl EmulatorRuntime {
                 let mut ran_on_own = 0.0f32;
                 let mut last_tick = std::time::Instant::now();
                 let mut pacing = PacingLog::new();
+                let mut last_frame = std::time::Instant::now();
                 loop {
                     let frame_time = 1.0 / Settings::current().nes_region().to_fps();
                     // Step in as soon as a tick is a frame late, before the audio runs low. If the
@@ -258,7 +259,7 @@ impl EmulatorRuntime {
                         nes_state.reset(hard);
                     }
 
-                    // Slower while netplay lets the other player catch up.
+                    // Slower or faster while netplay meets the other player.
                     let pace = nes_state.pace();
                     match &credit {
                         Ok(credit) => {
@@ -291,6 +292,16 @@ impl EmulatorRuntime {
                     }
                     while owed >= 1.0 {
                         owed -= 1.0;
+                        let started = std::time::Instant::now();
+                        let gap = started.duration_since(last_frame);
+                        if gap > std::time::Duration::from_millis(25) {
+                            log::debug!(
+                                "No frame for {:.1} ms (owed {:.2}, pace {pace:.3}, {})",
+                                gap.as_secs_f32() * 1000.0,
+                                owed + 1.0,
+                                if credit.is_ok() { "display tick" } else { "on our own" }
+                            );
+                        }
                         Emulator::run_frame(
                             &mut nes_state,
                             &controls,
@@ -300,6 +311,11 @@ impl EmulatorRuntime {
                         )
                         .await;
                         pacing.frames += 1;
+                        last_frame = std::time::Instant::now();
+                        let took = started.elapsed();
+                        if took > std::time::Duration::from_millis(10) {
+                            log::debug!("A frame took {:.1} ms", took.as_secs_f32() * 1000.0);
+                        }
                     }
                     if let Ok(credit) = &credit {
                         controls.clock.finished(credit);
@@ -473,8 +489,8 @@ pub trait NesStateHandler {
     fn reset(&mut self, hard: bool);
     fn save_sram(&mut self) -> Option<&[u8]>;
     fn frame(&self) -> u32;
-    /// How fast to run relative to the display; netplay slows down to let the other player
-    /// catch up.
+    /// How fast to run relative to the display; netplay slows down or speeds up to meet the other
+    /// player.
     fn pace(&self) -> f32 {
         1.0
     }
