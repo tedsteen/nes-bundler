@@ -124,7 +124,7 @@ impl NetplayGui {
                     return Some(MainMenuState::Main);
                 }
             }
-            SharedNetplayState::Failed(reason) => {
+            SharedNetplayState::Failed(reason, unlock_url) => {
                 let esc_was_pressed = esc_pressed(ui);
                 ui.vertical_centered(|ui| {
                     Label::new(MenuButton::ui_text(
@@ -141,6 +141,10 @@ impl NetplayGui {
                         .ui(ui);
                 });
                 ui.end_row();
+                if let Some(unlock_url) = unlock_url {
+                    Self::unlock_prompt_ui(ui, unlock_url);
+                    ui.end_row();
+                }
                 if ui
                     .vertical_centered(|ui| ui_button("Retry").ui(ui).clicked())
                     .inner
@@ -160,6 +164,31 @@ impl NetplayGui {
             }
         };
         None
+    }
+
+    /// Explains that a relay could make the connection possible, and links to unlocking one.
+    fn unlock_prompt_ui(ui: &mut Ui, unlock_url: &str) {
+        ui.vertical_centered(|ui| {
+            ui.set_width(300.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                ui.label("We're having trouble connecting you, click ");
+                ui.hyperlink_to("here", unlock_url)
+                    .on_hover_cursor(egui::CursorIcon::PointingHand);
+                ui.label(" to unlock Netplay!");
+            });
+        });
+    }
+
+    fn retry_button_ui(&self, ui: &mut Ui) {
+        ui.vertical_centered(|ui| {
+            if ui.button("Retry").clicked() {
+                let _ = self
+                    .shared_netplay
+                    .command_tx
+                    .try_send(NetplayCommand::RetryConnect);
+            }
+        });
     }
 
     fn needs_unlocking(start_time: Instant, unlock_url: &Option<String>) -> Option<String> {
@@ -370,7 +399,7 @@ impl NetplayGui {
                         .ui(ui);
                 });
             }
-            ConnectingState::PeeringUp(start_method) => {
+            ConnectingState::PeeringUp(start_method, unlock_url) => {
                 match start_method.as_ref() {
                     StartMethod::Start(room_name, join_or_host) => {
                         use super::connection::JoinOrHost::*;
@@ -448,6 +477,12 @@ impl NetplayGui {
                         //This is used internally during the `NetplayState::Resuming` state
                     }
                 }
+                if let Some(unlock_url) = unlock_url {
+                    ui.end_row();
+                    Self::unlock_prompt_ui(ui, unlock_url);
+                    ui.end_row();
+                    self.retry_button_ui(ui);
+                }
             }
         }
 
@@ -503,26 +538,9 @@ impl NetplayGui {
                 });
                 ui.end_row();
                 if let Some(unlock_url) = Self::needs_unlocking(*start_time, unlock_url) {
-                    ui.vertical_centered(|ui| {
-                        ui.set_width(300.0);
-                        ui.horizontal_wrapped(|ui| {
-                            ui.spacing_mut().item_spacing.x = 0.0;
-                            ui.label("We're having trouble connecting you, click ");
-                            ui.hyperlink_to("here", unlock_url)
-                                .on_hover_cursor(egui::CursorIcon::PointingHand);
-                            ui.label(" to unlock Netplay!");
-                        });
-                    });
+                    Self::unlock_prompt_ui(ui, &unlock_url);
                     ui.end_row();
-
-                    ui.vertical_centered(|ui| {
-                        if ui.button("Retry").clicked() {
-                            let _ = self
-                                .shared_netplay
-                                .command_tx
-                                .try_send(NetplayCommand::RetryConnect);
-                        }
-                    });
+                    self.retry_button_ui(ui);
                 }
                 ui.end_row();
             }

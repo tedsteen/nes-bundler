@@ -16,7 +16,7 @@ use crate::{
     netplay::{
         ConnectionPath, SharedNetplayConnectedState, SharedNetplayState,
         configuration::StaticNetplayServerConfiguration,
-        connection::{ConnectingSession, NetplayConnection, StartMethod},
+        connection::{ConnectingSession, NetplayConnection, PeerUnreachable, StartMethod},
     },
     settings::{MAX_PLAYERS, Settings},
 };
@@ -338,12 +338,17 @@ impl ResumingNetplaySession {
 #[derive(Debug)]
 pub struct FailedNetplaySession {
     reason: String,
+    unlock_url: Option<String>,
     pub start_method: StartMethod,
 }
 impl FailedNetplaySession {
-    fn new(reason: String, start_method: StartMethod) -> Self {
+    fn new(error: Error, start_method: StartMethod) -> Self {
+        log::warn!("Netplay failed: {error:#}");
         Self {
-            reason,
+            reason: error.to_string(),
+            unlock_url: error
+                .downcast_ref::<PeerUnreachable>()
+                .and_then(|unreachable| unreachable.unlock_url.clone()),
             start_method,
         }
     }
@@ -373,7 +378,7 @@ impl NetplaySession {
         Self::Resuming(ResumingNetplaySession::new(session_state))
     }
     fn fail(error: Error, start_method: StartMethod) -> Self {
-        Self::Failed(FailedNetplaySession::new(error.to_string(), start_method))
+        Self::Failed(FailedNetplaySession::new(error, start_method))
     }
 
     pub(crate) fn to_shared_state(&self) -> SharedNetplayState {
@@ -386,9 +391,10 @@ impl NetplaySession {
                 SharedNetplayState::Connected(connected_netplay_session.to_shared_state())
             }
             NetplaySession::Resuming(..) => SharedNetplayState::Resuming,
-            NetplaySession::Failed(failed_session) => {
-                SharedNetplayState::Failed(failed_session.reason.clone())
-            }
+            NetplaySession::Failed(failed_session) => SharedNetplayState::Failed(
+                failed_session.reason.clone(),
+                failed_session.unlock_url.clone(),
+            ),
         }
     }
 }

@@ -2676,6 +2676,7 @@ name = "nes-bundler"
 version = "1.5.0"
 dependencies = [
  "anyhow",
+ "async-tungstenite",
  "base64 0.23.1",
  "bitflags 2.13.2",
  "directories",
@@ -2698,6 +2699,7 @@ dependencies = [
  "ringbuf",
  "sdl3",
  "serde",
+ "serde_json",
  "serde_yaml_ng",
  "tetanes-core",
  "thingbuf",

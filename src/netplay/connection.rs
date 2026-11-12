@@ -6,12 +6,14 @@ use matchbox_socket::{ChannelConfig, RtcIceServerConfig, WebRtcSocket, WebRtcSoc
 use serde::Deserialize;
 use std::fmt::Debug;
 use std::pin::Pin;
-use std::time::Duration;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::watch::{Receiver, Sender, channel};
 
 use crate::bundle::Bundle;
 use crate::netplay::configuration::TurnOnServerConfiguration;
 use crate::netplay::session::{JoypadMapping, NetplayNesState};
+use crate::netplay::signaller::{ObservingSignallerBuilder, OpponentFound};
 use crate::settings::MAX_PLAYERS;
 
 use super::configuration::{
@@ -22,8 +24,27 @@ use super::configuration::{
 #[derive(Debug)]
 pub enum ConnectingState {
     LoadingNetplayServerConfiguration,
-    PeeringUp(Box<StartMethod>),
+    PeeringUp(
+        Box<StartMethod>,
+        // Unlock url to offer: another player is there, but we can't reach them without a relay.
+        Option<String>,
+    ),
 }
+
+/// Another player joined, but no connection to them could be made in time. Without a TURN relay
+/// that's usually because a direct connection isn't possible between the two networks.
+#[derive(Debug)]
+pub struct PeerUnreachable {
+    pub unlock_url: Option<String>,
+}
+
+impl std::fmt::Display for PeerUnreachable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Found another player, but couldn't connect to them")
+    }
+}
+
+impl std::error::Error for PeerUnreachable {}
 
 /// Aborts the wrapped task when dropped.
 pub struct AbortOnDrop(tokio::task::JoinHandle<()>);
@@ -50,8 +71,10 @@ pub struct ConnectingSession {
 impl ConnectingSession {
     pub fn connect(start_method: StartMethod) -> Self {
         log::debug!("Connecting: {start_method:?}");
-        let (state_sender, state) =
-            channel(ConnectingState::PeeringUp(Box::new(start_method.clone())));
+        let (state_sender, state) = channel(ConnectingState::PeeringUp(
+            Box::new(start_method.clone()),
+            None,
+        ));
         let start_method_cloned = start_method.clone();
         let netplay_connection = async move {
             let netplay_config = match &start_method_cloned {
@@ -131,7 +154,10 @@ impl ConnectingSession {
         netplay_server_configuration: StaticNetplayServerConfiguration,
     ) -> Result<NetplayConnection> {
         let matchbox_server = &netplay_server_configuration.matchbox.server;
-        let _ = state_sender.send(ConnectingState::PeeringUp(Box::new(start_method.clone())));
+        let _ = state_sender.send(ConnectingState::PeeringUp(
+            Box::new(start_method.clone()),
+            None,
+        ));
 
         let room_name = start_method.to_room_name();
 
@@ -142,6 +168,7 @@ impl ConnectingSession {
             IceCredentials::None => (None, None),
         };
         let room_url = format!("ws://{matchbox_server}/{room_name}");
+        let opponent_found = OpponentFound::default();
         let (mut socket, loop_fut) = {
             let ice_server = RtcIceServerConfig {
                 urls: netplay_server_configuration.matchbox.ice.urls.clone(),
@@ -153,6 +180,9 @@ impl ConnectingSession {
                 "Peering up through WebRTC socket:\nroom_url={room_url:?},\nice_server={ice_server:?}"
             );
             WebRtcSocketBuilder::new(room_url.clone())
+                .signaller_builder(Arc::new(ObservingSignallerBuilder::new(
+                    opponent_found.clone(),
+                )))
                 .ice_server(ice_server)
                 .add_channel(ChannelConfig::unreliable())
                 .build()
@@ -179,12 +209,49 @@ impl ConnectingSession {
         }));
 
         const PEER_UP_TIMEOUT: Duration = Duration::from_secs(30);
-        let peer_up_deadline = std::time::Instant::now() + PEER_UP_TIMEOUT;
+        // At least this long to connect to a player once found, however late they turned up.
+        const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
+        // How long a found player may stay unreachable before we offer unlocking a relay.
+        const UNREACHABLE_AFTER: Duration = Duration::from_secs(5);
+        let peer_up_deadline = Instant::now() + PEER_UP_TIMEOUT;
+        let unlock_url = netplay_server_configuration.unlock_url.clone();
+        let mut opponent_found_at: Option<Instant> = None;
+        let mut offering_unlock = false;
 
         log::debug!("Getting players...");
         loop {
-            if std::time::Instant::now() >= peer_up_deadline {
-                anyhow::bail!("Timed out waiting for players to connect");
+            if opponent_found.get() {
+                if opponent_found_at.is_none() {
+                    log::debug!("Found another player, connecting...");
+                }
+                opponent_found_at.get_or_insert_with(Instant::now);
+            } else {
+                opponent_found_at = None;
+            }
+
+            match opponent_found_at {
+                Some(found_at)
+                    if Instant::now() >= peer_up_deadline.max(found_at + CONNECT_TIMEOUT) =>
+                {
+                    return Err(PeerUnreachable { unlock_url }.into());
+                }
+                None if Instant::now() >= peer_up_deadline => {
+                    anyhow::bail!("Timed out waiting for players to connect");
+                }
+                _ => {}
+            }
+
+            let offer_unlock = unlock_url.is_some()
+                && opponent_found_at.is_some_and(|found_at| found_at.elapsed() > UNREACHABLE_AFTER);
+            if offer_unlock != offering_unlock {
+                offering_unlock = offer_unlock;
+                if offer_unlock {
+                    log::info!("Can't reach the other player; offering to unlock a relay");
+                }
+                let _ = state_sender.send(ConnectingState::PeeringUp(
+                    Box::new(start_method.clone()),
+                    unlock_url.clone().filter(|_| offer_unlock),
+                ));
             }
 
             socket.try_update_peers().map_err(|e| {

@@ -21,6 +21,7 @@ pub mod configuration;
 pub mod connection;
 pub mod gui;
 pub mod session;
+mod signaller;
 
 #[cfg(feature = "debug")]
 mod stats;
@@ -61,7 +62,10 @@ pub enum SharedNetplayState {
     Connecting(tokio::sync::watch::Receiver<ConnectingState>),
     Connected(SharedNetplayConnectedState),
     Resuming,
-    Failed(String),
+    Failed(
+        String,         // Reason
+        Option<String>, // Unlock url, when a relay might have made the connection possible
+    ),
 }
 
 #[derive(Clone)]
