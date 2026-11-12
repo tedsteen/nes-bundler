@@ -23,7 +23,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub async fn new(window: Arc<Window>, enable_vsync: bool) -> Result<Self> {
+    pub async fn new(window: Arc<Window>) -> Result<Self> {
         let size = window.inner_size();
         // All backends (the default); the display handle lets GL present on Wayland.
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_with_display_handle(
@@ -53,18 +53,9 @@ impl Renderer {
             .find(|f| !f.is_srgb())
             .unwrap_or(surface_caps.formats[0]);
 
-        let present_mode = if enable_vsync {
-            PresentMode::AutoVsync
-        } else {
-            [
-                PresentMode::Mailbox,
-                PresentMode::Immediate,
-                PresentMode::Fifo,
-            ]
-            .into_iter()
-            .find(|mode| surface_caps.present_modes.contains(mode))
-            .unwrap_or(PresentMode::AutoNoVsync)
-        };
+        // Always vsync: presenting waits for the display, and the display sets the pace of the
+        // emulation (see `AppShell`).
+        let present_mode = PresentMode::AutoVsync;
 
         let config = wgpu::SurfaceConfiguration {
             desired_maximum_frame_latency: 1,
@@ -106,9 +97,9 @@ impl Renderer {
         }
     }
 
-    /// Renders a frame, or skips it when the surface has no texture to give (e.g. the window is
-    /// occluded, or the surface had to be reconfigured).
-    pub fn render(&mut self, mut run_ui: impl FnMut(&mut Ui)) {
+    /// Renders and presents a frame, or skips it when the surface has no texture to give (e.g. the
+    /// window is occluded, or the surface had to be reconfigured). Returns whether it presented.
+    pub fn render(&mut self, mut run_ui: impl FnMut(&mut Ui)) -> bool {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
@@ -119,15 +110,15 @@ impl Renderer {
             match self.surface.get_current_texture() {
                 CurrentSurfaceTexture::Success(texture) => (texture, false),
                 CurrentSurfaceTexture::Suboptimal(texture) => (texture, true),
-                CurrentSurfaceTexture::Timeout | CurrentSurfaceTexture::Occluded => return,
+                CurrentSurfaceTexture::Timeout | CurrentSurfaceTexture::Occluded => return false,
                 CurrentSurfaceTexture::Outdated | CurrentSurfaceTexture::Lost => {
                     log::warn!("Surface lost or outdated, reconfiguring.");
                     self.surface.configure(&self.device, &self.config);
-                    return;
+                    return false;
                 }
                 CurrentSurfaceTexture::Validation => {
                     log::warn!("Surface validation error, skipping frame.");
-                    return;
+                    return false;
                 }
             }
         };
@@ -197,5 +188,6 @@ impl Renderer {
         if suboptimal {
             self.surface.configure(&self.device, &self.config);
         }
+        true
     }
 }

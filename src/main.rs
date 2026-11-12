@@ -11,7 +11,6 @@ use input::sdl3_impl::SDL3Gamepads;
 use sdl3::EventPump;
 
 use crate::app_context::AppContext;
-use crate::app_event::AppEvent;
 use crate::app_shell::AppShell;
 use crate::audio::AudioSystem;
 use crate::emulation::gui::EmulatorGui;
@@ -22,7 +21,6 @@ use winit::event_loop::EventLoop;
 use crate::main_view::gui::MainGui;
 
 mod app_context;
-mod app_event;
 mod app_shell;
 mod audio;
 mod bundle;
@@ -63,9 +61,29 @@ fn main() {
     }
 }
 
+/// Keeps macOS from slowing the app down once its window is in the background or minimized (App
+/// Nap, timer coalescing): emulation and audio have to keep their pace, netplay most of all. The
+/// returned activity lasts until it's dropped. Idle system sleep is still allowed.
+#[cfg(target_os = "macos")]
+fn keep_pace_in_background() -> impl Sized {
+    use objc2_foundation::{NSActivityOptions, NSProcessInfo, NSString};
+    NSProcessInfo::processInfo().beginActivityWithOptions_reason(
+        NSActivityOptions::UserInitiatedAllowingIdleSystemSleep
+            | NSActivityOptions::LatencyCritical,
+        &NSString::from_str("Running a game"),
+    )
+}
+
 fn run() -> anyhow::Result<()> {
+    #[cfg(target_os = "macos")]
+    let _activity = keep_pace_in_background();
     let app_context = AppContext::global();
-    let event_loop = EventLoop::<AppEvent>::with_user_event().build()?;
+    let event_loop = EventLoop::new()?;
+    if app_context.config().enable_vsync.is_some() {
+        log::warn!(
+            "`enable_vsync` in config.yaml is no longer used: nes-bundler always syncs to the display"
+        );
+    }
 
     // Needed because: https://github.com/libsdl-org/SDL/issues/5380#issuecomment-1071626081
     sdl3::hint::set("SDL_JOYSTICK_THREAD", "1");
@@ -76,7 +94,7 @@ fn run() -> anyhow::Result<()> {
     let settings = app_context.settings();
     let mut stream = audio_system.start_stream(settings);
 
-    let runtime = GameRuntime::new(&mut stream, event_loop.create_proxy());
+    let runtime = GameRuntime::new(&mut stream);
     let shared_state = runtime.shared_state();
 
     let inputs = Inputs::new(SDL3Gamepads::new(
@@ -109,6 +127,7 @@ fn init_logger() {
         {
             Ok(log_file) => {
                 env_logger::Builder::from_env(env_logger::Env::default())
+                    .format_timestamp_millis()
                     .target(env_logger::Target::Pipe(Box::new(log_file)))
                     .init();
             }
@@ -120,7 +139,9 @@ fn init_logger() {
     }
     #[cfg(not(windows))]
     {
-        env_logger::init();
+        env_logger::Builder::from_env(env_logger::Env::default())
+            .format_timestamp_millis()
+            .init();
     }
 }
 

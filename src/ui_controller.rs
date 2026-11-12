@@ -23,8 +23,9 @@ impl UiController {
         }
     }
 
-    pub fn render(&mut self, main_view: &mut MainView) {
-        main_view.render(&mut self.main_gui);
+    /// Returns whether a frame was presented; not when the window is hidden, for one.
+    pub fn render(&mut self, main_view: &mut MainView) -> bool {
+        main_view.render(&mut self.main_gui)
     }
 
     pub fn handle_gui_event(&mut self, main_view: &mut MainView, gui_event: &GuiEvent) {

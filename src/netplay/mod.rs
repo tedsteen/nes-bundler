@@ -225,4 +225,8 @@ impl NesStateHandler for Netplay {
     fn frame(&self) -> u32 {
         self.session.frame()
     }
+
+    fn pace(&self) -> f32 {
+        self.session.pace()
+    }
 }

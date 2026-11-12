@@ -19,6 +19,11 @@ use crate::{
 #[derive(Clone)]
 pub struct TetanesNesState {
     deck: ControlDeck,
+    /// The speed last given to the deck, in tetanes' quarter steps.
+    frame_speed: f32,
+    /// Netplay slows the frame clock down to let the other player catch up; the audio has to
+    /// stretch by as much to keep up.
+    catch_up_speed: f32,
 }
 trait ToTetanesRegion {
     fn to_tetanes_region(&self) -> NesRegion;
@@ -72,9 +77,12 @@ impl TetanesNesState {
             }
         }
 
-        let mut s = Self { deck };
-        s.apply_speed(1.0); // Triggers the correct sample rate
-        Ok(s)
+        deck.set_sample_rate(DEFAULT_SAMPLE_RATE);
+        Ok(Self {
+            deck,
+            frame_speed: 1.0,
+            catch_up_speed: 1.0,
+        })
     }
 
     fn clock_frame(&mut self) {
@@ -84,10 +92,16 @@ impl TetanesNesState {
         while self.deck.clock_frame().expect("NES to clock a frame") == Clocked::Continue {}
     }
 
-    async fn clock_frame_into(&mut self, mut buffers: Option<NESBuffers<'_>>) {
+    fn clock_frame_into(&mut self, mut buffers: Option<NESBuffers<'_>>) {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
+        if let Some(buffers) = &mut buffers {
+            // Keeps the audio buffer level while the display sets the pace (dynamic rate
+            // control), and stretches the audio as much as netplay slows the frames down.
+            self.deck
+                .set_audio_sample_ratio(buffers.audio.rate_control() / self.catch_up_speed);
+        }
         self.clock_frame();
 
         if let Some(buffers) = buffers.take() {
@@ -107,7 +121,7 @@ impl TetanesNesState {
                 #[cfg(feature = "debug")]
                 puffin::profile_scope!("Pushing audio");
 
-                buffers.audio.push_all(self.deck.audio_samples()).await;
+                buffers.audio.push(self.deck.audio_samples());
             }
         }
     }
@@ -125,33 +139,24 @@ impl TetanesNesState {
         self.deck.set_region(region);
     }
 
-    fn apply_speed(&mut self, speed: f32) {
-        let speed = speed.max(0.005);
-        let target_sample_rate = match self.deck.region() {
-            // Downsample a tiny bit extra to match the most common screen refresh rate (60hz)
-            NesRegion::Ntsc => {
-                DEFAULT_SAMPLE_RATE * (crate::emulation::NesRegion::Ntsc.to_fps() / 60.0)
-            }
-            _ => DEFAULT_SAMPLE_RATE,
-        };
-
-        let new_sample_rate = target_sample_rate * (1.0 / speed);
-
-        // Guarded because setting it rebuilds the filter chain and the synth.
-        if self.deck.bus().apu.sample_rate != new_sample_rate {
-            log::trace!("Change emulation speed to {speed}x");
-            self.deck.set_sample_rate(new_sample_rate);
+    /// Runs `speed` NES frames per display frame, in tetanes' quarter steps (0.25x to 2x). Tetanes
+    /// resamples the audio to match, so the display keeps setting the pace.
+    fn set_frame_speed(&mut self, speed: f32) {
+        let speed = ((speed * 4.0).round() / 4.0).clamp(0.25, 2.0);
+        // Guarded because setting it rebuilds the APU's filter chain.
+        if speed != self.frame_speed {
+            log::debug!("Emulation speed {speed}x");
+            self.frame_speed = speed;
+            self.deck.set_frame_speed(speed);
         }
     }
 
-    /// Fine-tunes the speed set with `set_speed`, for netplay to let the other player catch up.
-    ///
-    /// Goes through tetanes' dynamic rate control, which (unlike changing the sample rate) is
-    /// cheap enough to adjust every frame. A frame with more samples takes longer to play, and the
-    /// emulator is paced by audio. Tetanes limits it to +/-5%.
+    /// How much slower than the display netplay runs, to let the other player catch up. The frame
+    /// clock slows down by this much (see `NesStateHandler::pace`); this stretches the audio to
+    /// match.
     #[cfg(feature = "netplay")]
     pub fn set_catch_up_speed(&mut self, speed: f32) {
-        self.deck.set_audio_sample_ratio(1.0 / speed);
+        self.catch_up_speed = speed;
     }
 }
 
@@ -167,7 +172,7 @@ impl NesStateHandler for TetanesNesState {
         self.deck.joypad_mut(Player::Two).buttons =
             JoypadBtnState::from_bits_truncate(*joypad_state[1] as u16);
 
-        self.apply_speed(speed);
+        self.set_frame_speed(speed);
         // Frames clocked without buffers are netplay rollback replays, which are never shown, so
         // running ahead of them (to hide input lag) would only double their cost. It doesn't
         // change the emulation: the deck rewinds to the real frame after running ahead.
@@ -176,7 +181,7 @@ impl NesStateHandler for TetanesNesState {
         } else {
             0
         });
-        self.clock_frame_into(buffers).await;
+        self.clock_frame_into(buffers);
     }
 
     fn save_sram(&mut self) -> Option<&[u8]> {

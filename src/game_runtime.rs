@@ -1,18 +1,23 @@
-use crate::app_event::AppEvent;
+use std::time::Duration;
+
 use crate::audio::AudioStream;
 use crate::emulation::{Emulator, SharedState};
 use crate::input::JoypadState;
-use winit::event_loop::EventLoopProxy;
 
 pub struct GameRuntime {
     emulator: Emulator,
 }
 
 impl GameRuntime {
-    pub fn new(audio_stream: &mut AudioStream, event_proxy: EventLoopProxy<AppEvent>) -> Self {
+    pub fn new(audio_stream: &mut AudioStream) -> Self {
         Self {
-            emulator: Emulator::new(audio_stream, event_proxy),
+            emulator: Emulator::new(audio_stream),
         }
+    }
+
+    /// Runs `frames` frames' worth of emulation, waiting up to `timeout` for it to finish.
+    pub fn tick(&self, frames: f32, timeout: Duration) {
+        self.emulator.shared_state.emulator.tick(frames, timeout);
     }
 
     pub fn shared_state(&self) -> SharedState {

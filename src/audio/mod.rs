@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::audio::sdl3_impl::{SDL3AudioStream, SDL3AudioSystem, SDL3AvailableAudioDevice};
 
-pub mod pacer;
+pub mod buffer;
 
 pub mod gui;
 mod sdl3_impl;

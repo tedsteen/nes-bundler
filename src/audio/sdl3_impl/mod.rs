@@ -9,13 +9,16 @@ use sdl3::audio::{
 };
 use sdl3::sys::audio::SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
 
-use crate::audio::pacer::{
-    AudioBridge, AudioConsumer, AudioPacerControl, AudioProducer,
-    make_paced_bridge_ringbuf_bulk_async,
-};
+use crate::audio::buffer::{AudioBufferControl, AudioConsumer, AudioProducer, audio_buffer};
 use crate::audio::{AudioStream, AudioSystem, AvailableAudioDevice};
 use crate::emulation::DEFAULT_SAMPLE_RATE;
 use crate::settings::SettingsStore;
+
+// SDL callback granularity: 256 samples (~6 ms at 44100 Hz).
+// PipeWire shrinks the whole graph's quantum to match this, and ~1 ms
+// (45 samples) caused constant xruns on modest hardware. Must stay well
+// under the minimum 8 ms latency target (~353 samples).
+const CALLBACK_FRAMES: u32 = 256;
 
 #[derive(Debug, Clone)]
 pub struct SDL3AvailableAudioDevice {
@@ -87,7 +90,7 @@ pub struct SDL3AudioStream {
     tx: Option<AudioProducer>,
     take_back: Receiver<AudioConsumer>,
     volume: Arc<AtomicU8>,
-    ctl: AudioPacerControl,
+    ctl: AudioBufferControl,
 }
 
 impl SDL3AudioStream {
@@ -103,13 +106,10 @@ impl SDL3AudioStream {
         volume: u8,
         latency_micros: u32,
     ) -> Self {
-        let AudioBridge {
-            producer,
-            consumer,
-            control: ctl,
-        } = make_paced_bridge_ringbuf_bulk_async(
-            latency_micros as f64 / 1_000.0,
-            DEFAULT_SAMPLE_RATE as f64,
+        let (producer, consumer, ctl) = audio_buffer(
+            latency_micros,
+            DEFAULT_SAMPLE_RATE,
+            CALLBACK_FRAMES as usize,
         );
 
         let volume = Arc::new(AtomicU8::new(volume));
@@ -144,11 +144,6 @@ impl SDL3AudioStream {
         };
         let (give_back, take_back) = std::sync::mpsc::channel();
 
-        // SDL callback granularity: 256 samples (~6 ms at 44100 Hz).
-        // PipeWire shrinks the whole graph's quantum to match this, and ~1 ms
-        // (45 samples) caused constant xruns on modest hardware. Must stay well
-        // under the default 16 ms latency target (~705 samples).
-        const CALLBACK_FRAMES: u32 = 256;
         sdl3::hint::set(
             "SDL_AUDIO_DEVICE_SAMPLE_FRAMES",
             &CALLBACK_FRAMES.to_string(),
@@ -198,7 +193,7 @@ impl SDL3AudioStream {
     }
 
     pub(crate) fn set_latency(&self, latency_micros: u32) {
-        self.ctl.set_latency_ms(latency_micros as f64 / 1000.0);
+        self.ctl.set_latency_micros(latency_micros);
     }
 }
 
@@ -221,15 +216,12 @@ impl AudioCallback<f32> for NesBundlerAudioCallback {
 
         if let Some(rx) = &mut self.rx {
             let buf = &mut self.tmp[..requested];
+            // Silence fills the rest when the buffer can't cover it.
             let got = rx.pop_slice(buf);
 
             let gain = (self.volume.load(std::sync::atomic::Ordering::Relaxed) as f32) / 100.0;
             for x in &mut buf[..got] {
                 *x *= gain;
-            }
-
-            if got < requested {
-                buf[got..].fill(0.0);
             }
         } else {
             self.tmp[..requested].fill(0.0);

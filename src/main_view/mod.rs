@@ -58,10 +58,10 @@ fn to_egui_event(gamepad_event: &GamepadEvent) -> Option<egui::Event> {
 }
 
 impl MainView {
-    pub fn new(window: Window, frame_buffer: VideoBufferPool, enable_vsync: bool) -> Self {
+    pub fn new(window: Window, frame_buffer: VideoBufferPool) -> Self {
         let window = Arc::new(window);
-        let mut renderer = block_on(Renderer::new(window.clone(), enable_vsync))
-            .expect("a renderer to be created");
+        let mut renderer =
+            block_on(Renderer::new(window.clone())).expect("a renderer to be created");
         Self {
             modifiers: Modifiers::empty(),
 
@@ -136,13 +136,14 @@ impl MainView {
         }
     }
 
-    pub fn render(&mut self, main_gui: &mut MainGui) {
+    /// Returns whether a frame was presented.
+    pub fn render(&mut self, main_gui: &mut MainGui) -> bool {
         if let Some(nes_frame) = &self.frame_buffer.pop_ref() {
             self.nes_texture.update(&self.renderer.queue, nes_frame);
         }
 
         let nes_texture_id = self.nes_texture.get_id();
         self.renderer
-            .render(move |ui| main_gui.ui(ui, nes_texture_id));
+            .render(move |ui| main_gui.ui(ui, nes_texture_id))
     }
 }
