@@ -46,6 +46,25 @@ impl std::fmt::Display for PeerUnreachable {
 
 impl std::error::Error for PeerUnreachable {}
 
+/// Runs WebRTC (ICE, DTLS, SCTP) off the emulator thread. That thread runs the rest of netplay,
+/// so a burst of packets after a network hiccup would otherwise hold up a frame.
+fn network_runtime() -> &'static tokio::runtime::Handle {
+    static RUNTIME: std::sync::LazyLock<tokio::runtime::Handle> = std::sync::LazyLock::new(|| {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("a runtime for the netplay network");
+        let handle = runtime.handle().clone();
+        std::thread::Builder::new()
+            .name("netplay-network".to_string())
+            // Runs whatever is spawned on the handle, for as long as the app runs.
+            .spawn(move || runtime.block_on(std::future::pending::<()>()))
+            .expect("a thread for the netplay network");
+        handle
+    });
+    &RUNTIME
+}
+
 /// Aborts the wrapped task when dropped.
 pub struct AbortOnDrop(tokio::task::JoinHandle<()>);
 impl Drop for AbortOnDrop {
@@ -188,10 +207,10 @@ impl ConnectingSession {
                 .build()
         };
 
-        // Spawn the WebRTC event loop. The AbortOnDrop guard ensures the task is
-        // cancelled if peer_up is dropped (e.g. user cancels connecting) or when
-        // the NetplayConnection / ConnectedNetplaySession that owns it is dropped.
-        let loop_task = AbortOnDrop(tokio::task::spawn(async move {
+        // Spawn the WebRTC event loop on its own thread. The AbortOnDrop guard ensures the task
+        // is cancelled if peer_up is dropped (e.g. user cancels connecting) or when the
+        // NetplayConnection / ConnectedNetplaySession that owns it is dropped.
+        let loop_task = AbortOnDrop(network_runtime().spawn(async move {
             let loop_fut = loop_fut.fuse();
             let timeout = Delay::new(Duration::from_millis(100));
             pin_mut!(loop_fut, timeout);

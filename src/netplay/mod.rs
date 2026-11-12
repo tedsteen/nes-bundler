@@ -46,6 +46,7 @@ pub enum SharedNetplayConnectedState {
     Running(
         Instant,                // Start time
         Option<ConnectionPath>, // None until WebRTC reports it
+        Option<Instant>,        // When the connection last lagged, while lagging persistently
     ),
 }
 

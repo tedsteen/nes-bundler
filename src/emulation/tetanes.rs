@@ -21,8 +21,8 @@ pub struct TetanesNesState {
     deck: ControlDeck,
     /// The speed last given to the deck, in tetanes' quarter steps.
     frame_speed: f32,
-    /// Netplay slows the frame clock down to let the other player catch up; the audio has to
-    /// stretch by as much to keep up.
+    /// Netplay slows the frame clock down or speeds it up to meet the other player; the audio has
+    /// to stretch by as much to keep up.
     catch_up_speed: f32,
 }
 trait ToTetanesRegion {
@@ -151,8 +151,8 @@ impl TetanesNesState {
         }
     }
 
-    /// How much slower than the display netplay runs, to let the other player catch up. The frame
-    /// clock slows down by this much (see `NesStateHandler::pace`); this stretches the audio to
+    /// How much slower or faster than the display netplay runs, to meet the other player. The
+    /// frame clock changes by this much (see `NesStateHandler::pace`); this stretches the audio to
     /// match.
     #[cfg(feature = "netplay")]
     pub fn set_catch_up_speed(&mut self, speed: f32) {

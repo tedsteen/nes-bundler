@@ -18,6 +18,7 @@ use crate::{
         configuration::StaticNetplayServerConfiguration,
         connection::{ConnectingSession, NetplayConnection, PeerUnreachable, StartMethod},
     },
+    recurrence::Recurrence,
     settings::{MAX_PLAYERS, Settings},
 };
 #[derive(Clone, Debug)]
@@ -88,14 +89,21 @@ pub struct ConnectedNetplaySession {
     pub newer_confirmed_state: NetplayNesState,
     start_time: Instant,
     last_running_time: Instant,
-    /// How much slower than the display to run while this peer is ahead of the remote, so it can
-    /// catch up. Slows the emulator's frame clock (see `NetplaySession::pace`) and stretches the
+    /// How much slower (ahead of the remote) or faster (behind it) than the display to run, so the
+    /// two meet. Slows the emulator's frame clock (see `NetplaySession::pace`) and stretches the
     /// audio to match.
     catch_up_speed: f32,
     /// Seconds per frame, for easing `catch_up_speed`.
     frame_time: f32,
     /// Last `frames_ahead` logged, to log only when it changes.
     logged_frames_ahead: i32,
+    /// Frames in a row GGRS has had us wait for the other player's input.
+    waited_frames: u32,
+    /// The game freezing for the other player's input, or rolling back far, to tell a laggy
+    /// connection from a one-off hiccup; and when it last did while laggy.
+    lag: Recurrence,
+    last_lag: Option<Instant>,
+    log: NetplayLog,
     /// Kept for querying the WebRTC connection; GGRS owns its data channel.
     socket: WebRtcSocket,
     remote_peer: Option<PeerId>,
@@ -158,6 +166,10 @@ impl ConnectedNetplaySession {
             start_time: Instant::now(),
             last_running_time: Instant::now(),
             catch_up_speed: 1.0,
+            log: NetplayLog::new(),
+            waited_frames: 0,
+            lag: Recurrence::new(LAG_TIMES, LAG_WITHIN),
+            last_lag: None,
             frame_time: 1.0 / fps,
             logged_frames_ahead: 0,
             socket,
@@ -191,6 +203,27 @@ impl ConnectedNetplaySession {
                 puffin::profile_scope!("ggrs advance_frame");
                 match p2p_session.advance_frame() {
                     Ok(requests) => {
+                        // Out of prediction window, GGRS returns no frame to advance, waiting for
+                        // the other player's input. The game stands still meanwhile.
+                        if requests
+                            .iter()
+                            .any(|request| matches!(request, GgrsRequest::AdvanceFrame { .. }))
+                        {
+                            if self.waited_frames > 0 {
+                                log::debug!(
+                                    "Waited {} frames for the other player's input, {} frames past the last confirmed one",
+                                    self.waited_frames,
+                                    p2p_session.max_prediction()
+                                );
+                                self.waited_frames = 0;
+                            }
+                        } else {
+                            self.waited_frames += 1;
+                            self.log.skipped += 1;
+                            if self.waited_frames == 1 && self.lag.record(Instant::now()) {
+                                self.last_lag = Some(Instant::now());
+                            }
+                        }
                         // CPU time spent re-simulating after a misprediction (not waiting for audio).
                         let mut rollback: Option<(i32, Duration)> = None;
                         for request in requests {
@@ -257,54 +290,71 @@ impl ConnectedNetplaySession {
                         }
                         if let Some((depth, spent)) = rollback {
                             Self::log_rollback(depth, spent);
+                            if depth >= LAG_ROLLBACK_FRAMES && self.lag.record(Instant::now()) {
+                                self.last_lag = Some(Instant::now());
+                            }
+                            self.log.rollback(depth, spent);
                         }
                     }
                     Err(e) => {
+                        self.log.skipped += 1;
                         log::warn!(
-                            "Frame {} skipped: {e:?}",
+                            "Frame {} not advanced: {e:?}",
                             self.current_game_state.ggrs_frame,
                         )
                     }
                 }
 
                 let frames_ahead = p2p_session.frames_ahead();
+                let stats = p2p_session.network_stats(1 - self.local_player_index).ok();
                 self.update_catch_up_speed(frames_ahead);
+                self.log.frame(stats, frames_ahead, self.catch_up_speed);
             }
         }
     }
 
-    /// Slows down a little while ahead of the other player, so they can catch up.
+    /// Slows down a little while ahead of the other player, and speeds up a little while behind,
+    /// so the two meet in the middle. GGRS's `frames_ahead` is symmetric: the other player sees
+    /// the same lead the other way round, so both steer, closing the gap twice as fast as one
+    /// would and changing each one's speed (and pitch) half as much.
     ///
     /// GGRS averages `frames_ahead` over only half a second, so a network hiccup shows up as a
-    /// big lead that's gone a second later. The speed eases towards its target (slowly down,
-    /// quickly back up) so a hiccup barely registers, while a lasting lead is still absorbed.
+    /// big lead that's gone a second later. The speed eases towards its target (slowly away from
+    /// full speed, quickly back) so a hiccup barely registers, while a lasting lead is still
+    /// absorbed.
     fn update_catch_up_speed(&mut self, frames_ahead: i32) {
-        let target = if frames_ahead >= CATCH_UP_MIN_FRAMES_AHEAD {
+        let target = if frames_ahead.abs() >= CATCH_UP_MIN_FRAMES_AHEAD {
             //https://www.desmos.com/calculator/zbntsowijd
-            NETPLAY_MIN_SPEED.max(
-                1.0 - NETPLAY_SPEED_CURVE_COEFF
-                    * (NETPLAY_SPEED_CURVE_SCALE * frames_ahead as f32).powi(2),
-            )
+            let change = (NETPLAY_SPEED_CURVE_COEFF
+                * (NETPLAY_SPEED_CURVE_SCALE * frames_ahead as f32).powi(2))
+            .min(NETPLAY_MAX_SPEED_CHANGE);
+            1.0 - change * frames_ahead.signum() as f32
         } else {
             1.0
         };
-        let easing_time = if target < self.catch_up_speed {
-            CATCH_UP_SLOW_DOWN_TIME
+        let easing_time = if (target - 1.0).abs() > (self.catch_up_speed - 1.0).abs() {
+            CATCH_UP_DEPART_TIME
         } else {
-            CATCH_UP_SPEED_UP_TIME
+            CATCH_UP_RETURN_TIME
         };
         self.catch_up_speed +=
             (target - self.catch_up_speed) * (1.0 - (-self.frame_time / easing_time).exp());
 
-        let was_behind = self.logged_frames_ahead >= CATCH_UP_MIN_FRAMES_AHEAD;
+        let was_apart = self.logged_frames_ahead.abs() >= CATCH_UP_MIN_FRAMES_AHEAD;
         if frames_ahead != self.logged_frames_ahead {
             if frames_ahead >= CATCH_UP_MIN_FRAMES_AHEAD {
                 log::debug!(
                     "{frames_ahead} frames ahead of the other player, easing towards {target:.3}x (now {:.3}x)",
                     self.catch_up_speed
                 );
-            } else if was_behind {
-                log::debug!("Caught up with the other player, easing back to full speed");
+            } else if frames_ahead <= -CATCH_UP_MIN_FRAMES_AHEAD {
+                log::debug!(
+                    "{} frames behind the other player, easing towards {target:.3}x (now {:.3}x)",
+                    -frames_ahead,
+                    self.catch_up_speed
+                );
+            } else if was_apart {
+                log::debug!("Level with the other player, easing back to full speed");
             }
         }
         self.logged_frames_ahead = frames_ahead;
@@ -360,9 +410,11 @@ impl ConnectedNetplaySession {
                 self.last_running_time,
                 self.netplay_server_configuration.unlock_url.clone(),
             ),
-            ggrs::SessionState::Running => {
-                SharedNetplayConnectedState::Running(self.start_time, self.connection_path)
-            }
+            ggrs::SessionState::Running => SharedNetplayConnectedState::Running(
+                self.start_time,
+                self.connection_path,
+                self.last_lag,
+            ),
         }
     }
 }
@@ -466,13 +518,21 @@ const POLLING_TIMEOUT: Duration = Duration::from_millis(1);
 
 /// Minimum emulation speed applied when this peer is ahead of the remote (95%). The audio has to
 /// stretch as much, and tetanes allows its rate to move 5% at most.
-const NETPLAY_MIN_SPEED: f32 = 0.95;
+/// The connection is laggy when the game freezes waiting for the other player's input, or rolls
+/// back at least `LAG_ROLLBACK_FRAMES` (a visible correction), `LAG_TIMES` times within
+/// `LAG_WITHIN`. Once is a hiccup.
+const LAG_TIMES: usize = 3;
+const LAG_WITHIN: Duration = Duration::from_secs(30);
+const LAG_ROLLBACK_FRAMES: i32 = 6;
+
+/// The most catching up changes the speed, either way (0.95x to 1.05x).
+const NETPLAY_MAX_SPEED_CHANGE: f32 = 0.05;
 /// A one-frame lead comes and goes all the time and only means 0.4% slower; ignore it.
 const CATCH_UP_MIN_FRAMES_AHEAD: i32 = 2;
-/// How fast the catch-up speed follows its target (time constants, in seconds). Slowing down is
-/// gradual so a brief network hiccup barely slows the game; speeding back up is quicker.
-const CATCH_UP_SLOW_DOWN_TIME: f32 = 1.0;
-const CATCH_UP_SPEED_UP_TIME: f32 = 0.3;
+/// How fast the catch-up speed follows its target (time constants, in seconds). Moving away from
+/// full speed is gradual so a brief network hiccup barely changes it; returning is quicker.
+const CATCH_UP_DEPART_TIME: f32 = 1.0;
+const CATCH_UP_RETURN_TIME: f32 = 0.3;
 /// Input scale for the quadratic slowdown curve: controls how quickly the curve
 /// steepens as frames-ahead grows.
 /// See the interactive graph: https://www.desmos.com/calculator/zbntsowijd
@@ -641,6 +701,87 @@ impl Debug for NetplaySession {
             Self::Connected(arg0) => f.debug_tuple("Connected").field(arg0).finish(),
             Self::Resuming(arg0) => f.debug_tuple("Resuming").field(arg0).finish(),
             Self::Failed(arg0) => f.debug_tuple("Failed").field(arg0).finish(),
+        }
+    }
+}
+
+/// Logs, now and then, how netplay is doing: how much it rolls back, how the network looks to
+/// GGRS, and how much it slows down for the other player.
+struct NetplayLog {
+    since: Instant,
+    frames: u32,
+    rollbacks: u32,
+    rolled_back_frames: u32,
+    deepest_rollback: i32,
+    rollback_time: Duration,
+    skipped: u32,
+    ping: Option<(u128, u128)>,
+    send_queue: usize,
+    frames_ahead: (i32, i32),
+    speed: (f32, f32),
+}
+
+impl NetplayLog {
+    const INTERVAL: Duration = Duration::from_secs(5);
+
+    fn new() -> Self {
+        Self {
+            since: Instant::now(),
+            frames: 0,
+            rollbacks: 0,
+            rolled_back_frames: 0,
+            deepest_rollback: 0,
+            rollback_time: Duration::ZERO,
+            skipped: 0,
+            ping: None,
+            send_queue: 0,
+            frames_ahead: (0, 0),
+            speed: (1.0, 1.0),
+        }
+    }
+
+    fn rollback(&mut self, depth: i32, spent: Duration) {
+        self.rollbacks += 1;
+        self.rolled_back_frames += depth.max(0) as u32;
+        self.deepest_rollback = self.deepest_rollback.max(depth);
+        self.rollback_time += spent;
+    }
+
+    fn frame(&mut self, stats: Option<ggrs::NetworkStats>, frames_ahead: i32, speed: f32) {
+        self.frames += 1;
+        if let Some(stats) = stats {
+            self.ping = Some(match self.ping {
+                None => (stats.ping, stats.ping),
+                Some((low, high)) => (low.min(stats.ping), high.max(stats.ping)),
+            });
+            self.send_queue = self.send_queue.max(stats.send_queue_len);
+        }
+        self.frames_ahead = (
+            self.frames_ahead.0.min(frames_ahead),
+            self.frames_ahead.1.max(frames_ahead),
+        );
+        self.speed = (self.speed.0.min(speed), self.speed.1.max(speed));
+
+        if self.since.elapsed() >= Self::INTERVAL {
+            log::debug!(
+                "Netplay: {} frames, {} rollbacks ({} frames re-run, deepest {}, {:.1} ms), {} waiting for input, ping {}, send queue up to {}, {} to {} frames ahead, speed {:.3}x to {:.3}x",
+                self.frames,
+                self.rollbacks,
+                self.rolled_back_frames,
+                self.deepest_rollback,
+                self.rollback_time.as_secs_f32() * 1000.0,
+                self.skipped,
+                self.ping
+                    .map_or("unknown".to_string(), |(low, high)| format!(
+                        "{low}-{high} ms"
+                    )),
+                self.send_queue,
+                self.frames_ahead.0,
+                self.frames_ahead.1,
+                self.speed.0,
+                self.speed.1,
+            );
+            *self = Self::new();
         }
     }
 }
