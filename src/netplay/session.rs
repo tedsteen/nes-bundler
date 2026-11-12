@@ -269,19 +269,25 @@ impl ConnectedNetplaySession {
         let Some(peer) = self.remote_peer else {
             return;
         };
-        let path = self.socket.is_relayed(peer).map(|relayed| {
-            if relayed {
-                ConnectionPath::Relayed
-            } else {
-                ConnectionPath::Direct
-            }
-        });
-        if path.is_some() && path != self.connection_path {
+        // Unknown until WebRTC reports the pair; is_relayed and candidate_pair come from the same pair.
+        let (Some(relayed), Some(pair)) = (
+            self.socket.is_relayed(peer),
+            self.socket.candidate_pair(peer),
+        ) else {
+            return;
+        };
+        let path = if relayed {
+            ConnectionPath::Relayed
+        } else {
+            ConnectionPath::Direct
+        };
+        if self.connection_path != Some(path) {
             log::info!(
-                "Netplay connection to {peer} is {path:?} ({:?})",
-                self.socket.candidate_pair(peer)
+                "Netplay connection to {peer} is {path:?} (local: {:?}, remote: {:?})",
+                pair.local,
+                pair.remote
             );
-            self.connection_path = path;
+            self.connection_path = Some(path);
         }
     }
 
