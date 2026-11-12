@@ -61,6 +61,11 @@ const FADE_IN_SAMPLES: usize = 88;
 /// How fast the last sample fades to silence when the buffer runs dry.
 const FADE_OUT: f32 = 0.99;
 
+/// This many dropouts within `STUTTER_WITHIN` is stuttering: too little latency for this computer,
+/// rather than a one-off hiccup (the window opening, say).
+const STUTTER_DROPOUTS: usize = 3;
+const STUTTER_WITHIN: Duration = Duration::from_secs(30);
+
 struct Shared {
     /// The margin to keep: the configured latency, in samples.
     target: AtomicUsize,
@@ -74,6 +79,9 @@ struct Shared {
     skip: AtomicUsize,
     /// Times the sound card asked for samples the buffer didn't have.
     underruns: AtomicU64,
+    /// When the sound last cut out while stuttering (see `STUTTER_DROPOUTS`), in microseconds
+    /// since `epoch`; 0 for never.
+    last_stutter_micros: AtomicU64,
     /// Samples in and out, for logging.
     pushed: AtomicU64,
     played: AtomicU64,
@@ -237,6 +245,10 @@ pub struct AudioConsumer {
     last_sample: f32,
     /// Samples into the fade-in after a refill.
     faded_in: usize,
+    /// When the sound cut out the last few times before (microseconds since `epoch`), oldest
+    /// overwritten first.
+    dropouts: [Option<u64>; STUTTER_DROPOUTS - 1],
+    next_dropout: usize,
 }
 
 impl AudioConsumer {
@@ -291,8 +303,9 @@ impl AudioConsumer {
         if got < out.len() {
             self.fade_out(&mut out[got..]);
             self.shared.underruns.fetch_add(1, Ordering::Relaxed);
-            let since_push = self.shared.epoch.elapsed().as_micros() as u64
-                - self.shared.last_push_micros.load(Ordering::Relaxed);
+            let now = self.shared.epoch.elapsed().as_micros() as u64;
+            self.record_dropout(now);
+            let since_push = now - self.shared.last_push_micros.load(Ordering::Relaxed);
             log::debug!(
                 "Audio buffer ran dry ({got} of {} samples), {:.1} ms after the emulator last added audio",
                 out.len(),
@@ -301,6 +314,17 @@ impl AudioConsumer {
             self.start_refill();
         }
         got
+    }
+
+    fn record_dropout(&mut self, now: u64) {
+        // The oldest of the ones before, overwritten by this one.
+        let oldest = self.dropouts[self.next_dropout].replace(now);
+        self.next_dropout = (self.next_dropout + 1) % self.dropouts.len();
+        if oldest.is_some_and(|oldest| now - oldest <= STUTTER_WITHIN.as_micros() as u64) {
+            self.shared
+                .last_stutter_micros
+                .store(now.max(1), Ordering::Relaxed);
+        }
     }
 
     fn start_refill(&mut self) {
@@ -329,6 +353,18 @@ impl AudioBufferControl {
             samples_for(latency_micros, self.sample_rate),
             Ordering::Relaxed,
         );
+    }
+
+    /// How long ago the sound last cut out while stuttering: several times in a short while,
+    /// which more latency would fix.
+    pub fn since_stutter(&self) -> Option<Duration> {
+        let last_stutter = self.shared.last_stutter_micros.load(Ordering::Relaxed);
+        (last_stutter > 0).then(|| {
+            self.shared
+                .epoch
+                .elapsed()
+                .saturating_sub(Duration::from_micros(last_stutter))
+        })
     }
 }
 
@@ -360,6 +396,7 @@ pub fn audio_buffer(
         flush_generation: AtomicU64::new(0),
         skip: AtomicUsize::new(0),
         underruns: AtomicU64::new(0),
+        last_stutter_micros: AtomicU64::new(0),
         pushed: AtomicU64::new(0),
         played: AtomicU64::new(0),
         last_push_micros: AtomicU64::new(0),
@@ -388,10 +425,38 @@ pub fn audio_buffer(
             burst: 0,
             last_sample: 0.0,
             faded_in: 0,
+            dropouts: [None; STUTTER_DROPOUTS - 1],
+            next_dropout: 0,
         },
         AudioBufferControl {
             shared,
             sample_rate,
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SECOND: u64 = 1_000_000;
+
+    #[test]
+    fn a_few_scattered_dropouts_are_not_stuttering() {
+        let (_tx, mut rx, ctl) = audio_buffer(8_000, 44_100.0, 128);
+        for second in [1, 20, 40, 60, 80] {
+            rx.record_dropout(second * SECOND);
+        }
+        assert!(ctl.since_stutter().is_none());
+    }
+
+    #[test]
+    fn dropouts_close_together_are_stuttering() {
+        let (_tx, mut rx, ctl) = audio_buffer(8_000, 44_100.0, 128);
+        rx.record_dropout(SECOND);
+        rx.record_dropout(10 * SECOND);
+        assert!(ctl.since_stutter().is_none());
+        rx.record_dropout(20 * SECOND);
+        assert!(ctl.since_stutter().is_some());
+    }
 }
