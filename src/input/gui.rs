@@ -1,4 +1,5 @@
 use crate::{
+    gui::sizes,
     input::{JoypadButton, JoypadState},
     main_view::gui::{GuiComponent, GuiEvent, MainMenuState},
     settings::SettingsStore,
@@ -68,7 +69,7 @@ impl InputsGui {
             .name
             .to_string();
         egui::ComboBox::from_id_salt(format!("joypad-{}", player))
-            .width(160.0)
+            .width(sizes::COMBO_WIDTH)
             .selected_text(selected_text)
             .show_ui(ui, |ui| {
                 for input_configuration in available_configurations {
@@ -81,8 +82,10 @@ impl InputsGui {
             });
 
         let input_configuration = input_settings.selected_configuration_mut(player);
+        ui.add_space(sizes::FORM_SPACING[1]);
         Grid::new(format!("joypadmap_grid_{}", player))
             .num_columns(2)
+            .spacing(sizes::FORM_SPACING)
             .striped(true)
             .show(ui, |ui| {
                 use JoypadButton::*;
@@ -179,6 +182,7 @@ impl GuiComponent for InputsGui {
                     &mut self.mapping_request,
                 );
             });
+            ui.add_space(sizes::SECTION_SPACING);
             ui.vertical(|ui| {
                 Self::key_map_ui(
                     ui,

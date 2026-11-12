@@ -1,8 +1,8 @@
 use std::time::{Duration, Instant};
 
 use egui::{
-    Align, Align2, Button, Color32, Context, FontId, Image, Label, Layout, Margin, Response,
-    RichText, Style, TextureId, Ui, UiBuilder, Vec2, Widget, load::SizedTexture,
+    Align, Align2, Color32, Context, FontId, Image, Label, Layout, Margin, Response, RichText,
+    TextureId, Ui, UiBuilder, Vec2, Widget, load::SizedTexture,
 };
 
 use crate::{
@@ -11,7 +11,7 @@ use crate::{
     emulation::{
         NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3, NesRegion, SharedEmulator, gui::EmulatorGui,
     },
-    gui::{MenuButton, esc_pressed},
+    gui::{MenuButton, action_button, actions_ui, esc_pressed, section_ui, sizes},
     input::{JoypadState, KeyEvent, gamepad::GamepadEvent, gui::InputsGui},
     integer_scaling::{MINIMUM_INTEGER_SCALING_SIZE, calculate_size_corrected},
     settings::{MAX_PLAYERS, SettingsStore},
@@ -133,14 +133,16 @@ impl MainGui {
             .collapsible(false)
             .resizable(false)
             .movable(false)
-            .frame(egui::Frame::window(&Style::default()).inner_margin(Margin::same(20)))
+            .frame(
+                egui::Frame::window(&ctx.global_style()).inner_margin(Margin::same(sizes::MARGIN)),
+            )
             .pivot(Align2::CENTER_CENTER)
             .fixed_pos(screen_rect.center())
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     egui::Grid::new(format!("main_menu_grid_{window_title}"))
                         .num_columns(1)
-                        .spacing([10.0, 10.0])
+                        .spacing([sizes::ROW_SPACING, sizes::ROW_SPACING])
                         .show(ui, content);
                 });
             });
@@ -250,33 +252,23 @@ impl MainGui {
                 MainMenuState::Settings => {
                     Self::ui_main_container(Some("Settings"), ui, |ui| {
                         ui.vertical(|ui| {
-                            if let Some(name) = self.audio_gui.name() {
-                                ui.vertical_centered(|ui| {
-                                    ui.heading(name);
+                            if let Some(name) = self.audio_gui.name().map(str::to_owned) {
+                                section_ui(ui, true, &name, |ui| {
+                                    self.audio_gui.ui(ui);
                                 });
-                                self.audio_gui.ui(ui);
                             }
-                            ui.add_space(10.0);
-                            ui.separator();
-                            ui.add_space(10.0);
-                            if let Some(name) = self.inputs_gui.name() {
-                                ui.vertical_centered(|ui| {
-                                    ui.heading(name);
+                            if let Some(name) = self.inputs_gui.name().map(str::to_owned) {
+                                section_ui(ui, false, &name, |ui| {
+                                    self.inputs_gui.ui(ui);
                                 });
-                                self.inputs_gui.ui(ui);
                             }
 
                             if self.supported_nes_regions.len() > 1 {
-                                ui.separator();
-                                ui.vertical_centered(|ui| {
-                                    ui.heading("NES System");
-                                });
-                                ui.vertical(|ui| {
+                                section_ui(ui, false, "NES System", |ui| {
                                     ui.label(
                                         RichText::new("NOTE: changing this will restart the game")
                                             .color(Color32::DARK_RED),
                                     );
-
                                     ui.horizontal(|ui| {
                                         let mut settings = self.settings.write();
                                         for supported_region in &self.supported_nes_regions {
@@ -294,19 +286,13 @@ impl MainGui {
                                     });
                                 });
                             }
+                        });
+                        ui.end_row();
 
-                            ui.vertical_centered(|ui| {
-                                ui.add_space(20.0);
-                                if Button::new(
-                                    RichText::new("Close").font(FontId::proportional(20.0)),
-                                )
-                                .ui(ui)
-                                .clicked()
-                                    || esc_pressed(ui)
-                                {
-                                    self.menu_state = MainMenuState::Main;
-                                }
-                            });
+                        actions_ui(ui, |ui| {
+                            if action_button("Close").ui(ui).clicked() || esc_pressed(ui) {
+                                self.menu_state = MainMenuState::Main;
+                            }
                         });
                     });
                 }

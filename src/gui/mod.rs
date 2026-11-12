@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
 use egui::{
-    Color32, Context, CornerRadius, CursorIcon, FontId, Id, KeyboardShortcut, RichText, Role,
-    Sense, TextStyle, Ui, Vec2, Widget, WidgetInfo, WidgetText,
+    Button, Color32, Context, CornerRadius, CursorIcon, FontId, Id, KeyboardShortcut, Label,
+    RichText, Role, Sense, TextStyle, TextWrapMode, Ui, Vec2, Widget, WidgetInfo, WidgetText,
 };
 
 #[derive(Clone)]
@@ -17,6 +17,96 @@ impl MenuButtonGroup {
             focused: None,
         }
     }
+}
+
+/// Sizes shared by every menu, so they look like one app.
+pub mod sizes {
+    /// Menu items and status titles ("CONNECTING"), monospace.
+    pub const TITLE: f32 = 30.0;
+    /// Details under a title ("WAITING FOR SECOND PLAYER"), monospace.
+    #[cfg(feature = "netplay")]
+    pub const DETAIL: f32 = 15.0;
+    /// Action buttons (Close, Cancel, Join...).
+    pub const ACTION: f32 = 20.0;
+    /// Section headings in Settings.
+    pub const HEADING: f32 = 20.0;
+    /// Between the rows of a menu.
+    pub const ROW_SPACING: f32 = 10.0;
+    /// Before the actions at the bottom of a menu, and around the sections of one.
+    pub const SECTION_SPACING: f32 = 20.0;
+    /// Between a form's labels and its widgets, and between its rows.
+    pub const FORM_SPACING: [f32; 2] = [10.0, 6.0];
+    /// Inside the menu window.
+    pub const MARGIN: i8 = 20;
+    /// Dropdowns (audio output, input configurations).
+    pub const COMBO_WIDTH: f32 = 160.0;
+    /// Paragraphs of text, so they wrap rather than stretch the menu.
+    #[cfg(feature = "netplay")]
+    pub const TEXT_WIDTH: f32 = 300.0;
+}
+
+fn centered_row<R>(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui) -> R) -> R {
+    let inner = ui.vertical_centered(add_contents).inner;
+    ui.end_row();
+    inner
+}
+
+/// A centered title row in a menu, like a menu item that can't be picked.
+#[cfg(feature = "netplay")]
+pub fn title_ui(ui: &mut Ui, text: impl Into<String>, color: Color32) {
+    centered_row(ui, |ui| {
+        Label::new(MenuButton::ui_text(text, color))
+            .selectable(false)
+            .ui(ui);
+    });
+}
+
+/// A centered row of smaller text, under a title.
+#[cfg(feature = "netplay")]
+pub fn detail_ui(ui: &mut Ui, text: impl Into<String>) {
+    centered_row(ui, |ui| {
+        Label::new(
+            RichText::new(text)
+                .color(MenuButton::ACTIVE_COLOR)
+                .strong()
+                .font(FontId::monospace(sizes::DETAIL)),
+        )
+        .selectable(false)
+        .ui(ui);
+    });
+}
+
+/// A button for an action (Close, Cancel...).
+pub fn action_button(text: &str) -> Button<'_> {
+    Button::new(RichText::new(text).font(FontId::proportional(sizes::ACTION)))
+}
+
+/// The actions at the bottom of a menu, centered, set off from what's above.
+pub fn actions_ui<R>(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui) -> R) -> R {
+    // The grid already puts a row's spacing above.
+    ui.add_space(sizes::SECTION_SPACING - sizes::ROW_SPACING);
+    ui.end_row();
+    centered_row(ui, |ui| {
+        ui.spacing_mut().item_spacing.y = sizes::ROW_SPACING;
+        add_contents(ui)
+    })
+}
+
+/// A section of a menu (Audio, Input...), with its heading; sections after the first are set
+/// off by a line.
+pub fn section_ui(ui: &mut Ui, first: bool, heading: &str, add_contents: impl FnOnce(&mut Ui)) {
+    if !first {
+        ui.add_space(sizes::SECTION_SPACING / 2.0);
+        ui.separator();
+        ui.add_space(sizes::SECTION_SPACING / 2.0);
+    }
+    ui.vertical_centered(|ui| {
+        Label::new(RichText::new(heading).font(FontId::proportional(sizes::HEADING)))
+            .selectable(false)
+            .ui(ui);
+    });
+    ui.add_space(sizes::ROW_SPACING);
+    add_contents(ui);
 }
 
 const ESC_SHORTCUT: KeyboardShortcut = egui::KeyboardShortcut {
@@ -48,16 +138,20 @@ impl MenuButton {
         RichText::new(text)
             .color(color)
             .strong()
-            .font(FontId::monospace(30.0))
+            .font(FontId::monospace(sizes::TITLE))
     }
 }
 
 impl Widget for MenuButton {
     fn ui(self, ui: &mut Ui) -> egui::Response {
         let mut desired_size = Vec2::ZERO;
-        let galley = self
-            .text
-            .into_galley(ui, None, ui.available_width(), TextStyle::Button);
+        // A menu item stays on one line; the menu grows to fit it.
+        let galley = self.text.into_galley(
+            ui,
+            Some(TextWrapMode::Extend),
+            f32::INFINITY,
+            TextStyle::Button,
+        );
 
         desired_size.x += galley.size().x;
         desired_size.y = desired_size.y.max(galley.size().y);
