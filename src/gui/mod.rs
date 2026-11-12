@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use egui::{
     Color32, Context, CornerRadius, CursorIcon, FontId, Id, KeyboardShortcut, RichText, Role,
-    Sense, TextStyle, Ui, Vec2, Widget, WidgetInfo, WidgetText,
+    Sense, TextStyle, TextWrapMode, Ui, Vec2, Widget, WidgetInfo, WidgetText,
 };
 
 #[derive(Clone)]
@@ -55,9 +55,13 @@ impl MenuButton {
 impl Widget for MenuButton {
     fn ui(self, ui: &mut Ui) -> egui::Response {
         let mut desired_size = Vec2::ZERO;
-        let galley = self
-            .text
-            .into_galley(ui, None, ui.available_width(), TextStyle::Button);
+        // A menu item stays on one line; the menu grows to fit it.
+        let galley = self.text.into_galley(
+            ui,
+            Some(TextWrapMode::Extend),
+            f32::INFINITY,
+            TextStyle::Button,
+        );
 
         desired_size.x += galley.size().x;
         desired_size.y = desired_size.y.max(galley.size().y);

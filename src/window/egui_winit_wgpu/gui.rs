@@ -32,6 +32,11 @@ impl EguiRenderer {
         };
 
         egui_context.set_visuals_of(Theme::Dark, visuals);
+        // egui 0.34 made buttons and widgets roomier; keep the sizes the menus were laid out for.
+        egui_context.all_styles_mut(|style| {
+            style.spacing.button_padding = egui::vec2(4.0, 1.0);
+            style.spacing.interact_size.y = 18.0;
+        });
 
         let egui_state =
             egui_winit::State::new(egui_context.clone(), id, &window, None, None, None);

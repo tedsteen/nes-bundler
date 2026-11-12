@@ -60,7 +60,9 @@ futures = "0.3"
 
 egui = { version = "0.37", default-features = false, features = [
   "bytemuck",
-  "default_fonts",
+  # The default fonts plus the emoji and icon ones (⌨, 🎮 in input names), which egui 0.34
+  # stopped including by default.
+  "monochrome_emoji_fonts",
 ] }
 egui_plot = { version = "0.38", optional = true }
 
