@@ -92,6 +92,8 @@ pub struct ConnectedNetplaySession {
     /// Kept here rather than in the shared emulator controls: it changes often, and a speed
     /// change there flushes the audio.
     catch_up_speed: f32,
+    /// Last `frames_ahead` logged, to log only when it changes.
+    logged_frames_ahead: i32,
     /// Kept for querying the WebRTC connection; GGRS owns its data channel.
     socket: WebRtcSocket,
     remote_peer: Option<PeerId>,
@@ -153,6 +155,7 @@ impl ConnectedNetplaySession {
             start_time: Instant::now(),
             last_running_time: Instant::now(),
             catch_up_speed: 1.0,
+            logged_frames_ahead: 0,
             socket,
             remote_peer,
             connection_path: None,
@@ -186,12 +189,16 @@ impl ConnectedNetplaySession {
                 puffin::profile_scope!("ggrs advance_frame");
                 match p2p_session.advance_frame() {
                     Ok(requests) => {
+                        // CPU time spent re-simulating after a misprediction (not waiting for audio).
+                        let mut rollback: Option<(i32, Duration)> = None;
                         for request in requests {
                             match request {
                                 GgrsRequest::LoadGameState { cell, frame } => {
-                                    log::debug!("Loading (frame {:?})", frame);
+                                    let started = Instant::now();
+                                    let depth = self.current_game_state.ggrs_frame - frame;
                                     self.current_game_state =
                                         cell.load().expect("ggrs state to load");
+                                    rollback = Some((depth, started.elapsed()));
                                 }
                                 GgrsRequest::SaveGameState { cell, frame } => {
                                     assert_eq!(self.current_game_state.ggrs_frame, frame);
@@ -200,6 +207,7 @@ impl ConnectedNetplaySession {
                                 GgrsRequest::AdvanceFrame { inputs } => {
                                     let is_replay = self.current_game_state.ggrs_frame
                                         <= self.last_handled_ggrs_frame;
+                                    let started = Instant::now();
 
                                     self.current_game_state
                                         .nes_state
@@ -216,6 +224,9 @@ impl ConnectedNetplaySession {
                                         )
                                         .await;
 
+                                    if is_replay && let Some((_, spent)) = &mut rollback {
+                                        *spent += started.elapsed();
+                                    }
                                     if !is_replay {
                                         //This is not a replay
                                         self.last_handled_ggrs_frame =
@@ -237,6 +248,9 @@ impl ConnectedNetplaySession {
                                 }
                             }
                         }
+                        if let Some((depth, spent)) = rollback {
+                            Self::log_rollback(depth, spent);
+                        }
                     }
                     Err(e) => {
                         log::warn!(
@@ -253,12 +267,35 @@ impl ConnectedNetplaySession {
                         1.0 - NETPLAY_SPEED_CURVE_COEFF
                             * (NETPLAY_SPEED_CURVE_SCALE * frames_ahead as f32).powi(2),
                     );
-                    log::trace!("Frames ahead: {frames_ahead}, slowing down emulation ({speed}x)");
+                    if frames_ahead != self.logged_frames_ahead {
+                        log::debug!(
+                            "{frames_ahead} frame(s) ahead of the other player, running at {speed:.2}x"
+                        );
+                    }
                     self.catch_up_speed = speed;
                 } else {
+                    if self.logged_frames_ahead > 0 {
+                        log::debug!("Caught up with the other player, running at full speed");
+                    }
                     self.catch_up_speed = 1.0;
                 }
+                self.logged_frames_ahead = frames_ahead;
             }
+        }
+    }
+
+    /// Rollbacks are normal; long ones are what makes netplay slow down, since the replay has to
+    /// fit in a single frame next to the real one.
+    fn log_rollback(depth: i32, spent: Duration) {
+        const SLOW: Duration = Duration::from_millis(8); // Half a frame
+        const DEEP: i32 = 4;
+        let ms = spent.as_secs_f32() * 1000.0;
+        if spent > SLOW {
+            log::warn!("Rolling back {depth} frames took {ms:.1} ms of a 16.7 ms frame");
+        } else if depth >= DEEP {
+            log::debug!("Rolled back {depth} frames ({ms:.1} ms)");
+        } else {
+            log::trace!("Rolled back {depth} frames ({ms:.1} ms)");
         }
     }
 

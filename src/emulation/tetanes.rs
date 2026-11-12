@@ -35,6 +35,9 @@ impl ToTetanesRegion for crate::emulation::NesRegion {
 }
 
 impl TetanesNesState {
+    /// Frames to run ahead of the console to hide a frame of input lag.
+    const RUN_AHEAD: usize = 1;
+
     pub fn start_rom(
         rom: &[u8],
         load_sram: bool,
@@ -50,7 +53,7 @@ impl TetanesNesState {
                 // We keep battery-backed RAM in our own settings, so the deck does no file access.
                 .with_sram_dir(None)
                 // Hides a frame of input lag. The deck snapshots, clocks ahead and rewinds itself.
-                .with_run_ahead(1),
+                .with_run_ahead(Self::RUN_AHEAD),
         );
         deck.load_rom(Bundle::current().config.name.clone(), &mut Cursor::new(rom))?;
 
@@ -155,6 +158,14 @@ impl NesStateHandler for TetanesNesState {
             JoypadBtnState::from_bits_truncate(*joypad_state[1] as u16);
 
         self.apply_speed(speed);
+        // Frames clocked without buffers are netplay rollback replays, which are never shown, so
+        // running ahead of them (to hide input lag) would only double their cost. It doesn't
+        // change the emulation: the deck rewinds to the real frame after running ahead.
+        self.deck.set_run_ahead(if buffers.is_some() {
+            Self::RUN_AHEAD
+        } else {
+            0
+        });
         self.clock_frame_into(buffers).await;
     }
 
