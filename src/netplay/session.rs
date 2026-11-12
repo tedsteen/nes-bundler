@@ -87,6 +87,10 @@ pub struct ConnectedNetplaySession {
     pub newer_confirmed_state: NetplayNesState,
     start_time: Instant,
     last_running_time: Instant,
+    /// Slowdown applied on top of the requested speed while this peer is ahead of the remote.
+    /// Kept here rather than in the shared emulator controls: it changes often, and a speed
+    /// change there flushes the audio.
+    catch_up_speed: f32,
     _loop_task: crate::netplay::connection::AbortOnDrop,
 }
 
@@ -139,6 +143,7 @@ impl ConnectedNetplaySession {
             current_game_state: initial_state.clone(),
             start_time: Instant::now(),
             last_running_time: Instant::now(),
+            catch_up_speed: 1.0,
             _loop_task: loop_task,
         }
     }
@@ -147,7 +152,9 @@ impl ConnectedNetplaySession {
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
         mut buffers: Option<NESBuffers<'_>>,
+        speed: f32,
     ) {
+        let speed = speed * self.catch_up_speed;
         let p2p_session = &mut self.p2p_session;
 
         match p2p_session.current_state() {
@@ -192,6 +199,7 @@ impl ConnectedNetplaySession {
                                                 self.local_player_index,
                                             ),
                                             if is_replay { None } else { buffers.take() },
+                                            speed,
                                         )
                                         .await;
 
@@ -233,9 +241,9 @@ impl ConnectedNetplaySession {
                             * (NETPLAY_SPEED_CURVE_SCALE * frames_ahead as f32).powi(2),
                     );
                     log::trace!("Frames ahead: {frames_ahead}, slowing down emulation ({speed}x)");
-                    self.current_game_state.nes_state.set_speed(speed);
+                    self.catch_up_speed = speed;
                 } else {
-                    self.current_game_state.nes_state.set_speed(1.0)
+                    self.catch_up_speed = 1.0;
                 }
             }
         }
@@ -351,15 +359,16 @@ const NETPLAY_MIN_SPEED: f32 = 0.8;
 const NETPLAY_SPEED_CURVE_SCALE: f32 = 0.2;
 /// Strength coefficient for the quadratic term of the slowdown curve.
 const NETPLAY_SPEED_CURVE_COEFF: f32 = 0.1;
-impl NesStateHandler for NetplaySession {
-    async fn advance(
+impl NetplaySession {
+    pub async fn advance(
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
         buffers: Option<NESBuffers<'_>>,
+        speed: f32,
     ) {
         match self {
             NetplaySession::Disconnected(local_nes_state) => {
-                local_nes_state.advance(joypad_state, buffers).await;
+                local_nes_state.advance(joypad_state, buffers, speed).await;
             }
             NetplaySession::Connecting(connecting_session) => {
                 let future_connection = &mut connecting_session.netplay_connection;
@@ -390,7 +399,7 @@ impl NesStateHandler for NetplaySession {
                     log::warn!("Peer disconnected, resuming...");
                     *self = NetplaySession::resume(session_state);
                 } else {
-                    session_state.advance(joypad_state, buffers).await;
+                    session_state.advance(joypad_state, buffers, speed).await;
                 }
             }
             NetplaySession::Resuming(resuming) => {
@@ -446,25 +455,13 @@ impl NesStateHandler for NetplaySession {
         }
     }
 
-    fn reset(&mut self, hard: bool) {
+    pub fn reset(&mut self, hard: bool) {
         if let NetplaySession::Disconnected(local_nes_state) = self {
             local_nes_state.reset(hard);
         }
     }
 
-    fn set_speed(&mut self, speed: f32) {
-        match self {
-            NetplaySession::Connecting(..)
-            | NetplaySession::Resuming(..)
-            | NetplaySession::Failed(..) => {
-                //Noop when connecting, resuming or failed
-            }
-            NetplaySession::Connected(s) => s.current_game_state.nes_state.set_speed(speed),
-            NetplaySession::Disconnected(local_nes_state) => local_nes_state.set_speed(speed),
-        }
-    }
-
-    fn save_sram(&mut self) -> Option<&[u8]> {
+    pub fn save_sram(&mut self) -> Option<&[u8]> {
         if let NetplaySession::Disconnected(local_nes_state) = self {
             local_nes_state.save_sram()
         } else {
@@ -472,7 +469,7 @@ impl NesStateHandler for NetplaySession {
         }
     }
 
-    fn frame(&self) -> u32 {
+    pub fn frame(&self) -> u32 {
         match self {
             NetplaySession::Connecting(..)
             | NetplaySession::Resuming(..)

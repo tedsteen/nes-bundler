@@ -70,7 +70,7 @@ impl TetanesNesState {
         }
 
         let mut s = Self { deck };
-        s.set_speed(1.0); // Triggers the correct sample rate
+        s.apply_speed(1.0); // Triggers the correct sample rate
         Ok(s)
     }
 
@@ -121,10 +121,8 @@ impl TetanesNesState {
     fn set_region(&mut self, region: NesRegion) {
         self.deck.set_region(region);
     }
-}
 
-impl NesStateHandler for TetanesNesState {
-    fn set_speed(&mut self, speed: f32) {
+    fn apply_speed(&mut self, speed: f32) {
         let speed = speed.max(0.005);
         let target_sample_rate = match self.deck.region() {
             // Downsample a tiny bit extra to match the most common screen refresh rate (60hz)
@@ -136,24 +134,27 @@ impl NesStateHandler for TetanesNesState {
 
         let new_sample_rate = target_sample_rate * (1.0 / speed);
 
-        // Guarded because setting it rebuilds the filter chain and the synth, and netplay adjusts
-        // speed every frame.
+        // Guarded because setting it rebuilds the filter chain and the synth.
         if self.deck.bus().apu.sample_rate != new_sample_rate {
             log::trace!("Change emulation speed to {speed}x");
             self.deck.set_sample_rate(new_sample_rate);
         }
     }
+}
 
+impl NesStateHandler for TetanesNesState {
     async fn advance(
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
         buffers: Option<NESBuffers<'_>>,
+        speed: f32,
     ) {
         self.deck.joypad_mut(Player::One).buttons =
             JoypadBtnState::from_bits_truncate(*joypad_state[0] as u16);
         self.deck.joypad_mut(Player::Two).buttons =
             JoypadBtnState::from_bits_truncate(*joypad_state[1] as u16);
 
+        self.apply_speed(speed);
         self.clock_frame_into(buffers).await;
     }
 
