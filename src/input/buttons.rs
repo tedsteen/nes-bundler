@@ -38,6 +38,7 @@ pub enum GamepadButton {
     Misc3,
     Misc4,
     Misc5,
+    Misc6,
 }
 
 impl std::fmt::Display for GamepadButton {

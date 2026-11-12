@@ -112,7 +112,9 @@ impl Settings {
 
         let mut settings: Result<Settings> = File::open(settings_file_path)
             .map_err(anyhow::Error::msg)
-            .and_then(|f| serde_yaml::from_reader(BufReader::new(f)).map_err(anyhow::Error::msg));
+            .and_then(|f| {
+                serde_yaml_ng::from_reader(BufReader::new(f)).map_err(anyhow::Error::msg)
+            });
 
         match &mut settings {
             Ok(settings) => {
@@ -144,7 +146,7 @@ impl Settings {
         if let Err(e) = File::create(settings_file_path)
             .map_err(anyhow::Error::msg)
             .and_then(|file| {
-                serde_yaml::to_writer(BufWriter::new(file), self).map_err(anyhow::Error::msg)
+                serde_yaml_ng::to_writer(BufWriter::new(file), self).map_err(anyhow::Error::msg)
             })
         {
             log::error!("Failed to save settings: {:?}", e);

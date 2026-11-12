@@ -70,6 +70,8 @@ impl NetplayNesState {
 pub struct GGRSConfig;
 impl Config for GGRSConfig {
     type Input = u8;
+    // Same as earlier ggrs versions: assume the remote keeps holding what it held last.
+    type InputPredictor = ggrs::PredictRepeatLast;
     type State = NetplayNesState;
     type Address = PeerId;
 }
@@ -98,6 +100,7 @@ impl ConnectedNetplaySession {
         let ggrs_config = &netplay_server_configuration.ggrs;
         let mut sess_build = SessionBuilder::<GGRSConfig>::new()
             .with_num_players(MAX_PLAYERS)
+            .expect("a valid number of players")
             .with_input_delay(ggrs_config.input_delay)
             .with_fps(Settings::current_mut().nes_region_mut().to_fps() as usize)
             .unwrap()

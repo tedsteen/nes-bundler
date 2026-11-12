@@ -19,7 +19,6 @@ use crate::{
 #[derive(Clone)]
 pub struct TetanesNesState {
     deck: ControlDeck,
-    battery_backed: bool,
 }
 trait ToTetanesRegion {
     fn to_tetanes_region(&self) -> NesRegion;
@@ -44,29 +43,25 @@ impl TetanesNesState {
         let region = region.to_tetanes_region();
 
         log::debug!("Starting ROM with system region {region:?}");
-        let mut deck = ControlDeck::with_config(Config {
-            region,
-            ram_state: RamState::Random,
-            // We keep battery-backed RAM in our own settings, so the deck does no file access.
-            sram_dir: None,
-            // Hides a frame of input lag. The deck snapshots, clocks ahead and rewinds itself.
-            run_ahead: 1,
-            ..Default::default()
-        });
-        let loaded_rom =
-            deck.load_rom(Bundle::current().config.name.clone(), &mut Cursor::new(rom))?;
-        let battery_backed = loaded_rom.battery_backed;
+        let mut deck = ControlDeck::with_config(
+            Config::default()
+                .with_region(region)
+                .with_ram_state(RamState::Random)
+                // We keep battery-backed RAM in our own settings, so the deck does no file access.
+                .with_sram_dir(None)
+                // Hides a frame of input lag. The deck snapshots, clocks ahead and rewinds itself.
+                .with_run_ahead(1),
+        );
+        deck.load_rom(Bundle::current().config.name.clone(), &mut Cursor::new(rom))?;
 
-        if load_sram
-            && battery_backed
-            && let Some(b64_encoded_sram) = &Settings::current().save_state
-        {
+        // A no-op for carts without a battery.
+        if load_sram && let Some(b64_encoded_sram) = &Settings::current().save_state {
             use base64::Engine;
             use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
             match b64.decode(b64_encoded_sram) {
                 Ok(sram) => {
                     log::info!("Loading SRAM save state");
-                    Self::load_sram(&mut deck, &sram);
+                    deck.set_sram(&sram);
                 }
                 Err(err) => {
                     log::warn!("Failed to base64 decode sram: {err:?}");
@@ -74,24 +69,9 @@ impl TetanesNesState {
             }
         }
 
-        let mut s = Self {
-            deck,
-            battery_backed,
-        };
+        let mut s = Self { deck };
         s.set_speed(1.0); // Triggers the correct sample rate
         Ok(s)
-    }
-
-    /// Restores raw battery-backed RAM, in the layout [`ControlDeck::sram`] hands back.
-    ///
-    /// `ControlDeck::load_sram` reads tetanes' own container instead, and we store the bare bytes.
-    fn load_sram(deck: &mut ControlDeck, sram: &[u8]) {
-        let bus = deck.bus_mut();
-        let dst = bus.memory.sram_mut();
-        let len = dst.len().min(sram.len());
-        dst[..len].copy_from_slice(&sram[..len]);
-        // Boards that keep battery state of their own read it back out of the slice.
-        bus.mapper.restore_battery(&bus.memory);
     }
 
     fn clock_frame(&mut self) {
@@ -127,10 +107,6 @@ impl TetanesNesState {
                 buffers.audio.push_all(self.deck.audio_samples()).await;
             }
         }
-    }
-
-    fn sram(&mut self) -> &[u8] {
-        self.deck.sram()
     }
 
     fn reset(&mut self, hard: bool) {
@@ -182,11 +158,8 @@ impl NesStateHandler for TetanesNesState {
     }
 
     fn save_sram(&mut self) -> Option<&[u8]> {
-        if self.battery_backed {
-            Some(self.sram())
-        } else {
-            None
-        }
+        // Empty for carts without a battery.
+        Some(self.deck.sram()).filter(|sram| !sram.is_empty())
     }
 
     fn frame(&self) -> u32 {
@@ -204,7 +177,6 @@ impl Debug for TetanesNesState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TetanesNesState")
             .field("frame", &self.frame())
-            .field("battery_backed", &self.battery_backed)
             .finish()
     }
 }
