@@ -4,11 +4,17 @@ use crate::{
     settings::SettingsStore,
 };
 use egui::{Slider, Ui};
+use std::time::Duration;
 
 pub struct AudioGui {
     pub audio_system: AudioSystem,
     audio_stream: AudioStream,
     settings: &'static SettingsStore,
+}
+
+impl AudioGui {
+    /// How long the stutter warning stays up after the sound last cut out.
+    const STUTTER_WARNING: Duration = Duration::from_secs(5);
 }
 
 impl AudioGui {
@@ -79,6 +85,15 @@ impl GuiComponent for AudioGui {
             }
         });
         None
+    }
+
+    fn messages(&self, _menu_state: &MainMenuState) -> Option<Vec<String>> {
+        (self.audio_stream.since_stutter()? < Self::STUTTER_WARNING).then(|| {
+            vec![format!(
+                "{} - Stuttering, try raising the latency in Settings",
+                self.name().expect("a name")
+            )]
+        })
     }
 
     fn name(&self) -> Option<&str> {

@@ -198,6 +198,11 @@ impl SDL3AudioStream {
     pub(crate) fn set_latency(&self, latency_micros: u32) {
         self.ctl.set_latency_micros(latency_micros);
     }
+
+    /// How long ago the sound last cut out while stuttering, if it has.
+    pub(crate) fn since_stutter(&self) -> Option<std::time::Duration> {
+        self.ctl.since_stutter()
+    }
 }
 
 pub struct NesBundlerAudioCallback {
@@ -219,11 +224,11 @@ impl AudioCallback<f32> for NesBundlerAudioCallback {
 
         if let Some(rx) = &mut self.rx {
             let buf = &mut self.tmp[..requested];
-            // Silence fills the rest when the buffer can't cover it.
-            let got = rx.pop_slice(buf);
+            // A fade to silence fills the rest when the buffer can't cover it.
+            rx.pop_slice(buf);
 
             let gain = (self.volume.load(std::sync::atomic::Ordering::Relaxed) as f32) / 100.0;
-            for x in &mut buf[..got] {
+            for x in buf {
                 *x *= gain;
             }
         } else {
