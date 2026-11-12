@@ -1,4 +1,5 @@
 use sdl3::EventPump;
+use sdl3::event::Event;
 use winit::application::ApplicationHandler;
 use winit::event::{StartCause, WindowEvent};
 
@@ -73,7 +74,6 @@ impl ApplicationHandler for AppShell {
         };
 
         Self::handle_window_action(event_loop, &mut self.ui, main_view, &window_event);
-        Self::forward_sdl_events(&mut self.sdl_event_pump, &mut self.ui, main_view);
 
         self.runtime.write_inputs(self.ui.current_game_inputs());
         self.ui.handle_window_event(main_view, &window_event);
@@ -82,6 +82,25 @@ impl ApplicationHandler for AppShell {
             return;
         }
         self.ui.update_cursor_visibility(main_view);
+    }
+
+    // Runs once per event-loop iteration (the loop polls), even while the window gets no events,
+    // e.g. when it's hidden and the OS stops sending redraws.
+    fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        let Some(main_view) = &mut self.main_view else {
+            return;
+        };
+
+        if Self::forward_sdl_events(&mut self.sdl_event_pump, &mut self.ui, main_view) {
+            log::info!("Quit requested, shutting down");
+            event_loop.exit();
+            return;
+        }
+
+        self.runtime.write_inputs(self.ui.current_game_inputs());
+        if self.ui.take_exit_requested() {
+            event_loop.exit();
+        }
     }
 }
 
@@ -102,17 +121,21 @@ impl AppShell {
         }
     }
 
+    /// Forwards pending SDL gamepad events to the UI. Returns `true` if SDL asked the app to quit,
+    /// which it does on SIGINT/SIGTERM (the window itself belongs to winit, not SDL).
     fn forward_sdl_events(
         sdl_event_pump: &mut EventPump,
         ui: &mut UiController,
         main_view: &mut MainView,
-    ) {
-        for gui_event in sdl_event_pump
-            .poll_iter()
-            .flat_map(|event| event.to_gamepad_event())
-            .map(GuiEvent::Gamepad)
-        {
-            ui.handle_gui_event(main_view, &gui_event);
+    ) -> bool {
+        let mut quit = false;
+        for event in sdl_event_pump.poll_iter() {
+            if let Event::Quit { .. } = event {
+                quit = true;
+            } else if let Some(gamepad_event) = event.to_gamepad_event() {
+                ui.handle_gui_event(main_view, &GuiEvent::Gamepad(gamepad_event));
+            }
         }
+        quit
     }
 }
