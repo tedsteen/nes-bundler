@@ -65,6 +65,11 @@ const FADE_OUT: f32 = 0.99;
 /// rather than a one-off hiccup (the window opening, say).
 const STUTTER_DROPOUTS: usize = 3;
 const STUTTER_WITHIN: Duration = Duration::from_secs(30);
+/// A dropout counts towards stuttering only if the emulator was adding audio on time: within this
+/// many frames' worth of its last addition, which allows for a frame a 120 Hz refresh late. Later
+/// than that it missed a frame (skipped waiting for the other player in netplay, a long rollback,
+/// a stall), which more latency wouldn't fix.
+const ON_TIME_FRAMES: f32 = 1.75;
 
 struct Shared {
     /// The margin to keep: the configured latency, in samples.
@@ -85,8 +90,10 @@ struct Shared {
     /// Samples in and out, for logging.
     pushed: AtomicU64,
     played: AtomicU64,
-    /// When the emulator last added samples (microseconds since `epoch`), for logging.
+    /// When the emulator last added samples (microseconds since `epoch`), and how many: a frame's
+    /// worth.
     last_push_micros: AtomicU64,
+    last_push_samples: AtomicUsize,
     epoch: Instant,
     sample_rate: f32,
 }
@@ -135,6 +142,9 @@ impl AudioProducer {
             self.shared.epoch.elapsed().as_micros() as u64,
             Ordering::Relaxed,
         );
+        self.shared
+            .last_push_samples
+            .store(samples.len(), Ordering::Relaxed);
         self.shared
             .pushed
             .fetch_add(samples.len() as u64, Ordering::Relaxed);
@@ -304,12 +314,24 @@ impl AudioConsumer {
             self.fade_out(&mut out[got..]);
             self.shared.underruns.fetch_add(1, Ordering::Relaxed);
             let now = self.shared.epoch.elapsed().as_micros() as u64;
-            self.record_dropout(now);
-            let since_push = now - self.shared.last_push_micros.load(Ordering::Relaxed);
+            let since_push =
+                now.saturating_sub(self.shared.last_push_micros.load(Ordering::Relaxed));
+            let frame_micros = self.shared.last_push_samples.load(Ordering::Relaxed) as f32
+                / self.shared.sample_rate
+                * 1_000_000.0;
+            let emulator_on_time = since_push as f32 <= frame_micros * ON_TIME_FRAMES;
+            if emulator_on_time {
+                self.record_dropout(now);
+            }
             log::debug!(
-                "Audio buffer ran dry ({got} of {} samples), {:.1} ms after the emulator last added audio",
+                "Audio buffer ran dry ({got} of {} samples), {:.1} ms after the emulator last added audio{}",
                 out.len(),
-                since_push as f32 / 1000.0
+                since_push as f32 / 1000.0,
+                if emulator_on_time {
+                    ""
+                } else {
+                    " (the emulator fell behind)"
+                }
             );
             self.start_refill();
         }
@@ -400,6 +422,7 @@ pub fn audio_buffer(
         pushed: AtomicU64::new(0),
         played: AtomicU64::new(0),
         last_push_micros: AtomicU64::new(0),
+        last_push_samples: AtomicUsize::new(0),
         epoch: Instant::now(),
         sample_rate,
     });
