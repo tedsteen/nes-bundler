@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::audio::sdl3_impl::{SDL3AudioStream, SDL3AudioSystem, SDL3AvailableAudioDevice};
 
-pub mod pacer;
+pub mod buffer;
 
 pub mod gui;
 mod sdl3_impl;
@@ -11,8 +11,12 @@ pub type AudioSystem = SDL3AudioSystem;
 pub type AudioStream = SDL3AudioStream;
 pub type AvailableAudioDevice = SDL3AvailableAudioDevice;
 
+/// The audio latency setting: how much audio to keep buffered at the lowest point, just before
+/// the emulator adds a frame's worth, on top of what the sound card takes at once. The display
+/// sets a steady pace, so a few milliseconds is plenty; a slower computer can raise it if the
+/// sound stutters.
 pub const MAX_AUDIO_LATENCY_MICROS: u32 = 40_000;
-pub const MIN_AUDIO_LATENCY_MICROS: u32 = 8_000;
+pub const MIN_AUDIO_LATENCY_MICROS: u32 = 2_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct AudioSettings {
@@ -27,14 +31,14 @@ pub struct AudioSettings {
 
 impl AudioSettings {
     pub const fn default_latency_micros() -> u32 {
-        16_000
+        8_000
     }
     fn de_latency<'de, D>(deserializer: D) -> Result<u32, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         let mut v = u32::deserialize(deserializer)?;
-        if !(MIN_AUDIO_LATENCY_MICROS..MAX_AUDIO_LATENCY_MICROS).contains(&v) {
+        if !(MIN_AUDIO_LATENCY_MICROS..=MAX_AUDIO_LATENCY_MICROS).contains(&v) {
             v = AudioSettings::default_latency_micros();
         }
         Ok(v)

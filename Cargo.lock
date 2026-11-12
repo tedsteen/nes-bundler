@@ -2691,6 +2691,7 @@ dependencies = [
  "log",
  "matchbox_socket",
  "md5",
+ "objc2-foundation 0.3.2",
  "puffin",
  "puffin_egui",
  "rand 0.10.3",

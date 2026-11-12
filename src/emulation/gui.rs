@@ -59,7 +59,13 @@ impl DebugGui {
         if self.override_speed {
             ui.end_row();
             if ui
-                .add(egui::Slider::new(&mut self.speed, 0.01..=2.0).suffix("x"))
+                // Tetanes runs whole display frames at quarter steps. Not used during netplay,
+                // which has to step one NES frame at a time.
+                .add(
+                    egui::Slider::new(&mut self.speed, 0.25..=2.0)
+                        .step_by(0.25)
+                        .suffix("x"),
+                )
                 .changed()
             {
                 self.shared_emulator.set_speed(self.speed);

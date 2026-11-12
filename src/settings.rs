@@ -161,6 +161,12 @@ impl Settings {
         hasher.finish()
     }
 
+    pub fn nes_region(&self) -> NesRegion {
+        self.nes_region
+            .clone()
+            .unwrap_or_else(|| Bundle::current().config.default_region().clone())
+    }
+
     pub fn nes_region_mut(&mut self) -> &mut NesRegion {
         self.nes_region
             .get_or_insert_with(|| Bundle::current().config.default_region().clone())

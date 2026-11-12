@@ -10,19 +10,18 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use thingbuf::{Recycle, ThingBuf};
-use winit::event_loop::EventLoopProxy;
 
 use crate::{
-    app_event::AppEvent,
     audio::{
         AudioStream,
-        pacer::{AudioFlush, AudioProducer},
+        buffer::{AudioFlush, AudioProducer},
     },
-    emulation::tetanes::TetanesNesState,
+    emulation::{clock::FrameClock, tetanes::TetanesNesState},
     input::JoypadState,
     settings::{MAX_PLAYERS, Settings},
 };
 
+pub mod clock;
 pub mod gui;
 pub mod tetanes;
 pub type LocalNesState = TetanesNesState;
@@ -57,6 +56,7 @@ pub struct EmulatorControls {
     reset: Arc<AtomicU8>,
     shutdown: Arc<AtomicBool>,
     audio_flush: AudioFlush,
+    clock: FrameClock,
 }
 
 impl EmulatorControls {
@@ -67,6 +67,7 @@ impl EmulatorControls {
             reset: Arc::new(AtomicU8::new(Self::RESET_NONE)),
             shutdown: Arc::new(AtomicBool::new(false)),
             audio_flush,
+            clock: FrameClock::default(),
         }
     }
 
@@ -119,7 +120,7 @@ impl EmulatorControls {
 
     pub fn request_shutdown(&self) {
         self.shutdown.store(true, Ordering::Release);
-        self.audio_flush.flush();
+        self.clock.wake();
     }
 
     fn shutdown_requested(&self) -> bool {
@@ -155,6 +156,12 @@ impl SharedEmulator {
     pub fn request_reset(&self, hard: bool) {
         self.controls.request_reset(hard);
     }
+
+    /// Runs `frames` frames' worth of emulation, waiting up to `timeout` for it to finish. The
+    /// display runs the game at `speed` times its own frame rate.
+    pub fn tick(&self, frames: f32, speed: f32, timeout: std::time::Duration) {
+        self.controls.clock.tick(frames, speed, timeout);
+    }
 }
 
 impl SharedState {
@@ -185,7 +192,6 @@ pub const DEFAULT_SAMPLE_RATE: f32 = 44_100.0;
 struct EmulatorRuntime {
     frame_buffer: VideoBufferPool,
     shared_emulator: SharedEmulator,
-    event_proxy: EventLoopProxy<AppEvent>,
     audio_producer: AudioProducer,
     #[cfg(feature = "netplay")]
     shared_netplay: crate::netplay::SharedNetplay,
@@ -206,7 +212,6 @@ impl EmulatorRuntime {
             let EmulatorRuntime {
                 frame_buffer,
                 shared_emulator,
-                event_proxy,
                 mut audio_producer,
                 #[cfg(feature = "netplay")]
                 shared_netplay,
@@ -228,7 +233,24 @@ impl EmulatorRuntime {
             );
 
             tokio::task::LocalSet::new().block_on(&rt, async move {
+                // Frames owed but not run yet; fractions carry over to the next tick.
+                let mut owed = 0.0f32;
+                // Frames run on our own while the display stalled, which its next tick covers too.
+                let mut ran_on_own = 0.0f32;
+                let mut last_tick = std::time::Instant::now();
+                let mut pacing = PacingLog::new();
                 loop {
+                    let frame_time = 1.0 / Settings::current().nes_region().to_fps();
+                    // Step in as soon as a tick is a frame late, before the audio runs low. If the
+                    // tick was only late, it covers what we ran and that's subtracted from it.
+                    // On our own, check often, so each frame (and its audio) goes out close to when
+                    // it's due rather than up to a frame late.
+                    let watchdog = if ran_on_own > 0.0 {
+                        std::time::Duration::from_millis(4)
+                    } else {
+                        std::time::Duration::from_secs_f32(frame_time)
+                    };
+                    let credit = tokio::time::timeout(watchdog, controls.clock.take()).await;
                     if controls.shutdown_requested() {
                         break;
                     }
@@ -236,48 +258,106 @@ impl EmulatorRuntime {
                         nes_state.reset(hard);
                     }
 
-                    let mut frame_result = frame_buffer.push_ref();
-                    let video_frame_available = frame_result.is_ok();
-                    nes_state
-                        .advance(
-                            controls.read_inputs(),
-                            Some(NESBuffers {
-                                audio: &mut audio_producer,
-                                video: frame_result.as_deref_mut().ok(),
-                            }),
-                            controls.speed(),
-                        )
-                        .await;
-                    drop(frame_result);
-
-                    if video_frame_available {
-                        let _ = event_proxy.send_event(AppEvent::NesFrameReady);
-                    }
-
-                    let frame = nes_state.frame();
-                    shared_emulator
-                        .state
-                        .frame
-                        .store(frame, Emulator::FRAME_WRITE_ORDERING);
-
-                    //TODO: Figure out why this is needed (probably to avoid busy loop..)
-                    tokio::task::yield_now().await;
-
-                    // 2) periodic SRAM snapshot (non-blocking check)
-                    if frame.is_multiple_of(Emulator::SRAM_SNAPSHOT_INTERVAL_FRAMES) {
-                        use base64::Engine;
-                        use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
-                        if let Some(sram) = nes_state.save_sram() {
-                            let sram = sram.to_vec();
-                            // Do this in a blocking task as we want the main loop free from blocking code
-                            tokio::task::spawn_blocking(move || {
-                                Settings::current_mut().save_state = Some(b64.encode(sram));
-                            });
+                    // Slower while netplay lets the other player catch up.
+                    let pace = nes_state.pace();
+                    match &credit {
+                        Ok(credit) => {
+                            if ran_on_own > 0.0 {
+                                log::debug!(
+                                    "Display ticking again; ran {ran_on_own:.1} frames on our own, the tick brought {:.1}",
+                                    credit.frames * pace
+                                );
+                            }
+                            owed += credit.frames * pace - std::mem::take(&mut ran_on_own);
+                            audio_producer.set_display_speed(credit.speed);
+                        }
+                        // No tick: the display stalled (a hidden or minimized window, a window
+                        // being dragged). Keep time on our own so the audio doesn't run dry.
+                        Err(_) => {
+                            if ran_on_own == 0.0 {
+                                log::debug!("Display stopped ticking, keeping time on our own");
+                            }
+                            let due = last_tick.elapsed().as_secs_f32() / frame_time * pace;
+                            audio_producer.set_display_speed(1.0);
+                            owed += due;
+                            ran_on_own += due;
                         }
                     }
+                    last_tick = std::time::Instant::now();
+                    owed = owed.max(-Emulator::MAX_OWED_FRAMES);
+                    if owed > Emulator::MAX_OWED_FRAMES {
+                        log::debug!("Fell {owed:.1} frames behind the display, skipping ahead");
+                        owed = Emulator::MAX_OWED_FRAMES;
+                    }
+                    while owed >= 1.0 {
+                        owed -= 1.0;
+                        Emulator::run_frame(
+                            &mut nes_state,
+                            &controls,
+                            &frame_buffer,
+                            &mut audio_producer,
+                            &shared_emulator,
+                        )
+                        .await;
+                        pacing.frames += 1;
+                    }
+                    if let Ok(credit) = &credit {
+                        controls.clock.finished(credit);
+                    }
+                    pacing.maybe_log(&audio_producer);
                 }
             });
         })
+    }
+}
+
+/// Logs, now and then, how well the emulator keeps pace with the display and the sound card.
+struct PacingLog {
+    since: std::time::Instant,
+    frames: u32,
+    underruns: u64,
+    pushed: u64,
+    played: u64,
+}
+
+impl PacingLog {
+    const INTERVAL: std::time::Duration = std::time::Duration::from_secs(10);
+
+    fn new() -> Self {
+        Self {
+            since: std::time::Instant::now(),
+            frames: 0,
+            underruns: 0,
+            pushed: 0,
+            played: 0,
+        }
+    }
+
+    fn maybe_log(&mut self, audio: &AudioProducer) {
+        let elapsed = self.since.elapsed();
+        if elapsed < Self::INTERVAL {
+            return;
+        }
+        let stats = audio.stats();
+        let per_second = |count: u64| count as f32 / elapsed.as_secs_f32();
+        log::debug!(
+            "Pacing: {:.2} frames/s, audio margin {:.1} ms (target {:.1} ms, sound card bursts up to {:.1} ms), rate {:+.2}% (drift {:+.3}%), {:.0} samples/s in, {:.0} out, {} underruns",
+            self.frames as f32 / elapsed.as_secs_f32(),
+            stats.margin_ms,
+            stats.target_ms,
+            stats.burst_ms,
+            (stats.rate - 1.0) * 100.0,
+            stats.drift * 100.0,
+            per_second(stats.pushed - self.pushed),
+            per_second(stats.played - self.played),
+            stats.underruns - self.underruns,
+        );
+        *self = Self {
+            underruns: stats.underruns,
+            pushed: stats.pushed,
+            played: stats.played,
+            ..Self::new()
+        };
     }
 }
 
@@ -291,8 +371,54 @@ impl Emulator {
     /// Ordering used when the emulator thread *writes* the frame counter read by other threads.
     const FRAME_WRITE_ORDERING: std::sync::atomic::Ordering = std::sync::atomic::Ordering::Release;
     const SRAM_SNAPSHOT_INTERVAL_FRAMES: u32 = 100;
+    /// More owed than this (the emulator was stalled) is dropped rather than raced through. Room
+    /// for a late tick's worth plus what's left over from the one before.
+    const MAX_OWED_FRAMES: f32 = 5.0;
 
-    pub fn new(audio_stream: &mut AudioStream, event_proxy: EventLoopProxy<AppEvent>) -> Self {
+    async fn run_frame<N: NesStateHandler>(
+        nes_state: &mut N,
+        controls: &EmulatorControls,
+        frame_buffer: &VideoBufferPool,
+        audio: &mut AudioProducer,
+        shared_emulator: &SharedEmulator,
+    ) {
+        // The newest frame replaces one the display hasn't picked up yet.
+        let mut slot = frame_buffer.push_ref().ok().or_else(|| {
+            drop(frame_buffer.pop_ref());
+            frame_buffer.push_ref().ok()
+        });
+        nes_state
+            .advance(
+                controls.read_inputs(),
+                Some(NESBuffers {
+                    audio,
+                    video: slot.as_deref_mut(),
+                }),
+                controls.speed(),
+            )
+            .await;
+        drop(slot);
+
+        let frame = nes_state.frame();
+        shared_emulator
+            .state
+            .frame
+            .store(frame, Emulator::FRAME_WRITE_ORDERING);
+
+        if frame.is_multiple_of(Emulator::SRAM_SNAPSHOT_INTERVAL_FRAMES) {
+            use base64::Engine;
+            use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+            if let Some(sram) = nes_state.save_sram() {
+                let sram = sram.to_vec();
+                // Do this in a blocking task as we want the main loop free from blocking code
+                tokio::task::spawn_blocking(move || {
+                    Settings::current_mut().save_state = Some(b64.encode(sram));
+                });
+            }
+        }
+    }
+
+    pub fn new(audio_stream: &mut AudioStream) -> Self {
         let nes_state = new_local_nes_state(true);
         let audio_producer = audio_stream.take_producer();
         let audio_flush = audio_producer.flush_handle();
@@ -310,7 +436,6 @@ impl Emulator {
         let runtime = EmulatorRuntime {
             frame_buffer: shared_state.emulator.frame_buffer.clone(),
             shared_emulator: shared_state.emulator.clone(),
-            event_proxy,
             audio_producer,
             #[cfg(feature = "netplay")]
             shared_netplay: shared_state.netplay.clone(),
@@ -348,6 +473,11 @@ pub trait NesStateHandler {
     fn reset(&mut self, hard: bool);
     fn save_sram(&mut self) -> Option<&[u8]>;
     fn frame(&self) -> u32;
+    /// How fast to run relative to the display; netplay slows down to let the other player
+    /// catch up.
+    fn pace(&self) -> f32 {
+        1.0
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Hash, Debug, PartialEq)]

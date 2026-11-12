@@ -26,8 +26,9 @@ pub struct BuildConfiguration {
     pub manufacturer: String,
     pub default_settings: Settings,
     pub supported_nes_regions: Vec<NesRegion>,
-    #[serde(default = "Default::default")]
-    pub enable_vsync: bool,
+    /// No longer used: nes-bundler always syncs to the display. Read only to warn about it.
+    #[serde(default)]
+    pub enable_vsync: Option<bool>,
     #[serde(default = "Default::default")]
     pub start_in_fullscreen: bool,
     #[serde(default = "Default::default")]

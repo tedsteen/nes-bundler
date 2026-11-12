@@ -94,6 +94,15 @@ md5 = { version = "0.8", optional = true }
 async-tungstenite = { version = "0.35", default-features = false, features = ["smol-runtime"], optional = true }
 serde_json = { version = "1", optional = true }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# To opt out of App Nap and timer coalescing (see `keep_pace_in_background` in main.rs).
+objc2-foundation = { version = "0.3", default-features = false, features = [
+  "std",
+  "NSObject",
+  "NSProcessInfo",
+  "NSString",
+] }
+
 [build-dependencies]
 anyhow = "1.0"
 serde_yaml_ng = "0.10"

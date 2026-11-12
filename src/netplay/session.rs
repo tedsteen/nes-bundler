@@ -88,9 +88,9 @@ pub struct ConnectedNetplaySession {
     pub newer_confirmed_state: NetplayNesState,
     start_time: Instant,
     last_running_time: Instant,
-    /// Slowdown applied on top of the requested speed while this peer is ahead of the remote.
-    /// Kept here rather than in the shared emulator controls: it changes often, and a speed
-    /// change there flushes the audio.
+    /// How much slower than the display to run while this peer is ahead of the remote, so it can
+    /// catch up. Slows the emulator's frame clock (see `NetplaySession::pace`) and stretches the
+    /// audio to match.
     catch_up_speed: f32,
     /// Seconds per frame, for easing `catch_up_speed`.
     frame_time: f32,
@@ -171,7 +171,6 @@ impl ConnectedNetplaySession {
         &mut self,
         joypad_state: [JoypadState; MAX_PLAYERS],
         mut buffers: Option<NESBuffers<'_>>,
-        speed: f32,
     ) {
         self.update_connection_path();
         let p2p_session = &mut self.p2p_session;
@@ -227,7 +226,8 @@ impl ConnectedNetplaySession {
                                                 self.local_player_index,
                                             ),
                                             if is_replay { None } else { buffers.take() },
-                                            speed,
+                                            // GGRS steps exactly one NES frame at a time.
+                                            1.0,
                                         )
                                         .await;
 
@@ -464,8 +464,8 @@ impl NetplaySession {
 
 const POLLING_TIMEOUT: Duration = Duration::from_millis(1);
 
-/// Minimum emulation speed applied when this peer is ahead of the remote (95%), the most
-/// tetanes' dynamic rate control allows.
+/// Minimum emulation speed applied when this peer is ahead of the remote (95%). The audio has to
+/// stretch as much, and tetanes allows its rate to move 5% at most.
 const NETPLAY_MIN_SPEED: f32 = 0.95;
 /// A one-frame lead comes and goes all the time and only means 0.4% slower; ignore it.
 const CATCH_UP_MIN_FRAMES_AHEAD: i32 = 2;
@@ -519,7 +519,7 @@ impl NetplaySession {
                     log::warn!("Peer disconnected, resuming...");
                     *self = NetplaySession::resume(session_state);
                 } else {
-                    session_state.advance(joypad_state, buffers, speed).await;
+                    session_state.advance(joypad_state, buffers).await;
                 }
             }
             NetplaySession::Resuming(resuming) => {
@@ -586,6 +586,13 @@ impl NetplaySession {
             local_nes_state.save_sram()
         } else {
             None
+        }
+    }
+
+    pub fn pace(&self) -> f32 {
+        match self {
+            NetplaySession::Connected(session) => session.catch_up_speed,
+            _ => 1.0,
         }
     }
 

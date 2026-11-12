@@ -6,7 +6,7 @@ use anyhow::Result;
 use egui::Ui;
 use egui_wgpu::ScreenDescriptor;
 use gui::EguiRenderer;
-use wgpu::{CurrentSurfaceTexture, PresentMode};
+use wgpu::{CurrentSurfaceTexture, PresentMode, SurfaceTexture};
 use winit::window::Window;
 
 pub mod texture;
@@ -20,10 +20,20 @@ pub struct Renderer {
 
     pub window: Arc<Window>,
     pub egui: gui::EguiRenderer,
+    /// The surface texture to draw the next frame into, acquired ahead of time (see `acquire`),
+    /// and whether the surface needs reconfiguring after presenting it.
+    next_frame: Option<(SurfaceTexture, bool)>,
+}
+
+impl Drop for Renderer {
+    fn drop(&mut self) {
+        // A surface texture has to go before its surface, which is declared (and dropped) first.
+        self.next_frame = None;
+    }
 }
 
 impl Renderer {
-    pub async fn new(window: Arc<Window>, enable_vsync: bool) -> Result<Self> {
+    pub async fn new(window: Arc<Window>) -> Result<Self> {
         let size = window.inner_size();
         // All backends (the default); the display handle lets GL present on Wayland.
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_with_display_handle(
@@ -53,18 +63,9 @@ impl Renderer {
             .find(|f| !f.is_srgb())
             .unwrap_or(surface_caps.formats[0]);
 
-        let present_mode = if enable_vsync {
-            PresentMode::AutoVsync
-        } else {
-            [
-                PresentMode::Mailbox,
-                PresentMode::Immediate,
-                PresentMode::Fifo,
-            ]
-            .into_iter()
-            .find(|mode| surface_caps.present_modes.contains(mode))
-            .unwrap_or(PresentMode::AutoNoVsync)
-        };
+        // Always vsync: presenting waits for the display, and the display sets the pace of the
+        // emulation (see `AppShell`).
+        let present_mode = PresentMode::AutoVsync;
 
         let config = wgpu::SurfaceConfiguration {
             desired_maximum_frame_latency: 1,
@@ -90,6 +91,7 @@ impl Renderer {
             size,
             window,
             egui,
+            next_frame: None,
         })
     }
 
@@ -99,6 +101,8 @@ impl Renderer {
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
+            // It's the old size.
+            self.next_frame = None;
             self.size = new_size;
             self.config.width = new_size.width;
             self.config.height = new_size.height;
@@ -106,30 +110,45 @@ impl Renderer {
         }
     }
 
-    /// Renders a frame, or skips it when the surface has no texture to give (e.g. the window is
-    /// occluded, or the surface had to be reconfigured).
-    pub fn render(&mut self, mut run_ui: impl FnMut(&mut Ui)) {
+    /// Gets the surface texture for the next frame. With vsync this waits until the frame presented
+    /// last is on screen, so doing it right after presenting (rather than right before drawing)
+    /// lets the next frame start from the latest input. Returns whether there's a texture; not when
+    /// the window is occluded, for one.
+    pub fn acquire(&mut self) -> bool {
+        if self.next_frame.is_some() {
+            return true;
+        }
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
-        let (output, suboptimal) = {
-            #[cfg(feature = "debug")]
-            puffin::profile_scope!("get_current_texture");
-
-            match self.surface.get_current_texture() {
-                CurrentSurfaceTexture::Success(texture) => (texture, false),
-                CurrentSurfaceTexture::Suboptimal(texture) => (texture, true),
-                CurrentSurfaceTexture::Timeout | CurrentSurfaceTexture::Occluded => return,
-                CurrentSurfaceTexture::Outdated | CurrentSurfaceTexture::Lost => {
-                    log::warn!("Surface lost or outdated, reconfiguring.");
-                    self.surface.configure(&self.device, &self.config);
-                    return;
-                }
-                CurrentSurfaceTexture::Validation => {
-                    log::warn!("Surface validation error, skipping frame.");
-                    return;
-                }
+        self.next_frame = match self.surface.get_current_texture() {
+            CurrentSurfaceTexture::Success(texture) => Some((texture, false)),
+            CurrentSurfaceTexture::Suboptimal(texture) => Some((texture, true)),
+            CurrentSurfaceTexture::Timeout | CurrentSurfaceTexture::Occluded => None,
+            CurrentSurfaceTexture::Outdated | CurrentSurfaceTexture::Lost => {
+                log::warn!("Surface lost or outdated, reconfiguring.");
+                self.surface.configure(&self.device, &self.config);
+                None
             }
+            CurrentSurfaceTexture::Validation => {
+                log::warn!("Surface validation error, skipping frame.");
+                None
+            }
+        };
+        self.next_frame.is_some()
+    }
+
+    /// Renders and presents a frame into the acquired texture (acquiring one if needed). Returns
+    /// whether it presented.
+    pub fn render(&mut self, mut run_ui: impl FnMut(&mut Ui)) -> bool {
+        #[cfg(feature = "debug")]
+        puffin::profile_function!();
+
+        if !self.acquire() {
+            return false;
+        }
+        let Some((output, suboptimal)) = self.next_frame.take() else {
+            return false;
         };
 
         let view = {
@@ -197,5 +216,6 @@ impl Renderer {
         if suboptimal {
             self.surface.configure(&self.device, &self.config);
         }
+        true
     }
 }
