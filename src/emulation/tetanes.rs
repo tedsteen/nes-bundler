@@ -143,6 +143,16 @@ impl TetanesNesState {
             self.deck.set_sample_rate(new_sample_rate);
         }
     }
+
+    /// Fine-tunes the speed set with `set_speed`, for netplay to let the other player catch up.
+    ///
+    /// Goes through tetanes' dynamic rate control, which (unlike changing the sample rate) is
+    /// cheap enough to adjust every frame. A frame with more samples takes longer to play, and the
+    /// emulator is paced by audio. Tetanes limits it to +/-5%.
+    #[cfg(feature = "netplay")]
+    pub fn set_catch_up_speed(&mut self, speed: f32) {
+        self.deck.set_audio_sample_ratio(1.0 / speed);
+    }
 }
 
 impl NesStateHandler for TetanesNesState {

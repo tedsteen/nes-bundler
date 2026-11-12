@@ -92,6 +92,8 @@ pub struct ConnectedNetplaySession {
     /// Kept here rather than in the shared emulator controls: it changes often, and a speed
     /// change there flushes the audio.
     catch_up_speed: f32,
+    /// Seconds per frame, for easing `catch_up_speed`.
+    frame_time: f32,
     /// Last `frames_ahead` logged, to log only when it changes.
     logged_frames_ahead: i32,
     /// Kept for querying the WebRTC connection; GGRS owns its data channel.
@@ -108,12 +110,13 @@ impl ConnectedNetplaySession {
         let initial_state = netplay_connection.initial_state;
         let loop_task = netplay_connection.loop_task;
 
+        let fps = Settings::current_mut().nes_region_mut().to_fps();
         let ggrs_config = &netplay_server_configuration.ggrs;
         let mut sess_build = SessionBuilder::<GGRSConfig>::new()
             .with_num_players(MAX_PLAYERS)
             .expect("a valid number of players")
             .with_input_delay(ggrs_config.input_delay)
-            .with_fps(Settings::current_mut().nes_region_mut().to_fps() as usize)
+            .with_fps(fps as usize)
             .unwrap()
             .with_max_prediction_window(ggrs_config.max_prediction);
 
@@ -155,6 +158,7 @@ impl ConnectedNetplaySession {
             start_time: Instant::now(),
             last_running_time: Instant::now(),
             catch_up_speed: 1.0,
+            frame_time: 1.0 / fps,
             logged_frames_ahead: 0,
             socket,
             remote_peer,
@@ -169,7 +173,6 @@ impl ConnectedNetplaySession {
         mut buffers: Option<NESBuffers<'_>>,
         speed: f32,
     ) {
-        let speed = speed * self.catch_up_speed;
         self.update_connection_path();
         let p2p_session = &mut self.p2p_session;
 
@@ -209,6 +212,10 @@ impl ConnectedNetplaySession {
                                         <= self.last_handled_ggrs_frame;
                                     let started = Instant::now();
 
+                                    // Set every frame, since a loaded state carries its own.
+                                    self.current_game_state
+                                        .nes_state
+                                        .set_catch_up_speed(self.catch_up_speed);
                                     self.current_game_state
                                         .nes_state
                                         .advance(
@@ -261,27 +268,46 @@ impl ConnectedNetplaySession {
                 }
 
                 let frames_ahead = p2p_session.frames_ahead();
-                if frames_ahead > 0 {
-                    //https://www.desmos.com/calculator/zbntsowijd
-                    let speed = NETPLAY_MIN_SPEED.max(
-                        1.0 - NETPLAY_SPEED_CURVE_COEFF
-                            * (NETPLAY_SPEED_CURVE_SCALE * frames_ahead as f32).powi(2),
-                    );
-                    if frames_ahead != self.logged_frames_ahead {
-                        log::debug!(
-                            "{frames_ahead} frame(s) ahead of the other player, running at {speed:.2}x"
-                        );
-                    }
-                    self.catch_up_speed = speed;
-                } else {
-                    if self.logged_frames_ahead > 0 {
-                        log::debug!("Caught up with the other player, running at full speed");
-                    }
-                    self.catch_up_speed = 1.0;
-                }
-                self.logged_frames_ahead = frames_ahead;
+                self.update_catch_up_speed(frames_ahead);
             }
         }
+    }
+
+    /// Slows down a little while ahead of the other player, so they can catch up.
+    ///
+    /// GGRS averages `frames_ahead` over only half a second, so a network hiccup shows up as a
+    /// big lead that's gone a second later. The speed eases towards its target (slowly down,
+    /// quickly back up) so a hiccup barely registers, while a lasting lead is still absorbed.
+    fn update_catch_up_speed(&mut self, frames_ahead: i32) {
+        let target = if frames_ahead >= CATCH_UP_MIN_FRAMES_AHEAD {
+            //https://www.desmos.com/calculator/zbntsowijd
+            NETPLAY_MIN_SPEED.max(
+                1.0 - NETPLAY_SPEED_CURVE_COEFF
+                    * (NETPLAY_SPEED_CURVE_SCALE * frames_ahead as f32).powi(2),
+            )
+        } else {
+            1.0
+        };
+        let easing_time = if target < self.catch_up_speed {
+            CATCH_UP_SLOW_DOWN_TIME
+        } else {
+            CATCH_UP_SPEED_UP_TIME
+        };
+        self.catch_up_speed +=
+            (target - self.catch_up_speed) * (1.0 - (-self.frame_time / easing_time).exp());
+
+        let was_behind = self.logged_frames_ahead >= CATCH_UP_MIN_FRAMES_AHEAD;
+        if frames_ahead != self.logged_frames_ahead {
+            if frames_ahead >= CATCH_UP_MIN_FRAMES_AHEAD {
+                log::debug!(
+                    "{frames_ahead} frames ahead of the other player, easing towards {target:.3}x (now {:.3}x)",
+                    self.catch_up_speed
+                );
+            } else if was_behind {
+                log::debug!("Caught up with the other player, easing back to full speed");
+            }
+        }
+        self.logged_frames_ahead = frames_ahead;
     }
 
     /// Rollbacks are normal; long ones are what makes netplay slow down, since the replay has to
@@ -438,8 +464,15 @@ impl NetplaySession {
 
 const POLLING_TIMEOUT: Duration = Duration::from_millis(1);
 
-/// Minimum emulation speed applied when this peer is ahead of the remote (80%).
-const NETPLAY_MIN_SPEED: f32 = 0.8;
+/// Minimum emulation speed applied when this peer is ahead of the remote (95%), the most
+/// tetanes' dynamic rate control allows.
+const NETPLAY_MIN_SPEED: f32 = 0.95;
+/// A one-frame lead comes and goes all the time and only means 0.4% slower; ignore it.
+const CATCH_UP_MIN_FRAMES_AHEAD: i32 = 2;
+/// How fast the catch-up speed follows its target (time constants, in seconds). Slowing down is
+/// gradual so a brief network hiccup barely slows the game; speeding back up is quicker.
+const CATCH_UP_SLOW_DOWN_TIME: f32 = 1.0;
+const CATCH_UP_SPEED_UP_TIME: f32 = 0.3;
 /// Input scale for the quadratic slowdown curve: controls how quickly the curve
 /// steepens as frames-ahead grows.
 /// See the interactive graph: https://www.desmos.com/calculator/zbntsowijd
