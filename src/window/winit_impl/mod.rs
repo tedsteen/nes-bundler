@@ -1,7 +1,4 @@
-use crate::{
-    input::keys::{KeyCode, Modifiers},
-    integer_scaling::MINIMUM_INTEGER_SCALING_SIZE,
-};
+use crate::input::keys::{KeyCode, Modifiers};
 
 use super::Fullscreen;
 
@@ -35,7 +32,7 @@ impl Fullscreen for winit::window::Window {
             use winit::platform::macos::WindowExtMacOS;
             if window.is_fullscreen() {
                 window.set_simple_fullscreen(false);
-                let _ = window.request_inner_size(MINIMUM_INTEGER_SCALING_SIZE);
+                let _ = window.request_inner_size(default_window_size());
             } else {
                 window.set_simple_fullscreen(true);
             }
@@ -44,7 +41,7 @@ impl Fullscreen for winit::window::Window {
         {
             if window.is_fullscreen() {
                 window.set_fullscreen(None);
-                let _ = window.request_inner_size(MINIMUM_INTEGER_SCALING_SIZE);
+                let _ = window.request_inner_size(default_window_size());
             } else {
                 window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
             }
@@ -61,4 +58,13 @@ impl Fullscreen for winit::window::Window {
         #[cfg(not(target_os = "macos"))]
         self.fullscreen().is_some()
     }
+}
+
+/// The window's default size for the region the player picked.
+fn default_window_size() -> crate::Size {
+    crate::integer_scaling::default_window_size(
+        crate::settings::Settings::current()
+            .nes_region()
+            .pixel_aspect_ratio(),
+    )
 }

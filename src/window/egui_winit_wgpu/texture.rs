@@ -3,7 +3,6 @@ use super::Renderer;
 pub struct Texture {
     texture: wgpu::Texture,
     size: wgpu::Extent3d,
-    id: egui::TextureId,
 }
 
 impl Texture {
@@ -29,13 +28,12 @@ impl Texture {
             view_formats: &[],
         });
 
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let id = renderer.egui.renderer.register_native_texture(
-            &renderer.device,
-            &view,
-            wgpu::FilterMode::Nearest,
-        );
-        Self { id, texture, size }
+        Self { texture, size }
+    }
+
+    pub fn view(&self) -> wgpu::TextureView {
+        self.texture
+            .create_view(&wgpu::TextureViewDescriptor::default())
     }
 
     pub fn update(&self, queue: &wgpu::Queue, bytes: &[u8]) {
@@ -54,8 +52,5 @@ impl Texture {
             },
             self.size,
         );
-    }
-    pub fn get_id(&self) -> egui::TextureId {
-        self.id
     }
 }

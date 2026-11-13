@@ -221,8 +221,8 @@ impl NesStateHandler for TetanesNesState {
         self.reset(hard);
     }
 
-    fn fps(&self) -> f32 {
-        self.region.to_fps()
+    fn region(&self) -> crate::emulation::NesRegion {
+        self.region.clone()
     }
 }
 

@@ -5,7 +5,7 @@ use crate::{
     input::{KeyEvent, buttons::GamepadButton, gamepad::GamepadEvent, keys::Modifiers},
     window::{
         Fullscreen,
-        egui_winit_wgpu::{Renderer, texture::Texture},
+        egui_winit_wgpu::{Renderer, nes_picture, texture::Texture},
     },
 };
 
@@ -62,10 +62,12 @@ impl MainView {
         let window = Arc::new(window);
         let mut renderer =
             block_on(Renderer::new(window.clone())).expect("a renderer to be created");
+        let nes_texture = Texture::new(&mut renderer, NES_WIDTH, NES_HEIGHT, Some("nes frame"));
+        nes_picture::register(&mut renderer, &nes_texture);
         Self {
             modifiers: Modifiers::empty(),
 
-            nes_texture: Texture::new(&mut renderer, NES_WIDTH, NES_HEIGHT, Some("nes frame")),
+            nes_texture,
             renderer,
             frame_buffer,
             window,
@@ -151,8 +153,6 @@ impl MainView {
             self.nes_texture.update(&self.renderer.queue, nes_frame);
         }
 
-        let nes_texture_id = self.nes_texture.get_id();
-        self.renderer
-            .render(move |ui| main_gui.ui(ui, nes_texture_id))
+        self.renderer.render(move |ui| main_gui.ui(ui))
     }
 }

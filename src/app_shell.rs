@@ -11,9 +11,10 @@ use crate::game_runtime::GameRuntime;
 use crate::input::gamepad::ToGamepadEvent;
 use crate::main_view::MainView;
 use crate::main_view::gui::GuiEvent;
+use crate::settings::Settings;
 use crate::ui_controller::UiController;
 use crate::window::Fullscreen;
-use crate::{Size, emulation, integer_scaling, window};
+use crate::{integer_scaling, window};
 
 pub struct AppShell {
     app: &'static AppContext,
@@ -264,10 +265,11 @@ impl AppShell {
 
 impl ApplicationHandler for AppShell {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        let pixel_aspect = Settings::current().nes_region().pixel_aspect_ratio();
         let window = window::create_window(
             &self.app.config().name,
-            integer_scaling::MINIMUM_INTEGER_SCALING_SIZE,
-            Size::new(emulation::NES_WIDTH_4_3, emulation::NES_HEIGHT),
+            integer_scaling::default_window_size(pixel_aspect),
+            integer_scaling::min_window_size(pixel_aspect),
             event_loop,
         )
         .expect("a window to be created");

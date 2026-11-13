@@ -44,27 +44,26 @@ pub fn persist_sram<N: NesStateHandler>(nes_state: &mut N) {
     }
 }
 pub const NES_WIDTH: u32 = 256;
-pub const NES_WIDTH_4_3: u32 = (NES_WIDTH as f32 * (4.0 / 3.0)) as u32;
 pub const NES_HEIGHT: u32 = 240;
 
 static NTSC_PAL: &[u8] = include_bytes!("../../config/palette.pal");
 
 pub struct SharedEmulatorState {
     frame: AtomicU32,
-    /// The frame rate of the game running (its region's), as `f32` bits. Netplay runs the
-    /// bundle's region whatever the player picked, so the display paces by this.
-    fps: AtomicU32,
+    /// The region of the game running (see `NesRegion::to_u8`). Netplay runs the bundle's
+    /// region whatever the player picked, so the display paces and shapes the picture by this.
+    region: AtomicU8,
 }
 impl SharedEmulatorState {
     fn new() -> Self {
         Self {
             frame: AtomicU32::new(0),
-            fps: AtomicU32::new(Settings::current().nes_region().to_fps().to_bits()),
+            region: AtomicU8::new(Settings::current().nes_region().to_u8()),
         }
     }
 
-    pub fn fps(&self) -> f32 {
-        f32::from_bits(self.fps.load(Ordering::Relaxed))
+    pub fn region(&self) -> NesRegion {
+        NesRegion::from_u8(self.region.load(Ordering::Relaxed))
     }
 }
 
@@ -260,12 +259,12 @@ impl EmulatorRuntime {
                 let mut pacing = PacingLog::new();
                 let mut last_frame = std::time::Instant::now();
                 loop {
-                    let fps = nes_state.fps();
+                    let region = nes_state.region();
                     shared_emulator
                         .state
-                        .fps
-                        .store(fps.to_bits(), Ordering::Relaxed);
-                    let frame_time = 1.0 / fps;
+                        .region
+                        .store(region.to_u8(), Ordering::Relaxed);
+                    let frame_time = 1.0 / region.to_fps();
                     // Step in as soon as a tick is a frame late, before the audio runs low. If the
                     // tick was only late, it covers what we ran and that's subtracted from it.
                     // On our own, check often, so each frame (and its audio) goes out close to when
@@ -507,8 +506,8 @@ pub trait NesStateHandler {
     fn reset(&mut self, hard: bool);
     fn save_sram(&mut self) -> Option<&[u8]>;
     fn frame(&self) -> u32;
-    /// The frame rate of the game running, from its region.
-    fn fps(&self) -> f32;
+    /// The region of the game running, which sets its frame rate and pixel shape.
+    fn region(&self) -> NesRegion;
     /// How fast to run relative to the display; netplay slows down or speeds up to meet the other
     /// player.
     fn pace(&self) -> f32 {
@@ -529,6 +528,32 @@ impl NesRegion {
             NesRegion::Pal => 50.006_977,
             NesRegion::Ntsc => 60.098_812,
             NesRegion::Dendy => 50.006_977,
+        }
+    }
+
+    /// How wide an NES pixel is for each 1 tall, on the TV the console was made for: the ratio
+    /// of the TV's square-pixel rate to the console's pixel rate. NTSC's is 8:7. PAL draws its
+    /// pixels at a slower rate, so they're wider; Dendy shares PAL's clock.
+    pub fn pixel_aspect_ratio(&self) -> f32 {
+        match self {
+            NesRegion::Ntsc => 8.0 / 7.0,
+            NesRegion::Pal | NesRegion::Dendy => 2_950_000.0 / 2_128_137.0,
+        }
+    }
+
+    fn to_u8(&self) -> u8 {
+        match self {
+            NesRegion::Pal => 0,
+            NesRegion::Ntsc => 1,
+            NesRegion::Dendy => 2,
+        }
+    }
+
+    fn from_u8(value: u8) -> Self {
+        match value {
+            0 => NesRegion::Pal,
+            2 => NesRegion::Dendy,
+            _ => NesRegion::Ntsc,
         }
     }
 }
