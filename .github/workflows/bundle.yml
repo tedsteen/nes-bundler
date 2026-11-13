@@ -6,6 +6,16 @@ on:
     types:
       - bundle
 
+# A newer push to the same branch cancels the run it replaces. Each bundle request
+# (repository_dispatch) gets a group of its own, so customers never cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'repository_dispatch' && github.run_id || github.ref }}
+  cancel-in-progress: true
+
+# Only the release job writes; the rest read the repository.
+permissions:
+  contents: read
+
 defaults:
   run:
     shell: bash
@@ -60,7 +70,13 @@ jobs:
     name: Bundle ${{ needs.prepare_config.outputs.bundle_name }}${{ matrix.netplay && ' (Netplay)' || ''}} for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     needs: prepare_config
+    # A build is around 10 minutes; this ends one stuck in notarization, say, long before
+    # the 6-hour default.
+    timeout-minutes: 45
     strategy:
+      # One platform failing shouldn't cancel the others: a bundle request still gets
+      # the platforms that built.
+      fail-fast: false
       matrix:
         # NOTE: Should use the oldest available Ubuntu release, for maximum compatibility
         os: [windows-latest, macOS-15, ubuntu-22.04]
@@ -337,8 +353,10 @@ jobs:
   release:
     name: Release
     needs: bundle
-    if: startsWith(github.event.ref, 'refs/tags/v') && github.event.client_payload.configuration_url == ''
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v') && github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Get artifacts
         uses: actions/download-artifact@v8
