@@ -534,8 +534,10 @@ const LAG_TIMES: usize = 3;
 const LAG_WITHIN: Duration = Duration::from_secs(30);
 const LAG_ROLLBACK_FRAMES: i32 = 6;
 
-/// The most catching up changes the speed, either way (0.95x to 1.05x).
-const NETPLAY_MAX_SPEED_CHANGE: f32 = 0.05;
+/// The most catching up changes the speed, either way (0.98x to 1.02x). The audio is stretched
+/// to match, which shifts its pitch by as much: 2% is about a third of a semitone, hard to hear,
+/// where 5% sounded like a slowing tape. Both players steer, so a gap still closes at up to 4%.
+const NETPLAY_MAX_SPEED_CHANGE: f32 = 0.02;
 /// A one-frame lead comes and goes all the time and only means 0.4% slower; ignore it.
 const CATCH_UP_MIN_FRAMES_AHEAD: i32 = 2;
 /// How fast the catch-up speed follows its target (time constants, in seconds). Moving away from
