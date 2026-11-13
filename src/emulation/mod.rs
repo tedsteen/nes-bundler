@@ -26,12 +26,13 @@ pub mod gui;
 pub mod tetanes;
 pub type LocalNesState = TetanesNesState;
 /// The bundle's game, in the player's region, with their battery save if `load_sram`.
-pub fn new_local_nes_state(load_sram: bool) -> LocalNesState {
+pub fn new_local_nes_state(load_sram: bool) -> anyhow::Result<LocalNesState> {
+    use anyhow::Context;
     // Bound out so the settings guard is released before `start_rom`, which takes one of its own
     // to restore SRAM.
     let region = Settings::current().nes_region();
     LocalNesState::start_rom(&crate::bundle::Bundle::current().rom, load_sram, &region)
-        .expect("Failed to start ROM")
+        .context("The game's ROM could not be started")
 }
 
 /// Keeps the game's battery-backed RAM in the settings, which write it to disk in the background.
@@ -456,8 +457,7 @@ impl Emulator {
         }
     }
 
-    pub fn new(audio_stream: &mut AudioStream) -> Self {
-        let nes_state = new_local_nes_state(true);
+    pub fn new(audio_stream: &mut AudioStream, nes_state: LocalNesState) -> Self {
         let audio_producer = audio_stream.take_producer();
         let audio_flush = audio_producer.flush_handle();
 

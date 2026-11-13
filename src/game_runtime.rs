@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::audio::AudioStream;
-use crate::emulation::{Emulator, SharedState};
+use crate::emulation::{Emulator, LocalNesState, SharedState};
 use crate::input::JoypadState;
 
 pub struct GameRuntime {
@@ -9,9 +9,9 @@ pub struct GameRuntime {
 }
 
 impl GameRuntime {
-    pub fn new(audio_stream: &mut AudioStream) -> Self {
+    pub fn new(audio_stream: &mut AudioStream, nes_state: LocalNesState) -> Self {
         Self {
-            emulator: Emulator::new(audio_stream),
+            emulator: Emulator::new(audio_stream, nes_state),
         }
     }
 
