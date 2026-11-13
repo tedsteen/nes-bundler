@@ -26,11 +26,9 @@ pub struct AppShell {
     /// macOS won't show.
     occluded: bool,
     latency: LatencyLog,
-    /// When `about_to_wait` last ran. On Windows it doesn't while the window is being resized
-    /// (a loop of Windows' own), so frames are drawn on `RedrawRequested` meanwhile.
+    /// When `about_to_wait` last ran. Windows doesn't run it while a window is being moved or
+    /// resized (loops of its own), so frames are drawn on `RedrawRequested` meanwhile.
     last_wait: Instant,
-    /// A frame was drawn on `RedrawRequested` since `about_to_wait` last ran, which then needn't.
-    drawn_since_wait: bool,
 }
 
 /// Logs, now and then, how long a frame takes from taking the input to presenting it, and how
@@ -264,7 +262,6 @@ impl AppShell {
             occluded: false,
             latency: LatencyLog::new(),
             last_wait: Instant::now(),
-            drawn_since_wait: false,
         }
     }
 }
@@ -279,7 +276,9 @@ impl ApplicationHandler for AppShell {
         )
         .expect("a window to be created");
 
-        self.main_view = Some(MainView::new(window, self.runtime.frame_buffer()));
+        let main_view = MainView::new(window, self.runtime.frame_buffer());
+        Self::keep_redrawing(&main_view);
+        self.main_view = Some(main_view);
     }
 
     fn new_events(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop, cause: StartCause) {
@@ -307,8 +306,6 @@ impl ApplicationHandler for AppShell {
                 log::debug!("Window {}", if *occluded { "hidden" } else { "shown" });
                 self.occluded = *occluded;
             }
-            // Drawn at the new size right away, rather than the old frame stretched to it.
-            WindowEvent::Resized(_) => main_view.window.request_redraw(),
             _ => {}
         }
 
@@ -320,16 +317,13 @@ impl ApplicationHandler for AppShell {
         }
         self.ui.update_cursor_visibility(main_view);
 
-        // Frames are normally drawn in `about_to_wait`. This covers a window being resized: macOS
-        // keeps calling `about_to_wait` meanwhile, Windows doesn't, but it does deliver redraws.
+        // Frames are drawn in `about_to_wait`; a redraw only draws one if that has stalled.
         if window_event == WindowEvent::RedrawRequested {
-            self.frame(event_loop);
-            self.drawn_since_wait = true;
-            // `about_to_wait` has stalled: Windows is in its resize loop. Keep the game going.
-            if self.last_wait.elapsed() > self.runtime.frame_time() * 2
-                && let Some(main_view) = &self.main_view
-            {
-                main_view.window.request_redraw();
+            if self.last_wait.elapsed() > self.runtime.frame_time() * 2 {
+                self.frame(event_loop);
+            }
+            if let Some(main_view) = &self.main_view {
+                Self::keep_redrawing(main_view);
             }
         }
     }
@@ -339,14 +333,20 @@ impl ApplicationHandler for AppShell {
     // scheduling on top of that would skip refreshes.
     fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         self.last_wait = Instant::now();
-        if std::mem::take(&mut self.drawn_since_wait) {
-            return;
-        }
         self.frame(event_loop);
     }
 }
 
 impl AppShell {
+    /// Keeps a redraw requested on Windows, which runs loops of its own while a window is being
+    /// moved or resized: it delivers redraws meanwhile, but not `about_to_wait`, and the game
+    /// would freeze. Elsewhere `about_to_wait` keeps running, so there's no need; and some
+    /// platforms throttle redraws (Wayland to its frame callbacks).
+    fn keep_redrawing(_main_view: &MainView) {
+        #[cfg(windows)]
+        _main_view.window.request_redraw();
+    }
+
     /// Takes the input, runs the emulator and draws a frame.
     fn frame(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let Some(main_view) = &mut self.main_view else {
