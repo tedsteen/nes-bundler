@@ -2679,6 +2679,7 @@ dependencies = [
  "async-tungstenite",
  "base64 0.23.1",
  "bitflags 2.13.2",
+ "bytemuck",
  "directories",
  "egui",
  "egui-wgpu",

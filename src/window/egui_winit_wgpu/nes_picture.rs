@@ -16,8 +16,9 @@ struct Resources {
 /// `Uniforms` in the shader: four vec2/vec4 rows of f32.
 const UNIFORMS_SIZE: u64 = 12 * 4;
 
-/// Sets up drawing `texture` (the NES frame) for `NesPicture`.
-pub fn register(renderer: &mut Renderer, texture: &Texture) {
+/// Sets up drawing `texture` (the NES frame's palette indices) in the colors of `palette` for
+/// `NesPicture`.
+pub fn register(renderer: &mut Renderer, texture: &Texture, palette: &Texture) {
     let device = &renderer.device;
     let format = renderer.config.format;
 
@@ -27,13 +28,6 @@ pub fn register(renderer: &mut Renderer, texture: &Texture) {
         size: UNIFORMS_SIZE,
         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
-    });
-    // Linear: the shader picks where to sample so that it only blends across a pixel edge.
-    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-        label: Some("nes picture sampler"),
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        ..Default::default()
     });
 
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -54,7 +48,7 @@ pub fn register(renderer: &mut Renderer, texture: &Texture) {
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Texture {
                     multisampled: false,
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    sample_type: wgpu::TextureSampleType::Uint,
                     view_dimension: wgpu::TextureViewDimension::D2,
                 },
                 count: None,
@@ -62,12 +56,17 @@ pub fn register(renderer: &mut Renderer, texture: &Texture) {
             wgpu::BindGroupLayoutEntry {
                 binding: 2,
                 visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                },
                 count: None,
             },
         ],
     });
     let view = texture.view();
+    let palette_view = palette.view();
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("nes picture bind group"),
         layout: &bind_group_layout,
@@ -82,7 +81,7 @@ pub fn register(renderer: &mut Renderer, texture: &Texture) {
             },
             wgpu::BindGroupEntry {
                 binding: 2,
-                resource: wgpu::BindingResource::Sampler(&sampler),
+                resource: wgpu::BindingResource::TextureView(&palette_view),
             },
         ],
     });

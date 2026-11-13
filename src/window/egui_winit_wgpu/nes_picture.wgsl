@@ -15,8 +15,10 @@ struct Uniforms {
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
-@group(0) @binding(1) var picture: texture_2d<f32>;
-@group(0) @binding(2) var picture_sampler: sampler;
+// A palette index per pixel: color and emphasis bits, 0 to 511.
+@group(0) @binding(1) var picture: texture_2d<u32>;
+// The color of each palette index, in a row.
+@group(0) @binding(2) var palette: texture_2d<f32>;
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -40,6 +42,13 @@ fn linear_from_gamma(srgb: vec3<f32>) -> vec3<f32> {
     return select(higher, lower, cutoff);
 }
 
+// The color of a pixel of the picture, clamped to its edges.
+fn color_at(texel: vec2<i32>) -> vec4<f32> {
+    let last = vec2<i32>(textureDimensions(picture)) - vec2<i32>(1);
+    let index = textureLoad(picture, clamp(texel, vec2<i32>(0), last), 0).r;
+    return textureLoad(palette, vec2<i32>(i32(index & 511u), 0), 0);
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let texel = in.uv * uniforms.texture_size;
@@ -50,9 +59,19 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let region = vec2<f32>(0.5) - vec2<f32>(0.5) / scale;
     let from_center = fract(texel) - vec2<f32>(0.5);
     let offset = (from_center - clamp(from_center, -region, region)) * scale + vec2<f32>(0.5);
-    let sample_at = (floor(texel) + offset) / uniforms.texture_size;
+    // Blend the four pixels around that point, as a linear sampler would; the indices can't be
+    // filtered, only their colors.
+    let point = floor(texel) + offset - vec2<f32>(0.5);
+    let corner = vec2<i32>(floor(point));
+    let weight = point - floor(point);
+    let top = mix(color_at(corner), color_at(corner + vec2<i32>(1, 0)), weight.x);
+    let bottom = mix(
+        color_at(corner + vec2<i32>(0, 1)),
+        color_at(corner + vec2<i32>(1, 1)),
+        weight.x,
+    );
 
-    var color = textureSample(picture, picture_sampler, sample_at) * uniforms.tint;
+    var color = mix(top, bottom, weight.y) * uniforms.tint;
     if uniforms.flags.x > 0.5 {
         color = vec4<f32>(linear_from_gamma(color.rgb), color.a);
     }

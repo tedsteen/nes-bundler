@@ -9,7 +9,7 @@ use tetanes_core::{
     memory::RamState,
 };
 
-use super::{DEFAULT_SAMPLE_RATE, NESBuffers, NTSC_PAL, NesStateHandler};
+use super::{DEFAULT_SAMPLE_RATE, NESBuffers, NesStateHandler};
 use crate::{
     bundle::Bundle,
     input::JoypadState,
@@ -127,16 +127,7 @@ impl TetanesNesState {
 
         if let Some(buffers) = buffers.take() {
             if let Some(video) = buffers.video {
-                #[cfg(feature = "debug")]
-                puffin::profile_scope!("copy buffers");
-                self.deck.frame_buffer_raw().iter().enumerate().for_each(
-                    |(idx, &palette_index)| {
-                        let palette_index = palette_index as usize * 3;
-                        let pixel_index = idx * 4;
-                        video[pixel_index..pixel_index + 3]
-                            .clone_from_slice(&NTSC_PAL[palette_index..palette_index + 3]);
-                    },
-                );
+                video.copy_from_slice(self.deck.frame_buffer_raw());
             }
             {
                 #[cfg(feature = "debug")]
