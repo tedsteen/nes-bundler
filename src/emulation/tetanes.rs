@@ -25,6 +25,8 @@ pub struct TetanesNesState {
     /// to stretch by as much to keep up.
     catch_up_speed: f32,
     region: crate::emulation::NesRegion,
+    /// The last frame failed, so the error is logged once rather than every frame.
+    failed: bool,
 }
 trait ToTetanesRegion {
     fn to_tetanes_region(&self) -> NesRegion;
@@ -84,6 +86,7 @@ impl TetanesNesState {
             frame_speed: 1.0,
             catch_up_speed: 1.0,
             region: region_setting.clone(),
+            failed: false,
         })
     }
 
@@ -91,7 +94,23 @@ impl TetanesNesState {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
-        while self.deck.clock_frame().expect("NES to clock a frame") == Clocked::Continue {}
+        loop {
+            match self.deck.clock_frame() {
+                Ok(Clocked::Continue) => {}
+                Ok(_) => {
+                    self.failed = false;
+                    break;
+                }
+                // The game crashed the console (a jammed CPU, say). Keep the app up; a reset
+                // gets the game going again.
+                Err(e) => {
+                    if !std::mem::replace(&mut self.failed, true) {
+                        log::error!("The emulated NES failed: {e}");
+                    }
+                    break;
+                }
+            }
+        }
     }
 
     fn clock_frame_into(&mut self, mut buffers: Option<NESBuffers<'_>>) {

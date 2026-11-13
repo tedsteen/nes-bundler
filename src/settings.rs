@@ -209,6 +209,27 @@ impl Settings {
 
         match &mut settings {
             Ok(settings) => {
+                // Input configurations the bundle has added since, and selections of ones that
+                // are gone (renamed in a newer bundle, say), which nothing could look up.
+                for (id, configuration) in &default_settings.input.configurations {
+                    settings
+                        .input
+                        .configurations
+                        .entry(id.clone())
+                        .or_insert_with(|| configuration.clone());
+                }
+                for (selected, default) in settings
+                    .input
+                    .selected
+                    .iter_mut()
+                    .zip(&default_settings.input.selected)
+                {
+                    if !settings.input.configurations.contains_key(selected) {
+                        log::warn!("Input {selected:?} is gone, selecting {default:?} instead");
+                        selected.clone_from(default);
+                    }
+                }
+
                 let default_selected = default_settings.input.selected.clone();
                 //Make sure no gamepads are selected after loading settings (they will be autoselected later if they are connected)
                 for (player, default_selected_input) in

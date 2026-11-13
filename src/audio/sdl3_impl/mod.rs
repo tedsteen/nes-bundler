@@ -60,15 +60,14 @@ impl SDL3AudioSystem {
             SDL3AvailableAudioDevice::new(self.audio_subsystem.default_playback_device().id());
         devices.push(default.clone());
 
-        devices.extend(
-            self.audio_subsystem
-                .audio_playback_device_ids()
-                .map_err(|e| format!("Could not query for audio devices ({e:?})"))
-                .unwrap()
-                .into_iter()
-                .filter(|id| *id != default.audio_device_id)
-                .map(SDL3AvailableAudioDevice::new),
-        );
+        match self.audio_subsystem.audio_playback_device_ids() {
+            Ok(ids) => devices.extend(
+                ids.into_iter()
+                    .filter(|id| *id != default.audio_device_id)
+                    .map(SDL3AvailableAudioDevice::new),
+            ),
+            Err(e) => log::error!("Could not list audio devices: {e}"),
+        }
 
         devices
     }
@@ -116,28 +115,63 @@ impl SDL3AudioStream {
         );
 
         let volume = Arc::new(AtomicU8::new(volume));
-        let (stream, take_back) = Self::create(
-            audio_system.audio_subsystem.clone(),
-            device,
-            consumer,
-            volume.clone(),
-        );
-        Self {
-            audio_stream_with_callback: Some(stream),
+        let mut stream = Self {
+            audio_stream_with_callback: None,
+            take_back: std::sync::mpsc::channel().1,
             audio_system,
             tx: Some(producer),
-            take_back,
             volume,
             ctl,
-        }
+        };
+        stream.open(device, consumer);
+        stream
     }
+
+    /// Plays through `device`, or the default device should it fail to open, or nothing should
+    /// that fail too: no sound beats no game.
+    fn open(&mut self, device: AvailableAudioDevice, consumer: AudioConsumer) {
+        let default = self.audio_system.get_default_device();
+        let mut consumer = consumer;
+        for device in [device.clone(), default.clone()] {
+            let (stream, take_back) = Self::create(
+                self.audio_system.audio_subsystem.clone(),
+                &device,
+                consumer,
+                self.volume.clone(),
+            );
+            self.take_back = take_back;
+            match stream {
+                Ok(stream) => {
+                    self.audio_stream_with_callback = Some(stream);
+                    return;
+                }
+                Err(e) => {
+                    log::error!("Could not play audio through {}: {e:#}", device.name());
+                    if device.audio_device_id == default.audio_device_id {
+                        break;
+                    }
+                    consumer = self.take_consumer();
+                }
+            }
+        }
+        log::error!("No audio device could be opened, playing without sound");
+    }
+
+    /// The consumer back from the stream that had it, once that stream is dropped (or failed to
+    /// open).
+    fn take_consumer(&self) -> AudioConsumer {
+        self.take_back
+            .recv()
+            .expect("the audio consumer back from the stream")
+    }
+
     fn create(
         audio_subsystem: AudioSubsystem,
-        device: AvailableAudioDevice,
+        device: &AvailableAudioDevice,
         rx: AudioConsumer,
         volume: Arc<AtomicU8>,
     ) -> (
-        AudioStreamWithCallback<NesBundlerAudioCallback>,
+        anyhow::Result<AudioStreamWithCallback<NesBundlerAudioCallback>>,
         Receiver<AudioConsumer>,
     ) {
         let desired_spec = AudioSpec {
@@ -146,6 +180,13 @@ impl SDL3AudioStream {
             format: Some(AudioFormat::f32_sys()),
         };
         let (give_back, take_back) = std::sync::mpsc::channel();
+        // Gives the consumer back when dropped, also when the stream fails to open.
+        let callback = NesBundlerAudioCallback {
+            tmp: Vec::new(),
+            rx: Some(rx),
+            give_back,
+            volume,
+        };
 
         sdl3::hint::set(
             "SDL_AUDIO_DEVICE_SAMPLE_FRAMES",
@@ -158,36 +199,24 @@ impl SDL3AudioStream {
             &desired_spec,
         )
         .map_err(anyhow::Error::msg)
-        .expect("An audio device")
-        .open_playback_stream_with_callback(
-            &desired_spec,
-            NesBundlerAudioCallback {
-                tmp: Vec::new(),
-                rx: Some(rx),
-                give_back,
-                volume,
-            },
-        )
-        .expect("The stream to start");
-
-        stream.resume().expect("The stream to resume");
+        .and_then(|audio_device| {
+            audio_device
+                .open_playback_stream_with_callback(&desired_spec, callback)
+                .map_err(anyhow::Error::msg)
+        })
+        .and_then(|stream| {
+            stream.resume().map_err(anyhow::Error::msg)?;
+            Ok(stream)
+        });
         (stream, take_back)
     }
 
     pub(crate) fn swap_output_device(&mut self, device: AvailableAudioDevice) {
         if let Some(stream) = self.audio_stream_with_callback.take() {
-            stream.pause().expect("The stream to pause");
-            drop(stream);
-            let (stream, take_back) = Self::create(
-                self.audio_system.audio_subsystem.clone(),
-                device,
-                self.take_back.recv().unwrap(),
-                self.volume.clone(),
-            );
-            self.take_back = take_back;
-
-            self.audio_stream_with_callback = Some(stream);
+            let _ = stream.pause();
         }
+        let consumer = self.take_consumer();
+        self.open(device, consumer);
     }
 
     pub(crate) fn set_volume(&mut self, volume: u8) {
@@ -240,8 +269,9 @@ impl AudioCallback<f32> for NesBundlerAudioCallback {
 
 impl Drop for NesBundlerAudioCallback {
     fn drop(&mut self) {
-        self.give_back
-            .send(self.rx.take().expect("an audio consumer"))
-            .expect("To be able to give back the audio consumer");
+        if let Some(rx) = self.rx.take() {
+            // Nobody to give it back to when the app is shutting down.
+            let _ = self.give_back.send(rx);
+        }
     }
 }

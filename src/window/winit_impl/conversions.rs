@@ -213,6 +213,9 @@ impl ToGuiKeyCode for winit::keyboard::KeyCode {
 impl ToGuiEvent for WindowEvent {
     fn to_gui_event(&self) -> Option<GuiEvent> {
         match self {
+            winit::event::WindowEvent::Focused(false) => {
+                Some(GuiEvent::Keyboard(crate::input::KeyEvent::ReleaseAll))
+            }
             winit::event::WindowEvent::ModifiersChanged(modifiers) => modifiers
                 .state()
                 .to_gui_mod()

@@ -15,7 +15,7 @@ impl InputSettings {
         &mut self,
         id: InputId,
         default: InputConfiguration,
-    ) -> &InputConfiguration {
+    ) -> &mut InputConfiguration {
         self.configurations.entry(id).or_insert(default)
     }
 

@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::Error;
+use anyhow::{Context, Error};
 use ggrs::PlayerType;
 use ggrs::{Config, GgrsRequest, P2PSession, SessionBuilder};
 use matchbox_socket::{PeerId, WebRtcSocket};
@@ -61,18 +61,18 @@ pub struct NetplayNesState {
 }
 impl NetplayNesState {
     /// The bundle's netplay ROM, in its default region: both players have to run the same game.
-    pub fn new(joypad_mapping: JoypadMapping) -> Self {
+    pub fn new(joypad_mapping: JoypadMapping) -> anyhow::Result<Self> {
         let bundle = Bundle::current();
-        Self {
+        Ok(Self {
             nes_state: LocalNesState::start_rom(
                 &bundle.netplay_rom,
                 false,
                 bundle.config.default_region(),
             )
-            .expect("the netplay ROM to start"),
+            .context("Could not start the netplay ROM")?,
             ggrs_frame: 0,
             joypad_mapping,
-        }
+        })
     }
 }
 
@@ -120,7 +120,7 @@ pub struct ConnectedNetplaySession {
 }
 
 impl ConnectedNetplaySession {
-    fn new(netplay_connection: NetplayConnection) -> Self {
+    fn new(netplay_connection: NetplayConnection) -> anyhow::Result<Self> {
         let mut socket = netplay_connection.socket;
         let netplay_server_configuration = netplay_connection.netplay_server_configuration.clone();
         let initial_state = netplay_connection.initial_state;
@@ -129,11 +129,9 @@ impl ConnectedNetplaySession {
         let fps = Bundle::current().config.default_region().to_fps();
         let ggrs_config = &netplay_server_configuration.ggrs;
         let mut sess_build = SessionBuilder::<GGRSConfig>::new()
-            .with_num_players(MAX_PLAYERS)
-            .expect("a valid number of players")
+            .with_num_players(MAX_PLAYERS)?
             .with_input_delay(ggrs_config.input_delay)
-            .with_fps(fps as usize)
-            .unwrap()
+            .with_fps(fps as usize)?
             .with_max_prediction_window(ggrs_config.max_prediction);
 
         let players = socket.players();
@@ -142,27 +140,27 @@ impl ConnectedNetplaySession {
             _ => None,
         });
         for (i, player) in players.into_iter().enumerate() {
-            sess_build = sess_build
-                .add_player(player, i)
-                .expect("player to be added to ggrs session");
+            sess_build = sess_build.add_player(player, i)?;
         }
 
-        let p2p_session = sess_build
-            .start_p2p_session(socket.take_channel(0).expect("a channel"))
-            .expect("ggrs session to start");
+        let channel = socket
+            .take_channel(0)
+            .map_err(|e| anyhow::anyhow!("No data channel to the other player ({e:?})"))?;
+        let p2p_session = sess_build.start_p2p_session(channel)?;
         //There should be only one.
         let local_player_index = *p2p_session.local_player_handles().first().unwrap_or(&0);
 
-        let initial_state = initial_state.unwrap_or_else(|| {
+        let initial_state = match initial_state {
+            Some(state) => state,
             //TODO: Actual input mapping. This will only be needed when it's a random match (we don't have an obvious P1 & P2)
-            NetplayNesState::new(if local_player_index == 0 {
+            None => NetplayNesState::new(if local_player_index == 0 {
                 JoypadMapping::P1
             } else {
                 JoypadMapping::P2
-            })
-        });
+            })?,
+        };
 
-        Self {
+        Ok(Self {
             p2p_session,
             netplay_server_configuration,
             local_player_index,
@@ -184,7 +182,7 @@ impl ConnectedNetplaySession {
             remote_peer,
             connection_path: None,
             _loop_task: loop_task,
-        }
+        })
     }
 
     pub async fn advance(
@@ -493,8 +491,11 @@ impl NetplaySession {
         Self::Connecting(ConnectingSession::connect(start_method))
     }
 
-    fn connect(connection: NetplayConnection) -> Self {
-        Self::Connected(Box::new(ConnectedNetplaySession::new(connection)))
+    fn connect(connection: NetplayConnection, start_method: StartMethod) -> Self {
+        match ConnectedNetplaySession::new(connection) {
+            Ok(session) => Self::Connected(Box::new(session)),
+            Err(e) => Self::fail(e.context("Could not start the game"), start_method),
+        }
     }
 
     pub fn resume(session_state: &mut ConnectedNetplaySession) -> NetplaySession {
@@ -566,7 +567,10 @@ impl NetplaySession {
                     connection_result = future_connection => {
                         match connection_result {
                             Ok(connection) => {
-                                *self = NetplaySession::connect(connection);
+                                *self = NetplaySession::connect(
+                                    connection,
+                                    connecting_session.start_method.clone(),
+                                );
                             },
                             Err(e) => {
                                 *self = NetplaySession::fail(e, connecting_session.start_method.clone());
@@ -613,7 +617,10 @@ impl NetplaySession {
                     }
                 };
                 match outcome {
-                    ResumeOutcome::Connected(c) => *self = NetplaySession::connect(*c),
+                    ResumeOutcome::Connected(c) => {
+                        let start_method = resuming.attempt1.start_method.clone();
+                        *self = NetplaySession::connect(*c, start_method);
+                    }
                     ResumeOutcome::Attempt1Failed => {
                         resuming.attempt1_failed = true;
                         if resuming.attempt2_failed {
