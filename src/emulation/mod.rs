@@ -265,16 +265,19 @@ impl EmulatorRuntime {
                         .region
                         .store(region.to_u8(), Ordering::Relaxed);
                     let frame_time = 1.0 / region.to_fps();
-                    // Step in as soon as a tick is a frame late, before the audio runs low. If the
-                    // tick was only late, it covers what we ran and that's subtracted from it.
-                    // On our own, check often, so each frame (and its audio) goes out close to when
-                    // it's due rather than up to a frame late.
-                    let watchdog = if ran_on_own > 0.0 {
-                        std::time::Duration::from_millis(4)
+                    // Step in once a tick is more than a frame and a quarter after the last one,
+                    // before the audio runs low. The quarter is slack for a display a little slower
+                    // than the game (60 Hz showing NTSC's 60.1) and for jitter; without it, a tick
+                    // a fraction of a millisecond late counted as a stall. If the tick was only
+                    // late, it covers what we ran and that's subtracted from it. On our own, check
+                    // often, so each frame (and its audio) goes out close to when it's due rather
+                    // than up to a frame late.
+                    let deadline = if ran_on_own > 0.0 {
+                        std::time::Instant::now() + std::time::Duration::from_millis(4)
                     } else {
-                        std::time::Duration::from_secs_f32(frame_time)
+                        last_tick + std::time::Duration::from_secs_f32(frame_time * 1.25)
                     };
-                    let credit = tokio::time::timeout(watchdog, controls.clock.take()).await;
+                    let credit = tokio::time::timeout_at(deadline.into(), controls.clock.take()).await;
                     if controls.shutdown_requested() {
                         // Whatever was saved since the last snapshot.
                         persist_sram(&mut nes_state);
