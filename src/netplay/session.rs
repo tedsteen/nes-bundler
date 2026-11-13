@@ -681,14 +681,14 @@ impl NetplaySession {
         }
     }
 
-    pub fn fps(&self) -> f32 {
+    pub fn region(&self) -> crate::emulation::NesRegion {
         match self {
-            NetplaySession::Connected(s) => s.current_game_state.nes_state.fps(),
-            NetplaySession::Disconnected(local_nes_state) => local_nes_state.fps(),
+            NetplaySession::Connected(s) => s.current_game_state.nes_state.region(),
+            NetplaySession::Disconnected(local_nes_state) => local_nes_state.region(),
             // What runs next, a netplay game.
             NetplaySession::Connecting(..)
             | NetplaySession::Resuming(..)
-            | NetplaySession::Failed(..) => Bundle::current().config.default_region().to_fps(),
+            | NetplaySession::Failed(..) => Bundle::current().config.default_region().clone(),
         }
     }
 }

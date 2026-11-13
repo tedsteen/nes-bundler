@@ -9,6 +9,7 @@ use gui::EguiRenderer;
 use wgpu::{CurrentSurfaceTexture, PresentMode, SurfaceTexture};
 use winit::window::Window;
 
+pub mod nes_picture;
 pub mod texture;
 
 pub struct Renderer {

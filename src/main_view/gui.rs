@@ -1,20 +1,18 @@
 use std::time::{Duration, Instant};
 
 use egui::{
-    Align, Align2, Color32, Context, FontId, Image, Label, Layout, Margin, Response, RichText,
-    TextureId, Ui, UiBuilder, Vec2, Widget, load::SizedTexture,
+    Align, Align2, Color32, Context, FontId, Label, Layout, Margin, Rect, Response, RichText, Ui,
+    UiBuilder, Vec2, Widget,
 };
 
 use crate::{
-    Size,
     audio::gui::AudioGui,
-    emulation::{
-        NES_HEIGHT, NES_WIDTH, NES_WIDTH_4_3, NesRegion, SharedEmulator, gui::EmulatorGui,
-    },
+    emulation::{NesRegion, SharedEmulator, gui::EmulatorGui},
     gui::{MenuButton, action_button, actions_ui, esc_pressed, section_ui, sizes},
     input::{JoypadState, KeyEvent, gamepad::GamepadEvent, gui::InputsGui},
-    integer_scaling::{MINIMUM_INTEGER_SCALING_SIZE, calculate_size_corrected},
+    integer_scaling,
     settings::{MAX_PLAYERS, SettingsStore},
+    window::egui_winit_wgpu::nes_picture::NesPicture,
 };
 
 pub trait ToGuiEvent {
@@ -156,7 +154,7 @@ impl MainGui {
         f(&mut self.emulator_gui);
     }
 
-    pub fn ui(&mut self, ui: &mut Ui, nes_texture_id: TextureId) {
+    pub fn ui(&mut self, ui: &mut Ui) {
         #[cfg(feature = "debug")]
         puffin::profile_scope!("ui");
 
@@ -166,42 +164,32 @@ impl MainGui {
             egui::CentralPanel::default()
                 .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
                 .show(ui, |ui| {
-                    let available_size = ui.available_size();
-                    let frame_size = if available_size.x < MINIMUM_INTEGER_SCALING_SIZE.width as f32
-                        || available_size.y < MINIMUM_INTEGER_SCALING_SIZE.height as f32
-                    {
-                        let width = NES_WIDTH_4_3;
-                        let ratio_height = available_size.y / NES_HEIGHT as f32;
-                        let ratio_width = available_size.x / width as f32;
-                        let ratio = f32::min(ratio_height, ratio_width);
-                        Size::new(
-                            (width as f32 * ratio) as u32,
-                            (NES_HEIGHT as f32 * ratio) as u32,
-                        )
+                    let available = ui.available_rect_before_wrap();
+                    let pixels_per_point = ui.ctx().pixels_per_point();
+                    let (width, height) = integer_scaling::picture_size(
+                        (available.width(), available.height()),
+                        pixels_per_point,
+                        self.emulator.state.region().pixel_aspect_ratio(),
+                    );
+                    let size = Vec2::new(width, height) / pixels_per_point;
+                    // Centered, starting on a whole physical pixel, so the rows line up with
+                    // the display's.
+                    let min = (((available.center() - size / 2.0).to_vec2() * pixels_per_point)
+                        .round()
+                        / pixels_per_point)
+                        .to_pos2();
+                    let tint = if self.visible() {
+                        Self::MENU_TINT
                     } else {
-                        calculate_size_corrected(
-                            available_size.x as u32,
-                            available_size.y as u32,
-                            NES_WIDTH,
-                            NES_HEIGHT,
-                            4.0,
-                            3.0,
-                        )
+                        Color32::WHITE
                     };
-
-                    ui.centered_and_justified(|ui| {
-                        let mut nes_image = Image::from_texture(SizedTexture::new(
-                            nes_texture_id,
-                            Vec2 {
-                                x: frame_size.width as f32,
-                                y: frame_size.height as f32,
-                            },
-                        ));
-                        if self.visible() {
-                            nes_image = nes_image.tint(Self::MENU_TINT);
-                        }
-                        ui.add(nes_image);
-                    });
+                    ui.painter().add(egui_wgpu::Callback::new_paint_callback(
+                        Rect::from_min_size(min, size),
+                        NesPicture {
+                            size: [width, height],
+                            tint: tint.to_normalized_gamma_f32(),
+                        },
+                    ));
 
                     // Messages are painted over the game, in the top of the screen.
                     let messages_rect = ui.max_rect().shrink(Self::MESSAGES_MARGIN);

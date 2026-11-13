@@ -228,8 +228,8 @@ impl NesStateHandler for Netplay {
         self.session.frame()
     }
 
-    fn fps(&self) -> f32 {
-        self.session.fps()
+    fn region(&self) -> crate::emulation::NesRegion {
+        self.session.region()
     }
 
     fn pace(&self) -> f32 {
