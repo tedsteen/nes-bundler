@@ -17,8 +17,6 @@ impl EguiRenderer {
     pub fn new(
         device: &Device,
         output_color_format: TextureFormat,
-        output_depth_format: Option<TextureFormat>,
-        msaa_samples: u32,
         window: &Window,
     ) -> EguiRenderer {
         let egui_context = Context::default();
@@ -41,13 +39,10 @@ impl EguiRenderer {
         let egui_state =
             egui_winit::State::new(egui_context.clone(), id, &window, None, None, None);
 
-        // egui_state.set_pixels_per_point(window.scale_factor() as f32);
         let egui_renderer = Renderer::new(
             device,
             output_color_format,
             RendererOptions {
-                depth_stencil_format: output_depth_format,
-                msaa_samples,
                 dithering: false,
                 ..Default::default()
             },
