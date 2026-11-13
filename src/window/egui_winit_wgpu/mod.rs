@@ -17,7 +17,6 @@ pub struct Renderer {
     device: wgpu::Device,
     pub queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
-    pub size: winit::dpi::PhysicalSize<u32>,
 
     pub window: Arc<Window>,
     pub egui: gui::EguiRenderer,
@@ -86,14 +85,13 @@ impl Renderer {
         log::debug!("Surface configuration: {config:?}");
         surface.configure(&device, &config);
 
-        let egui = EguiRenderer::new(&device, config.format, None, 1, &window);
+        let egui = EguiRenderer::new(&device, config.format, &window);
 
         Ok(Self {
             surface,
             device,
             queue,
             config,
-            size,
             window,
             egui,
             next_frame: None,
@@ -109,7 +107,6 @@ impl Renderer {
         if new_size.width > 0 && new_size.height > 0 {
             // It's the old size.
             self.next_frame = None;
-            self.size = new_size;
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.resized = true;
