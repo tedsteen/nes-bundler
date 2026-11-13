@@ -97,16 +97,19 @@ jobs:
         with:
           key: ${{ matrix.netplay && 'netplay' || 'local' }}
 
-      - name: Install dependencies
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: echo "${WIX}bin" >> $GITHUB_PATH
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install create-dmg
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
         run: |
-          if [[ $RUNNER_OS == "Windows" ]]; then
-            echo "${WIX}bin" >> $GITHUB_PATH
-          elif [[ $RUNNER_OS == "macOS" ]]; then
-            brew install create-dmg
-          elif [[ $RUNNER_OS == "Linux" ]]; then
-            sudo apt-get update
-            sudo apt-get install -y libxcursor-dev libxi-dev libxrandr-dev libxss-dev libxtst-dev
-          fi
+          sudo apt-get update
+          sudo apt-get install -y libxcursor-dev libxi-dev libxrandr-dev libxss-dev libxtst-dev
 
       - name: Download encrypted configuration
         if: github.event.client_payload.configuration_url != ''
@@ -118,34 +121,42 @@ jobs:
         if: github.event.client_payload.configuration_url != ''
         env:
           CONFIG_ZIP_PASSWORD: ${{ secrets.CONFIG_ZIP_PASSWORD }}
+        run: ./build_scripts/decrypt-config.sh --unpack
+
+      - name: Set up paths and names
         run: |
-          openssl enc -d -aes-256-cbc -pbkdf2 \
-            -in config.zip.enc -out config.zip \
-            -pass env:CONFIG_ZIP_PASSWORD
+          BUNDLE_VERSION="${{ needs.prepare_config.outputs.bundle_version }}"
+          {
+            echo "BINARIES_PATH=$RUNNER_TEMP/binaries"
+            # From pwd rather than $GITHUB_WORKSPACE, which is a Windows path on Windows.
+            echo "ARTIFACTS=$(pwd)/artifacts"
+            echo "BUNDLE_CONFIG=$(pwd)/config"
+            echo "FEATURE_FLAG=${{ matrix.netplay && '--features netplay' || '' }}"
+            echo "SIMPLE_BUNDLE_NAME=${{ needs.prepare_config.outputs.bundle_name }}"
+            echo "BUNDLE_NAME=${{ needs.prepare_config.outputs.bundle_name }} $BUNDLE_VERSION ${{ runner.os }}${{ matrix.netplay && ' Netplay' || '' }}"
+            echo "BUNDLE_VERSION=$BUNDLE_VERSION"
+          } >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/binaries" artifacts
 
-          FILE_BIN=$(sha224sum config.zip | cut -d' ' -f1)
-          echo "::add-mask::$FILE_BIN"
-          echo "FILE_BIN=$FILE_BIN" >> $GITHUB_ENV
-
-          unzip -o -q config.zip -d config
-
-      - name: Build
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
         run: |
-          BINARIES_PATH="$RUNNER_TEMP/binaries"
-          mkdir -p $BINARIES_PATH
-          FEATURE_FLAG="${{ matrix.netplay && '--features netplay' || ''}}"
-          if [[ $RUNNER_OS == "Windows" ]]; then
-            cargo build --locked --release $FEATURE_FLAG
-            mv target/release/nes-bundler.exe ${BINARIES_PATH}/nes-bundler.exe
-          elif [[ $RUNNER_OS == "macOS" ]]; then
-            cargo build --locked --release --target=x86_64-apple-darwin --target=aarch64-apple-darwin $FEATURE_FLAG
-            lipo target/x86_64-apple-darwin/release/nes-bundler \
-              target/aarch64-apple-darwin/release/nes-bundler \
-              -create -output $BINARIES_PATH/nes-bundler
-          elif [[ $RUNNER_OS == "Linux" ]]; then
-            cargo build --locked --release $FEATURE_FLAG
-            mv target/release/nes-bundler $BINARIES_PATH/nes-bundler
-          fi
+          cargo build --locked --release $FEATURE_FLAG
+          mv target/release/nes-bundler.exe "$BINARIES_PATH/nes-bundler.exe"
+
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cargo build --locked --release --target=x86_64-apple-darwin --target=aarch64-apple-darwin $FEATURE_FLAG
+          lipo target/x86_64-apple-darwin/release/nes-bundler \
+            target/aarch64-apple-darwin/release/nes-bundler \
+            -create -output "$BINARIES_PATH/nes-bundler"
+
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cargo build --locked --release $FEATURE_FLAG
+          mv target/release/nes-bundler "$BINARIES_PATH/nes-bundler"
 
       - uses: apple-actions/import-codesign-certs@v7
         name: Import macOS certificates
@@ -161,74 +172,64 @@ jobs:
           APPLE_SIGNING_IDENTITY=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
           echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY" >> $GITHUB_ENV
 
-      - name: Set up bundle name and version
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
         run: |
-          echo "BUNDLE_NAME=${{ needs.prepare_config.outputs.bundle_name }} ${{ needs.prepare_config.outputs.bundle_version }} ${{ runner.os }}${{ matrix.netplay && ' Netplay' || '' }}" >> $GITHUB_ENV
-          echo "BUNDLE_VERSION=${{ needs.prepare_config.outputs.bundle_version }}" >> $GITHUB_ENV
+          mkdir wix
+          cp "$BINARIES_PATH/nes-bundler.exe" wix/
+          candle "$BUNDLE_CONFIG/windows/wix/main.wxs" -o wix/
+          light wix/*.wixobj -o "$BINARIES_PATH/nes-bundler.msi" -ext WixUIExtension
 
-      - name: Prepare Artifacts
+          cp "$BINARIES_PATH/nes-bundler.exe" "$ARTIFACTS/$BUNDLE_NAME.exe"
+          cp "$BINARIES_PATH/nes-bundler.msi" "$ARTIFACTS/$BUNDLE_NAME Installer.msi"
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
         run: |
-          rm -rf artifacts
-          mkdir artifacts
-          ARTIFACTS=$(readlink -f artifacts)
-          echo "ARTIFACTS=$ARTIFACTS" >> $GITHUB_ENV
-          BUNDLE_CONFIG=$(readlink -f config)
-          BINARIES_PATH="$RUNNER_TEMP/binaries"
-          if [[ $RUNNER_OS == "Windows" ]]; then
-            mkdir wix
-            cp $BINARIES_PATH/nes-bundler.exe wix/
-            candle $BUNDLE_CONFIG/windows/wix/main.wxs -o wix/
-            light wix/*.wixobj -o "$BINARIES_PATH/nes-bundler.msi" -ext WixUIExtension
+          BUNDLE_APP_PATH="$RUNNER_TEMP/$SIMPLE_BUNDLE_NAME.app"
+          mkdir -p "$BUNDLE_APP_PATH/Contents/MacOS" "$BUNDLE_APP_PATH/Contents/Resources"
+          cp "$BUNDLE_CONFIG/macos/Info.plist" "$BUNDLE_APP_PATH/Contents/"
 
-            cp $BINARIES_PATH/nes-bundler.exe "$ARTIFACTS/$BUNDLE_NAME.exe"
-            cp "$BINARIES_PATH/nes-bundler.msi" "$ARTIFACTS/$BUNDLE_NAME Installer.msi"
+          iconutil "$BUNDLE_CONFIG/macos/bundle.iconset" -c icns --output "$BUNDLE_APP_PATH/Contents/Resources/bundle.icns"
 
-          elif [[ $RUNNER_OS == "macOS" ]]; then
-            SIMPLE_BUNDLE_NAME="${{ needs.prepare_config.outputs.bundle_name }}"
-            BUNDLE_APP_PATH="$RUNNER_TEMP/$SIMPLE_BUNDLE_NAME.app"
-            mkdir -p "$BUNDLE_APP_PATH/Contents/MacOS"
-            mkdir -p "$BUNDLE_APP_PATH/Contents/Resources"
-            cp $BUNDLE_CONFIG/macos/Info.plist "$BUNDLE_APP_PATH/Contents/"
+          mv "$BINARIES_PATH/nes-bundler" "$BUNDLE_APP_PATH/Contents/MacOS/"
 
-            iconutil $BUNDLE_CONFIG/macos/bundle.iconset -c icns --output "$BUNDLE_APP_PATH/Contents/Resources/bundle.icns"
+          codesign --force --options=runtime -s "$APPLE_SIGNING_IDENTITY" "$BUNDLE_APP_PATH/Contents/MacOS/nes-bundler"
 
-            mv $BINARIES_PATH/nes-bundler "$BUNDLE_APP_PATH/Contents/MacOS/"
+          create-dmg \
+            --volname "$SIMPLE_BUNDLE_NAME" \
+            --volicon "$BUNDLE_APP_PATH/Contents/Resources/bundle.icns" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "$SIMPLE_BUNDLE_NAME.app" 200 170 \
+            --hide-extension "$SIMPLE_BUNDLE_NAME.app" \
+            --app-drop-link 600 165 \
+            "$ARTIFACTS/$BUNDLE_NAME Installer.dmg" \
+            "$BUNDLE_APP_PATH/"
 
-            codesign --force --options=runtime -s "$APPLE_SIGNING_IDENTITY" "$BUNDLE_APP_PATH/Contents/MacOS/nes-bundler"
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          # The release profile already strips the binary.
+          tar czf "$ARTIFACTS/${BUNDLE_NAME}.tar.gz" -C "$BINARIES_PATH" nes-bundler
 
-            create-dmg \
-              --volname "$SIMPLE_BUNDLE_NAME" \
-              --volicon "$BUNDLE_APP_PATH/Contents/Resources/bundle.icns" \
-              --window-pos 200 120 \
-              --window-size 800 400 \
-              --icon-size 100 \
-              --icon "$SIMPLE_BUNDLE_NAME.app" 200 170 \
-              --hide-extension "$SIMPLE_BUNDLE_NAME.app" \
-              --app-drop-link 600 165 \
-              "$ARTIFACTS/$BUNDLE_NAME Installer.dmg" \
-              "$BUNDLE_APP_PATH/"
+          # Pinned rather than `latest`: what runs here signs nothing, but it does build
+          # what we ship.
+          curl -fLo linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage
+          echo "c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d  linuxdeploy" | sha256sum -c -
+          chmod +x linuxdeploy
+          curl -fLo linuxdeploy-plugin-appimage https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/1-alpha-20250213-1/linuxdeploy-plugin-appimage-x86_64.AppImage
+          chmod +x linuxdeploy-plugin-appimage
 
-          elif [[ $RUNNER_OS == "Linux" ]]; then
-            # The release profile already strips the binary.
-            tar czf "$ARTIFACTS/${BUNDLE_NAME}.tar.gz" -C "$BINARIES_PATH" nes-bundler
-
-            # Pinned rather than `latest`: what runs here signs nothing, but it does build
-            # what we ship.
-            curl -fLo linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage
-            echo "c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d  linuxdeploy" | sha256sum -c -
-            chmod +x linuxdeploy
-            curl -fLo linuxdeploy-plugin-appimage https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/1-alpha-20250213-1/linuxdeploy-plugin-appimage-x86_64.AppImage
-            chmod +x linuxdeploy-plugin-appimage
-
-            export LDAI_OUTPUT=${BUNDLE_NAME}.AppImage
-            ./linuxdeploy \
-              --executable=$BINARIES_PATH/nes-bundler \
-              --desktop-file=$BUNDLE_CONFIG/linux/bundle.desktop \
-              --appdir=AppDir \
-              --icon-file=$BUNDLE_CONFIG/linux/icon_256x256.png \
-              --output=appimage
-            mv "${BUNDLE_NAME}.AppImage" $ARTIFACTS/
-          fi
+          export LDAI_OUTPUT=${BUNDLE_NAME}.AppImage
+          ./linuxdeploy \
+            --executable="$BINARIES_PATH/nes-bundler" \
+            --desktop-file="$BUNDLE_CONFIG/linux/bundle.desktop" \
+            --appdir=AppDir \
+            --icon-file="$BUNDLE_CONFIG/linux/icon_256x256.png" \
+            --output=appimage
+          mv "${BUNDLE_NAME}.AppImage" "$ARTIFACTS/"
 
       - name: Sign and notarize macOS artifacts
         if: runner.os == 'macOS'
@@ -301,14 +302,7 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           CONFIG_ZIP_PASSWORD: ${{ secrets.CONFIG_ZIP_PASSWORD }}
-        run: |
-          openssl enc -d -aes-256-cbc -pbkdf2 \
-            -in config.zip.enc -out config.zip \
-            -pass env:CONFIG_ZIP_PASSWORD
-
-          FILE_BIN=$(sha224sum config.zip | cut -d' ' -f1)
-          echo "::add-mask::$FILE_BIN"
-          echo "FILE_BIN=$FILE_BIN" >> $GITHUB_ENV
+        run: ./build_scripts/decrypt-config.sh
 
       - name: Get email address
         if: ${{ !cancelled() }}
@@ -317,38 +311,19 @@ jobs:
           echo "::add-mask::$RECIPIENT_EMAIL"
           echo "RECIPIENT_EMAIL=$RECIPIENT_EMAIL" >> $GITHUB_ENV
 
-      - name: Prepare email
-        if: success()
-        run: |
-          cat <<EOF >> email.html
-          <p>Click <a href="https://filebin.net/$FILE_BIN/">here</a> to download all the bundles.</p>
-          <p>Thanks for using <a href="https://nes-bundler.com">NES Bundler</a>!</p>
-          EOF
-
+      # The download link if every platform built, otherwise where to find out what failed.
       - name: Email bundle
+        if: ${{ !cancelled() }}
         uses: dawidd6/action-send-mail@v18
         with:
           server_address: smtp.gmail.com
           server_port: 465
-          username: ${{secrets.MAIL_USERNAME}}
-          password: ${{secrets.MAIL_PASSWORD}}
-          subject: Your bundle for ${{ needs.prepare_config.outputs.bundle_name }} is ready!
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
           to: ${{ env.RECIPIENT_EMAIL }}
           from: NES Bundler <${{ secrets.MAIL_USERNAME }}>
-          html_body: file://email.html
-
-      - name: Email failure message
-        if: failure()
-        uses: dawidd6/action-send-mail@v18
-        with:
-          server_address: smtp.gmail.com
-          server_port: 465
-          username: ${{secrets.MAIL_USERNAME}}
-          password: ${{secrets.MAIL_PASSWORD}}
-          subject: There was a problem bundling ${{ needs.prepare_config.outputs.bundle_name }}.
-          to: ${{ env.RECIPIENT_EMAIL }}
-          from: NES Bundler <${{ secrets.MAIL_USERNAME }}>
-          body: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} for details.
+          subject: ${{ needs.bundle.result == 'success' && format('Your bundle for {0} is ready!', needs.prepare_config.outputs.bundle_name) || format('There was a problem bundling {0}.', needs.prepare_config.outputs.bundle_name) }}
+          html_body: ${{ needs.bundle.result == 'success' && format('<p>Click <a href="https://filebin.net/{0}/">here</a> to download all the bundles.</p><p>Thanks for using <a href="https://nes-bundler.com">NES Bundler</a>!</p>', env.FILE_BIN) || format('<p>See <a href="{0}/{1}/actions/runs/{2}">the build</a> for details.</p>', github.server_url, github.repository, github.run_id) }}
 
   release:
     name: Release
