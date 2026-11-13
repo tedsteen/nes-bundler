@@ -3,6 +3,7 @@ use super::Renderer;
 pub struct Texture {
     texture: wgpu::Texture,
     size: wgpu::Extent3d,
+    bytes_per_texel: u32,
 }
 
 impl Texture {
@@ -10,6 +11,7 @@ impl Texture {
         renderer: &mut Renderer,
         width: u32,
         height: u32,
+        format: wgpu::TextureFormat,
         label: Option<&'static str>,
     ) -> Self {
         let size = wgpu::Extent3d {
@@ -23,12 +25,18 @@ impl Texture {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            format,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
 
-        Self { texture, size }
+        Self {
+            texture,
+            size,
+            bytes_per_texel: format
+                .block_copy_size(None)
+                .expect("an uncompressed texture format"),
+        }
     }
 
     pub fn view(&self) -> wgpu::TextureView {
@@ -47,7 +55,7 @@ impl Texture {
             bytes,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(4 * self.size.width),
+                bytes_per_row: Some(self.bytes_per_texel * self.size.width),
                 rows_per_image: Some(self.size.height),
             },
             self.size,

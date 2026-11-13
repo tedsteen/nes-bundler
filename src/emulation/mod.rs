@@ -46,7 +46,9 @@ pub fn persist_sram<N: NesStateHandler>(nes_state: &mut N) {
 pub const NES_WIDTH: u32 = 256;
 pub const NES_HEIGHT: u32 = 240;
 
-static NTSC_PAL: &[u8] = include_bytes!("../../config/palette.pal");
+/// The bundle's palette: RGB for each of the 512 palette indices (64 colors × 8 emphasis
+/// combinations).
+pub static PALETTE: &[u8] = include_bytes!("../../config/palette.pal");
 
 pub struct SharedEmulatorState {
     frame: AtomicU32,
@@ -566,20 +568,17 @@ pub struct NESBuffers<'a> {
     pub video: Option<&'a mut NESVideoFrame>,
 }
 
-pub struct NESVideoFrame(Vec<u8>);
+/// One NES frame as the PPU makes it: a palette index per pixel (a color and the emphasis bits).
+/// The colors are looked up as it's drawn (see `nes_picture.wgsl`), which keeps that work off the
+/// emulator thread and the upload half the size of RGBA.
+pub struct NESVideoFrame(Vec<u16>);
 
 impl NESVideoFrame {
-    pub const SIZE: usize = (NES_WIDTH * NES_HEIGHT * 4) as usize;
+    pub const SIZE: usize = (NES_WIDTH * NES_HEIGHT) as usize;
 
     /// Allocate a new frame for video output.
     pub fn new() -> Self {
-        let mut frame = vec![0; Self::SIZE];
-        frame
-            .iter_mut()
-            .skip(3)
-            .step_by(4)
-            .for_each(|alpha| *alpha = 255);
-        Self(frame)
+        Self(vec![0; Self::SIZE])
     }
 }
 
@@ -590,7 +589,7 @@ impl Default for NESVideoFrame {
 }
 
 impl Deref for NESVideoFrame {
-    type Target = Vec<u8>;
+    type Target = Vec<u16>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }

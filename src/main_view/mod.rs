@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    emulation::{NES_HEIGHT, NES_WIDTH, VideoBufferPool},
+    emulation::{NES_HEIGHT, NES_WIDTH, PALETTE, VideoBufferPool},
     input::{KeyEvent, buttons::GamepadButton, gamepad::GamepadEvent, keys::Modifiers},
     window::{
         Fullscreen,
@@ -62,8 +62,29 @@ impl MainView {
         let window = Arc::new(window);
         let mut renderer =
             block_on(Renderer::new(window.clone())).expect("a renderer to be created");
-        let nes_texture = Texture::new(&mut renderer, NES_WIDTH, NES_HEIGHT, Some("nes frame"));
-        nes_picture::register(&mut renderer, &nes_texture);
+        let nes_texture = Texture::new(
+            &mut renderer,
+            NES_WIDTH,
+            NES_HEIGHT,
+            wgpu::TextureFormat::R16Uint,
+            Some("nes frame"),
+        );
+        // The bundle's palette, as RGBA, looked up as the frame is drawn.
+        let palette_texture = Texture::new(
+            &mut renderer,
+            (PALETTE.len() / 3) as u32,
+            1,
+            wgpu::TextureFormat::Rgba8Unorm,
+            Some("nes palette"),
+        );
+        let palette: Vec<u8> = PALETTE
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .flat_map(|[r, g, b]| [*r, *g, *b, 255])
+            .collect();
+        palette_texture.update(&renderer.queue, &palette);
+        nes_picture::register(&mut renderer, &nes_texture, &palette_texture);
         Self {
             modifiers: Modifiers::empty(),
 
@@ -150,7 +171,8 @@ impl MainView {
     /// Returns whether a frame was presented.
     pub fn render(&mut self, main_gui: &mut MainGui) -> bool {
         if let Some(nes_frame) = &self.frame_buffer.pop_ref() {
-            self.nes_texture.update(&self.renderer.queue, nes_frame);
+            self.nes_texture
+                .update(&self.renderer.queue, bytemuck::cast_slice(nes_frame));
         }
 
         self.renderer.render(move |ui| main_gui.ui(ui))
