@@ -26,6 +26,11 @@ pub struct AppShell {
     /// macOS won't show.
     occluded: bool,
     latency: LatencyLog,
+    /// When `about_to_wait` last ran. On Windows it doesn't while the window is being resized
+    /// (a loop of Windows' own), so frames are drawn on `RedrawRequested` meanwhile.
+    last_wait: Instant,
+    /// A frame was drawn on `RedrawRequested` since `about_to_wait` last ran, which then needn't.
+    drawn_since_wait: bool,
 }
 
 /// Logs, now and then, how long a frame takes from taking the input to presenting it, and how
@@ -258,6 +263,8 @@ impl AppShell {
             display: DisplayClock::new(),
             occluded: false,
             latency: LatencyLog::new(),
+            last_wait: Instant::now(),
+            drawn_since_wait: false,
         }
     }
 }
@@ -300,7 +307,8 @@ impl ApplicationHandler for AppShell {
                 log::debug!("Window {}", if *occluded { "hidden" } else { "shown" });
                 self.occluded = *occluded;
             }
-            // Rendering happens in `about_to_wait`, once per refresh.
+            // Drawn at the new size right away, rather than the old frame stretched to it.
+            WindowEvent::Resized(_) => main_view.window.request_redraw(),
             _ => {}
         }
 
@@ -311,12 +319,36 @@ impl ApplicationHandler for AppShell {
             return;
         }
         self.ui.update_cursor_visibility(main_view);
+
+        // Frames are normally drawn in `about_to_wait`. This covers a window being resized: macOS
+        // keeps calling `about_to_wait` meanwhile, Windows doesn't, but it does deliver redraws.
+        if window_event == WindowEvent::RedrawRequested {
+            self.frame(event_loop);
+            self.drawn_since_wait = true;
+            // `about_to_wait` has stalled: Windows is in its resize loop. Keep the game going.
+            if self.last_wait.elapsed() > self.runtime.frame_time() * 2
+                && let Some(main_view) = &self.main_view
+            {
+                main_view.window.request_redraw();
+            }
+        }
     }
 
     // Runs after every batch of events. Renders here rather than on `RedrawRequested`: presenting
     // waits for vsync, so the loop runs exactly once per display refresh, where winit's own redraw
     // scheduling on top of that would skip refreshes.
     fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        self.last_wait = Instant::now();
+        if std::mem::take(&mut self.drawn_since_wait) {
+            return;
+        }
+        self.frame(event_loop);
+    }
+}
+
+impl AppShell {
+    /// Takes the input, runs the emulator and draws a frame.
+    fn frame(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let Some(main_view) = &mut self.main_view else {
             return;
         };
