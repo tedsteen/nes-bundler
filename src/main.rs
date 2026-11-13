@@ -111,10 +111,12 @@ fn run() -> anyhow::Result<()> {
         settings,
     );
     let ui = UiController::new(main_gui, std::time::Duration::from_secs(1));
-    let shell = &mut AppShell::new(app_context, runtime, sdl_event_pump, ui);
-    event_loop.run_app(shell)?;
-
-    Ok(())
+    let mut shell = AppShell::new(app_context, runtime, sdl_event_pump, ui);
+    let result = event_loop.run_app(&mut shell);
+    // Stops the emulator, which saves the game's battery RAM on the way out.
+    drop(shell);
+    settings::SettingsStore::flush();
+    Ok(result?)
 }
 
 fn init_logger() {

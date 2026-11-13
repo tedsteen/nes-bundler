@@ -83,10 +83,10 @@ pub fn action_button(text: &str) -> Button<'_> {
 
 /// The actions at the bottom of a menu, centered, set off from what's above.
 pub fn actions_ui<R>(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui) -> R) -> R {
-    // The grid already puts a row's spacing above.
-    ui.add_space(sizes::SECTION_SPACING - sizes::ROW_SPACING);
-    ui.end_row();
     centered_row(ui, |ui| {
+        // Inside the row: egui doesn't allow space added to the grid itself. The grid already
+        // puts a row's spacing above.
+        ui.add_space(sizes::SECTION_SPACING - sizes::ROW_SPACING);
         ui.spacing_mut().item_spacing.y = sizes::ROW_SPACING;
         add_contents(ui)
     })

@@ -11,7 +11,6 @@ use crate::game_runtime::GameRuntime;
 use crate::input::gamepad::ToGamepadEvent;
 use crate::main_view::MainView;
 use crate::main_view::gui::GuiEvent;
-use crate::settings::Settings;
 use crate::ui_controller::UiController;
 use crate::window::Fullscreen;
 use crate::{Size, emulation, integer_scaling, window};
@@ -173,10 +172,6 @@ impl DisplayClock {
         }
     }
 
-    fn frame_time() -> Duration {
-        Duration::from_secs_f64(1.0 / Settings::current().nes_region().to_fps() as f64)
-    }
-
     /// The whole number of refreshes per frame `interval` is close enough to.
     fn lock_for(&self, interval: f64, frame_time: f64) -> Option<u32> {
         let refreshes = (frame_time / interval).round().max(1.0);
@@ -196,7 +191,7 @@ impl DisplayClock {
         let elapsed = now.duration_since(self.last_tick).as_secs_f64();
         self.last_tick = now;
 
-        let frame_time = Self::frame_time().as_secs_f64();
+        let frame_time = runtime.frame_time().as_secs_f64();
         if self.paced_by_display && (frame_time / 8.0..frame_time * 4.0).contains(&elapsed) {
             self.refresh.add(elapsed);
         }
@@ -355,7 +350,7 @@ impl ApplicationHandler for AppShell {
             // A hidden window presents nothing and so doesn't wait for vsync; a timer keeps the
             // emulator going instead (netplay can't pause), until the window shows again.
             event_loop.set_control_flow(ControlFlow::WaitUntil(
-                self.display.last_tick + DisplayClock::frame_time(),
+                self.display.last_tick + self.runtime.frame_time(),
             ));
         }
     }
