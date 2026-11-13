@@ -24,6 +24,7 @@ pub struct TetanesNesState {
     /// Netplay slows the frame clock down or speeds it up to meet the other player; the audio has
     /// to stretch by as much to keep up.
     catch_up_speed: f32,
+    region: crate::emulation::NesRegion,
 }
 trait ToTetanesRegion {
     fn to_tetanes_region(&self) -> NesRegion;
@@ -46,9 +47,9 @@ impl TetanesNesState {
     pub fn start_rom(
         rom: &[u8],
         load_sram: bool,
-        region: &crate::emulation::NesRegion,
+        region_setting: &crate::emulation::NesRegion,
     ) -> Result<Self> {
-        let region = region.to_tetanes_region();
+        let region = region_setting.to_tetanes_region();
 
         log::debug!("Starting ROM with system region {region:?}");
         let mut deck = ControlDeck::with_config(
@@ -82,6 +83,7 @@ impl TetanesNesState {
             deck,
             frame_speed: 1.0,
             catch_up_speed: 1.0,
+            region: region_setting.clone(),
         })
     }
 
@@ -195,8 +197,13 @@ impl NesStateHandler for TetanesNesState {
 
     fn reset(&mut self, hard: bool) {
         //Set the region in case it has been changed since last start/reset
-        self.set_region(Settings::current_mut().nes_region_mut().to_tetanes_region());
+        self.region = Settings::current().nes_region();
+        self.set_region(self.region.to_tetanes_region());
         self.reset(hard);
+    }
+
+    fn fps(&self) -> f32 {
+        self.region.to_fps()
     }
 }
 

@@ -25,12 +25,23 @@ pub mod clock;
 pub mod gui;
 pub mod tetanes;
 pub type LocalNesState = TetanesNesState;
+/// The bundle's game, in the player's region, with their battery save if `load_sram`.
 pub fn new_local_nes_state(load_sram: bool) -> LocalNesState {
-    // Bound out so the settings write guard is released before `start_rom`, which takes a read
-    // guard of its own to restore SRAM.
-    let region = Settings::current_mut().nes_region_mut().clone();
+    // Bound out so the settings guard is released before `start_rom`, which takes one of its own
+    // to restore SRAM.
+    let region = Settings::current().nes_region();
     LocalNesState::start_rom(&crate::bundle::Bundle::current().rom, load_sram, &region)
         .expect("Failed to start ROM")
+}
+
+/// Keeps the game's battery-backed RAM in the settings, which write it to disk in the background.
+pub fn persist_sram<N: NesStateHandler>(nes_state: &mut N) {
+    use base64::Engine;
+    use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+    if let Some(sram) = nes_state.save_sram() {
+        let encoded = b64.encode(sram);
+        Settings::current_mut().save_state = Some(encoded);
+    }
 }
 pub const NES_WIDTH: u32 = 256;
 pub const NES_WIDTH_4_3: u32 = (NES_WIDTH as f32 * (4.0 / 3.0)) as u32;
@@ -40,12 +51,20 @@ static NTSC_PAL: &[u8] = include_bytes!("../../config/palette.pal");
 
 pub struct SharedEmulatorState {
     frame: AtomicU32,
+    /// The frame rate of the game running (its region's), as `f32` bits. Netplay runs the
+    /// bundle's region whatever the player picked, so the display paces by this.
+    fps: AtomicU32,
 }
 impl SharedEmulatorState {
     fn new() -> Self {
         Self {
             frame: AtomicU32::new(0),
+            fps: AtomicU32::new(Settings::current().nes_region().to_fps().to_bits()),
         }
+    }
+
+    pub fn fps(&self) -> f32 {
+        f32::from_bits(self.fps.load(Ordering::Relaxed))
     }
 }
 
@@ -241,7 +260,12 @@ impl EmulatorRuntime {
                 let mut pacing = PacingLog::new();
                 let mut last_frame = std::time::Instant::now();
                 loop {
-                    let frame_time = 1.0 / Settings::current().nes_region().to_fps();
+                    let fps = nes_state.fps();
+                    shared_emulator
+                        .state
+                        .fps
+                        .store(fps.to_bits(), Ordering::Relaxed);
+                    let frame_time = 1.0 / fps;
                     // Step in as soon as a tick is a frame late, before the audio runs low. If the
                     // tick was only late, it covers what we ran and that's subtracted from it.
                     // On our own, check often, so each frame (and its audio) goes out close to when
@@ -253,6 +277,8 @@ impl EmulatorRuntime {
                     };
                     let credit = tokio::time::timeout(watchdog, controls.clock.take()).await;
                     if controls.shutdown_requested() {
+                        // Whatever was saved since the last snapshot.
+                        persist_sram(&mut nes_state);
                         break;
                     }
                     if let Some(hard) = controls.take_reset() {
@@ -422,15 +448,7 @@ impl Emulator {
             .store(frame, Emulator::FRAME_WRITE_ORDERING);
 
         if frame.is_multiple_of(Emulator::SRAM_SNAPSHOT_INTERVAL_FRAMES) {
-            use base64::Engine;
-            use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
-            if let Some(sram) = nes_state.save_sram() {
-                let sram = sram.to_vec();
-                // Do this in a blocking task as we want the main loop free from blocking code
-                tokio::task::spawn_blocking(move || {
-                    Settings::current_mut().save_state = Some(b64.encode(sram));
-                });
-            }
+            persist_sram(nes_state);
         }
     }
 
@@ -489,6 +507,8 @@ pub trait NesStateHandler {
     fn reset(&mut self, hard: bool);
     fn save_sram(&mut self) -> Option<&[u8]>;
     fn frame(&self) -> u32;
+    /// The frame rate of the game running, from its region.
+    fn fps(&self) -> f32;
     /// How fast to run relative to the display; netplay slows down or speeds up to meet the other
     /// player.
     fn pace(&self) -> f32 {

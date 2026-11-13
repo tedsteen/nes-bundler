@@ -11,7 +11,8 @@ use matchbox_socket::{PeerId, WebRtcSocket};
 use tokio::select;
 
 use crate::{
-    emulation::{LocalNesState, NESBuffers, NesStateHandler, new_local_nes_state},
+    bundle::Bundle,
+    emulation::{LocalNesState, NESBuffers, NesStateHandler},
     input::JoypadState,
     netplay::{
         ConnectionPath, SharedNetplayConnectedState, SharedNetplayState,
@@ -19,7 +20,7 @@ use crate::{
         connection::{ConnectingSession, NetplayConnection, PeerUnreachable, StartMethod},
     },
     recurrence::Recurrence,
-    settings::{MAX_PLAYERS, Settings},
+    settings::MAX_PLAYERS,
 };
 #[derive(Clone, Debug)]
 pub enum JoypadMapping {
@@ -59,9 +60,16 @@ pub struct NetplayNesState {
     joypad_mapping: JoypadMapping,
 }
 impl NetplayNesState {
+    /// The bundle's netplay ROM, in its default region: both players have to run the same game.
     pub fn new(joypad_mapping: JoypadMapping) -> Self {
+        let bundle = Bundle::current();
         Self {
-            nes_state: new_local_nes_state(false),
+            nes_state: LocalNesState::start_rom(
+                &bundle.netplay_rom,
+                false,
+                bundle.config.default_region(),
+            )
+            .expect("the netplay ROM to start"),
             ggrs_frame: 0,
             joypad_mapping,
         }
@@ -118,7 +126,7 @@ impl ConnectedNetplaySession {
         let initial_state = netplay_connection.initial_state;
         let loop_task = netplay_connection.loop_task;
 
-        let fps = Settings::current_mut().nes_region_mut().to_fps();
+        let fps = Bundle::current().config.default_region().to_fps();
         let ggrs_config = &netplay_server_configuration.ggrs;
         let mut sess_build = SessionBuilder::<GGRSConfig>::new()
             .with_num_players(MAX_PLAYERS)
@@ -663,6 +671,17 @@ impl NetplaySession {
             | NetplaySession::Failed(..) => 0,
             NetplaySession::Connected(s) => s.current_game_state.nes_state.frame(),
             NetplaySession::Disconnected(local_nes_state) => local_nes_state.frame(),
+        }
+    }
+
+    pub fn fps(&self) -> f32 {
+        match self {
+            NetplaySession::Connected(s) => s.current_game_state.nes_state.fps(),
+            NetplaySession::Disconnected(local_nes_state) => local_nes_state.fps(),
+            // What runs next, a netplay game.
+            NetplaySession::Connecting(..)
+            | NetplaySession::Resuming(..)
+            | NetplaySession::Failed(..) => Bundle::current().config.default_region().to_fps(),
         }
     }
 }

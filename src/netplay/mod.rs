@@ -8,7 +8,7 @@ use tokio::sync::watch::channel;
 use self::connection::StartMethod;
 
 use crate::{
-    emulation::{LocalNesState, NESBuffers, NesStateHandler},
+    emulation::{LocalNesState, NESBuffers, NesStateHandler, new_local_nes_state, persist_sram},
     input::JoypadState,
     netplay::{
         connection::{ConnectingState, JoinOrHost},
@@ -109,7 +109,6 @@ pub struct Netplay {
     shared_state_sender: tokio::sync::watch::Sender<SharedNetplayState>,
     session: NetplaySession,
     netplay_rx: tokio::sync::mpsc::Receiver<NetplayCommand>,
-    initial_local_nes_state: LocalNesState,
     #[cfg(feature = "debug")]
     stats: Arc<RwLock<[stats::NetplayStats; 2]>>,
 }
@@ -122,7 +121,6 @@ impl Netplay {
         netplay_rx: tokio::sync::mpsc::Receiver<NetplayCommand>,
     ) -> Self {
         Self {
-            initial_local_nes_state: local_play_nes_state.clone(),
             session: NetplaySession::new(local_play_nes_state),
             shared_state_sender,
             netplay_rx,
@@ -133,7 +131,9 @@ impl Netplay {
 
     fn start(&mut self, start_method: StartMethod) {
         match &mut self.session {
-            NetplaySession::Disconnected(..) => {
+            NetplaySession::Disconnected(local_nes_state) => {
+                // The local game is left behind; keep what it saved since the last snapshot.
+                persist_sram(local_nes_state.as_mut());
                 self.session = NetplaySession::start(start_method);
             }
             state => {
@@ -142,8 +142,9 @@ impl Netplay {
         }
     }
 
+    /// Back to a fresh local game, with the battery save as the local game last left it.
     fn disconnect(&mut self) {
-        self.session = NetplaySession::new(self.initial_local_nes_state.clone());
+        self.session = NetplaySession::new(new_local_nes_state(true));
     }
 
     fn retry_connect(&mut self) {
@@ -225,6 +226,10 @@ impl NesStateHandler for Netplay {
 
     fn frame(&self) -> u32 {
         self.session.frame()
+    }
+
+    fn fps(&self) -> f32 {
+        self.session.fps()
     }
 
     fn pace(&self) -> f32 {

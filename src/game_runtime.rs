@@ -24,6 +24,11 @@ impl GameRuntime {
             .tick(frames, speed, timeout);
     }
 
+    /// Seconds per frame of the game running.
+    pub fn frame_time(&self) -> Duration {
+        Duration::from_secs_f64(1.0 / self.emulator.shared_state.emulator.state.fps() as f64)
+    }
+
     pub fn shared_state(&self) -> SharedState {
         self.emulator.shared_state.clone()
     }
