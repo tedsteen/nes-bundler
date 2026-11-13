@@ -14,6 +14,7 @@ use crate::app_context::AppContext;
 use crate::app_shell::AppShell;
 use crate::audio::AudioSystem;
 use crate::emulation::gui::EmulatorGui;
+use crate::emulation::new_local_nes_state;
 use crate::game_runtime::GameRuntime;
 use crate::ui_controller::UiController;
 use winit::event_loop::EventLoop;
@@ -62,6 +63,19 @@ fn main() {
     }
 }
 
+/// Tells the player why the game won't start: run from Finder or Explorer, there's no console to
+/// read the log in. Only before the window system is set up, which this would interfere with
+/// (winit's macOS app delegate).
+fn show_startup_error(error: &anyhow::Error) {
+    let name = &AppContext::global().config().name;
+    let _ = sdl3::messagebox::show_simple_message_box(
+        sdl3::messagebox::MessageBoxFlag::ERROR,
+        name,
+        &format!("{name} couldn't start:\n\n{error:#}"),
+        None,
+    );
+}
+
 /// Keeps macOS from slowing the app down once its window is in the background or minimized (App
 /// Nap, timer coalescing): emulation and audio have to keep their pace, netplay most of all. The
 /// returned activity lasts until it's dropped. Idle system sleep is still allowed.
@@ -79,6 +93,8 @@ fn run() -> anyhow::Result<()> {
     #[cfg(target_os = "macos")]
     let _activity = keep_pace_in_background();
     let app_context = AppContext::global();
+    // First, so a ROM that won't start can be shown to the player (see `show_startup_error`).
+    let nes_state = new_local_nes_state(true).inspect_err(show_startup_error)?;
     let event_loop = EventLoop::new()?;
     if app_context.config().enable_vsync.is_some() {
         log::warn!(
@@ -95,7 +111,7 @@ fn run() -> anyhow::Result<()> {
     let settings = app_context.settings();
     let mut stream = audio_system.start_stream(settings);
 
-    let runtime = GameRuntime::new(&mut stream);
+    let runtime = GameRuntime::new(&mut stream, nes_state);
     let shared_state = runtime.shared_state();
 
     let inputs = Inputs::new(SDL3Gamepads::new(

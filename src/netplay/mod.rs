@@ -144,7 +144,9 @@ impl Netplay {
 
     /// Back to a fresh local game, with the battery save as the local game last left it.
     fn disconnect(&mut self) {
-        self.session = NetplaySession::new(new_local_nes_state(true));
+        // It started when the app did, so it starts again.
+        self.session =
+            NetplaySession::new(new_local_nes_state(true).expect("the game's ROM to start again"));
     }
 
     fn retry_connect(&mut self) {

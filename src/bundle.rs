@@ -70,19 +70,31 @@ impl Bundle {
     }
 
     fn load() -> Result<Bundle> {
-        let external_config = fs::read_to_string(Path::new("config.yaml"))
-            .inspect_err(|e| log::info!("Not using external config.yaml: {:?}", e))
-            .map_err(anyhow::Error::msg)
-            .and_then(|config| serde_yaml_ng::from_str(&config).map_err(anyhow::Error::msg));
+        let external_config = match fs::read_to_string(Path::new("config.yaml")) {
+            Ok(config) => serde_yaml_ng::from_str(&config)
+                .inspect_err(|e| {
+                    log::error!("config.yaml is invalid, using the bundled one instead: {e}")
+                })
+                .ok(),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                log::info!("No external config.yaml, using the bundled one");
+                None
+            }
+            Err(e) => {
+                log::error!("Could not read config.yaml, using the bundled one instead: {e}");
+                None
+            }
+        };
 
         let external_rom = fs::read(Path::new("rom.nes"))
             .inspect_err(|e| log::info!("Not using external rom.nes: {:?}", e));
 
         // Try to load from external bundle first and if that doesn't work fall back to the embedded bundle
 
-        let config: BuildConfiguration = external_config.unwrap_or(serde_yaml_ng::from_str(
-            include_str!("../config/config.yaml"),
-        )?);
+        let config: BuildConfiguration = match external_config {
+            Some(config) => config,
+            None => serde_yaml_ng::from_str(include_str!("../config/config.yaml"))?,
+        };
 
         let rom = external_rom.unwrap_or(include_bytes!("../config/rom.nes").to_vec());
 
