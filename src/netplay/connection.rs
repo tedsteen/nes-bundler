@@ -299,7 +299,7 @@ impl ConnectingSession {
                         Some(NetplayNesState::new(match join_or_host {
                             JoinOrHost::Host => JoypadMapping::P1,
                             JoinOrHost::Join => JoypadMapping::P2,
-                        }))
+                        })?)
                     }
                     StartMethod::MatchWithRandom => None,
                 };

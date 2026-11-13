@@ -18,6 +18,7 @@ impl Keyboards {
             KeyEvent::Released(key) if *key != KeyCode::Escape => {
                 self.pressed_keys.remove(key);
             }
+            KeyEvent::ReleaseAll => self.pressed_keys.clear(),
             _ => (),
         };
     }

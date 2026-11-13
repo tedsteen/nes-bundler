@@ -23,6 +23,10 @@ pub enum KeyEvent {
     Pressed(KeyCode),
     Released(KeyCode),
     ModifiersChanged(Modifiers),
+    /// The window lost focus: its key releases go to whichever window has it now, so every key
+    /// counts as released, or a key held while switching away stays pressed (and, in netplay,
+    /// reaches the other player).
+    ReleaseAll,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -21,6 +21,9 @@ pub enum GamepadEvent {
     ControllerAdded {
         which: InputId,
     },
+    ControllerRemoved {
+        which: InputId,
+    },
     ButtonDown {
         which: InputId,
         button: GamepadButton,

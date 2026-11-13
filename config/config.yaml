@@ -92,7 +92,7 @@ default_settings:
           a: KeyK
       01-gamepad-0:
         id: 01-gamepad-0
-        name: "🎮 Gamepad"
+        name: "🎮 Gamepad 1"
         kind: !Gamepad
           up: DPadUp
           down: DPadDown

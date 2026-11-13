@@ -100,6 +100,10 @@ impl MainView {
                 self.modifiers = *modifiers;
                 false
             }
+            Keyboard(KeyEvent::ReleaseAll) => {
+                self.modifiers = Modifiers::empty();
+                false
+            }
             Keyboard(KeyEvent::Pressed(key_code)) => self
                 .renderer
                 .window

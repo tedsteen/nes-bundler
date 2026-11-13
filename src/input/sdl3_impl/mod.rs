@@ -6,6 +6,7 @@ use super::buttons::ToGamepadButton;
 use super::settings::InputSettings;
 use super::{InputConfiguration, ToInputId};
 use super::{InputId, JoypadState, buttons::GamepadButton};
+use crate::bundle::Bundle;
 use crate::input::InputConfigurationKind;
 use std::collections::{HashMap, HashSet};
 
@@ -56,7 +57,10 @@ impl GamepadState for SDL3GamepadState {
 }
 pub struct SDL3Gamepads {
     game_controller_subsystem: GamepadSubsystem,
+    /// By input configuration id, one per slot.
     all: HashMap<InputId, Box<dyn GamepadState>>,
+    /// SDL's id for each connected gamepad, to its input configuration id.
+    by_instance: HashMap<InputId, InputId>,
 }
 
 impl Gamepads for SDL3Gamepads {
@@ -79,6 +83,13 @@ impl Gamepads for SDL3Gamepads {
                     log::error!("Could not setup controller {:?}", which);
                 }
             }
+            // Its slot frees up, and `Inputs` moves a player using it back to a keyboard.
+            GamepadEvent::ControllerRemoved { which } => {
+                if let Some(gamepad_id) = self.by_instance.remove(which) {
+                    self.all.remove(&gamepad_id);
+                    log::info!("Gamepad {gamepad_id} disconnected");
+                }
+            }
             GamepadEvent::ButtonDown { which, button, .. } => {
                 if let Some(gamepad_state) = self.get_gamepad(which.clone()) {
                     gamepad_state.toggle_button(button, true);
@@ -97,19 +108,36 @@ impl Gamepads for SDL3Gamepads {
     }
 }
 impl SDL3Gamepads {
-    fn to_gamepad_id(id: &InputId) -> String {
-        format!("01-gamepad-{}", id)
+    /// Gamepads are known by slot: the first connected is 0, the next 1, and one plugged back in
+    /// takes the lowest free slot. SDL's own ids count up with every connection, so keying by
+    /// them would never match the bundle's preset (`01-gamepad-0`) and would lose remaps on
+    /// every replug.
+    fn to_gamepad_id(slot: usize) -> String {
+        format!("01-gamepad-{slot}")
     }
 
     pub fn new(game_controller_subsystem: GamepadSubsystem) -> Self {
         SDL3Gamepads {
             game_controller_subsystem,
             all: HashMap::new(),
+            by_instance: HashMap::new(),
         }
     }
 
-    fn get_gamepad(&mut self, id: InputId) -> Option<&mut Box<dyn GamepadState>> {
-        self.all.get_mut(&Self::to_gamepad_id(&id))
+    fn get_gamepad(&mut self, instance_id: InputId) -> Option<&mut Box<dyn GamepadState>> {
+        let gamepad_id = self.by_instance.get(&instance_id)?;
+        self.all.get_mut(gamepad_id)
+    }
+
+    /// The lowest slot no connected gamepad has.
+    fn free_slot(&self) -> usize {
+        (0..)
+            .find(|&slot| {
+                self.all
+                    .get(&Self::to_gamepad_id(slot))
+                    .is_none_or(|gamepad| !gamepad.is_connected())
+            })
+            .expect("a free slot")
     }
 
     /// Opens a newly connected controller, registers it, creates or retrieves its input
@@ -124,48 +152,60 @@ impl SDL3Gamepads {
         input_id: InputId,
         input_settings: &mut InputSettings,
     ) -> bool {
-        let Some(found_controller) = self
-            .game_controller_subsystem
-            .gamepads()
-            .expect("go get the gamepads")
-            .iter()
-            .find_map(|id| {
-                if input_id == id.to_input_id() && self.game_controller_subsystem.is_gamepad(*id) {
-                    match self.game_controller_subsystem.open(*id) {
-                        Ok(c) => Some(c),
-                        Err(e) => {
-                            log::error!("Failed to open controller {:?}", e);
-                            None
-                        }
+        let gamepads = match self.game_controller_subsystem.gamepads() {
+            Ok(gamepads) => gamepads,
+            Err(e) => {
+                log::error!("Could not list gamepads: {e}");
+                return false;
+            }
+        };
+        let Some(found_controller) = gamepads.iter().find_map(|id| {
+            if input_id == id.to_input_id() && self.game_controller_subsystem.is_gamepad(*id) {
+                match self.game_controller_subsystem.open(*id) {
+                    Ok(c) => Some(c),
+                    Err(e) => {
+                        log::error!("Failed to open controller {:?}", e);
+                        None
                     }
-                } else {
-                    None
                 }
-            })
-        else {
+            } else {
+                None
+            }
+        }) else {
             return false;
         };
 
-        let instance_id = found_controller.id().unwrap().to_input_id();
-        let gamepad_id = Self::to_gamepad_id(&instance_id);
+        let slot = self.free_slot();
+        let gamepad_id = Self::to_gamepad_id(slot);
+        self.by_instance.retain(|_, id| *id != gamepad_id);
+        self.by_instance.insert(input_id, gamepad_id.clone());
         self.all.insert(
             gamepad_id.clone(),
             Box::new(SDL3GamepadState::new(found_controller)),
         );
+        log::info!("Gamepad connected as {gamepad_id}");
 
         // The caller already holds the settings write lock; taking it again here deadlocks.
         let default_mapping = input_settings.default_gamepad_mapping;
-        let conf_id = input_settings
-            .get_or_create_config(
-                gamepad_id.clone(),
-                InputConfiguration {
-                    name: format!("🎮 Gamepad {}", instance_id),
-                    id: gamepad_id,
-                    kind: InputConfigurationKind::Gamepad(default_mapping),
-                },
-            )
-            .id
-            .clone();
+        // Named for its slot, unless the bundle names it; set on every connection, since older
+        // versions named gamepads after SDL's ids.
+        let name = Bundle::current()
+            .config
+            .default_settings
+            .input
+            .configurations
+            .get(&gamepad_id)
+            .map_or_else(|| format!("🎮 Gamepad {}", slot + 1), |c| c.name.clone());
+        let configuration = input_settings.get_or_create_config(
+            gamepad_id.clone(),
+            InputConfiguration {
+                name: name.clone(),
+                id: gamepad_id,
+                kind: InputConfigurationKind::Gamepad(default_mapping),
+            },
+        );
+        configuration.name = name;
+        let conf_id = configuration.id.clone();
 
         // Automatically select this gamepad for the first player still using a keyboard.
         if matches!(
@@ -190,6 +230,11 @@ impl ToGamepadEvent for sdl3::event::Event {
             sdl3::event::Event::GamepadAdded { which, .. } => Some(GamepadEvent::ControllerAdded {
                 which: which.to_input_id(),
             }),
+            sdl3::event::Event::GamepadRemoved { which, .. } => {
+                Some(GamepadEvent::ControllerRemoved {
+                    which: which.to_input_id(),
+                })
+            }
             sdl3::event::Event::GamepadButtonDown { which, button, .. } => button
                 .to_gamepad_button()
                 .map(|button| GamepadEvent::ButtonDown {
