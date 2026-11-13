@@ -24,6 +24,10 @@ pub struct Renderer {
     /// The surface texture to draw the next frame into, acquired ahead of time (see `acquire`),
     /// and whether the surface needs reconfiguring after presenting it.
     next_frame: Option<(SurfaceTexture, bool)>,
+    /// The window was resized since the surface was last configured. Applied once, before the
+    /// next frame, rather than on every resize event: a drag sends several per frame, and each
+    /// configure rebuilds the swapchain.
+    resized: bool,
 }
 
 impl Drop for Renderer {
@@ -93,6 +97,7 @@ impl Renderer {
             window,
             egui,
             next_frame: None,
+            resized: false,
         })
     }
 
@@ -107,7 +112,7 @@ impl Renderer {
             self.size = new_size;
             self.config.width = new_size.width;
             self.config.height = new_size.height;
-            self.surface.configure(&self.device, &self.config);
+            self.resized = true;
         }
     }
 
@@ -122,6 +127,9 @@ impl Renderer {
         #[cfg(feature = "debug")]
         puffin::profile_function!();
 
+        if std::mem::take(&mut self.resized) {
+            self.surface.configure(&self.device, &self.config);
+        }
         self.next_frame = match self.surface.get_current_texture() {
             CurrentSurfaceTexture::Success(texture) => Some((texture, false)),
             CurrentSurfaceTexture::Suboptimal(texture) => Some((texture, true)),
