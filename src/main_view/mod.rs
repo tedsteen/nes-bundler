@@ -175,6 +175,7 @@ impl MainView {
                 .update(&self.renderer.queue, bytemuck::cast_slice(nes_frame));
         }
 
-        self.renderer.render(move |ui| main_gui.ui(ui))
+        let window = self.window.clone();
+        self.renderer.render(move |ui| main_gui.ui(ui, &*window))
     }
 }
