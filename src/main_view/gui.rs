@@ -12,7 +12,7 @@ use crate::{
     input::{JoypadState, KeyEvent, gamepad::GamepadEvent, gui::InputsGui},
     integer_scaling,
     settings::{MAX_PLAYERS, SettingsStore},
-    window::egui_winit_wgpu::nes_picture::NesPicture,
+    window::{Fullscreen, egui_winit_wgpu::nes_picture::NesPicture},
 };
 
 pub trait ToGuiEvent {
@@ -154,7 +154,7 @@ impl MainGui {
         f(&mut self.emulator_gui);
     }
 
-    pub fn ui(&mut self, ui: &mut Ui) {
+    pub fn ui(&mut self, ui: &mut Ui, window: &dyn Fullscreen) {
         #[cfg(feature = "debug")]
         puffin::profile_scope!("ui");
 
@@ -250,6 +250,12 @@ impl MainGui {
                                     self.inputs_gui.ui(ui);
                                 });
                             }
+                            section_ui(ui, false, "Display", |ui| {
+                                let mut fullscreen = window.is_fullscreen();
+                                if ui.checkbox(&mut fullscreen, "Fullscreen").changed() {
+                                    window.toggle_fullscreen();
+                                }
+                            });
 
                             if self.supported_nes_regions.len() > 1 {
                                 section_ui(ui, false, "NES System", |ui| {
