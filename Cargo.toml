@@ -111,4 +111,7 @@ anyhow = "1.0"
 serde_yaml_ng = "0.10"
 serde = { version = "1.0", features = ["derive"] }
 tinytemplate = "1.2"
+
+# Only build.rs's Windows resource step uses it (for the icon and version info).
+[target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
