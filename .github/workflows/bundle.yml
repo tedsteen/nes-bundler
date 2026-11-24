@@ -286,10 +286,16 @@ jobs:
         if: github.event.client_payload.recipient_email != ''
         run: |
           shopt -s nullglob
+          PIDS=()
           for ARTIFACT in artifacts/*; do
               ./build_scripts/upload.sh "$FILE_BIN" "$ARTIFACT" &
+              PIDS+=($!)
           done
-          wait
+          # A bare `wait` succeeds whatever the uploads did; waiting on each one fails the
+          # step if any of them failed.
+          for PID in "${PIDS[@]}"; do
+              wait "$PID"
+          done
 
   send_email:
     name: Send email
@@ -298,21 +304,27 @@ jobs:
       - bundle
       - prepare_config
     runs-on: ubuntu-latest
+    # The steps run only while the ones before them succeed, so a bin that couldn't be worked
+    # out fails the job instead of emailing a link to nowhere.
     steps:
+      - name: Checkout build scripts
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            build_scripts/
+          sparse-checkout-cone-mode: false
+
       - name: Download encrypted configuration
-        if: ${{ !cancelled() }}
         uses: actions/download-artifact@v8
         with:
           name: encrypted-configuration
 
       - name: Decrypt configuration and get the bin
-        if: ${{ !cancelled() }}
         env:
           CONFIG_ZIP_PASSWORD: ${{ secrets.CONFIG_ZIP_PASSWORD }}
         run: ./build_scripts/decrypt-config.sh
 
       - name: Get email address
-        if: ${{ !cancelled() }}
         run: |
           RECIPIENT_EMAIL="$(jq -r '.client_payload.recipient_email' $GITHUB_EVENT_PATH)"
           echo "::add-mask::$RECIPIENT_EMAIL"
@@ -320,7 +332,6 @@ jobs:
 
       # The download link if every platform built, otherwise where to find out what failed.
       - name: Email bundle
-        if: ${{ !cancelled() }}
         uses: dawidd6/action-send-mail@v18
         with:
           server_address: smtp.gmail.com
