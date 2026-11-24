@@ -79,7 +79,7 @@ raw-window-handle = "0.6"
 
 sdl3 = { version = "0.22", features = ["build-from-source-static"] }
 
-tetanes-core = "0.17"
+tetanes-core = "0.19"
 thingbuf = "0.1"
 ringbuf = "0.6"
 
