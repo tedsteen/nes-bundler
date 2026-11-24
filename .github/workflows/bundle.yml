@@ -38,7 +38,7 @@ jobs:
       - name: Download and unpack configuration
         if: github.event.client_payload.configuration_url != ''
         run: |
-          CONFIGURATION_URL=$(jq -r '.client_payload.configuration_url' $GITHUB_EVENT_PATH)
+          CONFIGURATION_URL=$(jq -r '.client_payload.configuration_url' "$GITHUB_EVENT_PATH")
           echo "::add-mask::$CONFIGURATION_URL"
 
           curl -fL -o config.zip "$CONFIGURATION_URL"
@@ -47,8 +47,8 @@ jobs:
       - name: Get bundle name and version
         id: set_bundle_name_and_version
         run: |
-          echo "bundle_name=$(yq '.name' config/config.yaml)" >> $GITHUB_OUTPUT
-          echo "bundle_version=$(yq '.version // "${{ github.ref_name }}"' config/config.yaml)" >> $GITHUB_OUTPUT
+          echo "bundle_name=$(yq '.name' config/config.yaml)" >> "$GITHUB_OUTPUT"
+          echo "bundle_version=$(yq '.version // "${{ github.ref_name }}"' config/config.yaml)" >> "$GITHUB_OUTPUT"
 
       - name: Encrypt configuration
         if: github.event.client_payload.configuration_url != ''
@@ -136,7 +136,7 @@ jobs:
             # From pwd rather than $GITHUB_WORKSPACE, which is a Windows path on Windows.
             echo "ARTIFACTS=$(pwd)/artifacts"
             echo "BUNDLE_CONFIG=$(pwd)/config"
-            echo "FEATURE_FLAG=${{ matrix.netplay && '--features netplay' || '' }}"
+            echo "FEATURES=${{ matrix.netplay && 'netplay' || '' }}"
             echo "SIMPLE_BUNDLE_NAME=${{ needs.prepare_config.outputs.bundle_name }}"
             echo "BUNDLE_NAME=${{ needs.prepare_config.outputs.bundle_name }} $BUNDLE_VERSION ${{ runner.os }}${{ matrix.netplay && ' Netplay' || '' }}"
             echo "BUNDLE_VERSION=$BUNDLE_VERSION"
@@ -146,13 +146,13 @@ jobs:
       - name: Build (Windows)
         if: runner.os == 'Windows'
         run: |
-          cargo build --locked --release $FEATURE_FLAG
+          cargo build --locked --release --features "$FEATURES"
           mv target/release/nes-bundler.exe "$BINARIES_PATH/nes-bundler.exe"
 
       - name: Build (macOS)
         if: runner.os == 'macOS'
         run: |
-          cargo build --locked --release --target=x86_64-apple-darwin --target=aarch64-apple-darwin $FEATURE_FLAG
+          cargo build --locked --release --target=x86_64-apple-darwin --target=aarch64-apple-darwin --features "$FEATURES"
           lipo target/x86_64-apple-darwin/release/nes-bundler \
             target/aarch64-apple-darwin/release/nes-bundler \
             -create -output "$BINARIES_PATH/nes-bundler"
@@ -160,7 +160,7 @@ jobs:
       - name: Build (Linux)
         if: runner.os == 'Linux'
         run: |
-          cargo build --locked --release $FEATURE_FLAG
+          cargo build --locked --release --features "$FEATURES"
           mv target/release/nes-bundler "$BINARIES_PATH/nes-bundler"
 
       - uses: apple-actions/import-codesign-certs@v7
@@ -175,7 +175,7 @@ jobs:
         run: |
           CERT_INFO=$(security find-identity -v -p codesigning signing_temp.keychain | grep "Developer ID Application")
           APPLE_SIGNING_IDENTITY=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
-          echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY" >> $GITHUB_ENV
+          echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_ENV"
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
@@ -227,6 +227,7 @@ jobs:
           echo "c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d  linuxdeploy" | sha256sum -c -
           chmod +x linuxdeploy
           curl -fLo linuxdeploy-plugin-appimage https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/1-alpha-20250213-1/linuxdeploy-plugin-appimage-x86_64.AppImage
+          echo "992d502a248e14ab185448ddf6f6e7d25558cb84d4623c354c3af350c25fccb3  linuxdeploy-plugin-appimage" | sha256sum -c -
           chmod +x linuxdeploy-plugin-appimage
 
           export LDAI_OUTPUT=${BUNDLE_NAME}.AppImage
@@ -247,9 +248,9 @@ jobs:
           BUNDLE_APPLE_APP_PASSWORD: ${{ secrets.BUNDLE_APPLE_APP_PASSWORD }}
         run: |
           PP_PATH=$RUNNER_TEMP/build_pp.provisionprofile
-          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o $PP_PATH
+          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o "$PP_PATH"
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+          cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles
 
           ARTIFACT="$ARTIFACTS/$BUNDLE_NAME Installer.dmg"
 
@@ -286,10 +287,16 @@ jobs:
         if: github.event.client_payload.recipient_email != ''
         run: |
           shopt -s nullglob
+          PIDS=()
           for ARTIFACT in artifacts/*; do
               ./build_scripts/upload.sh "$FILE_BIN" "$ARTIFACT" &
+              PIDS+=($!)
           done
-          wait
+          # A bare `wait` succeeds whatever the uploads did; waiting on each one fails the
+          # step if any of them failed.
+          for PID in "${PIDS[@]}"; do
+              wait "$PID"
+          done
 
   send_email:
     name: Send email
@@ -298,29 +305,34 @@ jobs:
       - bundle
       - prepare_config
     runs-on: ubuntu-latest
+    # The steps run only while the ones before them succeed, so a bin that couldn't be worked
+    # out fails the job instead of emailing a link to nowhere.
     steps:
+      - name: Checkout build scripts
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            build_scripts/
+          sparse-checkout-cone-mode: false
+
       - name: Download encrypted configuration
-        if: ${{ !cancelled() }}
         uses: actions/download-artifact@v8
         with:
           name: encrypted-configuration
 
       - name: Decrypt configuration and get the bin
-        if: ${{ !cancelled() }}
         env:
           CONFIG_ZIP_PASSWORD: ${{ secrets.CONFIG_ZIP_PASSWORD }}
         run: ./build_scripts/decrypt-config.sh
 
       - name: Get email address
-        if: ${{ !cancelled() }}
         run: |
-          RECIPIENT_EMAIL="$(jq -r '.client_payload.recipient_email' $GITHUB_EVENT_PATH)"
+          RECIPIENT_EMAIL="$(jq -r '.client_payload.recipient_email' "$GITHUB_EVENT_PATH")"
           echo "::add-mask::$RECIPIENT_EMAIL"
-          echo "RECIPIENT_EMAIL=$RECIPIENT_EMAIL" >> $GITHUB_ENV
+          echo "RECIPIENT_EMAIL=$RECIPIENT_EMAIL" >> "$GITHUB_ENV"
 
       # The download link if every platform built, otherwise where to find out what failed.
       - name: Email bundle
-        if: ${{ !cancelled() }}
         uses: dawidd6/action-send-mail@v18
         with:
           server_address: smtp.gmail.com

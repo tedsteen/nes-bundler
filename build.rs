@@ -66,20 +66,14 @@ fn main() -> Result<()> {
         res.compile().expect("windows resource file to compile");
     }
 
-    let mut tt = TinyTemplate::new();
+    let main_wxs = normalize(include_str!("config/windows/wix/main.wxs-template"));
+    let bundle_desktop = normalize(include_str!("config/linux/bundle.desktop-template"));
+    let info_plist = normalize(include_str!("config/macos/Info.plist-template"));
 
-    tt.add_template(
-        "main.wxs",
-        include_str!("config/windows/wix/main.wxs-template"),
-    )?;
-    tt.add_template(
-        "bundle.desktop",
-        include_str!("config/linux/bundle.desktop-template"),
-    )?;
-    tt.add_template(
-        "Info.plist",
-        include_str!("config/macos/Info.plist-template"),
-    )?;
+    let mut tt = TinyTemplate::new();
+    tt.add_template("main.wxs", &main_wxs)?;
+    tt.add_template("bundle.desktop", &bundle_desktop)?;
+    tt.add_template("Info.plist", &info_plist)?;
 
     File::create("config/windows/wix/main.wxs")?
         .write_all(tt.render("main.wxs", &bundle_config)?.as_bytes())?;
@@ -90,4 +84,11 @@ fn main() -> Result<()> {
     File::create(std::path::Path::new("config/macos/Info.plist"))?
         .write_all(tt.render("Info.plist", &bundle_config)?.as_bytes())?;
     Ok(())
+}
+
+/// Templates edited on Windows can come with CRLF line endings and a byte order mark. Desktop
+/// files can't have either: a CR ends up in the value (`Icon=icon_256x256\r` names an icon that
+/// doesn't exist) and a BOM hides the `[Desktop Entry]` header.
+fn normalize(template: &str) -> String {
+    template.trim_start_matches('\u{feff}').replace('\r', "")
 }
